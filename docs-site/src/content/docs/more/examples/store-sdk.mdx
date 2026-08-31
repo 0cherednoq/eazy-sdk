@@ -1,0 +1,432 @@
+---
+title: "SDK магазина: от GET до шифрования"
+description: Соберите клиент магазина с моделями, авторизацией, HMAC, payload crypto и WebSocket.
+sources:
+  - eazy_sdk.api
+  - eazy_sdk.Client
+  - eazy_sdk.auth.BearerScheme
+  - eazy_sdk.request.hmac_sha256
+  - eazy_sdk.crypto
+  - eazy_sdk.websocket
+api_fingerprint: "sha256:160666bda9e65f42ec0e6246f59a3cc8dfcde41d0f2b59661286c29c0988c83b"
+---
+
+Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
+читаем каталог, создаём заказ, проводим оплату и получаем её статус по WebSocket.
+
+Сервер использует такие правила:
+
+| Операция | Требование |
+| --- | --- |
+| `GET /v1/products/{id}` | Публичный JSON |
+| `POST /v1/orders` | Bearer token |
+| `POST /v1/payments` | Bearer token, HMAC и зашифрованный payload |
+| `create-payment` по WebSocket | Тот же crypto profile, binary frame |
+
+Имена домена и endpoints учебные. Контракты похожи на закрытый API магазина, но не описывают
+конкретный сервис.
+
+Готовый локальный пример оплаты лежит в `examples/docs/store_sdk.py`. Он проверяет Bearer header,
+HMAC, encrypted media type и обратную сборку `PaymentResult`:
+
+```bash
+uv run python examples/docs/store_sdk.py
+```
+
+```text
+pay-42 accepted receipt-pay-42
+```
+
+Cipher в runnable-файле использует Base64 только для демонстрации стадий. Base64 не шифрует данные.
+
+## 1. Опишите модели каталога
+
+Начните с публичной операции. Здесь ещё нет auth, signing или middleware.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from pydantic import BaseModel
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import Path, Query
+from eazy_sdk.response import Json, Responses, Success
+
+class Product(BaseModel):
+    id: int
+    title: str
+    price: int
+    in_stock: bool
+
+class ProductSearch(BaseModel):
+    items: list[Product]
+    page: int
+
+PRODUCT = Responses[Product](success=(Success(200, Json(Product)),))
+PRODUCTS = Responses[ProductSearch](success=(Success(200, Json(ProductSearch)),))
+
+class GetProductRequest(TypedDict):
+    product_id: Annotated[int, Path()]
+
+class SearchProductsRequest(TypedDict):
+    query: Annotated[str, Query()]
+    page: NotRequired[Annotated[int, Query()]]
+
+class CatalogApi(AsyncApi):
+    @api.get("/v1/products/{product_id}", responses=PRODUCT)
+    async def product(self, **request: Unpack[GetProductRequest]):
+        raise NotImplementedError
+
+    @api.get("/v1/products", responses=PRODUCTS)
+    async def search(self, **request: Unpack[SearchProductsRequest]):
+        raise NotImplementedError
+```
+
+Сигнатура метода становится пользовательским API вашего SDK:
+
+```python
+catalog = CatalogApi(client)
+product = await catalog.product(product_id=42)
+keyboards = await catalog.search(query="keyboard", page=2)
+```
+
+`Path()` и `Query()` задают wire placement. `Responses[T]` одновременно задаёт parser реального
+ответа и показывает IDE тип результата; return-аннотация пустой декларации не нужна.
+
+## 2. Добавьте JSON body и ошибки API
+
+Заказ принимает Pydantic-модель. Ошибку недостатка товара тоже оформим как модель, чтобы
+пользователь мог обработать её без разбора raw JSON.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from pydantic import BaseModel
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import JsonBody
+from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+
+class OrderLine(BaseModel):
+    product_id: int
+    quantity: int
+
+class CreateOrder(BaseModel):
+    lines: list[OrderLine]
+
+class Order(BaseModel):
+    id: str
+    status: str
+    total: int
+
+class StockProblem(BaseModel):
+    product_id: int
+    available: int
+
+class OutOfStock(ApiError[StockProblem]):
+    pass
+
+ORDER_RESPONSES = Responses(
+    success=(Success(201, Json(Order)),),
+    errors=(Error(409, Json(StockProblem), exception=OutOfStock),),
+)
+
+class CreateOrderRequest(TypedDict):
+    body: Annotated[CreateOrder, JsonBody()]
+
+class OrdersApi(AsyncApi):
+    @api.post("/v1/orders", responses=ORDER_RESPONSES)
+    async def create(self, **request: Unpack[CreateOrderRequest]) -> Order:
+        raise NotImplementedError
+```
+
+Вызов остаётся обычным Python-кодом:
+
+```python
+try:
+    order = await sdk.orders.create(
+        body=CreateOrder(lines=[OrderLine(product_id=42, quantity=1)])
+    )
+except OutOfStock as error:
+    print(error.error.product_id, error.error.available)
+```
+
+## 3. Закройте операции Bearer token
+
+Схема доступа живёт рядом с контрактами SDK. Сам token приложение передаёт при создании клиента.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.auth import BearerScheme
+from eazy_sdk.request import JsonBody
+
+CUSTOMER = BearerScheme("store-customer")
+
+class CreateOrderRequest(TypedDict):
+    body: Annotated[CreateOrder, JsonBody()]
+
+class OrdersApi(AsyncApi):
+    @api.post(
+        "/v1/orders",
+        responses=ORDER_RESPONSES,
+        security=CUSTOMER,
+    )
+    async def create(self, **request: Unpack[CreateOrderRequest]) -> Order:
+        raise NotImplementedError
+```
+
+```python
+import httpx
+
+from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+client = AsyncClient(
+    base_url="https://api.store.example",
+    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
+    config=ClientConfig(auth=CUSTOMER.static(access_token)),
+)
+orders = OrdersApi(client)
+```
+
+Eazy SDK добавит `Authorization: Bearer <token>` только операции с `security=CUSTOMER`. Для login,
+refresh и сохранения session используйте {doc}`session auth </more/examples/json-auth>`.
+
+## 4. Подпишите точные bytes оплаты
+
+Платёжный endpoint требует HMAC от method, path и SHA-256 тела. Secret получает key provider.
+Аргументы API-метода не содержат signing key.
+
+```python
+from eazy_sdk.request import (
+    SigningKey,
+    SigningKeyRequirement,
+    body_digest,
+    header_output,
+    hmac_sha256,
+    join,
+    method,
+    path,
+)
+
+PAYMENTS_KEY = SigningKeyRequirement("store-payments")
+PAYMENTS_HMAC = hmac_sha256(
+    key=PAYMENTS_KEY,
+    base=join(method(), path(), body_digest("sha256"), separator=b"\n"),
+    output=header_output("X-Payment-Signature"),
+)
+
+def signing_key(requirement: SigningKeyRequirement) -> SigningKey:
+    if requirement == PAYMENTS_KEY:
+        return SigningKey(load_secret_from_vault())
+    raise LookupError(requirement.name)
+```
+
+Подключите provider в `ClientConfig(key_provider=signing_key)`, а правило к операции через
+`signing=PAYMENTS_HMAC`. Eazy SDK сначала готовит окончательное тело, затем считает подпись. При
+retry тело и подпись создаются заново.
+
+## 5. Зашифруйте поля до сериализации
+
+Магазин принимает номер карты и CVV как зашифрованные JSON-значения. Пользователь SDK передаёт
+обычную typed-модель. Cipher получает значения до JSON codec.
+
+```python
+from pydantic import BaseModel
+
+from eazy_sdk.crypto import (
+    CryptoContext,
+    FrozenValue,
+    decrypt_field,
+    decrypt_inbound,
+    encrypt_field,
+    encrypt_outbound,
+    payload_crypto,
+)
+
+class Card(BaseModel):
+    number: str
+    cvv: str
+
+class CreatePayment(BaseModel):
+    order_id: str
+    card: Card
+    amount: int
+
+class PaymentResult(BaseModel):
+    id: str
+    status: str
+    receipt: str
+
+class StoreFieldCipher:
+    name = "store-fields-v1"
+
+    def encrypt(
+        self,
+        value: FrozenValue,
+        *,
+        context: CryptoContext,
+    ) -> FrozenValue:
+        return keyring.encrypt_json(value, context=context)
+
+    def decrypt(
+        self,
+        value: FrozenValue,
+        *,
+        context: CryptoContext,
+    ) -> FrozenValue:
+        return keyring.decrypt_json(value, context=context)
+
+FIELD_CIPHER = StoreFieldCipher()
+PAYMENT_CRYPTO = payload_crypto(
+    "store-payments-v1",
+    outbound=encrypt_outbound(
+        encrypt_field(CreatePayment, lambda body: body.card.number, using=FIELD_CIPHER),
+        encrypt_field(CreatePayment, lambda body: body.card.cvv, using=FIELD_CIPHER),
+    ),
+    inbound=decrypt_inbound(
+        decrypt_field(PaymentResult, lambda body: body.receipt, using=FIELD_CIPHER),
+    ),
+)
+```
+
+Lambda не исполняется на пользовательских данных. При создании descriptor она записывает typed
+путь модели. Поэтому переименование `card.number` видно type checker, а alias модели переводится в
+wire key автоматически.
+
+`StoreFieldCipher`, алгоритм, ключи, nonce и KMS client поставляет приложение. Eazy SDK задаёт
+интерфейс и порядок стадий.
+
+## 6. Зашифруйте всё тело и задайте Content-Type
+
+Если сервер принимает encrypted envelope вместо JSON, добавьте bytes cipher и wire policy:
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.crypto import (
+    decrypt_encoded,
+    encrypt_encoded,
+    http_encrypted,
+)
+
+PAYMENT_CRYPTO = payload_crypto(
+    "store-payments-v2",
+    outbound=encrypt_outbound(
+        encrypt_field(CreatePayment, lambda body: body.card.number, using=FIELD_CIPHER),
+        encrypt_field(CreatePayment, lambda body: body.card.cvv, using=FIELD_CIPHER),
+        encoded=encrypt_encoded(using=BODY_CIPHER, max_output_bytes=96_000),
+    ),
+    inbound=decrypt_inbound(
+        decrypt_field(PaymentResult, lambda body: body.receipt, using=FIELD_CIPHER),
+        encoded=decrypt_encoded(using=BODY_CIPHER, max_input_bytes=96_000),
+    ),
+)
+
+class CreatePaymentRequest(TypedDict):
+    body: Annotated[CreatePayment, JsonBody()]
+
+class PaymentsApi(AsyncApi):
+    @api.post(
+        "/v1/payments",
+        responses=Responses(success=(Success(201, Json(PaymentResult)),)),
+        security=CUSTOMER,
+        signing=PAYMENTS_HMAC,
+        crypto=PAYMENT_CRYPTO,
+        crypto_wire=http_encrypted(
+            content_type="application/vnd.store.encrypted+json",
+            clear_content_type="application/json",
+        ),
+    )
+    async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
+        raise NotImplementedError
+```
+
+Фактический порядок для этого метода:
+
+```text
+CreatePayment
+  -> model dump
+  -> encrypt card.number и card.cvv
+  -> JSON bytes
+  -> encrypt whole body
+  -> HMAC exact encrypted bytes
+  -> HTTP send
+```
+
+Eazy SDK управляет финальными `Content-Type` и `Content-Length`. Не объявляйте эти headers вручную
+на той же операции. Ответ проходит обратный путь: decrypt bytes, JSON parse, decrypt `receipt`,
+затем validation в `PaymentResult`.
+
+## 7. Примените тот же профиль к WebSocket
+
+HTTP и WebSocket используют один `PayloadCrypto`. Меняется только wire policy: HTTP задаёт media
+type, WebSocket задаёт text или binary frame.
+
+```python
+from eazy_sdk.crypto import websocket_encrypted
+from eazy_sdk.websocket import (
+    AsyncWsApi,
+    JsonPayload,
+    Replies,
+    SuccessReply,
+    ws,
+)
+
+class PaymentsSocket(AsyncWsApi):
+    @ws.call(
+        "create-payment",
+        payload=JsonPayload(CreatePayment),
+        replies=Replies((SuccessReply("payment-created", PaymentResult),)),
+        crypto=PAYMENT_CRYPTO,
+        crypto_wire=websocket_encrypted(frame_kind="binary"),
+    )
+    async def create(
+        self,
+        card: Card,
+        order_id: str,
+        amount: int,
+    ) -> PaymentResult:
+        raise NotImplementedError
+```
+
+```python
+payment = await PaymentsSocket(ws_client).create(
+    card=Card(number="4111111111111111", cvv="123"),
+    order_id=order.id,
+    amount=order.total,
+)
+```
+
+Whole-frame encryption отправляет binary frame. Для text frame алгоритм должен вернуть валидный
+UTF-8 envelope, а policy должна явно содержать `text_safe=True`. Ping, pong и close frames не
+проходят payload crypto.
+
+## 8. Разложите SDK по модулям
+
+После прототипа разделите публичные контракты и application-owned secrets:
+
+```text
+store_sdk/
+├── models.py       # Product, Order, CreatePayment, PaymentResult
+├── catalog.py      # CatalogApi
+├── orders.py       # OrdersApi и CUSTOMER scheme
+├── payments.py     # PaymentsApi и PaymentsSocket
+└── security.py     # signing rules и crypto profile factories
+
+store_app/
+├── credentials.py  # access token acquisition
+├── keyring.py      # cipher implementation и key rotation
+└── client.py       # AsyncClient, AsyncWsClient и providers
+```
+
+SDK объявляет, где нужны auth, signing и crypto. Приложение поставляет tokens, signing keys и
+cipher implementation. Такое разделение не вшивает секреты и криптографические зависимости в
+сгенерированный или распространяемый пакет.
+
+Для деталей используйте отдельные руководства: {doc}`подпись запросов </signing>`,
+{doc}`payload crypto </guides/payload-crypto>`, {doc}`session auth </auth/session>` и
+{doc}`WebSocket runtime </guides/websocket>`.

@@ -1,0 +1,105 @@
+---
+title: Middleware
+description: Добавьте обработчик вызова клиента.
+sources:
+  - eazy_sdk.middleware
+  - eazy_sdk.clients.CallOptions
+api_fingerprint: "sha256:1c120922b78a2eda71a9a7dfa7422d50922ea3bc9e5862bd51ae181f0b703b05"
+---
+
+`CallMiddleware` оборачивает вызов клиента. `AttemptMiddleware` работает с отдельной отправкой HTTP-запроса.
+
+## Call middleware
+
+```python
+from time import monotonic
+
+from eazy_sdk import Client, ClientConfig
+from eazy_sdk.middleware import call_middleware
+
+class TraceCalls:
+    async def __call__(self, context, call_next):
+        started = monotonic()
+        try:
+            return await call_next(context)
+        finally:
+            metrics.observe(context.operation.operation_id, monotonic() - started)
+
+TRACE = call_middleware(TraceCalls())
+client = Client(
+    base_url=base_url,
+    handler=handler,
+    config=ClientConfig(middleware=(TRACE,)),
+)
+```
+
+Вызывайте `call_next` один раз.
+
+## Attempt middleware: retry proposal
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Attempt 1** · ``GET /health``
+
+```json
+{
+  "method": "GET",
+  "url": "/health",
+  "headers": {"X-Attempt": "1"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``503 Service Unavailable``
+
+```json
+{
+  "status": 503,
+  "headers": {"Retry-After": "0"},
+  "body": {"code": "warming_up"}
+}
+```
+::::
+:::::
+
+```python
+from eazy_sdk.middleware import ProposeAction, RetryAttempt, attempt_middleware
+
+class RetryOnceOn503:
+    def after_response(self, context):
+        if context.attempt == 1 and context.response.response.status_code == 503:
+            return ProposeAction(RetryAttempt(kind="service-unavailable"))
+        return None
+
+RETRY_503 = attempt_middleware(RetryOnceOn503())
+```
+
+## Hooks
+
+| Hook | Что разрешено вернуть |
+|---|---|
+| `contribute(context)` | `ValuePatch` до preparation |
+| `before_emit(context)` | `Continue`, `Fail` или `None`; request только для чтения |
+| `after_response(context)` | `Continue`, `ReplaceResponse`, `ProposeAction`, `Fail` |
+| `on_transport_error(context)` | `Continue`, `ProposeAction`, `Fail` |
+
+Middleware можно подключить к client или только к одному вызову:
+
+```python
+await api.health.get_health(
+    options=CallOptions(max_attempts=2, middleware=(RETRY_503,)),
+)
+```
+
+:::{tip} Captcha
+Для captcha используйте {doc}`Protection </guides/protection/index>`. Для token refresh используйте {doc}`Session </auth/session>`.
+:::

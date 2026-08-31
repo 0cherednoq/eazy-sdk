@@ -1,0 +1,155 @@
+---
+title: OpenAPI generator
+description: Генерация Python SDK из OpenAPI schema.
+sources:
+  - eazy_sdk_openapi.generator.generate_package
+api_fingerprint: "sha256:83c5dde74bfa4d6baa1de8711744a735c5d91d546fd062bf12e229dd7a6f92a7"
+---
+
+1. Установите generator
+
+   ```bash
+   uv add "eazy-sdk[httpx,pydantic]" "eazy-sdk-openapi[yaml]"
+   ```
+
+2. Сгенерируйте package
+
+   ```bash
+   eazy-sdk-openapi openapi.yaml generated --package-name museum_sdk
+   ```
+
+3. Импортируйте SDK
+
+   ```python
+   from museum_sdk import AsyncAPI
+
+   async with AsyncAPI.httpx(
+       base_url="https://museum.example.test",
+   ) as api:
+       hours = await api.operations.getMuseumHours(date="2026-08-14")
+   ```
+
+## HTTP
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /museum-hours``
+
+```json
+{
+  "method": "GET",
+  "url": "/museum-hours?date=2026-08-14",
+  "headers": {"Accept": "application/json"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Request-ID": "req-42"
+  },
+  "body": {"date": "2026-08-14", "open": "09:00", "close": "17:00"}
+}
+```
+::::
+:::::
+
+## Метаданные ответа
+
+Вызовите `.with_response(...)` у того же operation descriptor:
+
+```python
+result = await api.operations.getMuseumHours.with_response(
+    date="2026-08-14"
+)
+
+print(result.value)
+print(result.status_code)
+print(result.headers.get("x-request-id"))
+```
+
+Generator не создаёт второй метод. Обычный вызов и `.with_response(...)` проходят один response
+case и один executor pipeline.
+
+## Public-to-wire projection
+
+OpenAPI request body всегда остаётся wire contract. Если generated method должен показывать другой
+caller-facing object, добавьте explicit projection extension — generator не пытается угадать
+business mapping между двумя schemas:
+
+```yaml
+paths:
+  /register:
+    post:
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterWire'}
+      x-eazy-sdk:
+        projection:
+          source: {$ref: '#/components/schemas/RegisterPublic'}
+          target: {$ref: '#/components/schemas/RegisterWire'}
+          application: register-user
+          encoding: application/json
+          name: registration-v1
+```
+
+Свяжите portable requirement со статическим Python callable при generation:
+
+```bash
+eazy-sdk-openapi openapi.yaml generated \
+  --package-name registration_sdk \
+  --projection register-user=application.projections:register_to_wire
+```
+
+Generated source импортирует callable обычным `from ... import ...`, создаёт caller-facing
+`TypedDict`, private target model и `BodyProjection`. Inline lambda, `eval` и runtime lookup строки
+не используются. Без `projection` extension generator сохраняет прежний wire-shaped root body.
+
+## Авторизация
+
+Generated client принимает готовые credentials или session, если соответствующая схема описана для package:
+
+```python
+api = AsyncAPI.httpx(base_url=BASE_URL, credentials=credentials)
+api = AsyncAPI.httpx(base_url=BASE_URL, session=saved_session)
+```
+
+`httpx(...)` — только короткая фабрика. Для другого транспорта передайте Zapros handler напрямую;
+автоматические login, refresh и сохранение session останутся теми же:
+
+```python
+from zapros import AsyncStdNetworkHandler
+
+api = AsyncAPI.from_handler(
+    base_url=BASE_URL,
+    handler=AsyncStdNetworkHandler(),
+    credentials=credentials,
+)
+```
+
+## Проверка результата
+
+Откройте `openapi-compatibility.json` после генерации. Файл перечисляет части schema, которые были упрощены или требуют ручной настройки.
+
+Для JSON schema extra `[yaml]` не нужен:
+
+```bash
+uv add eazy-sdk-openapi
+```

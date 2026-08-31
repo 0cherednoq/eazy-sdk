@@ -1,0 +1,49 @@
+---
+title: SQLModel
+description: Публичный API SQLModel adapter.
+sources:
+  - eazy_sdk_sqlmodel
+api_fingerprint: "sha256:b9c2ae068cd3625e4204952ec2788b0dec255f1e6586f89bc46ef38b4f40d17d"
+---
+
+```python
+await create_all(engine)
+
+async with open_workspace(engine) as workspace:
+    ...
+```
+
+## Registration store
+
+```python
+SqlRegistrationStore(
+    session,
+    credentials_model=CredentialsModel,
+    profile_model=ProfileModel,
+    session_model=SessionModel,
+)
+```
+
+## Session store
+
+```python
+SqlSessionStore(
+    session,
+    account_id,
+    session_model=SessionModel,
+    codec=None,
+    kind="custom",
+    models=DEFAULT_MODELS,
+)
+```
+
+`SqlSessionStore` реализует нейтральный `SessionStore` с `load`, `save` и `invalidate`. `save`
+проверяет CAS revision и атомарно записывает session payload вместе с account event.
+
+`open_workspace(engine)` владеет transaction блока, но не engine. Успешный block commit-ится,
+исключение rollback-ится. Lifecycle stores используют отдельный `AsyncSession`, фиксируют каждый
+state/event boundary и отклоняют явную outer transaction.
+
+Schema содержит accounts, sessions, verifications, account links и append-only events. Default
+Pydantic codecs сохраняют payload как plaintext JSON; encryption at rest является обязанностью
+приложения или custom `SqlValueCodec`.

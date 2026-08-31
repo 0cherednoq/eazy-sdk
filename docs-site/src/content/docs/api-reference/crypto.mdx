@@ -1,0 +1,197 @@
+---
+title: Payload crypto
+description: Контракты шифрования полей и encoded payload для HTTP и WebSocket.
+sources:
+  - eazy_sdk.crypto
+api_fingerprint: "sha256:04e4e84dac90c9abcab448356936a09761dd7e06cee5a027ad9e0fb8c2247c82"
+---
+
+`eazy_sdk.crypto` подключает application-owned алгоритмы к подготовке HTTP body и WebSocket
+message. Модуль не реализует шифр и не хранит ключи.
+
+## Профиль
+
+```python
+profile = payload_crypto(
+    "payments-v1",
+    outbound=encrypt_outbound(...),
+    inbound=decrypt_inbound(...),
+)
+```
+
+| Функция | Стадия | Вход алгоритма |
+| --- | --- | --- |
+| `encrypt_field(Model, selector, using=...)` | До body codec | `FrozenValue` |
+| `decrypt_field(Model, selector, using=...)` | После body codec | `FrozenValue` |
+| `encrypt_encoded(using=...)` | После body codec | `bytes` |
+| `decrypt_encoded(using=...)` | До body codec | `bytes` |
+
+`selector` имеет вид `lambda body: body.card.number`. Разрешены атрибуты и literal indexes `str` или
+`int`. Пустой путь, вызов метода, повторяющиеся пути и пересечение parent/child завершают компиляцию
+ошибкой.
+
+## Интерфейсы алгоритмов
+
+Field algorithm реализует один или оба метода:
+
+```python
+class FieldCipher:
+    name = "field-v1"
+
+    def encrypt(
+        self,
+        value: FrozenValue,
+        *,
+        context: CryptoContext,
+    ) -> FrozenValue: ...
+
+    def decrypt(
+        self,
+        value: FrozenValue,
+        *,
+        context: CryptoContext,
+    ) -> FrozenValue: ...
+```
+
+Encoded algorithm принимает и возвращает `bytes`:
+
+```python
+class BodyCipher:
+    name = "body-v1"
+
+    def encrypt(self, value: bytes, *, context: CryptoContext) -> bytes: ...
+    def decrypt(self, value: bytes, *, context: CryptoContext) -> bytes: ...
+```
+
+Async-методы разрешены для `AsyncClient` и `AsyncWsClient`. Синхронный HTTP client принимает только
+синхронные алгоритмы. `name` является публичным стабильным identity. Не помещайте в него ключ,
+nonce или plaintext.
+
+## `CryptoContext`
+
+Контекст immutable. Алгоритм получает направление, стадию, logical operation, номер HTTP attempt
+или WebSocket connection generation и безопасную protocol metadata. Контекст нужен для выбора
+ключа и нового nonce. Он не содержит plaintext целиком.
+
+Алгоритм должен создавать новый ciphertext при каждом retry, redirect, reconnect, replay и
+resubscribe. Кэшировать ciphertext по logical call нельзя.
+
+## Typed AAD и metadata outputs
+
+Typed input использует существующий `RequestDependency[T]` и тот же `DependencyRegistry`:
+
+```python
+TENANT_DEP = RequestDependency.typed("tenant", str, secret=True)
+TENANT = crypto_input(TENANT_DEP, name="tenant-id")
+KEY_ID = crypto_output("key-id", str)
+
+profile = payload_crypto(
+    "payments-v2",
+    outbound=encrypt_outbound(
+        encoded=encrypt_encoded(using=CIPHER, outputs=(KEY_ID,)),
+    ),
+    inbound=decrypt_inbound(
+        encoded=decrypt_encoded(using=CIPHER, metadata=(KEY_ID,)),
+    ),
+    inputs=(TENANT,),
+)
+```
+
+Алгоритм читает dependency как `context.input(TENANT)`. Если input создан с `aad=True`, его
+immutable JSON-compatible значение также входит в `context.aad`. Encryptor возвращает metadata
+только через заранее объявленный result:
+
+```python
+return crypto_result(
+    ciphertext,
+    crypto_value(KEY_ID, selected_key_id),
+)
+```
+
+Для HTTP output связывается с header:
+
+```python
+http_encrypted(
+    metadata=(http_crypto_header(KEY_ID, "X-Key-Id"),),
+)
+```
+
+Decryptor получает проверенное значение как `context.metadata(KEY_ID)`. Query binding не входит в
+контракт: URL metadata несимметрична для response decrypt и часто попадает в access logs.
+
+Для WebSocket document-stage metadata зарезервируйте envelope path:
+
+```python
+websocket_encrypted(
+    metadata=(websocket_crypto_field(KEY_ID, "crypto", "kid"),),
+)
+```
+
+Whole-frame WebSocket crypto принимает только inputs с
+`scope=CryptoInputScope.CONNECTION`. Operation ещё неизвестна до decrypt и protocol inspect.
+Detached metadata encoded transform должна находиться внутри byte envelope самого алгоритма;
+отдельного header channel у WebSocket data frame нет. Custom protocol с document metadata должен
+объявить `crypto_reserved_paths`, чтобы compiler мог проверить collision с полями envelope.
+
+## Wire policy
+
+### HTTP
+
+```python
+http_encrypted(
+    content_type="application/vnd.store.encrypted+json",
+    clear_content_type="application/json",
+    plaintext_statuses=frozenset({400, 422}),
+)
+```
+
+| Параметр | Назначение |
+| --- | --- |
+| `content_type` | Внешний media type encrypted body |
+| `clear_content_type` | Codec для расшифрованных bytes |
+| `plaintext_statuses` | Статусы, которым разрешён незашифрованный ответ |
+
+При whole-body encryption runtime записывает финальные `Content-Type` и `Content-Length`. Ручное
+объявление этих headers для той же операции является configuration error. Без `http_encrypted`
+внешний media type равен `application/octet-stream`.
+
+### WebSocket
+
+```python
+websocket_encrypted(frame_kind="binary")
+```
+
+Whole-frame encryption по умолчанию использует binary data frame. Для text frame передайте
+`frame_kind="text", text_safe=True`; результат алгоритма должен быть валидным UTF-8. Control
+frames ping, pong и close профиль не обрабатывает.
+
+## Scope
+
+`crypto=` у HTTP или WebSocket operation принимает три состояния:
+
+| Значение | Результат |
+| --- | --- |
+| Аргумент отсутствует | Наследовать matching client scope |
+| `PayloadCrypto` | Использовать этот профиль |
+| `None` | Отключить унаследованный профиль |
+
+Для нескольких операций создайте `CryptoRegistry` из `CryptoRule`. HTTP rules используют
+`http_crypto_scope(...)`, WebSocket rules используют `websocket_crypto_scope(...)`. Registry
+передаётся через `ClientConfig.crypto` или `WsClientConfig.crypto`. Два matching rules с одинаковым
+приоритетом считаются неоднозначной конфигурацией.
+
+## Ошибки
+
+| Ошибка | Причина |
+| --- | --- |
+| `CryptoConfigurationError` | Неверная модель, selector, scope или wire ownership |
+| `PayloadEncryptionError` | Ошибка application encryptor |
+| `PayloadDecryptionError` | Ошибка application decryptor |
+| `CryptoLimitExceeded` | Превышен input/output byte limit |
+| `EncryptedMediaTypeMismatch` | HTTP response имеет неожиданный media type |
+| `EncryptedFrameKindMismatch` | WebSocket message имеет неожиданный frame kind |
+| `CryptoStreamingUnsupported` | Whole transform применён к streaming body |
+| `CryptoRuntimeMismatch` | Async algorithm передан sync runtime |
+
+Сообщение исходного исключения алгоритма не попадает в публичную crypto error и не сохраняется как
+`__cause__`. Полный пример находится в {doc}`руководстве по payload crypto </guides/payload-crypto>`.

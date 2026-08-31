@@ -1,0 +1,52 @@
+---
+title: Middleware
+description: Публичный API middleware клиента.
+sources:
+  - eazy_sdk.middleware
+api_fingerprint: "sha256:821721a7f18827f10341d3f45137847c424ab5238c1777ffec5688c27c37698e"
+---
+
+## Call middleware
+
+```python
+call_middleware(implementation, *, scope=None)
+```
+
+Implementation принимает `context` и `call_next`.
+
+## Attempt middleware
+
+```python
+attempt_middleware(
+    implementation,
+    *,
+    scope=None,
+    reads=(),
+    writes=(),
+)
+```
+
+Доступные hooks:
+
+```python
+contribute(context) -> ValuePatch | None
+before_emit(context) -> Continue | Fail | None
+after_response(context) -> Continue | ReplaceResponse | ProposeAction | Fail
+on_transport_error(context) -> Continue | ProposeAction | Fail
+```
+
+Повтор запроса задаётся через `RetryAttempt(...)`. Redirect задаётся через `RedirectTo(url)`.
+
+`CallMiddleware` оборачивает logical call и получает single-use `call_next`. Второй вызов
+`call_next` отклоняется. `AttemptMiddleware` запускается для каждой фактической попытки, включая
+retry, redirect и auth replay.
+
+| Hook | Mutable phase | Результат |
+|---|---|---|
+| `contribute` | До preparation | Typed `ValuePatch` или `None` |
+| `before_emit` | Prepared request только для чтения | `Continue`, `Fail`, `None` |
+| `after_response` | После normalization | replace/propose/fail decision |
+| `on_transport_error` | После adapter failure | propose/fail decision |
+
+`reads` и `writes` объявляют доступ attempt middleware к slots. Post-sign request mutation
+запрещена. Middleware регистрируется в `ClientConfig.middleware` или в `CallOptions.middleware`.

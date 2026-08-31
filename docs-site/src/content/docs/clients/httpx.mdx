@@ -1,0 +1,45 @@
+---
+title: HTTPX
+description: Sync или async transport на базе HTTPX.
+sources:
+  - eazy_sdk.Client
+  - eazy_sdk.AsyncClient
+api_fingerprint: "sha256:7ea6afceadd7d01dcafce2cf6f4d1b17dddecb2f78fb3fae5a47ff6aec2da282"
+---
+
+```bash
+uv add "eazy-sdk[httpx]"
+```
+
+HTTPX является рекомендуемым adapter для нового sync или async SDK. Передайте готовый
+`httpx.Client` или `httpx.AsyncClient`; Eazy SDK сохраняет его base URL, transport, proxy и
+connection pool.
+
+```python
+import httpx
+
+from eazy_sdk import AsyncClient, Client
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
+
+async_client = AsyncClient(
+    base_url=base_url,
+    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
+)
+async_api = AsyncUsersApi(async_client)
+user = await async_api.get_user(user_id=42)
+await async_client.aclose()
+
+sync_client = Client(
+    base_url=base_url,
+    handler=HttpxHandler(httpx.Client(), owns_client=True),
+)
+sync_api = SyncUsersApi(sync_client)
+user = sync_api.get_user(user_id=42)
+sync_client.close()
+```
+
+Для гарантированного закрытия используйте `async with` или `with` вокруг client. Не
+включайте автоматические redirects/retries на стороне HTTPX: ими управляет общий Eazy SDK
+executor, который заново выполняет preparation и signing для каждой попытки.
+
+Оба варианта используют один execution pipeline и возвращают одинаковые typed values.

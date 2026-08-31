@@ -1,0 +1,55 @@
+---
+title: HTML
+description: Typed offline HTML extraction через Annotated CSS/XPath schema.
+sources:
+  - eazy_sdk.parse_html
+  - eazy_sdk.CSS
+  - eazy_sdk.XPath
+  - eazy_sdk.Scope
+  - eazy_sdk.response.Html
+api_fingerprint: "sha256:7d5bdbe867d2d8ca15eda7c5b246d24592aea117dbcfba249e26c7250455a867"
+---
+
+`parse_html` извлекает typed model без HTTP и без Zapros. Один schema contract работает с
+dataclass, Pydantic и msgspec; selector engine возвращает primitive tree, после чего выбранный
+`ModelAdapter` строит итоговый объект.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+
+from eazy_sdk import CSS, Scope, parse_html
+
+@dataclass
+class Product:
+    name: Annotated[str, CSS(".name::text")]
+    price: Annotated[float, CSS(".price::text")]
+
+@dataclass
+class Catalog:
+    title: Annotated[str, CSS("h1::text")]
+    products: Annotated[list[Product], Scope(CSS("article.product"))]
+
+catalog = parse_html(html_bytes, Catalog)
+```
+
+Используйте `CSS("a::attr(href)")` для атрибутов и `XPath("//h1/text()")`, когда XPath точнее.
+Для `list[T]` selector возвращает все совпадения; для nested model `Scope(...)` создаёт отдельный
+контекст на каждый найденный элемент. У optional field отсутствие совпадения даёт `None`, а у
+required field — `ExtractionError` с полным model path и selector.
+
+## HTML response
+
+Тот же schema подключается к response cases:
+
+```python
+from eazy_sdk.response import Html, Responses, Success
+
+CATALOG_RESPONSES = Responses(
+    success=(Success(200, Html(Catalog)),),
+)
+```
+
+`Html(Model)` выполняет extractor → primitive tree → `ModelAdapter`. Для нестандартного формата
+реализуйте `ResponseExtractor`; старый `Parsed(...)` остаётся явным parser escape hatch для
+протоколов, которые не выражаются extractor schema.

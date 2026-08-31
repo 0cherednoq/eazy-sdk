@@ -1,0 +1,20 @@
+{
+  "openapi": "3.1.0",
+  "path_operations": 8,
+  "generated_operations": 8,
+  "fully_supported": false,
+  "issues": [
+    {
+      "pointer": "#/paths/~1tickets~1{ticketId}~1qr/get/responses/200/content/image~1png",
+      "feature": "raw-response-media",
+      "support": "partial",
+      "detail": "image/png is returned as bytes; its schema is not decoded"
+    },
+    {
+      "pointer": "#/webhooks",
+      "feature": "webhooks",
+      "support": "ignored",
+      "detail": "inbound webhook handlers are outside the outbound client generator"
+    }
+  ]
+}

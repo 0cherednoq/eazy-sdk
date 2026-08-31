@@ -1,0 +1,433 @@
+---
+title: Сериализация моделей и codecs
+description: Используйте dataclass, Pydantic, msgspec или подключите собственный ModelAdapter.
+sources:
+  - eazy_sdk.models
+  - eazy_sdk.codecs
+  - eazy_sdk.response.ResponseExtractor
+api_fingerprint: "sha256:e2ab6a55460ba526ee5988357ef9a06f0c5d2830e12c8beef6e4742e574e4667"
+---
+
+Eazy SDK поддерживает dataclass из стандартной библиотеки, Pydantic v2 и `msgspec.Struct`.
+Одна и та же модель работает в `JsonBody()`, `FormBody()`, `MultipartBody()`, `Json(Model)`,
+`Html(Model)` и `Extracted(Model, ...)`. Для другой model library реализуйте `ModelAdapter` и
+передайте registry в `ClientConfig`.
+
+## Что именно расширять
+
+| Задача | Extension point | Результат |
+|---|---|---|
+| Преобразовать model object в dict/list/scalars и обратно | `ModelAdapter` | Semantic primitives |
+| Получить окончательные bytes нестандартного request body | `BodyCodec` | `bytes` и media type |
+| Закодировать path/query/header/cookie/form field | `ScalarCodec` | Одно строковое значение |
+| Извлечь данные из нестандартного response format | `ResponseExtractor` | Semantic primitives |
+
+`ModelAdapter` не кодирует JSON и не управляет HTTP-заголовками. Сначала adapter преобразует
+модель в primitives, затем выбранный body marker или codec формирует wire representation. Для
+ответа порядок обратный: extractor получает primitives, после чего registry создаёт модель.
+
+## Установка model library
+
+Python dataclass доступен без дополнительного extra. Pydantic и msgspec устанавливаются отдельно:
+
+::::{tab-set}
+  :::{tab-item} uv
+
+```bash
+uv add "eazy-sdk[pydantic]"  # Pydantic v2
+uv add "eazy-sdk[msgspec]"   # msgspec.Struct
+```
+:::
+  :::{tab-item} pip
+
+```bash
+python -m pip install "eazy-sdk[pydantic]"  # Pydantic v2
+python -m pip install "eazy-sdk[msgspec]"   # msgspec.Struct
+```
+:::
+::::
+
+Устанавливайте только выбранную библиотеку. `default_model_adapters()` обнаруживает optional
+dependency во время использования соответствующей модели.
+
+## Опишите модели
+
+Выберите один вариант. Здесь намеренно показан вложенный document (`profile`): для плоского
+request object используйте `TypedDict`, как описано в {doc}`JSON body </guides/requests/json>`.
+Во всех трёх примерах вложенная request-модель сериализуется в JSON, а response-модель создаётся
+из JSON-ответа.
+
+::::{tab-set}
+  :::{tab-item} dataclass
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class CreateUserProfile:
+    name: str
+
+@dataclass
+class CreateUser:
+    profile: CreateUserProfile
+    tags: list[str] = field(default_factory=list)
+
+@dataclass
+class User:
+    id: int
+    profile: CreateUserProfile
+    tags: list[str] = field(default_factory=list)
+```
+
+Dataclass adapter поддерживает вложенные dataclasses, collections, optional fields и defaults.
+Имена полей в Python и на wire совпадают. Plain dataclass не имеет native serialization config,
+поэтому adapter включает все объявленные поля, в том числе defaults и `None`. Если модель требует
+другой payload, зарегистрируйте собственный `ModelAdapter`.
+:::
+  :::{tab-item} Pydantic v2
+
+```python
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+class CreateUserProfile(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    name: str = Field(
+        serialization_alias="displayName",
+        validation_alias=AliasChoices("name", "displayName"),
+    )
+    note: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+class CreateUser(BaseModel):
+    profile: CreateUserProfile
+    tags: list[str] = Field(default_factory=list)
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    id: int
+    profile: CreateUserProfile
+    tags: list[str] = Field(default_factory=list)
+```
+
+Pydantic adapter вызывает `model_dump(mode="json")` без Eazy SDK overrides для request и
+`model_validate(...)` для response. `ConfigDict`, `Field`, `field_serializer` и
+`model_serializer` полностью принадлежат модели. В примере `serialize_by_alias=True` включает
+`displayName`, а `exclude_if` исключает пустой `note`.
+:::
+  :::{tab-item} msgspec
+
+```python
+import msgspec
+
+class CreateUserProfile(
+    msgspec.Struct,
+    rename={"name": "displayName"},
+    omit_defaults=True,
+):
+    name: str
+
+class CreateUser(msgspec.Struct, omit_defaults=True):
+    profile: CreateUserProfile
+    tags: list[str] = []
+
+class User(
+    msgspec.Struct,
+    omit_defaults=True,
+):
+    id: int
+    profile: CreateUserProfile
+    tags: list[str] = []
+```
+
+Msgspec adapter выгружает request через `msgspec.to_builtins(...)` и создаёт response через
+`msgspec.convert(value, type=Model, strict=False)`. Native Struct options управляют wire payload.
+В примере `rename` задаёт `displayName`, а `omit_defaults=True` исключает пустой список `tags`.
+:::
+::::
+
+## Используйте модель в запросе и ответе
+
+Следующий API-класс одинаков для dataclass, Pydantic и msgspec. Подставьте определения
+`CreateUser` и `User` из выбранного примера:
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import JsonBody
+from eazy_sdk.response import Json, Responses, Success
+
+CREATE_USER_RESPONSES = Responses(
+    success=(Success(201, Json(User)),),
+)
+
+class CreateUserRequest(TypedDict):
+    body: Annotated[CreateUser, JsonBody()]
+
+class UsersApi(SyncApi):
+    @api.post("/users", operation_id="createUser", responses=CREATE_USER_RESPONSES)
+    def create_user(self, **request: Unpack[CreateUserRequest]) -> User:
+        raise NotImplementedError
+
+created = UsersApi(client).create_user(
+    body=CreateUser(
+        profile=CreateUserProfile(name="Ada"),
+        tags=["admin"],
+    ),
+)
+```
+
+Dataclass отправит `profile.name`. Pydantic и msgspec примеры отправят
+`profile.displayName`, потому что native configuration вложенной модели включает alias.
+`Json(User)` использует тот же registry для ответа.
+
+## Настройте сериализацию в модели
+
+`JsonBody()` не принимает `exclude_unset`, `exclude_defaults` или `exclude_none`. Эти параметры
+дали бы разную семантику для разных model libraries. Настройте payload там, где он определён:
+
+| Model library | Владелец serialization policy |
+|---|---|
+| Pydantic v2 | `ConfigDict`, `Field`, `field_serializer`, `model_serializer` |
+| msgspec | `rename`, `omit_defaults`, tags, `array_like` и другие Struct options |
+| dataclass | Все поля включены; для другой политики используйте custom adapter |
+| Custom model | Зарегистрированный `ModelAdapter.dump(...)` |
+
+Eazy SDK не включает aliases принудительно. Например, Pydantic использует alias только когда это
+разрешено самой моделью через `serialize_by_alias=True`; msgspec следует `rename`. Model dump не
+мутирует переданный object. Nested models, lists, mappings, enums, dates и datetimes рекурсивно
+приводятся к semantic primitives.
+
+У Pydantic `exclude_unset` — аргумент `model_dump`, а не настройка `ConfigDict`. Для плоского
+частичного payload используйте отдельный `TypedDict` с `NotRequired` keys. Если такая семантика
+нужна вложенному model-owned документу, задайте её в его `model_dump`/`model_serializer` или в
+заменяющем Pydantic adapter-е. Для особого wire format или canonical bytes используйте
+`BodyCodec`.
+
+## Подключите собственный ModelAdapter
+
+Собственный adapter нужен, если SDK использует модель, которую default registry не знает. Он
+должен уметь определить поддерживаемый тип и значение, описать поля, выгрузить объект и загрузить
+его из primitives.
+
+Ниже приведён полный adapter для условной `VendorUser`:
+
+```python
+from collections.abc import Mapping
+from typing import cast
+
+from eazy_sdk import ClientConfig
+from eazy_sdk.models import (
+    ModelAdapterRegistry,
+    ModelDumpMode,
+    ModelField,
+    default_model_adapters,
+)
+
+class VendorUser:
+    def __init__(self, name: str, age: int, note: str | None = None) -> None:
+        self.name = name
+        self.age = age
+        self.note = note
+
+class VendorUserAdapter:
+    name = "vendor-user"
+    version = "1"
+
+    def supports_type(self, annotation: object) -> bool:
+        return annotation is VendorUser
+
+    def supports_value(self, value: object) -> bool:
+        return isinstance(value, VendorUser)
+
+    def fields(self, annotation: object) -> tuple[ModelField, ...]:
+        if annotation is not VendorUser:
+            raise TypeError("VendorUserAdapter supports only VendorUser")
+        return (
+            ModelField(
+                name="name",
+                wire_name="displayName",
+                annotation=str,
+                metadata=(),
+                required=True,
+                validation_name="displayName",
+            ),
+            ModelField(
+                name="age",
+                wire_name="age",
+                annotation=int,
+                metadata=(),
+                required=True,
+                validation_name="age",
+            ),
+            ModelField(
+                name="note",
+                wire_name="note",
+                annotation=str | None,
+                metadata=(),
+                required=False,
+                default=None,
+                validation_name="note",
+            ),
+        )
+
+    def dump(
+        self,
+        value: object,
+        *,
+        mode: ModelDumpMode,
+        registry: ModelAdapterRegistry,
+    ) -> object:
+        user = cast(VendorUser, value)
+        result: dict[str, object] = {
+            "displayName": user.name,
+            "age": user.age,
+        }
+        if user.note is not None:
+            result["note"] = user.note
+        return result
+
+    def load[T](
+        self,
+        annotation: type[T],
+        value: object,
+        *,
+        registry: ModelAdapterRegistry,
+    ) -> T:
+        if annotation is not VendorUser or not isinstance(value, Mapping):
+            raise TypeError("expected VendorUser mapping")
+        raw_note = value.get("note")
+        note = None if raw_note is None else registry.load(str, raw_note)
+        return cast(
+            T,
+            VendorUser(
+                name=registry.load(str, value["displayName"]),
+                age=registry.load(int, value["age"]),
+                note=note,
+            ),
+        )
+
+models = default_model_adapters().with_adapter(VendorUserAdapter())
+config = ClientConfig(models=models)
+```
+
+`with_adapter(...)` добавляет новую семью моделей. Если требуется изменить сериализацию уже
+поддерживаемой семьи, например всех dataclasses в конкретном клиенте, замените встроенный adapter
+с сохранением его имени:
+
+```python
+models = default_model_adapters().replace_adapter(
+    "dataclass",
+    ProjectDataclassAdapter(),  # name = "dataclass"
+)
+config = ClientConfig(models=models)
+```
+
+Передайте `config` при создании клиента:
+
+```python
+client = Client(
+    base_url="https://api.example",
+    handler=handler,
+    config=config,
+)
+```
+
+После регистрации `VendorUser` можно использовать с теми же `JsonBody()`, `Json(VendorUser)` и
+`Html(VendorUser)`, что и встроенные модели.
+
+:::{warning} Adapter должен выбираться однозначно
+Имена adapters внутри registry должны быть уникальны. Ровно один adapter должен возвращать
+  `True` для конкретного типа или значения. Eazy SDK завершит конфигурацию ошибкой, если model
+  одновременно поддерживают несколько adapters. Порядок регистрации не разрешает конфликт.
+:::
+
+Поле `version` не обязательно, но рекомендуется. Имя, версия и implementation class adapter-а
+входят в fingerprint execution plan. Меняйте `version`, когда меняется wire-relevant поведение.
+
+### Контракт ModelAdapter
+
+| Member | Требование |
+|---|---|
+| `name: str` | Стабильное уникальное имя adapter-а |
+| `supports_type(annotation)` | `True` только для поддерживаемых model types |
+| `supports_value(value)` | `True` только для экземпляров поддерживаемой модели |
+| `fields(annotation)` | Поля в declaration/wire order с aliases, типами, metadata и defaults |
+| `dump(value, mode, registry)` | Новый object в `json` или `python` representation; adapter сам владеет aliases/exclusion; исходная модель не меняется |
+| `load(annotation, value, registry)` | Проверенная модель из mapping/sequence/scalars |
+
+Registry также предоставляет `with_adapter(...)` для новой model family и
+`replace_adapter(name, adapter)` для намеренной замены встроенной family. Replacement обязан
+сохранить имя: это удерживает fingerprint и диагностику стабильными.
+
+`dump` должен вернуть mapping, sequence или scalar, а не исходный model object. Для вложенных
+значений используйте переданный `registry`: он обеспечивает одинаковую рекурсивную обработку во
+всех request и response paths.
+
+## Создайте BodyCodec для точных bytes
+
+`ModelAdapter` выбирайте для новой model library. `BodyCodec` выбирайте, когда сервер требует
+особый media type, canonical JSON или другой точный byte format:
+
+```python
+import json
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.codecs import EncodeContext
+
+class CanonicalJson:
+    name = "canonical-json"
+    media_type = "application/vnd.example+json"
+
+    def encode(self, document: object, context: EncodeContext) -> bytes:
+        return json.dumps(
+            document,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+class CreatePaymentRequest(TypedDict):
+    body: Annotated[CreatePayment, CanonicalJson()]
+
+class PaymentsApi(SyncApi):
+    @api.post("/payments", responses=PAYMENT_RESPONSES)
+    def create(self, **request: Unpack[CreatePaymentRequest]) -> Payment:
+        raise NotImplementedError
+```
+
+До вызова codec runtime уже выбрал `ModelAdapter`, преобразовал model в semantic primitives и
+провалидировал projection target. `EncodeContext` содержит operation identity, но не model
+registry. Bytes, возвращённые `encode`, передаются Zapros через `body=` без повторной
+JSON-сериализации.
+Signer подписывает уже подготовленный `Request.body`, поэтому signer и сервер видят одинаковые
+bytes.
+
+Для обычного JSON используйте `JsonBody()`. Для path/query/header/cookie/form используйте
+`ScalarCodec`; он обязан вернуть одну строку. Например, `DelimitedScalarCodec(",")` кодирует
+список как `tag=a,b`. Повторяющиеся query names вида `tag=a&tag=b` Eazy SDK не поддерживает.
+
+## Сериализация ответов и HTML extraction
+
+`Json(Model)` декодирует JSON в primitives и вызывает `models.load(Model, primitive)`. HTML и
+custom formats используют тот же последний шаг:
+
+```python
+RESPONSES = Responses(
+    success=(
+        Success(200, Extracted(VendorUser, using=VendorExtractor())),
+    ),
+)
+```
+
+Custom `ResponseExtractor` привязывается к одному `ResponseContext` и возвращает `ParsedValue`,
+`NoMatch` или `Malformed` с primitive result. Он не должен создавать framework model сам.
+`Html(Model)` уже реализует этот pipeline для CSS/XPath extraction и поддерживает dataclass,
+Pydantic, msgspec и зарегистрированные custom adapters.

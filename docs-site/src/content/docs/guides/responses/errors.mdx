@@ -1,0 +1,129 @@
+---
+title: Ошибки API
+description: Ожидаемые ответы API как типизированные исключения.
+sources:
+  - eazy_sdk.api
+  - eazy_sdk.response
+api_fingerprint: "sha256:46b588a7d2e3047daa09375ea89b15dd0db243a242c40c2eed2bed257211eee5"
+---
+
+## Неправильный пароль
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /auth/login``
+
+```json
+{
+  "method": "POST",
+  "url": "/auth/login",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"username": "ada@example.test", "password": "wrong"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``401 Unauthorized``
+
+```json
+{
+  "status": 401,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"code": "invalid_password", "message": "Password is incorrect"}
+}
+```
+::::
+:::::
+
+## Пользователь не найден
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /auth/login``
+
+```json
+{
+  "method": "POST",
+  "url": "/auth/login",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"username": "nobody@example.test", "password": "anything"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``404 Not Found``
+
+```json
+{
+  "status": 404,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"code": "user_not_found", "message": "User does not exist"}
+}
+```
+::::
+:::::
+
+## Контракт
+
+```python
+from pydantic import BaseModel
+
+from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+
+class LoginProblem(BaseModel):
+    code: str
+    message: str
+
+class InvalidPasswordError(ApiError[LoginProblem]):
+    pass
+
+class UserNotFoundError(ApiError[LoginProblem]):
+    pass
+
+responses = Responses(
+    success=(Success(200, Json(UserSession)),),
+    errors=(
+        Error(401, Json(LoginProblem), exception=InvalidPasswordError),
+        Error(404, Json(LoginProblem), exception=UserNotFoundError),
+    ),
+)
+```
+
+## Обработка
+
+```python
+request: LoginRequest = {
+    "username": "ada@example.test",
+    "password": "wrong",
+}
+
+try:
+    session = await sdk.auth.login(request=request)
+except InvalidPasswordError as exc:
+    print(exc.error.message)
+except UserNotFoundError as exc:
+    print(exc.error.message)
+```
+
+`ApiError` хранит typed payload в `.error` и response context в `.context`. Не используйте status
+code branching после обычного вызова: documented error case уже выбрал точный exception type.
+
+Ответ с неизвестным status/media type даёт `UnexpectedResponseError`. Валидный case с malformed
+payload даёт `MalformedResponseError`. Эти ошибки означают нарушение контракта upstream и не
+смешиваются с ожидаемыми `401`/`404`.

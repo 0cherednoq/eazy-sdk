@@ -1,0 +1,43 @@
+---
+title: Response API
+description: Cases, representations, envelope и typed errors.
+sources:
+  - eazy_sdk.response
+api_fingerprint: "sha256:2e31602e0af0e3c2a30c7a75d98a98fac1fe465902aae65fac817fa0a282abfa"
+---
+
+`Responses` — единственное описание status/media/parser semantics операции. `Success` задаёт
+успешные cases, `Error` — ожидаемые typed ошибки, а `fallback` — поведение для остальных ответов.
+
+```python
+RESPONSES = Responses(
+    success=(Success(200, Json(User)),),
+    errors=(Error(404, Json(Problem), exception=UserNotFound),),
+)
+```
+
+Обычный метод возвращает значение из success case. `method.with_response(...)` возвращает
+`ResponseEnvelope`: `value`, `status_code`, `headers` и raw `response`. Неожиданный, неоднозначный
+или malformed ответ завершается соответствующей ошибкой Eazy SDK до возврата значения.
+
+## Representations
+
+| Representation | Результат |
+|---|---|
+| `Json(Model, media_type=...)` | dataclass, Pydantic, msgspec или custom model adapter |
+| `Html(Model, media_type=...)` | CSS/XPath primitives → model adapter |
+| `Extracted(Model, using=extractor, media_type=...)` | Custom primitive extractor → model adapter |
+| `Parsed(Model, using=parser, media_type=...)` | Custom typed parser |
+| `Text(media_type=...)` | `str` |
+| `Bytes(media_type=...)` | `bytes` |
+| `Empty(media_type=...)` | `None`, только при пустом body |
+
+Status selector может быть точным `int`, `StatusRange(start, end)` или `DEFAULT` для fallback.
+`ApiError[T]` предоставляет `.error` с typed payload и `.context` с безопасной metadata ответа.
+
+Ошибки классификации разделены: `UnexpectedResponseError`, `MalformedResponseError` и
+`AmbiguousResponseError`. Они не маскируются под документированную ошибку API.
+
+`ResponseExtractor` не создаёт framework model сам. Он возвращает primitive value, после чего
+единый `ModelAdapterRegistry` строит итоговый объект. Parsing session привязывается один раз к
+response attempt и может кешировать DOM/decoded tree по identity extractor-а.

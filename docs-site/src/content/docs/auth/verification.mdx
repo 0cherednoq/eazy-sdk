@@ -1,0 +1,77 @@
+---
+title: Verification
+description: Подтвердите созданный аккаунт кодом или другим proof.
+sources:
+  - eazy_sdk.accounts.VerificationAccepted
+  - eazy_sdk.accounts.PendingRegistration
+api_fingerprint: "sha256:7e90be3f1d03610c0aa86ffb3335d1f6f31e3c08b3d319a15291de70d150d9de"
+---
+
+Verification продолжает `PendingRegistration`, полученный после создания аккаунта.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /accounts/verify``
+
+```json
+{
+  "method": "POST",
+  "url": "/accounts/verify",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"verification_id": "email-1", "code": "123456"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"access_token": "access-v1"}
+}
+```
+::::
+:::::
+
+```python
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk.accounts import PendingRegistration, VerificationAccepted
+
+class VerificationCode(BaseModel):
+    code: SecretStr
+
+class RegistrationService:
+    async def verify(self, account, challenge, proof, api):
+        code = VerificationCode.model_validate(proof)
+        response = await api.accounts.verifyAccount(
+            verification_id=challenge.id,
+            code=code.code.get_secret_value(),
+        )
+        return VerificationAccepted(session=response.session)
+
+if isinstance(result, PendingRegistration):
+    result = await registrations.verify(
+        result,
+        VerificationCode(code="123456"),
+    )
+```
+
+После успешного verification registration store сохраняет новый статус аккаунта и session из
+ответа. Неверный proof оставляет регистрацию в pending-состоянии.
+
+После перезапуска загрузите незавершённую регистрацию по identifier:
+
+```python
+pending = await registrations.resume("ada@example.test")
+```

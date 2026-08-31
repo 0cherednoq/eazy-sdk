@@ -1,0 +1,129 @@
+---
+title: Registration
+description: Создайте аккаунт и сохраните его через registration store.
+sources:
+  - eazy_sdk.accounts.account_registration
+  - eazy_sdk.accounts.AccountDraft
+  - eazy_sdk.accounts.AccountIdentifier
+api_fingerprint: "sha256:97262efead6ce74b399601fa61c86b32600a48890401021bca21bcdc765f2cfb"
+---
+
+Credentials содержат данные для будущего login. Profile содержит данные аккаунта. Details нужны
+только во время регистрации.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /accounts``
+
+```json
+{
+  "method": "POST",
+  "url": "/accounts",
+  "headers": {"Content-Type": "application/json"},
+  "body": {
+    "email": "ada@example.test",
+    "password": "correct-horse",
+    "first_name": "Ada",
+    "accepted_terms": true
+  }
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``202 Accepted``
+
+```json
+{
+  "status": 202,
+  "headers": {"Content-Type": "application/json"},
+  "body": {
+    "user_id": "user-42",
+    "verification_id": "email-1",
+    "verification_kind": "email_code"
+  }
+}
+```
+::::
+:::::
+
+```python
+from typing import Annotated
+
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk.accounts import (
+    AccountCreated,
+    AccountDraft,
+    AccountIdentifier,
+    MemoryRegistrationStore,
+    VerificationChallenge,
+    account_registration,
+)
+
+class SignupCredentials(BaseModel):
+    email: Annotated[str, AccountIdentifier()]
+    password: SecretStr
+
+class AccountProfile(BaseModel):
+    first_name: str
+
+class SignupDetails(BaseModel):
+    accepted_terms: bool
+
+class CredentialsCodec:
+    def encode(self, value: SignupCredentials) -> object:
+        return {
+            "email": value.email,
+            "password": value.password.get_secret_value(),
+        }
+
+    def decode(self, value: object) -> SignupCredentials:
+        return SignupCredentials.model_validate(value)
+
+class RegistrationService:
+    async def create(self, draft, api):
+        response = await api.accounts.createAccount(
+            email=draft.credentials.email,
+            password=draft.credentials.password.get_secret_value(),
+            first_name=draft.profile.first_name,
+            accepted_terms=draft.details.accepted_terms,
+        )
+        return AccountCreated(
+            remote_id=response.user_id,
+            verification=VerificationChallenge(
+                id=response.verification_id,
+                kind=response.verification_kind,
+            ),
+        )
+
+registrations = account_registration(
+    SignupCredentials,
+    service=RegistrationService(),
+    store=MemoryRegistrationStore(CredentialsCodec()),
+    context_factory=lambda: api,
+    provider="example.test",
+)
+
+result = await registrations.create(
+    AccountDraft(
+        credentials=SignupCredentials(
+            email="ada@example.test",
+            password="correct-horse",
+        ),
+        profile=AccountProfile(first_name="Ada"),
+        details=SignupDetails(accepted_terms=True),
+    )
+)
+```
+
+Успешный create автоматически сохраняется через переданный registration store. Если сервер вернул
+challenge, `result` будет `PendingRegistration`. Следующий шаг описан в
+{doc}`Verification </auth/verification>`.

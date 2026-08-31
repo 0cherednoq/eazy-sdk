@@ -1,0 +1,54 @@
+---
+title: Dependencies
+description: Публичный API вычисляемых значений запроса.
+sources:
+  - eazy_sdk.dependencies
+api_fingerprint: "sha256:695374a7a669ef3bd8020e0a0d20d516e4f99386ea49ae5f1adfff7560be06a1"
+---
+
+```python
+dependency(
+    annotation: type[T],
+    *,
+    name: str | None = None,
+    provide: object | None = None,
+    apply=(),
+    cache=CALL,
+    secret: bool = False,
+) -> DependencySpec[T]
+```
+
+## Binding
+
+```python
+field("attribute").to_header("X-Name")
+field("attribute").to_query("name")
+field("attribute").to_cookie("name")
+field("attribute").to_body("name")
+value().to_header("X-Value")
+```
+
+## Cache
+
+`DependencyCachePolicy` поддерживает `NONE`, `CLIENT`, `CALL` и `ATTEMPT`.
+
+## Registry
+
+```python
+registry.register(descriptor, provider)
+```
+
+`DependencySpec` передаётся в `requires=(...)` декоратора. `provide=` может задать reusable provider
+identity, но implementation всегда регистрируется в `DependencyRegistry`, а не в операции.
+
+| Binding | Target |
+|---|---|
+| `field(name).to_header(name)` | Request header |
+| `field(name).to_query(name)` | Query parameter |
+| `field(name).to_cookie(name)` | Cookie |
+| `field(name).to_body(name)` | Body field |
+| `value().to_*` | Весь dependency result |
+
+`secret=True` redacts значение из diagnostics. Missing provider, invalid result type или конфликт
+нескольких bindings завершается до network side effects. `ATTEMPT` dependency пересчитывается для
+retry/redirect; `CALL` reuse-ится в пределах logical call.

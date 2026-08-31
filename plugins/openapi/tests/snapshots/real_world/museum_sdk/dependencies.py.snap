@@ -1,0 +1,25 @@
+"""Generated dependency identities and typed provider facade. Do not edit."""
+
+from typing import Literal
+
+from eazy_sdk.codegen import (
+    DependencyCachePolicy, DependencyProvider, DependencyRegistry, DependencySpec,
+    RequestDependency, field, value,
+)
+from .models import (
+    BuyMuseumTickets,
+    Error as ErrorModel,
+    MuseumHours,
+    MuseumTicketsConfirmation,
+    SpecialEvent,
+    SpecialEventCollection,
+    SpecialEventFields,
+)
+
+class Providers:
+    def __init__(self) -> None:
+        self.registry = DependencyRegistry()
+        pass
+
+
+__all__ = ['Providers']

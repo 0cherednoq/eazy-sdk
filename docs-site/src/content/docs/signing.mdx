@@ -1,0 +1,71 @@
+---
+title: Подпись запросов
+description: HMAC по method, target и digest точных request bytes.
+sources:
+  - eazy_sdk.request.hmac_sha256
+  - eazy_sdk.request.SigningKey
+  - eazy_sdk.request.SigningKeyRequirement
+  - eazy_sdk.request.body_digest
+  - eazy_sdk.request.header_output
+api_fingerprint: "sha256:d5b2d146f4a67efeaaaf7f15220db08a5f21a39a7e3cb34b2376c46630fd3969"
+---
+
+Создайте `RequestSignature` из typed компонентов и передайте его в `signing=` decorator или
+`ApiDefaults`. Key provider задаётся через `ClientConfig`; secret не входит в operation arguments.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import ApiDefaults, AsyncApi, ClientConfig, api
+from eazy_sdk.request import (
+    JsonField,
+    SigningKey,
+    SigningKeyRequirement,
+    body_digest,
+    header_output,
+    hmac_sha256,
+    join,
+    method,
+    path,
+)
+
+class PaymentRequest(TypedDict):
+    amount: Annotated[int, JsonField()]
+
+PAYMENTS_KEY = SigningKeyRequirement("payments-key")
+VENDOR_HMAC = hmac_sha256(
+    key=PAYMENTS_KEY,
+    base=join(
+        method(),
+        path(),
+        body_digest("sha256"),
+        separator=b"\n",
+    ),
+    output=header_output("X-Signature"),
+)
+
+class PaymentsApi(AsyncApi):
+    @api.post("/payments", responses=RESPONSES, signing=(VENDOR_HMAC,))
+    async def create(self, **request: Unpack[PaymentRequest]) -> Payment:
+        raise NotImplementedError
+```
+
+Key provider разрешает `SigningKeyRequirement` перед первой отправкой:
+
+```python
+def load_signing_key(requirement: SigningKeyRequirement) -> SigningKey:
+    if requirement == PAYMENTS_KEY:
+        return SigningKey("replace-with-secret")
+    raise LookupError(requirement.name)
+
+config = ClientConfig(key_provider=load_signing_key)
+```
+
+Eazy SDK сначала сериализует точные bytes, затем считает digest и добавляет signature header.
+Retry и redirect заново выполняют preparation/signing. Пример: request JSON `{"amount":100}` с
+headers `Content-Type: application/json` и `X-Signature: ...`; response status `201`, JSON
+`{"id":"p-1"}`.
+
+Signer читает immutable prepared request. Он может писать только объявленные outputs. Missing key,
+неподдерживаемый exact wire profile или конфликт output завершается до adapter emit. Не записывайте
+key и signature base с secrets в observer logs.

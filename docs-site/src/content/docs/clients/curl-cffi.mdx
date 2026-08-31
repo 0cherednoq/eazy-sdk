@@ -1,0 +1,32 @@
+---
+title: curl_cffi
+description: Sync и async transport с browser impersonation.
+sources:
+  - eazy_sdk.AsyncClient
+api_fingerprint: "sha256:07fae197f11e6403a25d071fdf5ec81e448a8f5d5808ce3332d15f6619f6c7e1"
+---
+
+```bash
+uv add "eazy-sdk[curl-cffi]"
+```
+
+```python
+from curl_cffi import requests
+
+from eazy_sdk import AsyncClient
+from eazy_sdk.handlers.curl_cffi import AsyncCurlCffiZaprosHandler
+
+raw = requests.AsyncSession()
+client = AsyncClient(
+    base_url="https://api.example",
+    handler=AsyncCurlCffiZaprosHandler(raw, owns_session=True),
+)
+users = AsyncUsersApi(client)
+user = await users.get_user(user_id=42)
+await client.aclose()
+```
+
+Sync-вариант использует `requests.Session` и `SyncUsersApi`. Impersonation, TLS fingerprint и proxy
+принадлежат transport/session configuration; typed API остаётся тем же.
+
+Если operation требует exact wire capability, adapter проверит её до dependency resolver и сети.

@@ -1,0 +1,78 @@
+---
+title: Подписанный API
+description: Подпишите method, target и SHA-256 digest точного JSON body через HMAC-SHA256.
+sources:
+  - eazy_sdk.request.hmac_sha256
+  - eazy_sdk.request.SigningKey
+api_fingerprint: "sha256:bb2a6ad5e18e1e183c56b58fd8745958856c7a894fff16d9d616d957a76d1539"
+---
+
+Eazy SDK сериализует JSON до подписи. Signer и HTTP adapter получают одни и те же bytes, поэтому
+HTTPX или Requests не пересобирают body после вычисления HMAC.
+
+## Обмен по сети
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /v1/payments``
+
+```json
+{
+  "method": "POST",
+  "url": "/v1/payments",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Signature": "06f06f38d18688c89e0e40b1f934d92bc4c51e3ecf74b1012a8332d64227a1aa"
+  },
+  "body": {"amount": "49.90", "currency": "EUR"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``201 Created``
+
+```json
+{
+  "status": 201,
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Request-Id": "req_pay_42"
+  },
+  "body": {"id": "pay_42", "status": "accepted"}
+}
+```
+::::
+:::::
+
+## Структура примера
+
+```text
+payments/
+├── models.py      # CreatePaymentInput и Payment
+├── signing.py     # SigningKeyRequirement и HMAC rule
+├── api.py         # Декорированный POST /v1/payments
+└── main.py        # key provider и вызов клиента
+```
+
+Signature base для примера:
+
+```text
+POST
+/v1/payments
+0e51c73f01851ebc29c3a3fc6b220768f6b34123a6285ece2a5f6c897f924f13
+```
+
+Последняя строка является SHA-256 от bytes
+`{"amount":"49.90","currency":"EUR"}`. Полный код правила подписи, API-метода и key provider
+находится в {doc}`руководстве по подписи запросов </signing>`.
+
+При retry, redirect или auth refresh Eazy SDK заново готовит request и считает новую подпись.
+Timestamp и nonce должны появиться до signing через auth, dependency или attempt contribution.

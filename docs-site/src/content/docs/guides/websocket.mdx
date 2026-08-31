@@ -1,0 +1,119 @@
+---
+title: WebSocket and AsyncAPI
+description: Generate or author a typed async WebSocket SDK and run it through Zapros.
+sources:
+  - eazy_sdk.websocket
+  - eazy_sdk_asyncapi.generate_package
+api_fingerprint: "sha256:dc80da79d3683afb248fd6ab389b0a3447b23755762841cb82c5dd71b9506a6d"
+---
+
+This guide is for SDK implementers who need typed one-shot calls or subscriptions over `ws` or
+`wss`. Eazy SDK keeps WebSocket state separate from the HTTP client. Both runtimes can share the
+same model registry, and HTTP can return the WSS endpoint before the WebSocket runtime is created.
+
+## Generate an SDK from AsyncAPI 3.0
+
+Install the WebSocket extra and the generator:
+
+```bash
+uv add "eazy-sdk[websocket]" "eazy-sdk-asyncapi[yaml]"
+eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
+```
+
+JSON input works without the `[yaml]` extra. The generator accepts AsyncAPI 3.0 `ws` and `wss`
+servers, channels, address parameters, messages, send/receive operations, operation replies,
+JSON Schema payloads, correlation IDs, and local `$ref` values.
+
+Use the generated protocol and thin `AsyncWsApi` facade with one `AsyncWsClient`:
+
+```python
+from market_stream import AsyncAPI, PROTOCOL, SERVERS
+from eazy_sdk.websocket import AsyncWsClient
+
+client = AsyncWsClient(
+    endpoint=SERVERS["production"],
+    protocol=PROTOCOL,
+)
+
+async with client:
+    api = AsyncAPI(client)
+    await api.publish(value="BTCUSD")
+    result = await api.lookup(value="BTCUSD")
+
+    async with await api.prices() as prices:
+        event = await anext(prices)
+        print(event.value)
+```
+
+Generated source contains models, constants, and decorated async methods. The generated package
+does not own a reader loop, reconnect policy, callback registry, or transport adapter.
+
+Operation extension `x-eazy-sdk-crypto` stores only a named profile and frame policy. When it is
+present, the package exports `crypto_registry(profiles)`; application code supplies handwritten
+`PayloadCrypto` objects through `WsClientConfig`. See
+{doc}`payload crypto for HTTP and WebSocket </guides/payload-crypto>`.
+
+## Author a GraphQL-WS client
+
+`GraphqlTransportWsProtocol` implements the `graphql-transport-ws` envelopes. Configure
+`connection_init` as protocol auth and require `connection_ack` before application operations:
+
+```python
+from eazy_sdk.websocket import (
+    AsyncWsClient,
+    GraphqlTransportWsProtocol,
+    ProtocolAuth,
+    WsClientConfig,
+)
+
+client = AsyncWsClient(
+    endpoint="wss://stream.example.test/graphql",
+    protocol=GraphqlTransportWsProtocol(),
+    subprotocols=("graphql-transport-ws",),
+    config=WsClientConfig(
+        protocol_auth=ProtocolAuth(
+            "connection_init",
+            lambda: {"authorization": "runtime credential"},
+            await_ready=True,
+        ),
+    ),
+)
+
+async with client:
+    stream = await client.subscribe(
+        "subscribe",
+        {"query": "subscription Prices { price }"},
+    )
+    async with stream:
+        print((await anext(stream)).value)
+```
+
+The protocol routes interleaved `next` messages by operation ID. `error` and `complete` terminate
+the matching operation. Closing a subscription sends GraphQL `complete` through the bounded writer.
+
+## Choose the correct authentication lifetime
+
+| Application | When credentials are read | Use for |
+|---|---|---|
+| `StaticUpgradeAuth` | Zapros client construction | HTTP upgrade headers that do not change |
+| `ProtocolAuth` | Every connection generation | `connection_init` and reconnect credentials |
+| `DynamicPerMessageAuth` | Every outbound attempt | Per-message tokens, including resubscribe |
+
+Middleware receives an immutable `WsMiddlewareContext` and returns a typed decision or message
+patch. It cannot access the socket, reader, writer, queue, or reconnect supervisor.
+
+## AsyncAPI lowering rules
+
+| AsyncAPI operation | Generated Eazy SDK declaration |
+|---|---|
+| `send` without reply | `@ws.send` |
+| `send` with Operation Reply | `@ws.call` |
+| `receive` | typed `Event[T]` alias |
+| `receive` with `x-eazy-sdk.websocket.kind: subscribe` | `@ws.subscribe` |
+
+Outbound message and exact-frame customization use the public `OutboundMessageTransform`,
+`InboundMessageTransform` and `ExactFrameTransform` stages. The removed protector-chain API has no
+compatibility path.
+
+Unsupported protocols, bindings, schema formats, or references stop generation. The diagnostic
+includes the operation ID, JSON Pointer, and local reference chain.

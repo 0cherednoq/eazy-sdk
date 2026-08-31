@@ -1,0 +1,225 @@
+---
+title: Шифрование payload
+description: Подключите application-owned шифрование полей или всего payload к HTTP и WebSocket.
+sources:
+  - eazy_sdk.crypto
+api_fingerprint: "sha256:04e4e84dac90c9abcab448356936a09761dd7e06cee5a027ad9e0fb8c2247c82"
+---
+
+Eazy SDK управляет стадиями и wire-представлением, но не предоставляет cipher, keyring или KMS
+client. Алгоритм, ключи, nonce и rotation остаются в приложении. Один профиль можно применить к
+HTTP-методу и WebSocket operation.
+
+## Объявите алгоритмы и профиль
+
+Алгоритм поля получает immutable JSON-значение (`FrozenValue`), а алгоритм всего payload — `bytes`.
+Оба получают immutable `CryptoContext` с направлением, стадией, номером attempt/generation и
+безопасной protocol metadata. Реализация может быть sync или async; sync HTTP принимает только sync
+алгоритмы.
+
+```python
+from eazy_sdk.crypto import (
+    CryptoContext,
+    FrozenValue,
+    decrypt_encoded,
+    decrypt_field,
+    decrypt_inbound,
+    encrypt_encoded,
+    encrypt_field,
+    encrypt_outbound,
+    payload_crypto,
+)
+
+class FieldCipher:
+    name = "payments-field-v1"
+
+    def encrypt(self, value: FrozenValue, *, context: CryptoContext) -> FrozenValue:
+        return application_encrypt_value(value, context=context)
+
+    def decrypt(self, value: FrozenValue, *, context: CryptoContext) -> FrozenValue:
+        return application_decrypt_value(value, context=context)
+
+class BodyCipher:
+    name = "payments-body-v1"
+
+    def encrypt(self, value: bytes, *, context: CryptoContext) -> bytes:
+        return application_encrypt_bytes(value, context=context)
+
+    def decrypt(self, value: bytes, *, context: CryptoContext) -> bytes:
+        return application_decrypt_bytes(value, context=context)
+
+FIELD_CIPHER = FieldCipher()
+BODY_CIPHER = BodyCipher()
+
+PAYMENT_CRYPTO = payload_crypto(
+    "payments-v1",
+    outbound=encrypt_outbound(
+        encrypt_field(CreatePayment, lambda body: body.card.number, using=FIELD_CIPHER),
+        encrypt_field(CreatePayment, lambda body: body.card.cvv, using=FIELD_CIPHER),
+        encoded=encrypt_encoded(
+            using=BODY_CIPHER,
+            max_input_bytes=64_000,
+            max_output_bytes=96_000,
+        ),
+    ),
+    inbound=decrypt_inbound(
+        decrypt_field(PaymentResult, lambda body: body.receipt, using=FIELD_CIPHER),
+        encoded=decrypt_encoded(
+            using=BODY_CIPHER,
+            max_input_bytes=96_000,
+            max_output_bytes=64_000,
+        ),
+    ),
+)
+```
+
+Lambda исполняется один раз над path recorder при создании descriptor. Eazy SDK не читает исходный
+текст и не разбирает AST. Атрибуты дают IDE и type checker путь модели; model adapter преобразует
+его в wire aliases. Поддерживаются attribute traversal и literal `str`/`int` indexes. Вызовы
+методов, пустые, повторяющиеся и parent/child paths отклоняются.
+
+Порядок стадий фиксирован:
+
+```text
+outbound: model dump -> encrypt fields -> codec -> encrypt bytes -> exact signing -> send
+inbound:  receive -> decrypt bytes -> codec parse -> decrypt fields -> model validation
+```
+
+## HTTP и Content-Type
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.crypto import http_encrypted
+from eazy_sdk.request import JsonBody
+
+class CreatePaymentRequest(TypedDict):
+    body: Annotated[CreatePayment, JsonBody()]
+
+class PaymentsApi(AsyncApi):
+    @api.post(
+        "/v1/payments",
+        crypto=PAYMENT_CRYPTO,
+        crypto_wire=http_encrypted(
+            content_type="application/vnd.example.encrypted+json",
+            clear_content_type="application/json",
+            plaintext_statuses=frozenset({400, 422}),
+        ),
+    )
+    async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
+        raise NotImplementedError
+```
+
+При whole-payload encryption Eazy SDK единолично записывает финальные `Content-Type` и
+`Content-Length`. Ручной параметр этих headers в том же методе является configuration error.
+`response.headers` сохраняет внешний encrypted media type, а parsing и `response.content_type`
+используют `clear_content_type`. Статусы из `plaintext_statuses` разрешают явно объявленные
+незашифрованные ошибки; остальные несовпадения fail closed.
+
+Без custom wire binding внешний тип для whole payload — `application/octet-stream`. Профиль только
+с field transforms сохраняет исходный JSON media type.
+
+## WebSocket и frame kind
+
+```python
+from eazy_sdk.crypto import websocket_encrypted
+from eazy_sdk.websocket import AsyncWsApi, JsonPayload, Replies, SuccessReply, ws
+
+class PaymentsSocket(AsyncWsApi):
+    @ws.call(
+        "create-payment",
+        payload=JsonPayload(CreatePayment),
+        replies=Replies((SuccessReply("created", PaymentResult),)),
+        crypto=PAYMENT_CRYPTO,
+        crypto_wire=websocket_encrypted(frame_kind="binary"),
+    )
+    async def create(self, number: str, amount: int) -> PaymentResult:
+        raise NotImplementedError
+```
+
+Whole-frame encryption по умолчанию отправляет binary data frame. Text frame разрешён только как
+`websocket_encrypted(frame_kind="text", text_safe=True)`: алгоритм обязан вернуть валидный UTF-8,
+например собственный Base64 envelope. Настоящие WebSocket ping/pong/close frames не проходят
+payload crypto.
+
+Inbound whole-frame профиль должен быть однозначным для connection: runtime не может узнать
+operation из зашифрованного envelope до decrypt. Если одна connection пытается активировать разные
+inbound encoded profiles, Eazy SDK завершает конфигурацию ошибкой. Для server push задайте общий
+profile в `WsClientConfig` или однозначное scoped rule.
+
+## AAD, key id и detached metadata
+
+Если cipher выбирает ключ по tenant, объявите typed input поверх `RequestDependency[str]`, добавьте
+его в `payload_crypto(..., inputs=(TENANT,))` и зарегистрируйте provider в `DependencyRegistry`.
+Алгоритм получает значение через `context.input(TENANT)`, а canonical immutable AAD — через
+`context.aad`. Secret dependency и resolved value не появляются в repr или transform trace.
+
+Key id, nonce или version marker возвращайте только через `CryptoResult`:
+
+```python
+KEY_ID = crypto_output("key-id", str)
+
+def encrypt(self, value: bytes, *, context: CryptoContext):
+    ciphertext, key_id = encrypt_for(context.input(TENANT), value)
+    return crypto_result(ciphertext, crypto_value(KEY_ID, key_id))
+```
+
+Output необходимо объявить в `encrypt_encoded(..., outputs=(KEY_ID,))` и связать с wire slot:
+
+```python
+HTTP_WIRE = http_encrypted(
+    metadata=(http_crypto_header(KEY_ID, "X-Key-Id"),),
+)
+```
+
+Inbound transform объявляет `metadata=(KEY_ID,)` и читает значение через
+`context.metadata(KEY_ID)`. Undeclared/missing/duplicate output, неверный тип и collision с request,
+signing или другим reserved writer завершаются fail-closed до отправки либо как sanitized algorithm
+failure.
+
+Для WebSocket envelope используйте `websocket_crypto_field(KEY_ID, "crypto", "kid")` только с
+document-stage field transform. Whole-frame crypto допускает только
+`CryptoInputScope.CONNECTION`; key id/nonce encoded transform должны быть частью зашифрованного byte
+envelope алгоритма.
+
+## Scope, отключение и replay
+
+Аргумент `crypto` имеет три состояния: отсутствие наследует client scope, профиль применяет его к
+operation, а `crypto=None` явно отключает наследование. Для групп используйте `CryptoRegistry` с
+`CryptoRule`, `http_crypto_scope(...)` или `websocket_crypto_scope(...)` и передайте registry через
+`ClientConfig.crypto`/`WsClientConfig.crypto`. Два одинаково приоритетных matching rules — ошибка.
+
+Каждый HTTP retry/redirect и каждый WebSocket replay/reconnect/resubscribe заново выполняет dump,
+шифрование и signing с новым context. Алгоритм не должен кэшировать ciphertext или nonce по
+logical call.
+
+## Ошибки и безопасная диагностика
+
+- `CryptoConfigurationError` — несовместимая модель, path, scope или wire ownership.
+- `PayloadEncryptionError` / `PayloadDecryptionError` — безопасная оболочка ошибки алгоритма.
+- `EncryptedMediaTypeMismatch` / `EncryptedFrameKindMismatch` — неожиданный wire формат.
+- `CryptoLimitExceeded` — превышен pre/post byte limit.
+- `CryptoStreamingUnsupported` — whole transform применён к streaming body.
+- `CryptoRuntimeMismatch` — async algorithm передан sync HTTP client.
+
+Eazy SDK не включает сообщение исходной algorithm exception в публичную ошибку и не сохраняет её
+как `__cause__`. Не помещайте plaintext, key или nonce в `name` алгоритма: это публичный стабильный
+идентификатор, который разрешено показывать в диагностике.
+
+## OpenAPI и AsyncAPI
+
+В operation schema хранится только имя профиля и wire policy:
+
+```yaml
+x-eazy-sdk-crypto:
+  profile: payments-v1
+  direction: bidirectional
+  wire:
+    contentType: application/vnd.example.encrypted+json # OpenAPI
+    # frameKind: binary                             # AsyncAPI
+```
+
+Generated package экспортирует `crypto_registry(profiles)`. Передайте ему mapping из имени в
+handwritten `PayloadCrypto`, затем установите результат в client config. Generated source не
+содержит алгоритм, ключи, dynamic imports, `eval` или selector lambda.

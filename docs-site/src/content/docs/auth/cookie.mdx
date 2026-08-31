@@ -1,0 +1,103 @@
+---
+title: Cookie
+description: Передайте готовое значение session cookie.
+sources:
+  - eazy_sdk.auth.CookieScheme
+api_fingerprint: "sha256:8c30742714ec92e41f68d080feddc65e5570997389f3fd1dfa82947a71c3bed4"
+---
+
+Используйте `CookieScheme`, если значение cookie уже известно.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /dashboard``
+
+```json
+{
+  "method": "GET",
+  "url": "/dashboard",
+  "headers": {"Cookie": "session_id=session-demo-42"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"welcome": "Ada"}
+}
+```
+::::
+:::::
+
+```python
+from eazy_sdk.auth import CookieScheme
+
+COOKIE = CookieScheme("session_id", name="dashboard-session")
+auth = COOKIE.static("session-demo-42")
+```
+
+Для cookie, которую сервер выдаёт после login, используйте {doc}`Session </auth/session>`.
+
+## Cookie после login
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /auth/login``
+
+```json
+{
+  "method": "POST",
+  "url": "/auth/login",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"username": "ada@example.test", "password": "correct-horse"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``204 No Content``
+
+```json
+{
+  "status": 204,
+  "headers": {
+    "Set-Cookie": "session_id=session-v1; Path=/; HttpOnly; Secure; SameSite=Lax"
+  },
+  "body": null
+}
+```
+::::
+:::::
+
+```python
+from eazy_sdk.auth import session_cookie
+
+auth = session_cookie(
+    "session_id",
+    credentials=credentials,
+    service=CookieLoginService(),
+)
+```
+
+`CookieLoginService.acquire(...)` вызывает login endpoint. Eazy SDK берёт `session_id` из
+`Set-Cookie` успешного ответа.

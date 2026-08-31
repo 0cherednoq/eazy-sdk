@@ -1,0 +1,73 @@
+---
+title: Protection
+description: Публичные captcha presets.
+sources:
+  - eazy_sdk.protection
+  - eazy_sdk_presets.cloudflare
+  - eazy_sdk_presets.recaptcha
+api_fingerprint: "sha256:5c6561e89ffe2f0e16d9bc3332fd9f29a3f1d17e31e7b6bb071821acf9ab2733"
+---
+
+## Mandatory operation flow
+
+```python
+requirement = ProtectionRequirement[Result]("login-protection")
+flow = protection_flow(
+    requirement,
+    acquire=ProtectionApi.acquire,
+    solve=True,
+    verify=ProtectionApi.verify,
+)
+solvers = SolverBindings(bind_solver(requirement, solver))
+```
+
+`ProtectionFlow` имеет три формы: acquire-only, acquire + solve и acquire + solve + verify.
+`FromProtection(requirement, field)` рекурсивно связывает typed result с точным полем private target
+модели `BodyProjection`. Все managed fields одного result применяются атомарно на каждой HTTP
+attempt после projection и до финальной target-валидации.
+
+Operation объявляет `protections=(requirement,)`; `ClientConfig` получает `protections=(flow,)` и
+`protection_solvers=solvers`. Missing flow, solver или field mapping завершается до сети.
+
+## Conditional and domain policies
+
+Conditional challenge остаётся response case/reaction. External WAF policy имеет reusable scope и
+также подключается через `ClientConfig.protections`.
+
+## Cloudflare
+
+```python
+cloudflare.challenge_pages(scope=..., solver=...)
+cloudflare.turnstile_widget(scope=..., solver=..., apply=...)
+cloudflare.turnstile_preclearance(
+    scope=...,
+    site_key=...,
+    page_url=...,
+    solver=...,
+)
+```
+
+## reCAPTCHA
+
+```python
+recaptcha.v2_checkbox(scope=..., solver=...)
+recaptcha.v2_invisible(scope=..., solver=...)
+recaptcha.v3_action(
+    scope=...,
+    site_key=...,
+    action=...,
+    solver=...,
+)
+recaptcha.enterprise_checkbox(scope=..., solver=...)
+recaptcha.enterprise_score_action(
+    scope=...,
+    project=...,
+    site_key=...,
+    action=...,
+    solver=...,
+)
+recaptcha.enterprise_policy_based_challenge(scope=..., solver=...)
+```
+
+Presets возвращают scoped client policies. Captcha-specific names принадлежат конкретным vendor
+models; общая operation abstraction называется Protection.

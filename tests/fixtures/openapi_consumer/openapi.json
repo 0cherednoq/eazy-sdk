@@ -1,0 +1,30 @@
+{
+  "openapi": "3.1.1",
+  "info": {"title": "Installed consumer fixture", "version": "1"},
+  "paths": {
+    "/ping": {
+      "get": {
+        "operationId": "ping",
+        "responses": {
+          "200": {
+            "description": "pong",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Ping"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Ping": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {"ok": {"type": "boolean"}}
+      }
+    }
+  }
+}

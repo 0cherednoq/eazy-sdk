@@ -1,0 +1,37 @@
+---
+title: Query
+description: Добавьте обязательные и optional query parameters.
+sources:
+  - eazy_sdk.request.Query
+api_fingerprint: "sha256:f453ddb8b315ae83f77db1f77f4d89684e12c859dc2c96c50accc7ed11ae8928"
+---
+
+Query parameters объявляются полями единого request-`TypedDict`. Отсутствующее optional поле не
+попадает в URL.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import Query
+
+class SearchUsersRequest(TypedDict):
+    q: Annotated[str, Query()]
+    limit: NotRequired[Annotated[int, Query()]]
+
+class AsyncUsersApi(AsyncApi):
+    @api.get("/users", operation_id="searchUsers", responses=RESPONSES)
+    async def search(self, **request: Unpack[SearchUsersRequest]) -> list[User]:
+        raise NotImplementedError
+
+users = await AsyncUsersApi(client).search(q="ada", limit=10)
+```
+
+Вызов отправит `GET /users?q=ada&limit=10`. `search(q="ada")` отправит только `q`.
+
+Переименуйте wire-параметр через `Query("page-size")`. Параметры `style`, `explode` и
+`allow_reserved` нужны для OpenAPI-compatible сериализации сложных значений. Для API, которое
+чувствительно к порядку query, задайте `WireOptions(query_order=(...))` в декораторе.
+
+Пример ответа: status `200`, `Content-Type: application/json`, body
+`[{"id":42,"name":"Ada"}]`.

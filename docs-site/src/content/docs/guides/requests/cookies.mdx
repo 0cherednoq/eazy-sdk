@@ -1,0 +1,32 @@
+---
+title: Cookies
+description: Добавьте cookie в HTTP request.
+sources:
+  - eazy_sdk.request.Cookie
+api_fingerprint: "sha256:7722abb33cd2e2a4a44c732d41db6fca914fb7cf359fc8732cdbd0953ff88a3d"
+---
+
+Cookie marker подходит для значения, которое действительно является аргументом операции. Session
+cookie лучше подключать через auth policy.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import Cookie
+
+class DashboardRequest(TypedDict):
+    experiment: NotRequired[Annotated[str, Cookie("experiment")]]
+
+class DashboardApi(SyncApi):
+    @api.get("/dashboard", operation_id="dashboard", responses=RESPONSES)
+    def dashboard(self, **request: Unpack[DashboardRequest]) -> Dashboard:
+        raise NotImplementedError
+```
+
+`dashboard(experiment="new-nav")` отправит `Cookie: experiment=new-nav`. Отсутствующее поле не
+добавляет cookie. Несколько cookie объединяются в один корректный header на этапе preparation.
+
+Для готовой auth cookie используйте `CookieScheme`; для cookie из login response используйте
+`session_cookie(...)`. Тогда credential не появляется в сигнатуре метода. Пример ответа: status
+`200`, `Content-Type: application/json`, body `{"widgets":3}`.

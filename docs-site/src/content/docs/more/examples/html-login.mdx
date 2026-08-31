@@ -1,0 +1,67 @@
+---
+title: HTML login
+description: Разберите dashboard и ошибки login, когда сервер всегда возвращает 200 text/html.
+freshness: false
+---
+
+Этот сценарий встречается у сайтов без JSON API. Form endpoint возвращает `200 text/html` для
+успеха, неверного пароля и неизвестного пользователя.
+
+## Обмен по сети
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /login``
+
+```json
+{
+  "method": "POST",
+  "url": "/login",
+  "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+  "body": "username=ada%40example.test&password=correct-horse"
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK · dashboard``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "text/html; charset=utf-8"},
+  "body": "<main data-page=\"dashboard\"><h1>Welcome, Ada</h1></main>"
+}
+```
+::::
+:::::
+
+## Структура примера
+
+```text
+scraper/
+├── models.py      # DashboardPage и typed error pages
+├── parser.py      # BeautifulSoup parser
+├── api.py         # Декорированный login и response cases
+└── main.py        # HTTPX client и вызов login
+```
+
+Рабочая схема состоит из трёх частей:
+
+1. `Form("username")` и `Form("password")` собирают form body.
+2. Parser строит BeautifulSoup document один раз на response.
+3. `Success` и два `Error` case проверяют признаки dashboard, invalid password и user not found.
+
+Полный код моделей, parser-а и декорированного API-метода находится в
+{doc}`руководстве по HTML </guides/responses/html>`. Там же показаны `NoMatch`, `Malformed` и
+`AmbiguousResponseError`.
+
+После login обычный scraping endpoint описывается тем же способом. Если страница имеет один
+вариант, достаточно одного `Parsed(PageModel, using=HTML_PARSER, media_type="text/html")`.

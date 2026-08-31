@@ -1,0 +1,72 @@
+---
+title: Bearer Token
+description: Authorization Bearer для готового access token.
+sources:
+  - eazy_sdk.auth.BearerScheme
+api_fingerprint: "sha256:e2fff75c3b7db2776393cf39d440eb20d820453e27b30febe997a2f938a562af"
+---
+
+Используйте статический Bearer token, если приложение уже получило access token и не должно
+автоматически выполнять login или refresh.
+
+```python
+import httpx
+
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk.auth import BearerScheme
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+BEARER = BearerScheme("user-bearer")
+
+class AsyncAccountApi(AsyncApi):
+    @api.get("/account", responses=ACCOUNT_RESPONSES, security=BEARER)
+    async def get_account(self) -> Account:
+        raise NotImplementedError
+
+auth = BEARER.static("access-v1")
+client = AsyncClient(
+    base_url="https://api.example.test",
+    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
+    config=ClientConfig(auth=auth),
+)
+account = await AsyncAccountApi(client).get_account()
+await client.aclose()
+```
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /account``
+
+```json
+{
+  "method": "GET",
+  "url": "/account",
+  "headers": {"Authorization": "Bearer access-v1"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"id": 42, "name": "Ada"}
+}
+```
+::::
+:::::
+
+Имя схемы является диагностическим identity и должно быть стабильным в пределах SDK. Для token,
+который нужно получать и обновлять автоматически, используйте {doc}`Login </auth/login>` и
+{doc}`Refresh </auth/refresh>`.

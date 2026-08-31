@@ -1,0 +1,47 @@
+---
+title: Signing
+description: Публичный API подписи запросов.
+sources:
+  - eazy_sdk.request.signatures
+api_fingerprint: "sha256:09cd39210a7dc9f0de65566ced9f07559a8f6311ee95204bea43b7dceeee238a"
+---
+
+## HMAC
+
+```python
+hmac_sha256(*, key, base, output)
+```
+
+## Данные подписи
+
+```python
+join(*parts, separator=b"", prefix=b"", suffix=b"")
+method()
+path()
+target()
+query(...)
+body_digest(...)
+canonical_json(...)
+```
+
+## Результат
+
+```python
+header_output(name, encoding="hex")
+query_output(name, encoding="hex")
+cookie_output(name, encoding="hex")
+body_output(name, encoding="hex")
+```
+
+Ключ задаётся через `SigningKeyRequirement(name)`.
+
+`join(...)` объединяет компоненты с явным separator. Доступные projections включают `header(...)`,
+`query(...)`, `canonical_json(...)`, `wire_body()` и `previous_signature(...)`.
+
+Output может записать подпись в header, query, cookie или body. `encoding` принимает `hex`,
+`base64` или `raw`; `position` фиксирует место для exact wire API. `sign(...)` регистрирует
+reusable scoped rule, а `use(...)`, `extend(...)` и `unsigned()` задают operation override.
+
+`ClientConfig.key_provider` является callable
+`(SigningKeyRequirement) -> SigningKey`. Secrets отсутствуют в arguments операции и redacted в
+`repr`.

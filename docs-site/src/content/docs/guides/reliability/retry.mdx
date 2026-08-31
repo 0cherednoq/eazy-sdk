@@ -1,0 +1,46 @@
+---
+title: Retry
+description: Повтор запроса после временной ошибки.
+sources:
+  - eazy_sdk.ClientConfig
+  - eazy_sdk.RetryPolicy
+  - eazy_sdk.clients.CallOptions
+api_fingerprint: "sha256:5ab1087deb0829476e07bd68743496a0d3e9e437b89cb0ed68293163e48c2804"
+---
+
+Настройте retry один раз в `ClientConfig` и при необходимости сузьте budget через `CallOptions`
+конкретного вызова.
+
+```python
+from eazy_sdk import AsyncClient, ClientConfig, RetryPolicy
+from eazy_sdk.clients import CallOptions
+
+config = ClientConfig(retry=RetryPolicy.safe(max_attempts=3), timeout=5.0)
+client = AsyncClient(base_url=base_url, handler=handler, config=config)
+
+payment = await api.payments.get_payment(
+    payment_id="pay_42",
+    options=CallOptions(max_attempts=4, transport_retries=1),
+)
+```
+
+Safe policy повторяет только replay-safe операции для временных status/transport failures. Для
+семантически безопасного POST установите `idempotent=True` в decorator; одноразовый stream требует
+`ReplayableStreamBody`. Каждый attempt заново выполняет preparation и signing.
+Если operation использует payload crypto, field/encoded transforms также выполняются заново:
+ciphertext и nonce предыдущей попытки не переиспользуются.
+
+Пример первого ответа: status `503`, header `Retry-After: 1`; успешный повтор: status `200`, JSON
+`{"id":"pay_42"}`.
+
+## Budgets
+
+| Настройка | Назначение |
+|---|---|
+| `max_attempts` | Общий предел всех попыток, включая auth и redirects |
+| `transport_retries` | Повторы после transport failure |
+| `auth_retries` | Повторы после refresh session |
+| `retry` | Policy, которая решает, какие status/method можно повторить |
+
+Истечение timeout или cancellation останавливает ожидание и не создаёт скрытый background retry.
+Если semantic safety нельзя доказать, executor возвращает replay error вместо повторной отправки.

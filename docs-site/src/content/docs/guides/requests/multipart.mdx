@@ -1,0 +1,41 @@
+---
+title: Multipart
+description: Отправьте файл через multipart/form-data.
+sources:
+  - eazy_sdk.request.Part
+  - eazy_sdk.request.MultipartPart
+api_fingerprint: "sha256:5a4f248febfa17cfcc7b8f235ca599dd498e5297a8e2d541d5fce58d52fe6764"
+---
+
+Каждый `Part()` становится частью `multipart/form-data`. Для filename, part content type или
+собственных part headers передайте `MultipartPart`.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import MultipartPart, Part
+
+class UploadFileRequest(TypedDict):
+    document: Annotated[MultipartPart, Part("document")]
+    label: NotRequired[Annotated[str, Part()]]
+
+class FilesApi(SyncApi):
+    @api.post("/files", operation_id="uploadFile", responses=RESPONSES)
+    def upload(self, **request: Unpack[UploadFileRequest]) -> Upload:
+        raise NotImplementedError
+
+result = FilesApi(client).upload(
+    document=MultipartPart(
+        b"PNG bytes",
+        filename="avatar.png",
+        content_type="image/png",
+    ),
+)
+```
+
+Eazy SDK формирует boundary и framing bytes до отправки. Для фиксированного boundary или полного
+body model используйте `MultipartBody(boundary=...)`. Adapter получает уже подготовленные bytes и
+не пересобирает multipart.
+
+Пример ответа: status `201`, `Content-Type: application/json`, body `{"file_id":"f-1"}`.

@@ -1,0 +1,93 @@
+---
+title: SQLModel
+description: Хранение аккаунтов Eazy SDK в SQLite или PostgreSQL.
+sources:
+  - eazy_sdk_sqlmodel
+api_fingerprint: "sha256:b9c2ae068cd3625e4204952ec2788b0dec255f1e6586f89bc46ef38b4f40d17d"
+---
+
+## Установка
+
+```bash
+uv add eazy-sdk-sqlmodel
+```
+
+Для SQLite добавьте async driver:
+
+```bash
+uv add aiosqlite
+```
+
+## Подключение
+
+```python
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from eazy_sdk_sqlmodel import create_all, open_workspace
+
+engine = create_async_engine("sqlite+aiosqlite:///sdk.db")
+await create_all(engine)
+```
+
+## Создание аккаунта
+
+```python
+async with open_workspace(engine) as storage:
+    account = await storage.accounts.create(
+        "ada@example.test",
+        provider="example.test",
+        credentials={
+            "format": "plain-json",
+            "version": 1,
+            "data": {"password": "correct-horse"},
+        },
+        profile={"first_name": "Ada"},
+    )
+```
+
+Credentials, profile и session payload сохраняются как JSON. Если нужна защита данных на диске, добавьте её на уровне приложения.
+
+## Регистрация
+
+```python
+from eazy_sdk_sqlmodel import SqlRegistrationStore
+
+registration_store = SqlRegistrationStore(
+    session,
+    credentials_model=SignupCredentials,
+    profile_model=AccountProfile,
+    session_model=UserSession,
+)
+```
+
+Передайте `registration_store` в `account_registration(...)`. После успешной регистрации аккаунт
+сохранится автоматически.
+
+## Сохранение login session
+
+```python
+from eazy_sdk.auth import session_auth
+from eazy_sdk_sqlmodel import SqlSessionStore
+
+session_store = SqlSessionStore(
+    database_session,
+    account.id,
+    session_model=UserSession,
+)
+auth = session_auth(
+    UserSession,
+    credentials=credentials,
+    service=LoginService(),
+    store=session_store,
+)
+```
+
+Store проверяет revision при refresh и не позволяет позднему ответу затереть новую session.
+Используйте отдельный `AsyncSession`: lifecycle store сам фиксирует state и event перед возвратом
+и отклоняет явную внешнюю transaction.
+
+## Production schema
+
+`create_all(...)` предназначен для новой базы. Для обновления v1 сначала выполните read-only
+inspection через `eazy-sdk-sqlmodel-migrate DATABASE_URL`, затем повторите команду с `--apply`.
+Runtime не имеет dual-schema path после миграции.

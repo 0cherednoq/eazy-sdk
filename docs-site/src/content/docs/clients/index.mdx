@@ -1,0 +1,33 @@
+---
+title: Клиенты
+description: Выберите HTTP-клиент для Eazy SDK.
+freshness: false
+---
+
+| Клиент | Sync | Async |
+|---|:---:|:---:|
+| HTTPX | ✓ | ✓ |
+| Requests | ✓ | — |
+| curl_cffi | ✓ | ✓ |
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} HTTPX
+:link: /clients/httpx
+:link-type: doc
+
+Обычный выбор для нового SDK.
+:::
+:::{grid-item-card} Requests
+:link: /clients/requests
+:link-type: doc
+
+Используйте существующую requests.Session.
+:::
+:::{grid-item-card} curl_cffi
+:link: /clients/curl-cffi
+:link-type: doc
+
+Клиент с browser impersonation.
+:::
+::::

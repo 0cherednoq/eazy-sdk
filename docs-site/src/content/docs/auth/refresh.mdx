@@ -1,0 +1,103 @@
+---
+title: Refresh
+description: Обновите Bearer session по refresh token.
+sources:
+  - eazy_sdk.auth.session_auth
+  - eazy_sdk.auth.RefreshToken
+  - eazy_sdk.auth.ExpiresAt
+api_fingerprint: "sha256:cd1125189a3510394c327d07d91106a26e9bba4cd0fe9234a4d4639adc92c2af"
+---
+
+Refresh обновляет истёкшую Bearer session без повторной передачи пароля. Runtime вызывает
+`refresh(...)` у того же auth service, сохраняет новую revision и только затем продолжает
+защищённую операцию.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /auth/refresh``
+
+```json
+{
+  "method": "POST",
+  "url": "/auth/refresh",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"refresh_token": "refresh-v1"}
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {
+    "access_token": "access-v2",
+    "refresh_token": "refresh-v2",
+    "expires_at": "2030-01-01T01:00:00Z"
+  }
+}
+```
+::::
+:::::
+
+## Объявите request и операцию
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import JsonField
+from eazy_sdk.response import Json, Responses, Success
+
+class RefreshRequest(TypedDict):
+    refresh_token: Annotated[str, JsonField()]
+
+class AsyncAuthApi(AsyncApi):
+    @api.post(
+        "/auth/refresh",
+        operation_id="refresh",
+        responses=Responses(success=(Success(200, Json(UserSession)),)),
+        security=None,
+    )
+    async def refresh(self, **request: Unpack[RefreshRequest]) -> UserSession:
+        raise NotImplementedError
+```
+
+## Добавьте refresh в service
+
+```python
+from eazy_sdk.auth import AuthContext
+
+class LoginService:
+    # acquire(...) показан на странице Login
+
+    async def refresh(
+        self,
+        session: UserSession,
+        context: AuthContext[AuthSdk],
+    ) -> UserSession:
+        return await context.sdk.auth.refresh(
+            refresh_token=session.refresh_token.get_secret_value(),
+        )
+```
+
+Refresh запускается в двух случаях:
+
+- `ExpiresAt()` считает текущую session просроченной с учётом `leeway`;
+- защищённый ответ требует auth replay, а у вызова остался `auth_retries` budget.
+
+Каждое сохранение использует ожидаемую revision. Если два refresh выполняются конкурентно,
+поздний ответ со старой revision не перезапишет более новую session. Ошибка response case также не
+изменяет store.
+
+Настройка `session_auth(...)` и полный login flow находятся на странице {doc}`Login </auth/login>`.

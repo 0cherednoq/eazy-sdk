@@ -1,0 +1,86 @@
+---
+title: Request API
+description: Маркеры размещения, тела и wire options.
+sources:
+  - eazy_sdk.request
+api_fingerprint: "sha256:7a4cdb666827fa079cfde60889a3fc305a30429bbeee8a00cabb8258aab6f07f"
+---
+
+Маркеры используются в полях единого operation `TypedDict`: `Annotated[T, Path()]`, `Query()`,
+`Header()` и `Cookie()`. Имя wire-поля можно передать маркеру явно; без аргумента используется имя
+поля.
+
+Плоское object-shaped тело объявляйте через `TypedDict`: это структура данных, а не model object.
+Dataclass, Pydantic v2 и msgspec оставляйте для вложенных документов и правил валидации, которыми
+действительно должна владеть модель. Для отдельных полей доступны `JsonField`, `Form` и `Part`;
+готовые bytes помечаются `BytesBody`.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import JsonField
+
+class CreateUserRequest(TypedDict):
+    name: Annotated[str, JsonField()]
+
+class UsersApi(SyncApi):
+    @api.post("/users", responses=CREATE_RESPONSES)
+    def create(self, **request: Unpack[CreateUserRequest]) -> User:
+        raise NotImplementedError
+```
+
+Caller передаёт `create(name="Ada")`. `Unpack` поддерживает `Required`/`NotRequired`, сохраняет
+IDE completion и раскрывается compiler-ом в identity-based slots.
+
+Если public kwargs должны остаться плоскими, а server ожидает другой nested document, передайте
+декоратору `body=BodyProjection(source, target, using, encoding)`. Поля `source` не получают
+placement markers: mapper строит private target на каждой attempt, target проходит model adapter
+validation, и только после этого `JsonBody`, form/multipart или custom `BodyCodec` кодирует один
+semantic document. Mapper не получает client/transport state; Adaptix остаётся optional и может
+быть заменён обычной typed функцией.
+
+Все HTTP inputs одной operation, включая path, query, headers, cookies и body, находятся в одном
+именованном `TypedDict`. Прямые HTTP-параметры в сигнатуре first-party SDK и generated source не
+используются. `CallOptions | None` является единственным отдельным keyword-only control argument.
+
+`WireOptions` фиксирует порядок и exact/protocol настройки только там, где сервер требует точных
+байтов. `CallOptions | None` — зарезервированный keyword-only параметр управления одним вызовом.
+
+## Placement markers
+
+| Marker | Default wire name | Основные настройки |
+|---|---|---|
+| `Path(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
+| `Query(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
+| `Header(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
+| `Cookie(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
+
+## Body markers
+
+| Marker | Content type | Назначение |
+|---|---|---|
+| `JsonBody(...)` | `application/json` | Вложенная модель, scalar или array |
+| `JsonField(name=None)` | `application/json` | Одно JSON field |
+| `FormBody(...)` | form-urlencoded | Root, nested или model-owned document |
+| `Form(name=None)` | form-urlencoded | Одно form field |
+| `MultipartBody(...)` | multipart/form-data | Root, nested или model-owned document |
+| `Part(name=None)` | multipart/form-data | Одна part |
+| `BytesBody(...)` | заданный caller-ом | Buffered bytes |
+| `ReplayableStreamBody(...)` | заданный caller-ом | Повторно создаваемый stream |
+
+`BodyProjection(...)` не является ещё одним body marker. Это связь public `TypedDict` с private
+wire schema и одним из перечисленных encodings; смешивать projection с root/flat body нельзя.
+
+Для плоского JSON, form или multipart document используйте `Unpack[TypedDict]` и field markers
+`JsonField`, `Form` или `Part`. Не оборачивайте несколько scalar fields в Pydantic, dataclass или
+msgspec model. Root body markers нужны для scalar/array payload, вложенного document или случая,
+когда модель действительно владеет validation и serialization policy.
+
+`WireOptions` принимает `query_order`, `header_order`, `cookie_order`, `body_order`, `exact` и
+`protocol`. Exact requirements проверяются до resolver calls и network side effects.
+
+Custom `BodyCodec` можно использовать вместо root body marker или как encoding `BodyProjection`:
+он получает уже адаптированные semantic primitives и `EncodeContext(operation_id=...)`, затем
+возвращает окончательные bytes. Model registry в context отсутствует. `ScalarCodec` в placement
+marker обязан вернуть одно wire value; повторяющиеся query names не поддерживаются.

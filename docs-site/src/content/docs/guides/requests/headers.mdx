@@ -1,0 +1,34 @@
+---
+title: Headers
+description: Добавьте typed request headers.
+sources:
+  - eazy_sdk.request.Header
+api_fingerprint: "sha256:77f17543665ac81c2c7f6b36f4c2772bf8a1ad0e527b53201ddb1685f594149a"
+---
+
+Header marker связывает Python-аргумент с request header. Указывайте wire-имя явно, когда оно
+отличается от имени аргумента.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import Header
+
+class GetReportRequest(TypedDict):
+    locale: Annotated[str, Header("Accept-Language")]
+    request_id: NotRequired[Annotated[str, Header("X-Request-ID")]]
+
+class ReportsApi(SyncApi):
+    @api.get("/reports", operation_id="getReport", responses=RESPONSES)
+    def report(self, **request: Unpack[GetReportRequest]) -> Report:
+        raise NotImplementedError
+```
+
+`report(locale="ru")` отправит `Accept-Language: ru` и пропустит optional `X-Request-ID`.
+Header names сравниваются без учёта регистра, но Eazy SDK сохраняет объявленное wire-имя и порядок
+там, где transport поддерживает exact mode.
+
+Не передавайте authorization, signing или managed protection headers вручную. Они принадлежат
+client policy и добавляются до отправки. Пример ответа: status `200`, header
+`Content-Type: application/json`, body `{"ready":true}`.

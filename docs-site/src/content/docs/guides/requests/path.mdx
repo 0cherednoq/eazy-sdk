@@ -1,0 +1,36 @@
+---
+title: Path
+description: Подставьте typed значение в URL path.
+sources:
+  - eazy_sdk.request.Path
+api_fingerprint: "sha256:2be2f3f4ff8860477f738b409779be7f6ae90dc7f85bdc56f394d862e098b40a"
+---
+
+Path parameter заменяет placeholder в URL. Тип и имя хранятся в operation `TypedDict`, а
+`Unpack` показывает их как keyword arguments публичного метода.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import Path
+
+class GetUserRequest(TypedDict):
+    user_id: Annotated[int, Path()]
+
+class UsersApi(SyncApi):
+    @api.get("/users/{user_id}", operation_id="getUser", responses=RESPONSES)
+    def get_user(self, **request: Unpack[GetUserRequest]) -> User:
+        raise NotImplementedError
+
+user = UsersApi(client).get_user(user_id=42)
+```
+
+Вызов отправит `GET /users/42`. При `Path("id")` wire-имя может отличаться от имени Python
+аргумента, но должно совпадать с `{id}` в шаблоне.
+
+Eazy SDK отклоняет API-класс при импорте, если placeholder отсутствует в request-`TypedDict`, `Path` marker
+не имеет placeholder или один placeholder описан несколько раз. Optional path parameters не
+поддерживаются: URL всегда должен быть однозначным.
+
+Пример ответа: status `200`, `Content-Type: application/json`, body `{"id":42,"name":"Ada"}`.

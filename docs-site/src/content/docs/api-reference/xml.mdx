@@ -1,0 +1,30 @@
+---
+title: XML
+description: Публичный API XML codec.
+freshness: false
+---
+
+```python
+ElementTreeXmlCodec(
+    root_name="root",
+    encoding="utf-8",
+)
+
+XmlBody(
+    codec=...,
+    name="xml",
+    media_type="application/xml",
+)
+
+XmlResponse(codec=...)
+```
+
+`XmlBody` используется как `Annotated` marker. `XmlResponse` является primitive extractor-ом и
+передаётся в `Extracted(Model, using=XmlResponse(codec), media_type="application/xml")`.
+
+`ElementTreeXmlCodec` сериализует semantic primitives из model registry и разбирает повторяющиеся
+elements в lists. Scalars возвращаются как text, после чего окончательные типы строит выбранный
+model adapter.
+
+Собственный codec реализует `serialize(value) -> bytes` и `parse(body) -> object`. Ошибка decode
+становится `MalformedResponseError`; codec не должен возвращать частичный результат.

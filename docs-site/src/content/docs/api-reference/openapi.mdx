@@ -1,0 +1,54 @@
+---
+title: OpenAPI
+description: CLI генератора Eazy SDK.
+sources:
+  - eazy_sdk_openapi
+api_fingerprint: "sha256:42c0213c89fe35c9a6c9881ca813d4032d992d17717dc66ffadea43fe2a1f0a2"
+---
+
+## CLI
+
+```text
+eazy-sdk-openapi [-h] --package-name PACKAGE_NAME
+                 [--projection REQUIREMENT=MODULE:ATTRIBUTE] spec output
+```
+
+| Аргумент | Значение |
+|---|---|
+| `spec` | OpenAPI document в JSON или YAML |
+| `output` | Каталог для generated package |
+| `--package-name` | Имя Python package |
+| `--projection` | Repeatable static import для named projection requirement |
+
+## Python
+
+```python
+from eazy_sdk_openapi import GenerationConfig, ProjectionImport
+
+parse_openapi(document) -> OpenAPIIR
+generate_package(
+    document,
+    *,
+    spec_path,
+    output_directory,
+    package_name,
+    config=GenerationConfig(
+        projections=(
+            ProjectionImport("register-user", "application.projections:register_to_wire"),
+        ),
+    ),
+) -> Path
+```
+
+Generator принимает OpenAPI 3.0.x, 3.1.x и 3.2.x. Результат содержит Pydantic models, отдельные
+`Async*Api`/`Sync*Api`, root SDK factories и `openapi-compatibility.json`.
+
+Каждая operation генерируется как декорированный метод с явными parameters. Обычный вызов
+возвращает success value; `method.with_response(...)` возвращает `ResponseEnvelope`.
+
+Canonical `x-eazy-sdk` поддерживает root `protectionFlows`, operation `protections` и typed output
+mappings. Operation `projection` содержит `source`, `target`, named `application`, `encoding` и
+optional stable `name`; target обязан совпадать с выбранной request-body wire schema. IR хранит
+это как `BodyProjectionIR`, а `GenerationConfig` разрешает application requirement в статический
+`module:attribute` import. Unknown fields, missing imports, remote `$ref` и obsolete extension
+aliases отклоняются до emission с operation ID и JSON Pointer.

@@ -1,0 +1,47 @@
+---
+title: XML
+description: XML request/response через eazy-sdk-xml.
+freshness: false
+---
+
+```bash
+uv add eazy-sdk-xml
+```
+
+Подключите XML codec к request marker и response extractor. Операция остаётся обычным методом
+API-класса.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.response import Extracted, Responses, Success
+from eazy_sdk_xml import ElementTreeXmlCodec, XmlBody, XmlResponse
+
+codec = ElementTreeXmlCodec(root_name="order")
+responses = Responses(
+    success=(
+        Success(
+            201,
+            Extracted(OrderResult, using=XmlResponse(codec), media_type="application/xml"),
+        ),
+    ),
+)
+
+class CreateOrderRequest(TypedDict):
+    order: Annotated[Order, XmlBody(codec=codec)]
+
+class OrdersApi(SyncApi):
+    @api.post("/orders", operation_id="createOrder", responses=responses)
+    def create_order(self, **request: Unpack[CreateOrderRequest]) -> OrderResult:
+        raise NotImplementedError
+```
+
+Пример request: `POST /orders`, `Content-Type: application/xml`, body
+`<order><id>42</id></order>`. Пример response: status `201`, `Content-Type: application/xml`, body
+`<result><accepted>true</accepted></result>`.
+
+Собственный codec реализует `serialize(value) -> bytes` и `parse(body) -> object`. Он должен быть
+детерминированным, если body участвует в signing. `XmlResponse` возвращает primitive tree, после
+чего общий `ModelAdapterRegistry` строит dataclass, Pydantic или msgspec model. Malformed XML
+становится response parsing error, а не частично заполненной моделью.

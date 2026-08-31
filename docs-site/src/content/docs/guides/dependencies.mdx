@@ -1,0 +1,55 @@
+---
+title: Dependencies
+description: Typed providers добавляют вычисляемые значения через проверяемые bindings.
+sources:
+  - eazy_sdk.dependencies
+api_fingerprint: "sha256:695374a7a669ef3bd8020e0a0d20d516e4f99386ea49ae5f1adfff7560be06a1"
+---
+
+Dependency подходит для device context, tenant ID и других значений, которые получает service, а
+не caller операции. Descriptor задаёт result type, cache policy и bindings; implementation
+регистрируется отдельно в `DependencyRegistry`.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import JsonBody
+
+class CreatePaymentRequest(TypedDict):
+    body: Annotated[Payment, JsonBody()]
+
+class PaymentsApi(AsyncApi):
+    @api.post("/payments", responses=RESPONSES, requires=(DEVICE_SPEC,))
+    async def create(self, **request: Unpack[CreatePaymentRequest]) -> Receipt:
+        raise NotImplementedError
+```
+
+`field(name)` выбирает атрибут результата, `value()` — весь результат. Target может быть header,
+query, cookie или body. Cache policies: `NONE`, `CLIENT`, `CALL`, `ATTEMPT`. Dependency patch
+проверяется атомарно до request side effects.
+
+Регистрируйте implementation на клиенте, а не в операции:
+
+```python
+from eazy_sdk import ClientConfig
+from eazy_sdk.dependencies import DependencyRegistry
+
+dependencies = DependencyRegistry()
+dependencies.register(DEVICE_SPEC, load_device_context)
+config = ClientConfig(dependencies=dependencies)
+```
+
+| Cache policy | Повторное вычисление |
+|---|---|
+| `NONE` | Каждый resolver access |
+| `CLIENT` | Один раз на client lifetime |
+| `CALL` | Один раз на logical API call |
+| `ATTEMPT` | Для каждой retry/redirect attempt |
+
+Если required dependency не зарегистрирована или возвращает значение неверного типа, вызов
+завершается до сети. Resolver не получает mutable request и не может обойти signing.
+
+Пример request после binding: header `X-Device-ID: device-7`, JSON
+`{"amount":"49.90","device":{"locale":"ru"}}`; response status `201`, JSON
+`{"id":"pay_42"}`.

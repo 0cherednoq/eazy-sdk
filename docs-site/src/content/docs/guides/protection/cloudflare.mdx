@@ -1,0 +1,79 @@
+---
+title: Cloudflare Challenge Pages
+description: Получение clearance cookie после Cloudflare challenge.
+sources:
+  - eazy_sdk.protection
+  - eazy_sdk_presets.cloudflare
+api_fingerprint: "sha256:6786bfce2ded775810c886453428eeef9cf83e8ae9d2f5dde1b6804d200d2669"
+---
+
+## Challenge
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /account``
+
+```json
+{
+  "method": "GET",
+  "url": "/account",
+  "headers": {"Accept": "application/json"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``403 Forbidden``
+
+```json
+{
+  "status": 403,
+  "headers": {
+    "Content-Type": "text/html",
+    "cf-mitigated": "challenge",
+    "cf-ray": "fixture-ray"
+  },
+  "body": "<html><title>Just a moment...</title></html>"
+}
+```
+::::
+:::::
+
+## Preset
+
+```python
+from datetime import datetime
+
+from eazy_sdk import Client, ClientConfig
+from eazy_sdk_presets import cloudflare, host
+
+class CloudflareSolver:
+    async def solve(self, challenge, context):
+        return cloudflare.CloudflareClearance(
+            cookies=(
+                cloudflare.SecretCookie("cf_clearance", "clearance-value"),
+            ),
+            expires_at=datetime.fromisoformat("2030-01-01T00:00:00+00:00"),
+        )
+
+protection = cloudflare.challenge_pages(
+    scope=host("api.example.test"),
+    solver=CloudflareSolver(),
+)
+
+client = Client(
+    base_url=base_url,
+    handler=handler,
+    config=ClientConfig(protections=(protection,)),
+)
+```
+
+Замените пример solver реализацией вашего captcha-сервиса или браузерного адаптера.

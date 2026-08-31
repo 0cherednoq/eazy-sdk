@@ -1,0 +1,74 @@
+---
+title: Session
+description: Публичный API login session.
+sources:
+  - eazy_sdk.auth
+api_fingerprint: "sha256:e05d52d8d3c2c46ca125bd892844f43414d5a3fe6fd055df4bb0f477fc006ba8"
+---
+
+## Session из модели
+
+```python
+session_auth(
+    SessionModel,
+    *,
+    credentials=None,
+    session=None,
+    service,
+    store=None,
+    identity=None,
+    name="session",
+    clock=...,
+) -> Auth
+```
+
+Передайте `credentials=` для login или `session=` для готовой session.
+
+## Session из cookie
+
+```python
+session_cookie(
+    "session_id",
+    *,
+    credentials,
+    service,
+    store=None,
+    identity=None,
+    name="session-cookie",
+) -> Auth
+```
+
+## Аннотации модели
+
+```python
+Bearer()
+RefreshToken()
+ExpiresAt(leeway=...)
+```
+
+## Store
+
+```python
+MemorySessionStore()
+```
+
+Совместимый `SessionStore` получает новую session после login или refresh.
+
+`session_auth(...)` требует ровно один источник: `credentials=` для автоматического login или
+`session=` для готового значения. Session model должна иметь ровно один `Bearer()` field, не более
+одного `RefreshToken()` и не более одного `ExpiresAt()`.
+
+`session_cookie(...)` всегда получает credentials и извлекает named cookie из `Set-Cookie`
+успешного login response. Service должен вызвать `.with_response(...)` и передать envelope через
+`context.capture(...)`, чтобы runtime увидел response headers.
+
+Store protocol:
+
+```python
+await store.load(key) -> StoredSession | None
+await store.save(key, value, revision)
+await store.invalidate(key, expected=None)
+```
+
+Revision является CAS proof. Store обязан отклонить сохранение поверх неожиданной более новой
+revision.

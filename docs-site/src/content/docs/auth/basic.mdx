@@ -1,0 +1,77 @@
+---
+title: Basic Auth
+description: Authorization Basic для декларативной операции.
+sources:
+  - eazy_sdk.auth.BasicScheme
+api_fingerprint: "sha256:bfc0fb3a56c647871a7bfef8afa5273f6f446a61bb2fe799b74f9207720afa19"
+---
+
+Basic Auth подходит, когда сервер ожидает логин и пароль в каждом запросе. Создайте одну схему,
+укажите её в операции и передайте credentials через `ClientConfig`.
+
+```python
+import httpx
+
+from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk.auth import BasicScheme
+from eazy_sdk.handlers.httpx import HttpxHandler
+
+BASIC = BasicScheme("admin-basic")
+
+class AdminApi(SyncApi):
+    @api.get("/admin/profile", responses=PROFILE_RESPONSES, security=BASIC)
+    def profile(self) -> Profile:
+        raise NotImplementedError
+
+auth = BASIC.static(("ada", "correct-horse"))
+client = Client(
+    base_url="https://api.example.test",
+    handler=HttpxHandler(httpx.Client(), owns_client=True),
+    config=ClientConfig(auth=auth),
+)
+profile = AdminApi(client).profile()
+```
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /admin/profile``
+
+```json
+{
+  "method": "GET",
+  "url": "/admin/profile",
+  "headers": {"Authorization": "Basic YWRhOmNvcnJlY3QtaG9yc2U="},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"id": 42, "name": "Ada"}
+}
+```
+::::
+:::::
+
+`BasicScheme` кодирует `username:password` в Base64 и добавляет header после подготовки request.
+Если операция подписывается, signer видит уже добавленный `Authorization`.
+
+:::{warning} Basic Auth требует HTTPS
+Base64 не шифрует credentials. Не отправляйте Basic Auth по незашифрованному соединению и не
+  записывайте значение `Authorization` в логи.
+:::
+
+Опишите `401` как `Error(...)` в `Responses`, чтобы неверные credentials давали typed API error.

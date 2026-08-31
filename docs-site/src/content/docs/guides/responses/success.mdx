@@ -1,0 +1,49 @@
+---
+title: Успешный ответ
+description: Разбор JSON-ответа в dataclass, Pydantic, msgspec или собственную модель.
+sources:
+  - eazy_sdk.api
+  - eazy_sdk.response
+api_fingerprint: "sha256:46b588a7d2e3047daa09375ea89b15dd0db243a242c40c2eed2bed257211eee5"
+---
+
+Обычный API-метод возвращает parsed value. `.with_response(...)` выполняет ту же операцию и
+добавляет HTTP metadata, не меняя parser или response case.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import Path
+from eazy_sdk.response import Json, Responses, Success
+
+RESPONSES = Responses(success=(Success(200, Json(User)),))
+
+class GetUserRequest(TypedDict):
+    user_id: Annotated[int, Path()]
+
+class UsersApi(SyncApi):
+    @api.get("/users/{user_id}", responses=RESPONSES)
+    def get_user(self, **request: Unpack[GetUserRequest]) -> User:
+        raise NotImplementedError
+
+users = UsersApi(client)
+user = users.get_user(user_id=42)
+envelope = users.get_user.with_response(user_id=42)
+
+assert envelope.value == User(id=42, name="Ada")
+print(envelope.status_code)
+print(envelope.headers.get("x-request-id"))
+print(envelope.response.raw_response)
+```
+
+Request: `GET /users/42`. Response: status `200`, header
+`Content-Type: application/json`, JSON `{"id":42,"name":"Ada"}`. Обычный вызов возвращает
+`User`; envelope дополнительно сохраняет HTTP metadata.
+
+`Json(User)` проверяет content type и создаёт модель через настроенный `ModelAdapterRegistry`.
+Поддерживаются dataclass, Pydantic v2, msgspec и зарегистрированные custom adapters. Примеры
+находятся в {doc}`руководстве по сериализации моделей </api-reference/models-codecs>`.
+
+Для `204` используйте `Empty()`, для текста `Text()`, для бинарного ответа `Bytes()`. Несколько
+успешных status описываются несколькими `Success(...)` cases внутри одного `Responses`.

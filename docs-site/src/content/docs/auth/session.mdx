@@ -1,0 +1,126 @@
+---
+title: Session
+description: Используйте готовую session или сохраните новую session между запусками.
+sources:
+  - eazy_sdk.auth.session_auth
+  - eazy_sdk.auth.session_scheme
+api_fingerprint: "sha256:e022a2427979a153e99f78911b5decd15fc860ac67949ae2909d06325e31b3d4"
+---
+
+Передайте готовую session, если login уже был выполнен.
+
+```python
+auth = session_auth(
+    UserSession,
+    session=saved_session,
+    service=LoginService(),
+)
+```
+
+Укажите ровно один аргумент: `credentials=` или `session=`.
+
+Автор hand-written SDK может один раз объявить ту же scheme для API defaults и lifecycle binding:
+
+```python
+from eazy_sdk import ApiDefaults, AsyncApi
+from eazy_sdk.auth import session_scheme
+
+USER_SESSION = session_scheme(UserSession, name="user-session")
+
+class AccountApi(AsyncApi):
+    defaults = ApiDefaults(security=USER_SESSION)
+
+auth = USER_SESSION.configure(
+    credentials=credentials,
+    service=LoginService(),
+)
+sdk = client.bind_sdk(StoreSdk)
+```
+
+`session_auth(...)` сохраняет свою короткую форму для SDK без reusable API default. В root SDK
+`SessionScheme.configure(...)` создаёт тот же lifecycle binding, а scoped login/refresh создаёт
+`StoreSdk` тем же public factory без untyped lambda и без передачи scheme в каждый экземпляр.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /account``
+
+```json
+{
+  "method": "GET",
+  "url": "/account",
+  "headers": {"Authorization": "Bearer access-v1"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"id": "user-42", "email": "ada@example.test"}
+}
+```
+::::
+:::::
+
+Без `store=` session хранится в памяти процесса. Передайте совместимый store, чтобы сохранить её:
+
+```python
+auth = session_auth(
+    UserSession,
+    credentials=credentials,
+    service=LoginService(),
+    store=session_store,
+    identity="ada@example.test",
+)
+```
+
+После успешного login и refresh новое значение автоматически передаётся в `session_store`.
+
+## SQLModel store
+
+`SqlSessionStore` реализует нейтральный `SessionStore` и может передаваться прямо в
+`session_auth(...)`:
+
+```python
+from eazy_sdk_sqlmodel import SqlSessionStore
+
+session_store = SqlSessionStore(
+    database_session,
+    account.id,
+    session_model=UserSession,
+)
+auth = session_auth(
+    UserSession,
+    credentials=credentials,
+    service=LoginService(),
+    store=session_store,
+    identity=account.identifier,
+)
+```
+
+Используйте отдельный `AsyncSession` для lifecycle store. `SqlSessionStore` атомарно сохраняет
+session и lifecycle event, проверяет CAS revision и отклоняет явную внешнюю transaction.
+
+## Что хранит session model
+
+| Аннотация | Назначение |
+|---|---|
+| `Bearer()` | Поле access token и способ заполнить `Authorization` |
+| `RefreshToken()` | Поле, которое service передаст refresh-ручке |
+| `ExpiresAt(leeway=...)` | Время, после которого runtime обновит session заранее |
+
+Модель должна содержать ровно одно поле `Bearer`, не более одного `RefreshToken` и не более одного
+`ExpiresAt`. Готовая `session=` и `credentials=` взаимоисключающие.

@@ -1,0 +1,46 @@
+---
+title: Комбинированная авторизация
+description: Требования AND и OR для одной операции.
+sources:
+  - eazy_sdk.auth.all_of
+  - eazy_sdk.auth.any_of
+api_fingerprint: "sha256:dd2902f6d64a707200682f063ddf2ae21705263a5d3241c73bac74b6b07ff310"
+---
+
+Eazy SDK различает требования AND и OR. `all_of(...)` формирует одну альтернативу, в которой
+нужны все credentials. `any_of(...)` выбирает первую полностью доступную альтернативу.
+
+```python
+from eazy_sdk import ApiDefaults, AsyncApi, api
+from eazy_sdk.auth import ApiKeyScheme, BearerScheme, BasicScheme, all_of, any_of
+
+BASIC = BasicScheme("basic")
+BEARER = BearerScheme("bearer")
+DEVICE_KEY = ApiKeyScheme.header("X-Device-Key", name="device-key")
+
+USER_OR_SERVICE = any_of(BEARER, all_of(BASIC, DEVICE_KEY))
+
+class AsyncReportsApi(AsyncApi):
+    defaults = ApiDefaults(security=USER_OR_SERVICE)
+
+    @api.get("/reports", responses=REPORTS_RESPONSES)
+    async def list_reports(self) -> list[Report]:
+        raise NotImplementedError
+
+    @api.post("/health-check", responses=HEALTH_RESPONSES, security=None)
+    async def health_check(self) -> Health:
+        raise NotImplementedError
+```
+
+В этом примере `/reports` принимает либо Bearer token, либо одновременно Basic credentials и
+`X-Device-Key`. `/health-check` явно отключает default и остаётся публичной.
+
+| Выражение | Семантика |
+|---|---|
+| `all_of(A, B)` | Требуются обе схемы `A` и `B` |
+| `any_of(A, B)` | Достаточно одной доступной схемы |
+| `any_of(all_of(A, B), C)` | Требуются `A` + `B` либо одна `C` |
+| `security=None` | Отключить `ApiDefaults.security` для операции |
+
+Зарегистрируйте providers для всех схем выбранной альтернативы. Если ни одна альтернатива не
+может быть разрешена, вызов завершается до сети.

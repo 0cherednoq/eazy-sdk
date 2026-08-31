@@ -1,0 +1,40 @@
+/* Small Eazy SDK additions on top of Shibuya. Code colors and typography remain theme-owned. */
+
+.http-exchange {
+  margin-block: 1.25rem 1.75rem;
+}
+
+.http-exchange .http-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--sy-c-border);
+  border-radius: 0.75rem;
+  background: var(--sy-c-background);
+}
+
+.http-exchange .http-panel > p:first-of-type {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--sy-c-border);
+  font-size: 0.82rem;
+}
+
+.http-exchange .http-panel--request {
+  border-left: 3px solid var(--accent-9);
+}
+
+.http-exchange .http-panel--response {
+  border-left: 3px solid #3e7fcb;
+}
+
+.http-exchange .literal-block-wrapper,
+.http-exchange div.highlight,
+.http-exchange pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.sd-card {
+  border-radius: 0.6rem;
+}

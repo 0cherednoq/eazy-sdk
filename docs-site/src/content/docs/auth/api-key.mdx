@@ -1,0 +1,88 @@
+---
+title: API Key
+description: Передайте API key в request header или query parameter.
+sources:
+  - eazy_sdk.auth.ApiKeyScheme
+api_fingerprint: "sha256:da86d1aae404ad80bd9415d1f97b97750188f76e9529cce582c8d9438c0c2911"
+---
+
+Используйте место, которое требует сервер.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /reports``
+
+```json
+{
+  "method": "GET",
+  "url": "/reports",
+  "headers": {"X-API-Key": "key_demo_123"},
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"reports": 3}
+}
+```
+::::
+:::::
+
+::::{tab-set}
+  :::{tab-item} Header
+
+```python
+from eazy_sdk.auth import ApiKeyScheme
+
+API_KEY = ApiKeyScheme.header("X-API-Key", name="reporting-key")
+auth = API_KEY.static("key_demo_123")
+```
+:::
+  :::{tab-item} Query
+
+```python
+from eazy_sdk.auth import ApiKeyScheme
+
+API_KEY = ApiKeyScheme.query("api_key", name="weather-key")
+auth = API_KEY.static("key_demo_123")
+```
+
+Query-вариант отправит `/weather?api_key=key_demo_123`.
+:::
+::::
+
+Передайте `auth` в `ClientConfig` и укажите `security=API_KEY` в декораторе операции:
+
+```python
+from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk.handlers.httpx import HttpxHandler
+
+class ReportsApi(SyncApi):
+    @api.get("/reports", responses=REPORT_RESPONSES, security=API_KEY)
+    def reports(self) -> Reports:
+        raise NotImplementedError
+
+client = Client(
+    base_url="https://api.example",
+    handler=HttpxHandler(raw, owns_client=True),
+    config=ClientConfig(auth=auth),
+)
+reports = ReportsApi(client).reports()
+```
+
+Не передавайте API key аргументом метода. Это credential клиента, а не часть публичной сигнатуры
+операции. Missing provider завершается до отправки HTTP request.

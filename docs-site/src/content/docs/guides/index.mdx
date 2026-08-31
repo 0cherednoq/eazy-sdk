@@ -1,0 +1,147 @@
+---
+title: Руководства
+description: Карта пользовательских функций Eazy SDK.
+template: splash
+freshness: false
+hero:
+  tagline: Откройте страницу с нужным запросом, ответом или поведением клиента.
+  actions:
+    - text: Быстрый старт
+      link: /getting-started/quickstart/
+      icon: right-arrow
+    - text: API Reference
+      link: /api-reference/
+      variant: minimal
+---
+
+## HTTP
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} Запросы
+:link: /guides/requests/index
+:link-type: doc
+
+Path, query, headers, cookies или body.
+:::
+:::{grid-item-card} Ответы
+:link: /guides/responses/index
+:link-type: doc
+
+Успешная модель, ошибка API или HTML.
+:::
+:::{grid-item-card} Клиенты
+:link: /clients/index
+:link-type: doc
+
+HTTPX, Requests или curl_cffi.
+:::
+:::{grid-item-card} Подпись
+:link: /signing
+:link-type: doc
+
+Добавьте HMAC-подпись к готовому запросу.
+:::
+:::{grid-item-card} Шифрование
+:link: /guides/payload-crypto
+:link-type: doc
+
+Шифруйте поля или всё тело до отправки.
+:::
+::::
+
+## Доступ
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} Авторизация
+:link: /auth/index
+:link-type: doc
+
+Выберите схему доступа к API.
+:::
+:::{grid-item-card} Login
+:link: /auth/login
+:link-type: doc
+
+Получите session по credentials.
+:::
+:::{grid-item-card} Регистрация
+:link: /auth/registration
+:link-type: doc
+
+Создайте аккаунт.
+:::
+:::{grid-item-card} Verification
+:link: /auth/verification
+:link-type: doc
+
+Подтвердите созданный аккаунт.
+:::
+::::
+
+## Поведение
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} Dependencies
+:link: /guides/dependencies
+:link-type: doc
+
+Передайте вычисляемые значения в запрос.
+:::
+:::{grid-item-card} Middleware
+:link: /guides/middleware
+:link-type: doc
+
+Добавьте обработчик вызова клиента.
+:::
+:::{grid-item-card} Retry
+:link: /guides/reliability/retry
+:link-type: doc
+
+Повторите запрос после временной ошибки.
+:::
+:::{grid-item-card} Redirect
+:link: /guides/reliability/redirect
+:link-type: doc
+
+Ограничьте число переходов.
+:::
+:::{grid-item-card} Rate limit
+:link: /guides/reliability/rate-limit
+:link-type: doc
+
+Ограничьте частоту запросов.
+:::
+::::
+
+## Инструменты
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} Protection
+:link: /guides/protection/index
+:link-type: doc
+
+Cloudflare, Turnstile или reCAPTCHA.
+:::
+:::{grid-item-card} OpenAPI
+:link: /guides/openapi
+:link-type: doc
+
+Сгенерируйте SDK из schema.
+:::
+:::{grid-item-card} SQLModel
+:link: /guides/sqlmodel
+:link-type: doc
+
+Сохраните аккаунты в базе данных.
+:::
+:::{grid-item-card} XML
+:link: /guides/xml
+:link-type: doc
+
+Отправьте XML body.
+:::
+::::

@@ -1,0 +1,74 @@
+---
+title: JSON body
+description: Используйте TypedDict для плоского JSON и модель только для вложенного документа.
+sources:
+  - eazy_sdk.request.JsonBody
+api_fingerprint: "sha256:c9640cc7895c54b4a30e14130c61760861dbfeb5b9af2efac93f661b0f868656"
+---
+
+Плоский JSON object объявляйте через `TypedDict` и раскрывайте через `Unpack`. Runtime проверяет
+required/optional keys, неизвестные поля и типы значений до provider calls и сети, а IDE показывает
+точные именованные аргументы без wrapper-словаря.
+
+```python
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import JsonField
+
+class CreateUser(TypedDict):
+    name: Annotated[str, JsonField()]
+    tags: Annotated[list[str], JsonField()]
+    note: NotRequired[Annotated[str, JsonField()]]
+
+class AsyncUsersApi(AsyncApi):
+    @api.post("/users", operation_id="createUser", responses=RESPONSES)
+    async def create(self, **request: Unpack[CreateUser]) -> User:
+        raise NotImplementedError
+
+user = await AsyncUsersApi(client).create(
+    name="Ada",
+    tags=["admin"],
+)
+```
+
+Запрос содержит `Content-Type: application/json` и body
+`{"name":"Ada","tags":["admin"]}`. Отсутствующий `NotRequired` key не попадает в body;
+явно переданный `None` остаётся JSON `null`, если тип поля допускает `None`.
+
+Для вложенного документа или model-owned validation используйте dataclass, Pydantic v2 или
+msgspec и передавайте его одним параметром с `JsonBody()`. Этот marker выбирает placement, но не
+переопределяет aliases/default/exclusion policy такой модели.
+
+Готовые определения для всех трёх model libraries и пример собственного `ModelAdapter` находятся
+в {doc}`руководстве по сериализации моделей </api-reference/models-codecs>`.
+
+Не смешивайте root body с `JsonField` в одной операции. Когда caller-visible kwargs и wire JSON
+имеют разную структуру, объявляйте `BodyProjection`; managed CAPTCHA/CSRF поля размещайте через
+`FromProtection` в её private target schema. Пример ответа: status `201`, JSON
+`{"id":42,"name":"Ada"}`.
+
+```python
+from eazy_sdk.request import BodyProjection, JsonBody
+
+def register_to_wire(source: RegisterUser) -> RegisterUserWire:
+    return {
+        "account": {"login": source["login"], "email": source["email"]},
+        "profile": {
+            "first_name": source["first_name"],
+            "last_name": source["last_name"],
+        },
+        "client": make_client_wire(),
+    }
+
+REGISTER_BODY = BodyProjection(
+    RegisterUser,
+    RegisterUserWire,
+    register_to_wire,
+    JsonBody(),
+)
+```
+
+Метод с `body=REGISTER_BODY` принимает `**request: Unpack[RegisterUser]`: caller передаёт поля
+напрямую, без `body=` или wrapper dict. `make_client_wire()` вызывается заново на каждой attempt;
+значения из mutable client/session state добавляйте auth/protection writers после projection.

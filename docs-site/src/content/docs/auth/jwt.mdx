@@ -1,0 +1,62 @@
+---
+title: JWT
+description: Передайте готовый JSON Web Token через Authorization Bearer.
+sources:
+  - eazy_sdk.auth.BearerScheme
+api_fingerprint: "sha256:e2fff75c3b7db2776393cf39d440eb20d820453e27b30febe997a2f938a562af"
+---
+
+JWT обычно передаётся как Bearer token. Eazy SDK отправляет строку JWT без декодирования.
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /profile``
+
+```json
+{
+  "method": "GET",
+  "url": "/profile",
+  "headers": {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.demo.signature"
+  },
+  "body": null
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {"id": "user-42", "role": "admin"}
+}
+```
+::::
+:::::
+
+```python
+from eazy_sdk.auth import BearerScheme
+
+JWT_AUTH = BearerScheme("jwt")
+auth = JWT_AUTH.static("eyJhbGciOiJIUzI1NiJ9.demo.signature")
+```
+
+Если JWT нужно получать по логину и обновлять по refresh token, используйте {doc}`Login </auth/login>`
+и {doc}`Refresh </auth/refresh>`.
+
+Eazy SDK не декодирует JWT, не проверяет его подпись и не использует claims для client-side access
+control. Для HTTP-клиента token является secret credential string. Валидация issuer, audience,
+expiration и signature принадлежит серверу или отдельному trusted token component приложения.
+
+Не помещайте JWT в query parameter и не записывайте его в logs. Если token уже находится в
+Pydantic session model, пометьте поле `SecretStr` и `Bearer()` вместо создания статической схемы.

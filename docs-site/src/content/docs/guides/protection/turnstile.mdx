@@ -1,0 +1,58 @@
+---
+title: Turnstile
+description: Cloudflare Turnstile widget или preclearance.
+sources:
+  - eazy_sdk.protection
+  - eazy_sdk_presets.cloudflare
+api_fingerprint: "sha256:6786bfce2ded775810c886453428eeef9cf83e8ae9d2f5dde1b6804d200d2669"
+---
+
+::::{tab-set}
+  :::{tab-item} Widget
+
+  Используйте этот вариант, когда Turnstile находится в ответе конкретной ручки.
+
+  ```python
+  from eazy_sdk_presets import cloudflare, form_field, operation
+
+  protection = cloudflare.turnstile_widget(
+      scope=operation("login"),
+      solver=TurnstileSolver(),
+      apply=form_field("cf-turnstile-response"),
+  )
+  ```
+:::
+  :::{tab-item} Preclearance
+
+  Используйте этот вариант, когда clearance требуется до первого запроса.
+
+  ```python
+  from eazy_sdk_presets import cloudflare, host
+
+  protection = cloudflare.turnstile_preclearance(
+      scope=host("api.example.test"),
+      site_key="public-site-key",
+      page_url="https://api.example.test/login",
+      solver=TurnstileSolver(),
+  )
+  ```
+:::
+::::
+
+Передайте preset клиенту:
+
+```python
+client = Client(
+    base_url=base_url,
+    handler=handler,
+    config=ClientConfig(protections=(protection,)),
+)
+```
+
+Widget preset является conditional response policy: solver запускается только после совпадения
+Turnstile response case. Preclearance выполняется до первого origin request в подходящем scope.
+Оба варианта используют replay coordinator и не отправляют повторно unsafe body без semantic
+proof.
+
+Для обязательных managed полей конкретной операции используйте `ProtectionRequirement` и
+`FromProtection`, показанные в {doc}`обзоре Protection </guides/protection/index>`.

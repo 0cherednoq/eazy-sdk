@@ -1,0 +1,162 @@
+---
+title: Eazy SDK
+description: Python SDK для API с проверкой запросов и ответов.
+layout: landing
+freshness: false
+---
+
+Объявите API-метод, отправьте запрос и получите типизированную модель ответа.
+
+::::{grid} 1 1 2 2
+:gutter: 2
+:::{grid-item-card} Установка
+:link: /getting-started/installation
+:link-type: doc
+
+Установите библиотеку с нужным HTTP-клиентом.
+:::
+:::{grid-item-card} Первый запрос
+:link: /getting-started/quickstart
+:link-type: doc
+
+Объявите GET-метод и получите Pydantic-модель.
+:::
+:::{grid-item-card} SDK магазина
+:link: /more/examples/store-sdk
+:link-type: doc
+
+Пройдите путь от GET до auth, HMAC, crypto и WebSocket.
+:::
+:::{grid-item-card} Авторизация
+:link: /auth/index
+:link-type: doc
+
+Basic, Bearer, JWT, API key, cookie или login flow.
+:::
+:::{grid-item-card} OpenAPI
+:link: /guides/openapi
+:link-type: doc
+
+Сгенерируйте SDK из OpenAPI schema.
+:::
+::::
+
+```{toctree}
+:hidden:
+:caption: Начало работы
+:maxdepth: 2
+
+getting-started/index
+getting-started/installation
+getting-started/quickstart
+guides/index
+```
+
+```{toctree}
+:hidden:
+:caption: Авторизация
+:maxdepth: 2
+
+auth/index
+auth/basic
+auth/bearer
+auth/jwt
+auth/api-key
+auth/cookie
+auth/combined
+auth/login
+auth/session
+auth/refresh
+auth/registration
+auth/verification
+```
+
+```{toctree}
+:hidden:
+:caption: Запросы и ответы
+:maxdepth: 3
+
+guides/requests/index
+guides/requests/path
+guides/requests/query
+guides/requests/headers
+guides/requests/cookies
+guides/requests/json
+guides/requests/form
+guides/requests/multipart
+guides/requests/bytes
+guides/responses/index
+guides/responses/success
+guides/responses/errors
+guides/responses/html
+```
+
+```{toctree}
+:hidden:
+:caption: Клиенты и поведение
+:maxdepth: 3
+
+clients/index
+clients/httpx
+clients/requests
+clients/curl-cffi
+guides/dependencies
+guides/middleware
+guides/reliability/retry
+guides/reliability/redirect
+guides/reliability/rate-limit
+signing
+guides/payload-crypto
+```
+
+```{toctree}
+:hidden:
+:caption: Защита и инструменты
+:maxdepth: 3
+
+guides/protection/index
+guides/protection/cloudflare
+guides/protection/turnstile
+guides/protection/recaptcha
+guides/openapi
+guides/websocket
+guides/sqlmodel
+guides/xml
+```
+
+```{toctree}
+:hidden:
+:caption: Примеры
+:maxdepth: 2
+
+more/examples/index
+more/examples/store-sdk
+more/examples/json-auth
+more/examples/html-login
+more/examples/signed-api
+```
+
+```{toctree}
+:hidden:
+:caption: API Reference
+:maxdepth: 2
+
+api-reference/index
+api-reference/api-methods
+api-reference/clients
+api-reference/request
+api-reference/response
+api-reference/models-codecs
+api-reference/auth
+api-reference/session
+api-reference/registration
+api-reference/verification
+api-reference/dependencies
+api-reference/middleware
+api-reference/signing
+api-reference/crypto
+api-reference/protection
+api-reference/openapi
+api-reference/sqlmodel
+api-reference/xml
+```

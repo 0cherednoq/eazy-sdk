@@ -1,0 +1,83 @@
+---
+title: JSON API с авторизацией
+description: Login, Bearer session и refresh через scoped SDK.
+sources:
+  - eazy_sdk.auth.session_auth
+  - eazy_sdk.auth.Bearer
+  - eazy_sdk.auth.RefreshToken
+  - eazy_sdk.auth.ExpiresAt
+api_fingerprint: "sha256:5a44011869a2b62a6c63d6c3f0fa53359243c502740ffddf53acfd724318043b"
+---
+
+Объявите `AsyncAuthApi` с decorated `login`/`refresh` и защищённый API-класс с bearer scheme.
+Session service получает `AuthContext`, вызывает `context.sdk.auth.login(...)` или
+`context.sdk.auth.refresh(...)` и возвращает Pydantic session model. Клиент хранит session через
+нейтральный `SessionStore` и повторяет только безопасный запрос с допустимым replay budget.
+
+```python
+from datetime import datetime, timedelta
+from typing import Annotated, TypedDict, Unpack
+
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken
+from eazy_sdk.request import JsonField
+from eazy_sdk.response import Json, Responses, Success
+
+class LoginCredentials(BaseModel):
+    email: str
+    password: SecretStr
+
+class LoginRequest(TypedDict):
+    email: Annotated[str, JsonField()]
+    password: Annotated[str, JsonField()]
+
+class RefreshRequest(TypedDict):
+    refresh_token: Annotated[str, JsonField()]
+
+class UserSession(BaseModel):
+    access_token: Annotated[SecretStr, Bearer()]
+    refresh_token: Annotated[SecretStr, RefreshToken()]
+    expires_at: Annotated[datetime, ExpiresAt(timedelta(seconds=30))]
+
+SESSION_RESPONSES = Responses(success=(Success(200, Json(UserSession)),))
+
+class AsyncAuthApi(AsyncApi):
+    @api.post("/auth/login", responses=SESSION_RESPONSES, security=None)
+    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
+        raise NotImplementedError
+
+    @api.post("/auth/refresh", responses=SESSION_RESPONSES, security=None)
+    async def refresh(self, **request: Unpack[RefreshRequest]) -> UserSession:
+        raise NotImplementedError
+
+class UserAuthService:
+    async def acquire(self, credentials, context):
+        return await context.sdk.auth.login(
+            email=credentials.email,
+            password=credentials.password.get_secret_value(),
+        )
+
+    async def refresh(self, session, context):
+        return await context.sdk.auth.refresh(
+            refresh_token=session.refresh_token.get_secret_value(),
+        )
+```
+
+Generated root client принимает credentials и связывает service со scoped SDK:
+
+```python
+api = AsyncAPI.httpx(base_url="http://127.0.0.1:8000", credentials=credentials)
+account = await api.account.get_account()
+await api.aclose()
+```
+
+Login request: `POST /auth/login`, JSON `{"email":"ada@example.test","password":"secret"}`.
+Login response: status `200`, JSON `{"access_token":"a1","refresh_token":"r1"}`. Защищённый
+request содержит `Authorization: Bearer a1`; после refresh — новый token и новую revision.
+
+Если передать `session=saved_session` вместо `credentials=...`, первый login не выполняется.
+`SqlSessionStore` можно подключить к generated factory policy, чтобы session переживала перезапуск.
+Полная конфигурация и ошибки рассмотрены в {doc}`Login </auth/login>`, {doc}`Refresh </auth/refresh>` и
+{doc}`Session </auth/session>`.

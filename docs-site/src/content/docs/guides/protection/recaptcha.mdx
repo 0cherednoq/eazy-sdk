@@ -1,0 +1,80 @@
+---
+title: reCAPTCHA
+description: Подключение reCAPTCHA v2, v3 или Enterprise.
+sources:
+  - eazy_sdk.protection
+  - eazy_sdk_presets.recaptcha
+api_fingerprint: "sha256:afa71cd2a486249200d3f4f808dae4e3c7e9b4a2cf0fb9797a4495700d0645b4"
+---
+
+::::{tab-set}
+  :::{tab-item} v2 Checkbox
+
+  ```python
+  from eazy_sdk_presets import operation, recaptcha
+
+  protection = recaptcha.v2_checkbox(
+      scope=operation("login"),
+      solver=RecaptchaSolver(),
+  )
+  ```
+:::
+  :::{tab-item} v2 Invisible
+
+  ```python
+  from eazy_sdk_presets import operation, recaptcha
+
+  protection = recaptcha.v2_invisible(
+      scope=operation("register"),
+      solver=RecaptchaSolver(),
+  )
+  ```
+:::
+  :::{tab-item} v3
+
+  ```python
+  from eazy_sdk_presets import form_field, operation, recaptcha
+
+  protection = recaptcha.v3_action(
+      scope=operation("createAccount"),
+      site_key="public-site-key",
+      action="create_account",
+      solver=RecaptchaSolver(),
+      apply=form_field("g-recaptcha-response"),
+  )
+  ```
+:::
+  :::{tab-item} Enterprise
+
+  ```python
+  from eazy_sdk_presets import operation, recaptcha
+
+  protection = recaptcha.enterprise_score_action(
+      scope=operation("checkout"),
+      project="project-id",
+      site_key="public-site-key",
+      action="checkout",
+      solver=RecaptchaSolver(),
+  )
+  ```
+:::
+::::
+
+Подключение к клиенту одинаково для всех вариантов:
+
+```python
+client = Client(
+    base_url=base_url,
+    handler=handler,
+    config=ClientConfig(protections=(protection,)),
+)
+```
+
+`scope=operation("login")` ограничивает policy одной operation identity. Не помещайте scope в
+декоратор API-метода: точный operation scope выводится автоматически, reusable policy scopes
+принадлежат client configuration.
+
+Solver получает typed challenge и возвращает typed solution. Он не мутирует request и не
+управляет retry. Response reaction применяет solution и запрашивает replay через общий
+coordinator. Для обязательной CAPTCHA до первого запроса используйте bounded flow из
+{doc}`обзора Protection </guides/protection/index>`.

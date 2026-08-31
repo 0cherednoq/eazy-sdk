@@ -1,0 +1,50 @@
+---
+title: Registration
+description: Публичный API создания аккаунта.
+sources:
+  - eazy_sdk.accounts
+api_fingerprint: "sha256:91fd9405f96ce8e322f1d3b6678bcfa4fa79672f848f00504b607eefd3bffae2"
+---
+
+## Модели
+
+```python
+AccountDraft(credentials=..., profile=..., details=...)
+AccountCreated(remote_id=..., verification=..., session=..., meta=...)
+```
+
+## Flow
+
+```python
+flow = account_registration(
+    CredentialsModel,
+    service=service,
+    store=store,
+    context_factory=context_factory,
+    provider=None,
+    verification=None,
+    session_lifecycle=None,
+    max_verification_steps=3,
+    deadline=None,
+    clock=...,
+    cancelled=...,
+)
+
+result = await flow.create(draft)
+```
+
+`create(...)` возвращает `CompleteRegistration` или `PendingRegistration`.
+
+Синхронный вариант создаётся через `sync_account_registration(...)`.
+
+`AccountDraft` разделяет `credentials`, `profile` и operation-specific `details`.
+Credentials model должна содержать ровно один field с `AccountIdentifier()`. Store сохраняет
+normalized identifier, remote ID, verification state и optional session.
+
+`AccountCreated` может вернуть сразу `session`, один `VerificationChallenge` или завершённый
+account без session. `max_verification_steps`, `deadline` и `cancelled` ограничивают lifecycle и не
+зависят от HTTP transport.
+
+Registration service вызывает scoped SDK через переданный `context_factory`. Ошибка remote API не
+фиксирует частично завершённый state; reservation и transitions сохраняются на documented
+state/event boundaries.

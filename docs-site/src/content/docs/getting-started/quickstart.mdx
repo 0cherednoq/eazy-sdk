@@ -1,0 +1,92 @@
+---
+title: Быстрый старт
+description: Объявите GET-метод SDK и получите проверенную Pydantic-модель.
+sources:
+  - eazy_sdk.api
+  - eazy_sdk.Client
+  - eazy_sdk.request
+  - eazy_sdk.response
+api_fingerprint: "sha256:5342ddfcf9c76ef0dd83f0a0f20189cff62d4891fd137d879b197cc06a654058"
+---
+
+За пять минут соберём метод SDK интернет-магазина: запросим товар по ID и получим проверенный
+`Product`.
+
+## Установите Eazy SDK
+
+```bash
+uv add "eazy-sdk[httpx,pydantic]"
+```
+
+## Создайте `quickstart.py`
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+import httpx
+from pydantic import BaseModel
+
+from eazy_sdk import Client, SyncApi, api
+from eazy_sdk.handlers.httpx import HttpxHandler
+from eazy_sdk.request import Path
+from eazy_sdk.response import Json, Responses, Success
+
+class Product(BaseModel):
+    id: int
+    title: str
+    price: int
+
+class GetProductRequest(TypedDict):
+    product_id: Annotated[int, Path()]
+
+class StoreApi(SyncApi):
+    @api.get(
+        "/v1/products/{product_id}",
+        responses=Responses[Product](success=(Success(200, Json(Product)),)),
+    )
+    def product(self, **request: Unpack[GetProductRequest]):
+        raise NotImplementedError
+
+def store(request: httpx.Request) -> httpx.Response:
+    assert request.url.path == "/v1/products/42"
+    return httpx.Response(
+        200,
+        json={"id": 42, "title": "Mechanical keyboard", "price": 12900},
+    )
+
+transport = httpx.MockTransport(store)
+raw_client = httpx.Client(transport=transport, headers={}, cookies={})
+
+with Client(
+    base_url="https://api.store.example",
+    handler=HttpxHandler(raw_client, owns_client=True),
+) as client:
+    product = StoreApi(client).product(product_id=42)
+    print(product.title, product.price)
+```
+
+`MockTransport` изображает сервер, поэтому пример работает без сети. В SDK замените его обычным
+`httpx.Client()`.
+
+## Запустите
+
+```bash
+uv run python quickstart.py
+```
+
+```text
+Mechanical keyboard 12900
+```
+
+`Path()` подставил `42` в URL. `Json(Product)` разобрал JSON и проверил поля через Pydantic. Тело
+метода не выполнялось: декоратор использовал его сигнатуру как контракт запроса.
+
+`api` содержит только HTTP-декораторы `get`, `post`, `put`, `patch` и `delete`. Классы `SyncApi` и
+`AsyncApi` импортируются отдельно, как показано в примере.
+
+Для POST/PUT public request также остаётся одним `Unpack[TypedDict]`. Если внешний API требует
+nested JSON, не добавляйте caller-у wrapper dict: `BodyProjection` связывает плоские kwargs с
+private wire schema и повторяет mapping/validation/encoding на каждой retry или redirect attempt.
+
+Продолжите со {doc}`сквозным примером SDK магазина </more/examples/store-sdk>`. Там этот метод вырастает
+в клиент с JSON body, ошибками API, авторизацией, подписью, шифрованием и WebSocket.

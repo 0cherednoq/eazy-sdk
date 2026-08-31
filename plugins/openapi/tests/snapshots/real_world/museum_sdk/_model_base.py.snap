@@ -1,0 +1,18 @@
+"""Generated OpenAPI model serialization policy. Do not edit."""
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+
+
+class OpenAPIModel(BaseModel):
+    """Preserve omitted fields while retaining explicitly supplied nulls."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        kwargs.setdefault("exclude_unset", True)
+        return super().model_dump(**kwargs)
+
+
+__all__ = ["OpenAPIModel"]

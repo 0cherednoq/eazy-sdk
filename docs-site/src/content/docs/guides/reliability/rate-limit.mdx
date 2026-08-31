@@ -1,0 +1,36 @@
+---
+title: Rate limit
+description: Ограничение частоты фактических HTTP-запросов.
+sources:
+  - eazy_sdk.ClientConfig
+  - eazy_sdk.ratelimit_runtime
+api_fingerprint: "sha256:0000b919b4d8ee651d1d2c895ba93e53932b5450db01108a6a0cdf600d5c1ab0"
+---
+
+Реализуйте limiter и передайте его в `ClientConfig`. Limiter резервирует право на фактическую
+отправку, а не на logical API call.
+
+```python
+from eazy_sdk import Client, ClientConfig
+from eazy_sdk.ratelimit_runtime import RateLimitDecision
+
+class ApiLimiter:
+    async def reserve(self, context):
+        delay = await bucket.reserve(context.authority)
+        return RateLimitDecision(delay=delay)
+
+client = Client(
+    base_url=base_url,
+    handler=handler,
+    config=ClientConfig(rate_limiter=ApiLimiter()),
+)
+```
+
+Limiter применяется перед каждой отправкой, включая retry и redirect.
+
+`context.authority` позволяет разделить buckets по upstream. Limiter может учитывать operation,
+attempt и deadline из context, но не должен отправлять HTTP request самостоятельно.
+
+Если reservation возвращает delay, executor ждёт с поддержкой cancellation и общего timeout.
+Retry после `429` создаёт новую reservation. Nested login, protection acquire и verify также
+проходят limiter, потому что являются обычными scoped API-методами.

@@ -1,0 +1,77 @@
+---
+title: Clients
+description: Публичные Zapros-backed клиенты Eazy SDK.
+sources:
+  - eazy_sdk.Client
+  - eazy_sdk.AsyncClient
+  - eazy_sdk.ClientConfig
+  - eazy_sdk.clients.CallOptions
+api_fingerprint: "sha256:20cd0bb87459f777a37117e2f99ebdaea1d4795db74d58fac01efda8437a1f31"
+---
+
+`Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Это единственная
+transport extension boundary: отдельные Eazy SDK adapter protocols и factory wrappers не
+используются.
+
+```python
+from zapros import AsyncStdNetworkHandler
+
+from eazy_sdk import AsyncClient, ClientConfig
+
+client = AsyncClient(
+    base_url="https://api.example",
+    handler=AsyncStdNetworkHandler(),
+    config=ClientConfig(timeout=5.0),
+)
+```
+
+По умолчанию клиент владеет handler и закрывает его. Для общего handler укажите
+`owns_handler=False`. Несовпадение sync/async handler отклоняется в конструкторе.
+
+`CallOptions` управляет timeout, redirect/retry budgets и replay одного вызова. Eazy SDK не
+использует middleware, retry, redirect, cookie store или auth Zapros: эти политики остаются в общем
+executor и каждый новый attempt создаёт новый Zapros `Request`.
+
+`client.bind_sdk(factory)` — публичный authoring API, а не private hook. Он создаёт root facade для
+hand-written SDK. Если session service вызывает
+`context.sdk`, runtime использует ту же фабрику для non-owning scoped facade с общим handler и
+parent lifecycle graph. Generated SDK вызывает этот метод внутри `from_handler(...)`; consumer его
+не повторяет. Объявите reusable `session_scheme(...)` в API defaults и настройте её через
+`.configure(...)`; тогда factory остаётся обычным классом: `sdk = client.bind_sdk(StoreSdk)`, без
+`Any`, `type(self)` и closure с security.
+
+`ClientConfig.crypto` принимает scoped `CryptoRegistry`. Прямой `crypto=` в API decorator имеет
+приоритет, а `crypto=None` отключает inherited profile. Полный контракт описан в
+{doc}`руководстве по шифрованию payload </guides/payload-crypto>`.
+
+## First-party handlers
+
+HTTPX, Requests и curl_cffi подключаются обычными Zapros handlers из `eazy_sdk.handlers`:
+
+```python
+import httpx
+
+from eazy_sdk import Client
+from eazy_sdk.handlers.httpx import HttpxHandler
+
+client = Client(
+    base_url="https://api.example",
+    handler=HttpxHandler(httpx.Client(), owns_client=True),
+)
+```
+
+## Ad-hoc HTTP
+
+```python
+response = await client.request(
+    "PATCH",
+    "/experimental",
+    params={"dry_run": "true"},
+    headers={"X-Trace": "trace-42"},
+    json={"enabled": True},
+    options=CallOptions(timeout=3.0),
+)
+```
+
+`request`, `get` и `post` возвращают `NormalizedResponse`. Повторяющиеся query names запрещены;
+коллекция должна использовать одно строковое значение или явный scalar codec.

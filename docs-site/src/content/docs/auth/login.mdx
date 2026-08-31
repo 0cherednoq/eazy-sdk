@@ -1,0 +1,261 @@
+---
+title: Login
+description: Получите и сохраните session через обычный scoped SDK-метод.
+sources:
+  - eazy_sdk.auth.session_auth
+  - eazy_sdk.auth.session_scheme
+  - eazy_sdk.auth.Bearer
+api_fingerprint: "sha256:8e23dfe7e5ea90feea2bf451de76be42c5c677d853ad5aefae951b57b4f3a7e1"
+---
+
+Login в Eazy SDK является обычной декорированной операцией. `session_auth(...)` вызывает её
+автоматически, когда защищённой ручке нужна session, а сохранённой session ещё нет.
+
+:::{note} Кому нужны шаги этой страницы
+Авторы hand-written SDK выполняют шаги 1–3. Пользователи generated SDK могут сразу перейти к
+  шагу 4 и передать `credentials=` в готовую root factory.
+:::
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /auth/login``
+
+```json
+{
+  "method": "POST",
+  "url": "/auth/login",
+  "headers": {"Content-Type": "application/json"},
+  "body": {
+    "email": "ada@example.test",
+    "password": "correct-horse",
+    "remember_me": true
+  }
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": {
+    "access_token": "access-v1",
+    "refresh_token": "refresh-v1",
+    "expires_at": "2030-01-01T00:05:00Z"
+  }
+}
+```
+::::
+:::::
+
+## 1. Объявите модели
+
+Разделяйте lifecycle input и HTTP body. Это позволяет менять форму конкретной login-ручки без
+изменения интерфейса, через который приложение передаёт credentials.
+
+```python
+from datetime import datetime, timedelta
+from typing import Annotated, NotRequired, TypedDict, Unpack
+
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_scheme
+from eazy_sdk.request import JsonField
+
+class LoginCredentials(BaseModel):
+    email: str
+    password: SecretStr
+
+class LoginRequest(TypedDict):
+    email: Annotated[str, JsonField()]
+    password: Annotated[str, JsonField()]
+    remember_me: NotRequired[Annotated[bool, JsonField()]]
+
+class UserSession(BaseModel):
+    access_token: Annotated[SecretStr, Bearer()]
+    refresh_token: Annotated[SecretStr, RefreshToken()]
+    expires_at: Annotated[
+        datetime,
+        ExpiresAt(leeway=timedelta(seconds=30)),
+    ]
+
+class Account(BaseModel):
+    id: int
+    email: str
+
+USER_SESSION = session_scheme(UserSession, name="user-session")
+```
+
+`Bearer()` отмечает поле, которое попадёт в `Authorization`. `RefreshToken()` выбирает поле для
+refresh, а `ExpiresAt()` определяет, когда session следует обновить до следующего запроса.
+
+## 2. Объявите login-метод
+
+```python
+from eazy_sdk import ApiDefaults, AsyncApi, api
+from eazy_sdk.response import Json, Responses, Success
+
+LOGIN_RESPONSES = Responses(
+    success=(Success(200, Json(UserSession)),),
+)
+ACCOUNT_RESPONSES = Responses(
+    success=(Success(200, Json(Account)),),
+)
+
+class AsyncAuthApi(AsyncApi):
+    @api.post(
+        "/auth/login",
+        operation_id="login",
+        responses=LOGIN_RESPONSES,
+        security=None,
+    )
+    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
+        raise NotImplementedError
+
+class AsyncAccountApi(AsyncApi):
+    defaults = ApiDefaults(security=USER_SESSION)
+
+    @api.get(
+        "/account",
+        operation_id="getAccount",
+        responses=ACCOUNT_RESPONSES,
+    )
+    async def get_account(self) -> Account:
+        raise NotImplementedError
+```
+
+`security=None` явно отключает inherited security для login. Тело функции не выполняется:
+descriptor связывает аргументы и передаёт вызов общему executor.
+
+## 3. Вызовите login из auth service
+
+```python
+from typing import Self
+
+from zapros import AsyncBaseHandler
+
+from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk.auth import AuthContext
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+class LoginService:
+    async def acquire(
+        self,
+        credentials: LoginCredentials,
+        context: AuthContext["AuthSdk"],
+    ) -> UserSession:
+        return await context.sdk.auth.login(
+            email=credentials.email,
+            password=credentials.password.get_secret_value(),
+            remember_me=True,
+        )
+
+class AuthSdk:
+    def __init__(self, client: AsyncClient) -> None:
+        self._client = client
+        self.auth = AsyncAuthApi(client)
+        self.account = AsyncAccountApi(client)
+
+    @classmethod
+    def from_handler(
+        cls,
+        *,
+        handler: AsyncBaseHandler,
+        credentials: LoginCredentials,
+        base_url: str = "https://api.example.test",
+        owns_handler: bool = True,
+    ) -> Self:
+        auth = USER_SESSION.configure(
+            credentials=credentials,
+            service=LoginService(),
+        )
+        client = AsyncClient(
+            base_url=base_url,
+            handler=handler,
+            owns_handler=owns_handler,
+            config=ClientConfig(auth=auth, timeout=20),
+        )
+        return client.bind_sdk(cls)
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
+```
+
+Service преобразует `LoginCredentials` в именованные аргументы плоского `LoginRequest`. Runtime
+отвечает только за выполнение операции, проверку response case и сохранение полученной
+`UserSession`. `USER_SESSION.configure(...)` передаёт service в auth runtime,
+`ClientConfig(auth=auth)` подключает runtime к client, а `client.bind_sdk(cls)` регистрирует
+фабрику scoped SDK для `context.sdk`.
+
+## 4. Создайте hand-written SDK
+
+```python
+credentials = LoginCredentials(
+    email="ada@example.test",
+    password=SecretStr("correct-horse"),
+)
+
+async with AuthSdk.from_handler(
+    handler=AsyncHttpxHandler(),
+    credentials=credentials,
+) as sdk:
+    account = await sdk.account.get_account()
+```
+
+Первый вызов `sdk.account.get_account()` требует `USER_SESSION`, поэтому runtime вызывает
+`LoginService.acquire(...)`. Login выполняется через `context.sdk.auth`, полученная session
+сохраняется, и исходный account request получает `Authorization: Bearer access-v1`.
+
+:::{note} Не создавайте SDK внутри auth service
+`LoginService` не хранит root SDK и не создаёт отдельный client. Scoped SDK предоставляет
+  runtime через `context.sdk`; transport и lifecycle graph остаются общими с root client.
+:::
+
+## 5. Передайте credentials generated SDK
+
+Generated SDK factory создаёт `session_auth(...)`, связывает scoped API и client. Пользователю
+остаётся передать lifecycle input. Auth service уже встроен генератором в root factory:
+
+```python
+credentials = LoginCredentials(
+    email="ada@example.test",
+    password=SecretStr("correct-horse"),
+)
+
+async with AsyncAPI.httpx(
+    base_url="https://api.example.test",
+    credentials=credentials,
+) as sdk:
+    account = await sdk.account.get_account()
+```
+
+Первый защищённый вызов запускает login. Следующие вызовы повторно используют сохранённую session,
+пока `expires_at` не войдёт в leeway.
+
+Полный исполняемый пример с login, защищённым запросом, refresh после `401` и replay находится в
+`examples/dummyjson_session_auth.py` в репозитории.
+
+:::{warning} Не храните пароль в HTTP-модели
+`LoginCredentials` является lifecycle input и может содержать `SecretStr`. Плоский
+  `LoginRequest` остаётся `TypedDict`, существует только для одного сетевого вызова и содержит
+  именно те поля, которые ожидает сервер.
+:::
+
+Если login требует CAPTCHA или CSRF, добавьте managed поля в приватную wire-модель. Публичная
+`LoginRequest` при этом не меняется. См. {doc}`обязательную Protection </guides/protection/index>`.

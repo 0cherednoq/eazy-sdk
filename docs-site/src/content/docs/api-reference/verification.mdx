@@ -1,0 +1,35 @@
+---
+title: Verification
+description: Публичный API подтверждения аккаунта.
+sources:
+  - eazy_sdk.accounts
+api_fingerprint: "sha256:91fd9405f96ce8e322f1d3b6678bcfa4fa79672f848f00504b607eefd3bffae2"
+---
+
+## Модели
+
+```python
+VerificationChallenge(id=..., kind=..., target=..., meta=...)
+VerificationAccepted(next_verification=..., session=..., meta=...)
+```
+
+## Методы
+
+```python
+result = await flow.verify(pending, proof)
+result = await flow.resume(identifier)
+pending = await flow.resend(pending)
+```
+
+`verify(...)` возвращает завершённую регистрацию или следующий challenge.
+
+`VerificationChallenge` содержит стабильные `id` и `kind`, optional `target` и `meta`.
+`VerificationAccepted` может вернуть следующую verification, session или metadata успешного
+шага.
+
+`flow.resume(identifier)` загружает pending registration после перезапуска. `flow.resend(pending)`
+заменяет challenge с сохранением chain. `flow.verify(pending, proof)` проверяет, что challenge
+принадлежит текущей revision, поэтому устаревший proof не может завершить более новый flow.
+
+Provider из `verification={kind: provider}` может получить proof автоматически. Если provider не
+зарегистрирован, caller передаёт proof явно.

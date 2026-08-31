@@ -1,0 +1,21 @@
+---
+title: Авторизация
+description: Выберите способ авторизации для вашего API.
+freshness: false
+---
+
+| Сценарий | Страница |
+|---|---|
+| Сервер принимает логин и пароль в `Authorization` | {doc}`Basic Auth </auth/basic>` |
+| У вас уже есть access token | {doc}`Bearer Token </auth/bearer>` |
+| Access token имеет формат JWT | {doc}`JWT </auth/jwt>` |
+| Сервер принимает ключ в header или query | {doc}`API Key </auth/api-key>` |
+| Сервер принимает готовую cookie | {doc}`Cookie </auth/cookie>` |
+| Endpoint допускает несколько схем | {doc}`Комбинированная авторизация </auth/combined>` |
+| Token нужно получить по логину и паролю | {doc}`Login </auth/login>` |
+| Session нужно передать или сохранить | {doc}`Session </auth/session>` |
+| Access token нужно обновлять | {doc}`Refresh </auth/refresh>` |
+| Нужно создать аккаунт | {doc}`Registration </auth/registration>` |
+| Аккаунт требует подтверждения | {doc}`Verification </auth/verification>` |
+
+Каждая страница показывает HTTP request, response и минимальную настройку Eazy SDK.

@@ -1,0 +1,36 @@
+---
+title: Bytes
+description: Отправьте готовое бинарное тело.
+sources:
+  - eazy_sdk.request.BytesBody
+api_fingerprint: "sha256:c5c5f233a02cc676978fade4d5f68b3d7f88fd6a567dba72d59a89be38fbda92"
+---
+
+`BytesBody` отправляет готовое буферизованное тело без JSON/form кодирования.
+
+```python
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import BytesBody, Path
+
+class PutObjectRequest(TypedDict):
+    name: Annotated[str, Path()]
+    payload: Annotated[
+        bytes,
+        BytesBody(content_type="application/octet-stream"),
+    ]
+
+class ObjectsApi(SyncApi):
+    @api.put("/objects/{name}", operation_id="putObject", responses=RESPONSES)
+    def put_object(self, **request: Unpack[PutObjectRequest]) -> Upload:
+        raise NotImplementedError
+
+result = ObjectsApi(client).put_object(name="x", payload=b"abc")
+```
+
+Вызов отправит три неизменённых bytes и `Content-Type: application/octet-stream`. Для gzip или
+deflate укажите `content_encoding`; Eazy SDK сожмёт body до signing. Для повторно создаваемого
+stream используйте `ReplayableStreamBody`, иначе unsafe replay будет отклонён.
+
+Пример ответа: status `201`, header `ETag: "42"`, JSON `{"stored":true}`.

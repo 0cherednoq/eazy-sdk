@@ -1,0 +1,35 @@
+---
+title: Requests
+description: Синхронный transport на базе requests.Session.
+sources:
+  - eazy_sdk.Client
+api_fingerprint: "sha256:576a9de0b9ad07d96cf6e0f543315738b2502ea269cf721d026627b78bacd549"
+---
+
+```bash
+uv add "eazy-sdk[requests]"
+```
+
+```python
+import requests
+
+from eazy_sdk import Client
+from eazy_sdk.handlers.requests import RequestsHandler
+
+raw = requests.Session()
+raw.headers.clear()
+client = Client(
+    base_url="https://api.example",
+    handler=RequestsHandler(raw, owns_session=True),
+)
+users = SyncUsersApi(client)
+user = users.get_user(user_id=42)
+client.close()
+```
+
+Requests поддерживает только синхронный client. `base_url` передаётся wrapper-у, потому что
+`requests.Session` не имеет собственного base URL. Очистка default headers нужна только если API
+требует точный набор или порядок headers.
+
+API-класс не зависит от transport и не меняется при переходе с HTTPX на Requests. Redirects и
+retries оставьте выключенными на уровне adapter-а, чтобы budgets контролировал Eazy SDK.

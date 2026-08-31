@@ -1,0 +1,34 @@
+---
+title: Redirect
+description: Следование HTTP redirect в пределах заданного лимита.
+sources:
+  - eazy_sdk.clients.CallOptions
+api_fingerprint: "sha256:84586e1b658a2f2abef02237f487e4afac0c8f72982dc493fc2221486b1dd660"
+---
+
+Eazy SDK обрабатывает redirect внутри общего attempt loop. Adapter-side redirects должны быть
+выключены, иначе новый request минует preparation, signing и budgets.
+
+```python
+from eazy_sdk.clients import CallOptions
+
+result = await api.payments.create(
+    body=request,
+    options=CallOptions(max_redirects=2),
+)
+```
+
+Пример: `POST /payments` с JSON `{"amount":"49.90"}` получает status `303`, header
+`Location: /payments/pay_42`; следующий attempt отправляет `GET /payments/pay_42` без body. `307`
+и `308` сохраняют method/body и требуют replay proof. Исчерпание лимита даёт
+`RedirectLimitExceeded`.
+
+| Status | Следующий method | Body |
+|---|---|---|
+| `301`, `302` | определяется redirect policy | обычно удаляется при переходе на GET |
+| `303` | `GET` | удаляется |
+| `307`, `308` | сохраняется | сохраняется только при replay-safe body |
+
+Каждый переход заново выполняет scoped middleware contribution, preparation, auth и signing.
+Redirect target остаётся subject to scope/security policy; неожиданный authority не получает
+credentials автоматически.

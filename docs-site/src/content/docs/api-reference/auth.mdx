@@ -1,0 +1,49 @@
+---
+title: Auth
+description: Публичные схемы статической авторизации.
+sources:
+  - eazy_sdk.auth
+api_fingerprint: "sha256:e05d52d8d3c2c46ca125bd892844f43414d5a3fe6fd055df4bb0f477fc006ba8"
+---
+
+## Схемы
+
+```python
+BearerScheme(name="bearer")
+BasicScheme(name="basic")
+ApiKeyScheme.header("X-API-Key", name="api_key")
+ApiKeyScheme.query("api_key", name="api_key")
+CookieScheme("session_id", name="cookie")
+```
+
+## Credential
+
+```python
+auth = scheme.static(credential)
+```
+
+## Композиция
+
+```python
+all_of(USER_AUTH, DEVICE_AUTH)
+any_of(all_of(USER_AUTH, DEVICE_AUTH), BASIC)
+```
+
+Параметр decorator `security` принимает схему, `SecurityAlternative`, `SecurityPolicy` или `None`.
+
+| Factory | Credential type | HTTP placement |
+|---|---|---|
+| `BasicScheme(name)` | `tuple[str, str]` | `Authorization: Basic ...` |
+| `BearerScheme(name)` | `str` | `Authorization: Bearer ...` |
+| `ApiKeyScheme.header(header, name=...)` | `str` | Request header |
+| `ApiKeyScheme.query(parameter, name=...)` | `str` | Query parameter |
+| `CookieScheme(cookie, name=...)` | `str` | Cookie |
+
+`scheme.static(credential)` создаёт client auth binding. `all_of(...)` возвращает одну AND
+альтернативу; `any_of(...)` создаёт OR policy. Runtime выбирает только полностью разрешимую
+альтернативу и не смешивает credentials из разных alternatives.
+
+Для lifecycle session используйте `session_auth(...)` или `session_cookie(...)`. Hand-written SDK
+может объявить reusable `session_scheme(...)` для `ApiDefaults` и вызвать её `.configure(...)`;
+их API описан в
+{doc}`Session reference </api-reference/session>`.

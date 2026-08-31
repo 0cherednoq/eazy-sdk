@@ -1,0 +1,626 @@
+"""Generated declarative sync/async API methods. Do not edit."""
+
+from typing import Annotated, Any, Literal, Required, TypedDict, Unpack, cast
+
+from pydantic import ConfigDict, Field
+from zapros import AsyncBaseHandler, BaseHandler
+
+from eazy_sdk import api
+from eazy_sdk.codegen import (
+    DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,
+    Client, ClientConfig,
+    Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,
+    MultipartBody, Part, Path, Query, QueryString, SyncApi,
+    Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,
+    WireOptions, all_of, any_of,
+    FromProtection, ProtectionRequirement, protection_flow,
+)
+from .auth import *
+
+from ._model_base import OpenAPIModel
+from .signatures import *
+from .models import (
+    BuyMuseumTickets,
+    Error as ErrorModel,
+    MuseumHours,
+    MuseumTicketsConfirmation,
+    SpecialEvent,
+    SpecialEventCollection,
+    SpecialEventFields,
+)
+
+class GetMuseumHoursRequest(TypedDict, total=False):
+    start_date: Annotated[str | None, Query('startDate')]
+    page: Annotated[int | None, Query('page')]
+    limit: Annotated[int | None, Query('limit')]
+
+
+class ListSpecialEventsRequest(TypedDict, total=False):
+    start_date: Annotated[str | None, Query('startDate')]
+    end_date: Annotated[str | None, Query('endDate')]
+    page: Annotated[int | None, Query('page')]
+    limit: Annotated[int | None, Query('limit')]
+
+
+class CreateSpecialEventRequest(TypedDict, total=False):
+    body: Required[Annotated[SpecialEvent, JsonBody(content_type='application/json')]]
+
+
+class GetSpecialEventRequest(TypedDict, total=False):
+    event_id: Required[Annotated[str, Path('eventId')]]
+
+
+class DeleteSpecialEventRequest(TypedDict, total=False):
+    event_id: Required[Annotated[str, Path('eventId')]]
+
+
+class UpdateSpecialEventRequest(TypedDict, total=False):
+    event_id: Required[Annotated[str, Path('eventId')]]
+    body: Required[Annotated[SpecialEventFields, JsonBody(content_type='application/json')]]
+
+
+class BuyMuseumTicketsRequest(TypedDict, total=False):
+    body: Required[Annotated[BuyMuseumTickets, JsonBody(content_type='application/json')]]
+
+
+class GetTicketCodeRequest(TypedDict, total=False):
+    ticket_id: Required[Annotated[str, Path('ticketId')]]
+
+
+class GetMuseumHours400Error(ApiError[ErrorModel]):
+    pass
+
+
+class GetMuseumHours404Error(ApiError[ErrorModel]):
+    pass
+
+
+class ListSpecialEvents400Error(ApiError[ErrorModel]):
+    pass
+
+
+class ListSpecialEvents404Error(ApiError[ErrorModel]):
+    pass
+
+
+class CreateSpecialEvent400Error(ApiError[ErrorModel]):
+    pass
+
+
+class CreateSpecialEvent404Error(ApiError[ErrorModel]):
+    pass
+
+
+class GetSpecialEvent400Error(ApiError[ErrorModel]):
+    pass
+
+
+class GetSpecialEvent404Error(ApiError[ErrorModel]):
+    pass
+
+
+class DeleteSpecialEvent400Error(ApiError[ErrorModel]):
+    pass
+
+
+class DeleteSpecialEvent401Error(ApiError[ErrorModel]):
+    pass
+
+
+class DeleteSpecialEvent404Error(ApiError[ErrorModel]):
+    pass
+
+
+class UpdateSpecialEvent400Error(ApiError[ErrorModel]):
+    pass
+
+
+class UpdateSpecialEvent404Error(ApiError[ErrorModel]):
+    pass
+
+
+class BuyMuseumTickets400Error(ApiError[ErrorModel]):
+    pass
+
+
+class BuyMuseumTickets404Error(ApiError[ErrorModel]):
+    pass
+
+
+class GetTicketCode400Error(ApiError[ErrorModel]):
+    pass
+
+
+class GetTicketCode404Error(ApiError[ErrorModel]):
+    pass
+
+
+
+
+class AsyncOperations(AsyncApi):
+
+    @api.get(
+        '/museum-hours',
+        operation_id='getMuseumHours',
+        responses=Responses[MuseumHours](
+        success=(
+            Success(200, Json(MuseumHours, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetMuseumHours400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetMuseumHours404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Operations',),
+    )
+    async def getMuseumHours(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetMuseumHoursRequest],
+    ) -> MuseumHours:
+        raise NotImplementedError
+
+
+class AsyncEvents(AsyncApi):
+
+    @api.get(
+        '/special-events',
+        operation_id='listSpecialEvents',
+        responses=Responses[SpecialEventCollection](
+        success=(
+            Success(200, Json(SpecialEventCollection, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=ListSpecialEvents400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=ListSpecialEvents404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    async def listSpecialEvents(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[ListSpecialEventsRequest],
+    ) -> SpecialEventCollection:
+        raise NotImplementedError
+
+    @api.post(
+        '/special-events',
+        operation_id='createSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(201, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=CreateSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=CreateSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    async def createSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[CreateSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+    @api.get(
+        '/special-events/{eventId}',
+        operation_id='getSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(200, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    async def getSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+    @api.delete(
+        '/special-events/{eventId}',
+        operation_id='deleteSpecialEvent',
+        responses=Responses[None](
+        success=(
+            Success(204, Empty(media_type=None)),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent400Error),
+            Error(401, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent401Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    async def deleteSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[DeleteSpecialEventRequest],
+    ) -> None:
+        raise NotImplementedError
+
+    @api.patch(
+        '/special-events/{eventId}',
+        operation_id='updateSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(200, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=UpdateSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=UpdateSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    async def updateSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[UpdateSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+
+class AsyncTickets(AsyncApi):
+
+    @api.post(
+        '/tickets',
+        operation_id='buyMuseumTickets',
+        responses=Responses[MuseumTicketsConfirmation](
+        success=(
+            Success(201, Json(MuseumTicketsConfirmation, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=BuyMuseumTickets400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=BuyMuseumTickets404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Tickets',),
+    )
+    async def buyMuseumTickets(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[BuyMuseumTicketsRequest],
+    ) -> MuseumTicketsConfirmation:
+        raise NotImplementedError
+
+    @api.get(
+        '/tickets/{ticketId}/qr',
+        operation_id='getTicketCode',
+        responses=Responses[bytes](
+        success=(
+            Success(200, Bytes(media_type='image/png')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetTicketCode400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetTicketCode404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Tickets',),
+    )
+    async def getTicketCode(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetTicketCodeRequest],
+    ) -> bytes:
+        raise NotImplementedError
+
+
+class AsyncAPI:
+    def __init__(self, client: AsyncClient) -> None:
+        self._client = client
+        self.operations: AsyncOperations = AsyncOperations(client)
+        self.events: AsyncEvents = AsyncEvents(client)
+        self.tickets: AsyncTickets = AsyncTickets(client)
+
+    @classmethod
+    def from_handler(
+        cls,
+        *,
+        base_url: str,
+        handler: AsyncBaseHandler,
+        config: ClientConfig | None = None,
+        owns_handler: bool = True,
+    ) -> AsyncAPI:
+        client = AsyncClient(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+            owns_handler=owns_handler,
+        )
+        return client.bind_sdk(cls)
+
+    @classmethod
+    def httpx(
+        cls, *, base_url: str, config: ClientConfig | None = None
+    ) -> AsyncAPI:
+        import httpx
+        from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+        raw = httpx.AsyncClient(base_url=base_url, headers={}, cookies={})
+        handler = AsyncHttpxHandler(raw, owns_client=True)
+        return cls.from_handler(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+        )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def __aenter__(self) -> AsyncAPI:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
+
+
+class SyncOperations(SyncApi):
+
+    @api.get(
+        '/museum-hours',
+        operation_id='getMuseumHours',
+        responses=Responses[MuseumHours](
+        success=(
+            Success(200, Json(MuseumHours, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetMuseumHours400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetMuseumHours404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Operations',),
+    )
+    def getMuseumHours(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetMuseumHoursRequest],
+    ) -> MuseumHours:
+        raise NotImplementedError
+
+
+class SyncEvents(SyncApi):
+
+    @api.get(
+        '/special-events',
+        operation_id='listSpecialEvents',
+        responses=Responses[SpecialEventCollection](
+        success=(
+            Success(200, Json(SpecialEventCollection, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=ListSpecialEvents400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=ListSpecialEvents404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    def listSpecialEvents(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[ListSpecialEventsRequest],
+    ) -> SpecialEventCollection:
+        raise NotImplementedError
+
+    @api.post(
+        '/special-events',
+        operation_id='createSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(201, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=CreateSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=CreateSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    def createSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[CreateSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+    @api.get(
+        '/special-events/{eventId}',
+        operation_id='getSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(200, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    def getSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+    @api.delete(
+        '/special-events/{eventId}',
+        operation_id='deleteSpecialEvent',
+        responses=Responses[None](
+        success=(
+            Success(204, Empty(media_type=None)),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent400Error),
+            Error(401, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent401Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=DeleteSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    def deleteSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[DeleteSpecialEventRequest],
+    ) -> None:
+        raise NotImplementedError
+
+    @api.patch(
+        '/special-events/{eventId}',
+        operation_id='updateSpecialEvent',
+        responses=Responses[SpecialEvent](
+        success=(
+            Success(200, Json(SpecialEvent, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=UpdateSpecialEvent400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=UpdateSpecialEvent404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Events',),
+    )
+    def updateSpecialEvent(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[UpdateSpecialEventRequest],
+    ) -> SpecialEvent:
+        raise NotImplementedError
+
+
+class SyncTickets(SyncApi):
+
+    @api.post(
+        '/tickets',
+        operation_id='buyMuseumTickets',
+        responses=Responses[MuseumTicketsConfirmation](
+        success=(
+            Success(201, Json(MuseumTicketsConfirmation, media_type='application/json')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=BuyMuseumTickets400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=BuyMuseumTickets404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Tickets',),
+    )
+    def buyMuseumTickets(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[BuyMuseumTicketsRequest],
+    ) -> MuseumTicketsConfirmation:
+        raise NotImplementedError
+
+    @api.get(
+        '/tickets/{ticketId}/qr',
+        operation_id='getTicketCode',
+        responses=Responses[bytes](
+        success=(
+            Success(200, Bytes(media_type='image/png')),
+        ),
+        errors=(
+            Error(400, Json(ErrorModel, media_type='application/problem+json'), exception=GetTicketCode400Error),
+            Error(404, Json(ErrorModel, media_type='application/problem+json'), exception=GetTicketCode404Error),
+        ),
+        ),
+        security=any_of(all_of(MUSEUM_PLACEHOLDER_AUTH)),
+        tags=('Tickets',),
+    )
+    def getTicketCode(
+        self,
+        *,
+        options: CallOptions | None = None,
+        **request: Unpack[GetTicketCodeRequest],
+    ) -> bytes:
+        raise NotImplementedError
+
+
+class SyncAPI:
+    def __init__(self, client: Client) -> None:
+        self._client = client
+        self.operations: SyncOperations = SyncOperations(client)
+        self.events: SyncEvents = SyncEvents(client)
+        self.tickets: SyncTickets = SyncTickets(client)
+
+    @classmethod
+    def from_handler(
+        cls,
+        *,
+        base_url: str,
+        handler: BaseHandler,
+        config: ClientConfig | None = None,
+        owns_handler: bool = True,
+    ) -> SyncAPI:
+        client = Client(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+            owns_handler=owns_handler,
+        )
+        return cls(client)
+
+    @classmethod
+    def httpx(
+        cls, *, base_url: str, config: ClientConfig | None = None
+    ) -> SyncAPI:
+        import httpx
+        from eazy_sdk.handlers.httpx import HttpxHandler
+
+        raw = httpx.Client(base_url=base_url, headers={}, cookies={})
+        handler = HttpxHandler(raw, owns_client=True)
+        return cls.from_handler(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+        )
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> SyncAPI:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+
+__all__ = ['AsyncAPI', 'AsyncOperations', 'AsyncEvents', 'AsyncTickets', 'SyncAPI', 'SyncOperations', 'SyncEvents', 'SyncTickets']
