@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Any, cast
 from urllib.parse import unquote_plus, urlsplit
 
@@ -12,6 +13,7 @@ from eazy_sdk._internal.http_operation import _OperationCall, _OperationDeclarat
 from eazy_sdk._internal.http_plan import RequestScope
 from eazy_sdk._internal.input import InputField, MethodInputSchema
 from eazy_sdk.accounts.session import LifecycleGraph
+from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.request import (
     BytesBody,
     Cookie,
@@ -94,11 +96,43 @@ class _SyncClientCore[TRaw = object]:
         call = _raw_call(method, url, params, headers, cookies, json, content)
         return cast(NormalizedResponse[TRaw], self._run(call, options).value)
 
+    def _prepare_operation[T](
+        self,
+        declaration: _OperationDeclaration[T],
+        values: dict[str, object],
+        *,
+        options: PrepareOptions,
+    ) -> PreparedCall:
+        effective = (
+            options
+            if options.call_options is not None
+            else replace(options, call_options=self._default_options)
+        )
+        return asyncio.run(self._core.prepare(declaration.call(values), options=effective))
+
     def get(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
         return self.request("GET", url, **kwargs)
 
+    def delete(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("DELETE", url, **kwargs)
+
+    def head(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("HEAD", url, **kwargs)
+
+    def options(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("OPTIONS", url, **kwargs)
+
+    def patch(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("PATCH", url, **kwargs)
+
     def post(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
         return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("PUT", url, **kwargs)
+
+    def trace(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
+        return self.request("TRACE", url, **kwargs)
 
     def close(self) -> None:
         close = getattr(self.raw, "close", None)

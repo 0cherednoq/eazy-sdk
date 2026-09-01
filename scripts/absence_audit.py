@@ -225,6 +225,8 @@ def audit() -> list[str]:
                 f"removed wire_body decorator remains in snapshot: {path.relative_to(ROOT)}"
             )
 
+    execution_core_definitions: list[Path] = []
+    compiler_entry_definitions: list[Path] = []
     for directory in (ROOT / "eazy_sdk", ROOT / "plugins"):
         for path in directory.rglob("*.py"):
             if _is_generated_path(path):
@@ -234,6 +236,13 @@ def audit() -> list[str]:
                 if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
                     if node.name in REMOVED_SYMBOLS:
                         failures.append(f"removed symbol {node.name}: {path.relative_to(ROOT)}")
+                    if isinstance(node, ast.ClassDef) and node.name == "ExecutionCore":
+                        execution_core_definitions.append(path.relative_to(ROOT))
+                    if (
+                        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+                        and node.name == "compile_endpoint"
+                    ):
+                        compiler_entry_definitions.append(path.relative_to(ROOT))
                 elif isinstance(node, ast.Import):
                     for alias in node.names:
                         if any(
@@ -328,6 +337,19 @@ def audit() -> list[str]:
                     failures.append(
                         f"direct model-library duck typing {node.attr}: {path.relative_to(ROOT)}"
                     )
+
+    expected_executor = [Path("eazy_sdk/clients/executor.py")]
+    if execution_core_definitions != expected_executor:
+        failures.append(
+            "expected one HTTP ExecutionCore path, found "
+            f"{[path.as_posix() for path in execution_core_definitions]!r}"
+        )
+    expected_compiler = [Path("eazy_sdk/_internal/http_compiler.py")]
+    if compiler_entry_definitions != expected_compiler:
+        failures.append(
+            "expected one compile_endpoint path, found "
+            f"{[path.as_posix() for path in compiler_entry_definitions]!r}"
+        )
 
     public_text_roots = (ROOT / "examples", ROOT / "docs-site" / "src", ROOT / "README.md")
     for entry in public_text_roots:

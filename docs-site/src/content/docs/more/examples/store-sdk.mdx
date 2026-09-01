@@ -8,7 +8,7 @@ sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.crypto
   - eazy_sdk.websocket
-api_fingerprint: "sha256:160666bda9e65f42ec0e6246f59a3cc8dfcde41d0f2b59661286c29c0988c83b"
+api_fingerprint: "sha256:98d9e0cfd88e9dd1f76aeae83e5ceac22839b5d96efc1ede3af7857200ee81e2"
 ---
 
 Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
@@ -74,11 +74,11 @@ class SearchProductsRequest(TypedDict):
 
 class CatalogApi(AsyncApi):
     @api.get("/v1/products/{product_id}", responses=PRODUCT)
-    async def product(self, **request: Unpack[GetProductRequest]):
+    async def product(self, **request: Unpack[GetProductRequest]) -> Product:
         raise NotImplementedError
 
     @api.get("/v1/products", responses=PRODUCTS)
-    async def search(self, **request: Unpack[SearchProductsRequest]):
+    async def search(self, **request: Unpack[SearchProductsRequest]) -> ProductSearch:
         raise NotImplementedError
 ```
 
@@ -90,8 +90,8 @@ product = await catalog.product(product_id=42)
 keyboards = await catalog.search(query="keyboard", page=2)
 ```
 
-`Path()` и `Query()` задают wire placement. `Responses[T]` одновременно задаёт parser реального
-ответа и показывает IDE тип результата; return-аннотация пустой декларации не нужна.
+`Path()` и `Query()` задают wire placement. `Responses[T]` задаёт parser реального ответа, а явная
+return-аннотация сохраняет strict mypy и IDE без module-level исключений.
 
 ## 2. Добавьте JSON body и ошибки API
 

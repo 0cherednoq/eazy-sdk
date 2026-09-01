@@ -4,9 +4,10 @@ description: Явные параметры API-метода для каждой 
 freshness: false
 ---
 
-Каждое поле единого operation `TypedDict` занимает одно явное место в HTTP request. Метод раскрывает
-schema через `**request: Unpack[OperationRequest]`. Eazy SDK проверяет placements при создании
-API-класса, до middleware и сети.
+Каждый request parameter занимает одно явное место в HTTP request. Hand-written SDK объявляет
+keyword-only параметры прямо; generated/reusable SDK раскрывает `TypedDict` через
+`**request: Unpack[OperationRequest]`. Eazy SDK проверяет placements при создании API-класса, до
+middleware и сети.
 
 | Часть запроса | Marker | Руководство |
 |---|---|---|
@@ -19,10 +20,10 @@ API-класса, до middleware и сети.
 | Multipart part | `Annotated[T, Part()]` | {doc}`Multipart </guides/requests/multipart>` |
 | Готовые bytes | `Annotated[bytes, BytesBody()]` | {doc}`Bytes </guides/requests/bytes>` |
 
-Весь плоский request описывайте одним `TypedDict`, включая path, query, headers, cookies и body
-fields. Pydantic/dataclass/msgspec нужны для вложенного document или model-owned
-validation/serialization policy; такая модель остаётся значением одного поля request-`TypedDict`.
-`Unpack` сохраняет точную IDE и strict-type-checker сигнатуру без повторения полей в методе.
+Выберите один стиль на operation: direct keyword-only параметры с обычными Python defaults или
+единый `Unpack[TypedDict]`. Pydantic/dataclass/msgspec нужны для вложенного document или
+model-owned validation/serialization policy. Оба request-стиля сохраняют точную IDE и
+strict-type-checker сигнатуру.
 
 Один параметр нельзя разместить дважды. Placeholder path должен иметь ровно один `Path` marker.
 `options` зарезервирован для `CallOptions | None`, должен быть keyword-only и не попадает в HTTP.

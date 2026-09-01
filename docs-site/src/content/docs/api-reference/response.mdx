@@ -1,43 +1,94 @@
 ---
 title: Response API
-description: Cases, representations, envelope и typed errors.
+description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:2e31602e0af0e3c2a30c7a75d98a98fac1fe465902aae65fac817fa0a282abfa"
+api_fingerprint: "sha256:6b175fdf7091e6607a3fc56aabc564ecca7ab8561c07c3ec7d00890dc6d68d67"
 ---
 
-`Responses` — единственное описание status/media/parser semantics операции. `Success` задаёт
-успешные cases, `Error` — ожидаемые typed ошибки, а `fallback` — поведение для остальных ответов.
+## Одна успешная case
+
+В hand-written SDK стандартный ответ объявляется рядом с operation:
+
+```python
+from typing import Annotated
+
+from pydantic import BaseModel
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import Path
+from eazy_sdk.response import Json
+
+class User(BaseModel):
+    id: int
+
+class UsersApi(AsyncApi):
+    @api.get("/users/{user_id}", response=Json(status=200))
+    async def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
+        raise NotImplementedError
+```
+
+`Json()` получает `User` из return-аннотации. Status по умолчанию равен `200`; `when=` задаёт
+дополнительное условие case. То же правило поддерживает `Html()`.
+
+## Полный `Responses`
+
+Используйте advanced contract, когда успехов несколько или нужна сложная arbitration:
 
 ```python
 RESPONSES = Responses(
-    success=(Success(200, Json(User)),),
+    success=(
+        Success(200, Json(User)),
+        Success(202, Json(PendingUser)),
+    ),
     errors=(Error(404, Json(Problem), exception=UserNotFound),),
+    fallback=Error(DEFAULT, Text()),
 )
 ```
-
-Обычный метод возвращает значение из success case. `method.with_response(...)` возвращает
-`ResponseEnvelope`: `value`, `status_code`, `headers` и raw `response`. Неожиданный, неоднозначный
-или malformed ответ завершается соответствующей ошибкой Eazy SDK до возврата значения.
-
-## Representations
 
 | Representation | Результат |
 |---|---|
 | `Json(Model, media_type=...)` | dataclass, Pydantic, msgspec или custom model adapter |
-| `Html(Model, media_type=...)` | CSS/XPath primitives → model adapter |
-| `Extracted(Model, using=extractor, media_type=...)` | Custom primitive extractor → model adapter |
-| `Parsed(Model, using=parser, media_type=...)` | Custom typed parser |
+| `Html(Model, media_type=...)` | CSS/XPath extraction → model adapter |
+| `Extracted(Model, using=...)` | Custom primitive extractor → model adapter |
+| `Parsed(Model, using=...)` | Custom response parser |
 | `Text(media_type=...)` | `str` |
 | `Bytes(media_type=...)` | `bytes` |
-| `Empty(media_type=...)` | `None`, только при пустом body |
+| `Empty(media_type=...)` | `None`, только для пустого body |
 
-Status selector может быть точным `int`, `StatusRange(start, end)` или `DEFAULT` для fallback.
-`ApiError[T]` предоставляет `.error` с typed payload и `.context` с безопасной metadata ответа.
+Status selector может быть `int`, `StatusRange(start, end)` или `DEFAULT`.
 
-Ошибки классификации разделены: `UnexpectedResponseError`, `MalformedResponseError` и
-`AmbiguousResponseError`. Они не маскируются под документированную ошибку API.
+## Typed callable parser
 
-`ResponseExtractor` не создаёт framework model сам. Он возвращает primitive value, после чего
-единый `ModelAdapterRegistry` строит итоговый объект. Parsing session привязывается один раз к
-response attempt и может кешировать DOM/decoded tree по identity extractor-а.
+Для одного custom model используйте фабрику, связывающую callback с типом заранее:
+
+```python
+from eazy_sdk.ext import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.response import ResponseContext, callable_parser
+
+def parse_challenge(
+    context: ResponseContext[object],
+) -> ParseAttempt[Challenge]:
+    if context.response.status_code != 403:
+        return NoMatch()
+    return ParsedValue(Challenge(context.text.value or ""))
+
+CHALLENGE_PARSER = callable_parser(Challenge, parse_challenge)
+```
+
+Runtime не передаёт callback-у `type[object]`. Несовместимый return type отклоняют mypy и
+Pyright. Для multi-model parser реализуйте advanced `ResponseParser` SPI. Старого
+`CallableParser` и compatibility alias нет.
+
+## Результаты и ошибки
+
+Обычный вызов возвращает значение success case. `method.with_response(...)` возвращает
+`ResponseEnvelope`: `value`, `status_code`, `headers` и normalized raw `response`.
+
+`ApiError[T]` содержит typed `.error` и безопасный `.context`. Ошибки классификации разделены:
+
+- `UnexpectedResponseError` — подходящей case нет;
+- `MalformedResponseError` — body не разобран выбранным parser/extractor;
+- `AmbiguousResponseError` — совпало больше одной case.
+
+Parsing session создаётся один раз на response attempt, поэтому custom parser или extractor может
+кэшировать decoded document по identity.

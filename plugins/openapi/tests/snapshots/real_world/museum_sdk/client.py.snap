@@ -1,11 +1,13 @@
 """Generated declarative sync/async API methods. Do not edit."""
 
+from __future__ import annotations
+
 from typing import Annotated, Any, Literal, Required, TypedDict, Unpack, cast
 
 from pydantic import ConfigDict, Field
 from zapros import AsyncBaseHandler, BaseHandler
 
-from eazy_sdk import api
+from eazy_sdk import AsyncSdk, HandlerProfile, SyncSdk, api, api_group
 from eazy_sdk.codegen import (
     DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,
     Client, ClientConfig,
@@ -331,29 +333,28 @@ class AsyncTickets(AsyncApi):
         raise NotImplementedError
 
 
-class AsyncAPI:
-    def __init__(self, client: AsyncClient) -> None:
-        self._client = client
-        self.operations: AsyncOperations = AsyncOperations(client)
-        self.events: AsyncEvents = AsyncEvents(client)
-        self.tickets: AsyncTickets = AsyncTickets(client)
+class AsyncAPI(AsyncSdk):
+    operations = api_group(AsyncOperations)
+    events = api_group(AsyncEvents)
+    tickets = api_group(AsyncTickets)
 
     @classmethod
     def from_handler(
         cls,
         *,
-        base_url: str,
+        base_url: str = '',
         handler: AsyncBaseHandler,
         config: ClientConfig | None = None,
         owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
     ) -> AsyncAPI:
-        client = AsyncClient(
+        return super().from_handler(
             base_url=base_url,
             handler=handler,
             config=config,
             owns_handler=owns_handler,
+            profile=profile,
         )
-        return client.bind_sdk(cls)
 
     @classmethod
     def httpx(
@@ -369,15 +370,6 @@ class AsyncAPI:
             handler=handler,
             config=config,
         )
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
-
-    async def __aenter__(self) -> AsyncAPI:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.aclose()
 
 
 class SyncOperations(SyncApi):
@@ -574,29 +566,28 @@ class SyncTickets(SyncApi):
         raise NotImplementedError
 
 
-class SyncAPI:
-    def __init__(self, client: Client) -> None:
-        self._client = client
-        self.operations: SyncOperations = SyncOperations(client)
-        self.events: SyncEvents = SyncEvents(client)
-        self.tickets: SyncTickets = SyncTickets(client)
+class SyncAPI(SyncSdk):
+    operations = api_group(SyncOperations)
+    events = api_group(SyncEvents)
+    tickets = api_group(SyncTickets)
 
     @classmethod
     def from_handler(
         cls,
         *,
-        base_url: str,
+        base_url: str = '',
         handler: BaseHandler,
         config: ClientConfig | None = None,
         owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
     ) -> SyncAPI:
-        client = Client(
+        return super().from_handler(
             base_url=base_url,
             handler=handler,
             config=config,
             owns_handler=owns_handler,
+            profile=profile,
         )
-        return cls(client)
 
     @classmethod
     def httpx(
@@ -612,15 +603,6 @@ class SyncAPI:
             handler=handler,
             config=config,
         )
-
-    def close(self) -> None:
-        self._client.close()
-
-    def __enter__(self) -> SyncAPI:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        self.close()
 
 
 __all__ = ['AsyncAPI', 'AsyncOperations', 'AsyncEvents', 'AsyncTickets', 'SyncAPI', 'SyncOperations', 'SyncEvents', 'SyncTickets']

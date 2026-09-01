@@ -24,6 +24,7 @@ from .cases import (
     Success,
     Text,
     UnexpectedResponseError,
+    callable_parser,
 )
 from .headers import FromHeader, Headers, ResponseHeader
 from .normalized import NormalizedResponse, RedirectInfo
@@ -57,4 +58,5 @@ __all__ = [
     "Success",
     "Text",
     "UnexpectedResponseError",
+    "callable_parser",
 ]

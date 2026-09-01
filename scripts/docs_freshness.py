@@ -159,7 +159,7 @@ def _signature_of(obj: object) -> str:
     try:
         signature = str(inspect.signature(obj))  # type: ignore[arg-type]
         return re.sub(r"0x[0-9A-Fa-f]+", "0x…", signature)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return "<no-signature>"
 
 

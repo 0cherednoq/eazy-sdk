@@ -1,80 +1,38 @@
 ---
 title: reCAPTCHA
-description: Подключение reCAPTCHA v2, v3 или Enterprise.
+description: Typed reCAPTCHA v2, v3 and Enterprise policies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:afa71cd2a486249200d3f4f808dae4e3c7e9b4a2cf0fb9797a4495700d0645b4"
+api_fingerprint: "sha256:923d9f72f2fb8f68b12b3a2b39ab65b2ca44a6de875ef7e7311c5c9287adf313"
 ---
 
-::::{tab-set}
-  :::{tab-item} v2 Checkbox
+v2/checkbox policies реагируют на response challenge. v3/action и Enterprise score policies
+получают token до request.
 
-  ```python
-  from eazy_sdk_presets import operation, recaptcha
+```python target
+v2 = recaptcha.v2_checkbox(
+    scope=operation("login"),
+    apply=form_field("g-recaptcha-response"),
+)
 
-  protection = recaptcha.v2_checkbox(
-      scope=operation("login"),
-      solver=RecaptchaSolver(),
-  )
-  ```
-:::
-  :::{tab-item} v2 Invisible
+v3 = recaptcha.v3_action(
+    scope=operation("createAccount"),
+    site_key="public-site-key",
+    action="create_account",
+    apply=form_field("g-recaptcha-response"),
+)
 
-  ```python
-  from eazy_sdk_presets import operation, recaptcha
-
-  protection = recaptcha.v2_invisible(
-      scope=operation("register"),
-      solver=RecaptchaSolver(),
-  )
-  ```
-:::
-  :::{tab-item} v3
-
-  ```python
-  from eazy_sdk_presets import form_field, operation, recaptcha
-
-  protection = recaptcha.v3_action(
-      scope=operation("createAccount"),
-      site_key="public-site-key",
-      action="create_account",
-      solver=RecaptchaSolver(),
-      apply=form_field("g-recaptcha-response"),
-  )
-  ```
-:::
-  :::{tab-item} Enterprise
-
-  ```python
-  from eazy_sdk_presets import operation, recaptcha
-
-  protection = recaptcha.enterprise_score_action(
-      scope=operation("checkout"),
-      project="project-id",
-      site_key="public-site-key",
-      action="checkout",
-      solver=RecaptchaSolver(),
-  )
-  ```
-:::
-::::
-
-Подключение к клиенту одинаково для всех вариантов:
-
-```python
-client = Client(
-    base_url=base_url,
-    handler=handler,
-    config=ClientConfig(protections=(protection,)),
+config = ClientConfig(
+    challenge_policies=(v2,),
+    before_call_policies=(v3,),
+    challenge_solvers=ChallengeSolverBindings(
+        bind_challenge_solver(v2.solver, RecaptchaV2Solver()),
+        bind_challenge_solver(v3.solver, RecaptchaV3Solver()),
+    ),
 )
 ```
 
-`scope=operation("login")` ограничивает policy одной operation identity. Не помещайте scope в
-декоратор API-метода: точный operation scope выводится автоматически, reusable policy scopes
-принадлежат client configuration.
-
-Solver получает typed challenge и возвращает typed solution. Он не мутирует request и не
-управляет retry. Response reaction применяет solution и запрашивает replay через общий
-coordinator. Для обязательной CAPTCHA до первого запроса используйте bounded flow из
-{doc}`обзора Protection </guides/protection/index>`.
+`scope=operation(...)` ограничивает policy одной operation identity. Solver возвращает typed
+solution и не мутирует request, cache или retry coordinator. Private token field отсутствует в
+public method signature и добавляется перед projection/encoding/signing нужного attempt.

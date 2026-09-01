@@ -20,9 +20,11 @@ from eazy_sdk.ext import (
     AuthProviders,
     ExecutionRuntime,
     HttpProtocol,
+    ParsedValue,
     PreparedRequest,
     ReplayableBodyStream,
     StaticAuthProvider,
+    callable_parser,
 )
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
@@ -43,16 +45,23 @@ from eazy_sdk.middleware import (
     call_middleware,
 )
 from eazy_sdk.protection import (
-    ResponseReaction,
+    BeforeCallPolicy,
+    ChallengeSolverBindings,
+    ResponseSignal,
     SolveContext,
-    SolverRegistry,
     SolverRequirement,
-    header_target,
+    before_call_policy,
+    bind_challenge_solver,
+    challenge_policy,
+    per_call,
+    per_match,
+    private_bindings,
+    private_cookie,
+    private_header,
     safe_method,
 )
 from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimitDecision
 from eazy_sdk.request import (
-    Cookie,
     Header,
     Query,
     ReplayableStreamBody,
@@ -353,6 +362,8 @@ def test_redirect_restarts_preparation_and_recomputes_scope() -> None:
 
 
 def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
+    from eazy_sdk._internal import RequestScope
+
     @dataclass(frozen=True)
     class Challenge:
         token: str
@@ -369,21 +380,27 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         errors=(challenge_case,),
     )
     requirement: SolverRequirement[Challenge, str] = SolverRequirement("challenge")
-    solvers = SolverRegistry()
-    solvers.register(requirement, Solver())
-    reaction = ResponseReaction(
-        challenge_case,
-        requirement,
-        header_target("X-Device"),
-        safe_method(),
+    scope = RequestScope()
+
+    def parse_challenge(context: Any) -> Any:
+        value = context.json.value
+        return ParsedValue(Challenge(value["token"]))
+
+    signal = ResponseSignal(
+        "challenge",
+        scope,
+        Challenge,
+        callable_parser(Challenge, parse_challenge),
+        prefilter=lambda context: context.response.status_code == 409,
     )
-
-    @dataclass(frozen=True)
-    class Policy:
-        reactions: tuple[object, ...]
-        scope: object
-
-    from eazy_sdk._internal import RequestScope
+    policy = challenge_policy(
+        scope=scope,
+        signal=signal,
+        solver=requirement,
+        apply=private_bindings(private_header("X-Device")),
+        persistence=per_match(),
+        replay=safe_method(),
+    )
 
     signatures: list[bytes] = []
     requests: list[PreparedRequest] = []
@@ -412,7 +429,7 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         output=header_output("X-Signature"),
     )
     declaration = dataclass_replace(
-        cast(Any, DeviceItemsApi.items).resolve(ApiDefaults()),
+        cast(Any, ItemsApi.items).resolve(ApiDefaults()),
         responses=responses,
         signing=(signature,),
     )
@@ -420,8 +437,10 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         CAPABILITIES,
         emit,
         "https://api.test",
-        solvers=solvers,
-        protections=(Policy((reaction,), RequestScope()),),
+        challenge_policies=(policy,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(requirement, Solver())
+        ),
         key_provider=key_provider,
     )
 
@@ -469,7 +488,6 @@ def test_middleware_action_reenters_start_attempt() -> None:
 
 def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> None:
     from eazy_sdk._internal import RequestScope
-    from eazy_sdk.protection import BeforeCall, SolutionFreshness, cookie_target
 
     class AcquireApi(SyncApi):
         @api.get(
@@ -486,25 +504,15 @@ def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> No
             operation_id="protected",
             responses=Responses(success=(Success(200, Json(dict)),)),
         )
-        def protected(
-            self, *, clearance: Annotated[str | None, Cookie("clearance")] = None
-        ) -> dict[str, object]:
+        def protected(self) -> dict[str, object]:
             raise NotImplementedError
 
-    @dataclass(frozen=True)
-    class Policy:
-        before: tuple[object, ...]
-        scope: object
-
-    policy = Policy(
-        (
-            BeforeCall(
-                AcquireApi.token,
-                cookie_target("clearance"),
-                SolutionFreshness.PER_CALL,
-            ),
-        ),
-        RequestScope(operation_ids=frozenset({"protected"})),
+    policy: BeforeCallPolicy[Any, Any] = before_call_policy(
+        identity="test.acquire-clearance",
+        scope=RequestScope(operation_ids=frozenset({"protected"})),
+        acquire=AcquireApi.token,
+        apply=private_bindings(private_cookie("clearance")),
+        persistence=per_call(),
     )
     seen: list[str] = []
 
@@ -517,7 +525,12 @@ def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> No
         return response()
 
     client = _SyncClientCore(
-        ExecutionRuntime(CAPABILITIES, emit, "https://api.test", protections=(policy,))
+        ExecutionRuntime(
+            CAPABILITIES,
+            emit,
+            "https://api.test",
+            before_call_policies=(policy,),
+        )
     )
     assert ProtectedApi(client).protected() == {"ok": True}
     assert seen == ["https://api.test/token", "https://api.test/protected"]

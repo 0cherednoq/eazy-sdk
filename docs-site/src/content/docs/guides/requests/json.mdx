@@ -6,9 +6,9 @@ sources:
 api_fingerprint: "sha256:c9640cc7895c54b4a30e14130c61760861dbfeb5b9af2efac93f661b0f868656"
 ---
 
-Плоский JSON object объявляйте через `TypedDict` и раскрывайте через `Unpack`. Runtime проверяет
-required/optional keys, неизвестные поля и типы значений до provider calls и сети, а IDE показывает
-точные именованные аргументы без wrapper-словаря.
+Плоский JSON object можно объявить прямыми keyword-only `JsonField` параметрами или через
+`Unpack[TypedDict]`. Runtime проверяет поля и типы значений до provider calls и сети, а IDE
+показывает точные именованные аргументы без wrapper-словаря.
 
 ```python
 from typing import Annotated, NotRequired, TypedDict, Unpack
@@ -69,6 +69,18 @@ REGISTER_BODY = BodyProjection(
 )
 ```
 
-Метод с `body=REGISTER_BODY` принимает `**request: Unpack[RegisterUser]`: caller передаёт поля
-напрямую, без `body=` или wrapper dict. `make_client_wire()` вызывается заново на каждой attempt;
-значения из mutable client/session state добавляйте auth/protection writers после projection.
+Метод с `body=REGISTER_BODY` может принять `**request: Unpack[RegisterUser]` или совпадающие
+keyword-only поля `RegisterUser`. Caller передаёт их напрямую, без `body=` или wrapper dict.
+`make_client_wire()` вызывается заново на каждой attempt; значения из mutable client/session state
+добавляйте auth/protection writers после projection.
+
+Для projection действуют три разные состояния:
+
+- отсутствующий `NotRequired` key не передаётся mapper-у, поэтому mapper может применить свой
+  default;
+- явно переданный `None` остаётся присутствующим key со значением `None`;
+- отсутствующий required key вызывает `OperationBindingError` до mapper, providers и network.
+
+`TypedDict` не объявляет runtime defaults. Для `Unpack` используйте `source.get("field", default)`
+или default private target model. В direct signature обычный Python default материализуется и
+передаётся mapper-у. На каждой attempt mapper получает новую глубокую копию public values.

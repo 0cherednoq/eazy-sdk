@@ -158,8 +158,8 @@ def test_rejects_projection_source_that_is_not_a_typed_dict() -> None:
                 raise NotImplementedError
 
 
-def test_rejects_projection_without_unpack_input() -> None:
-    with pytest.raises(PlanError, match=r"requires Unpack\[TypedDict\]"):
+def test_rejects_projection_when_source_is_absent_from_direct_input() -> None:
+    with pytest.raises(PlanError, match="not present in the public input"):
 
         class InvalidApi(SyncApi):
             @api.post("/project", body=PROJECTION, responses=RESPONSES)

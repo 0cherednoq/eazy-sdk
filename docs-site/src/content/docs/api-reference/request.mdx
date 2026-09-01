@@ -3,12 +3,13 @@ title: Request API
 description: Маркеры размещения, тела и wire options.
 sources:
   - eazy_sdk.request
-api_fingerprint: "sha256:7a4cdb666827fa079cfde60889a3fc305a30429bbeee8a00cabb8258aab6f07f"
+  - eazy_sdk.OperationBindingError
+api_fingerprint: "sha256:3ae3eee0108f12cc49ee1d8eb41fbc0b06e5651555251a6f67673ebb020f9b23"
 ---
 
-Маркеры используются в полях единого operation `TypedDict`: `Annotated[T, Path()]`, `Query()`,
-`Header()` и `Cookie()`. Имя wire-поля можно передать маркеру явно; без аргумента используется имя
-поля.
+Маркеры используются либо в явных keyword-only параметрах метода, либо в полях operation
+`TypedDict`: `Annotated[T, Path()]`, `Query()`, `Header()` и `Cookie()`. Имя wire-поля можно
+передать маркеру явно; без аргумента используется Python-имя.
 
 Плоское object-shaped тело объявляйте через `TypedDict`: это структура данных, а не model object.
 Dataclass, Pydantic v2 и msgspec оставляйте для вложенных документов и правил валидации, которыми
@@ -40,9 +41,17 @@ validation, и только после этого `JsonBody`, form/multipart и�
 semantic document. Mapper не получает client/transport state; Adaptix остаётся optional и может
 быть заменён обычной typed функцией.
 
-Все HTTP inputs одной operation, включая path, query, headers, cookies и body, находятся в одном
-именованном `TypedDict`. Прямые HTTP-параметры в сигнатуре first-party SDK и generated source не
-используются. `CallOptions | None` является единственным отдельным keyword-only control argument.
+Hand-written SDK может объявить все HTTP inputs прямыми keyword-only параметрами с Python
+defaults. Generated/reusable SDK может раскрыть единый `TypedDict` через `Unpack`. Эти два стиля
+lower-ятся одинаково, но не смешиваются в одной operation. `CallOptions | None` является
+единственным отдельным keyword-only control argument.
+
+| Задача | Стиль | Поведение отсутствующего значения |
+|---|---|---|
+| Hand-written метод с удобными IDE defaults | Явные keyword-only параметры | Python default материализуется до projection |
+| Reusable/generated request schema | `**request: Unpack[TypedDict]` | `NotRequired` key остаётся отсутствующим |
+| Обязательное значение в любом стиле | Параметр без default / required key | Ошибка `bind` до mapper и I/O |
+| Явно переданный `None` | Любой стиль с nullable type | Key присутствует со значением `None` |
 
 `WireOptions` фиксирует порядок и exact/protocol настройки только там, где сервер требует точных
 байтов. `CallOptions | None` — зарезервированный keyword-only параметр управления одним вызовом.
@@ -69,8 +78,30 @@ semantic document. Mapper не получает client/transport state; Adaptix 
 | `BytesBody(...)` | заданный caller-ом | Buffered bytes |
 | `ReplayableStreamBody(...)` | заданный caller-ом | Повторно создаваемый stream |
 
-`BodyProjection(...)` не является ещё одним body marker. Это связь public `TypedDict` с private
+`BodyProjection(...)` не является ещё одним body marker. Это связь public mapper schema с private
 wire schema и одним из перечисленных encodings; смешивать projection с root/flat body нельзя.
+Источник может быть представлен direct параметрами или `Unpack`. Direct defaults материализуются
+до вызова mapper; omitted `NotRequired` key в `Unpack` остаётся отсутствующим.
+
+## Ошибки binding и projection
+
+Public binding, projection и preparation failures используют один `OperationBindingError`.
+Tooling читает поля ошибки напрямую, не разбирает message:
+
+| Поле | Значение |
+|---|---|
+| `code` | Стабильный machine-readable вид ошибки |
+| `operation_id` | Public identity операции |
+| `field` | Caller field или nested path, если он известен |
+| `phase` | `bind`, `projection` или `prepare` |
+
+`error.as_dict()` возвращает только эти безопасные поля. Значение аргумента, private wire document,
+credentials и internal slot name в message, `repr` и mapping не входят.
+
+Для `BodyProjection.source` отсутствие `NotRequired` key, явный `None` и отсутствие required key
+не смешиваются. Omitted key не попадает в mapper input. Explicit `None` попадает. Missing required
+key завершается на `bind` до mapper, providers и handler. Mapper получает fresh deep copy на каждой
+attempt, включая retry и redirect.
 
 Для плоского JSON, form или multipart document используйте `Unpack[TypedDict]` и field markers
 `JsonField`, `Form` или `Part`. Не оборачивайте несколько scalar fields в Pydantic, dataclass или

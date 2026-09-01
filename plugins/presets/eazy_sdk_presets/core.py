@@ -8,17 +8,24 @@ from typing import Any
 
 from eazy_sdk.ext import RequestScope
 from eazy_sdk.protection import (
-    BeforeCall,
-    ChallengeSolver,
-    ResponseReaction,
+    PrivateBindings,
+    ProtectionPersistence,
     ResponseSignal,
-    SolutionFreshness,
-    SolutionTarget,
-    SolverRegistry,
     SolverRequirement,
-    body_field,
-    header_target,
-    query_target,
+    client_identity,
+    private_bindings,
+    private_body,
+    private_header,
+    private_query,
+)
+from eazy_sdk.protection import (
+    per_call as protection_per_call,
+)
+from eazy_sdk.protection import (
+    per_match as protection_per_match,
+)
+from eazy_sdk.protection import (
+    until_expiry as protection_until_expiry,
 )
 
 
@@ -46,44 +53,67 @@ class ProtectionCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
-class BoundProtection:
+class PresetChallengePolicy:
     id: PresetId
+    identity: str
     revision: int
     scope: RequestScope
-    solver_requirement: SolverRequirement[Any, Any]
+    signal: ResponseSignal[Any]
+    solver: SolverRequirement[Any, Any]
+    apply: PrivateBindings[Any]
+    persistence: ProtectionPersistence
+    replay: Any
     capabilities: ProtectionCapabilities
-    signals: tuple[ResponseSignal[Any], ...] = ()
-    reactions: tuple[ResponseReaction[Any, Any], ...] = ()
-    before: tuple[BeforeCall, ...] = ()
-    solver: ChallengeSolver[Any, Any] | None = None
+    challenge_identity: Any | None = None
     customized: frozenset[str] = frozenset()
 
-    def install(self, registry: SolverRegistry) -> None:
-        if self.solver is not None:
-            registry.register(self.solver_requirement, self.solver)
-
-    def replace_parser(self, parser: Any) -> BoundProtection:
+    def replace_parser(self, parser: Any) -> PresetChallengePolicy:
         if not callable(getattr(parser, "bind", None)):
             raise TypeError("parser must implement bind(response)")
-        signals = tuple(replace(signal, parser=parser) for signal in self.signals)
-        return replace(self, signals=signals, customized=self.customized | {"parser"})
-
-    def extend_detection(self, predicate: Any) -> BoundProtection:
-        def combined(context: Any) -> bool:
-            return all(
-                signal.prefilter is None or signal.prefilter(context) for signal in self.signals
-            ) and bool(predicate(context))
-
-        signals = tuple(replace(signal, prefilter=combined) for signal in self.signals)
-        return replace(self, signals=signals, customized=self.customized | {"detection"})
-
-    def replace_application(self, target: SolutionTarget) -> BoundProtection:
-        reactions = tuple(replace(reaction, apply=target) for reaction in self.reactions)
-        before = tuple(replace(flow, apply=target) for flow in self.before)
         return replace(
             self,
-            reactions=reactions,
-            before=before,
+            signal=replace(self.signal, parser=parser),
+            customized=self.customized | {"parser"},
+        )
+
+    def extend_detection(self, predicate: Any) -> PresetChallengePolicy:
+        def combined(context: Any) -> bool:
+            return (
+                self.signal.prefilter is None or self.signal.prefilter(context)
+            ) and bool(predicate(context))
+
+        return replace(
+            self,
+            signal=replace(self.signal, prefilter=combined),
+            customized=self.customized | {"detection"},
+        )
+
+    def replace_application(self, target: PrivateBindings[Any]) -> PresetChallengePolicy:
+        return replace(
+            self,
+            apply=target,
+            customized=self.customized | {"application"},
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PresetBeforeCallPolicy:
+    id: PresetId
+    identity: str
+    revision: int
+    scope: RequestScope
+    acquire: None
+    challenge: object
+    solver: SolverRequirement[Any, Any]
+    apply: PrivateBindings[Any]
+    persistence: ProtectionPersistence
+    capabilities: ProtectionCapabilities
+    customized: frozenset[str] = frozenset()
+
+    def replace_application(self, target: PrivateBindings[Any]) -> PresetBeforeCallPolicy:
+        return replace(
+            self,
+            apply=target,
             customized=self.customized | {"application"},
         )
 
@@ -95,25 +125,49 @@ class ProtectionTemplate[TChallenge, TSolution]:
     solver_requirement: SolverRequirement[TChallenge, TSolution]
     capabilities: ProtectionCapabilities
 
-    def bind(
+    def bind_challenge(
         self,
         *,
         scope: RequestScope,
-        solver: ChallengeSolver[TChallenge, TSolution] | None = None,
-        signals: tuple[ResponseSignal[Any], ...] = (),
-        reactions: tuple[ResponseReaction[Any, Any], ...] = (),
-        before: tuple[BeforeCall, ...] = (),
-    ) -> BoundProtection:
-        return BoundProtection(
+        signal: ResponseSignal[TChallenge],
+        apply: PrivateBindings[TSolution],
+        persistence: ProtectionPersistence,
+        replay: Any,
+        challenge_identity: Any | None = None,
+    ) -> PresetChallengePolicy:
+        return PresetChallengePolicy(
             self.id,
+            str(self.id),
             self.revision,
             scope,
+            signal,
             self.solver_requirement,
+            apply,
+            persistence,
+            replay,
             self.capabilities,
-            signals,
-            reactions,
-            before,
-            solver,
+            challenge_identity,
+        )
+
+    def bind_before(
+        self,
+        *,
+        scope: RequestScope,
+        apply: PrivateBindings[TSolution],
+        persistence: ProtectionPersistence,
+        challenge: TChallenge,
+    ) -> PresetBeforeCallPolicy:
+        return PresetBeforeCallPolicy(
+            self.id,
+            str(self.id),
+            self.revision,
+            scope,
+            None,
+            challenge,
+            self.solver_requirement,
+            apply,
+            persistence,
+            self.capabilities,
         )
 
 
@@ -128,37 +182,38 @@ def operation(value: object) -> RequestScope:
     return RequestScope(operation_ids=frozenset({operation_id}))
 
 
-def form_field(name: str, *, value_field: str | None = "token") -> SolutionTarget:
-    return body_field(name, value_field=value_field)
+def form_field(name: str, *, value_field: str | None = "token") -> PrivateBindings[Any]:
+    return private_bindings(private_body(name, field=value_field))
 
 
-def json_field(name: str, *, value_field: str | None = "token") -> SolutionTarget:
-    return body_field(name, value_field=value_field)
+def json_field(name: str, *, value_field: str | None = "token") -> PrivateBindings[Any]:
+    return private_bindings(private_body(name, field=value_field))
 
 
-def header(name: str, *, value_field: str | None = "token") -> SolutionTarget:
-    return header_target(name, value_field=value_field)
+def header(name: str, *, value_field: str | None = "token") -> PrivateBindings[Any]:
+    return private_bindings(private_header(name, field=value_field))
 
 
-def query(name: str, *, value_field: str | None = "token") -> SolutionTarget:
-    return query_target(name, value_field=value_field)
+def query(name: str, *, value_field: str | None = "token") -> PrivateBindings[Any]:
+    return private_bindings(private_query(name, field=value_field))
 
 
-def per_call() -> SolutionFreshness:
-    return SolutionFreshness.PER_CALL
+def per_call() -> ProtectionPersistence:
+    return protection_per_call()
 
 
-def per_match() -> SolutionFreshness:
-    return SolutionFreshness.PER_MATCH
+def per_match() -> ProtectionPersistence:
+    return protection_per_match()
 
 
-def until_expiry() -> SolutionFreshness:
-    return SolutionFreshness.UNTIL_EXPIRY
+def until_expiry() -> ProtectionPersistence:
+    return protection_until_expiry(scope=client_identity())
 
 
 __all__ = [
     "BodyAccess",
-    "BoundProtection",
+    "PresetBeforeCallPolicy",
+    "PresetChallengePolicy",
     "PresetId",
     "ProtectionCapabilities",
     "ProtectionTemplate",

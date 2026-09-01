@@ -1,4 +1,3 @@
-# mypy: disable-error-code="no-untyped-def"
 """Smallest deterministic Eazy SDK example, with no public network dependency."""
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ class GetProductRequest(TypedDict):
 
 class StoreApi(SyncApi):
     @api.get("/v1/products/{product_id}", responses=PRODUCT_RESPONSES)
-    def product(self, **request: Unpack[GetProductRequest]):
+    def product(self, **request: Unpack[GetProductRequest]) -> Product:
         raise NotImplementedError
 
 

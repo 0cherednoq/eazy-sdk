@@ -65,7 +65,7 @@ def parse_session_cookie(
             elif morsel["expires"]:
                 try:
                     expires_at = parsedate_to_datetime(morsel["expires"])
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     expires_at = None
                 if expires_at is not None:
                     if expires_at.tzinfo is None:

@@ -135,20 +135,33 @@ class ResponseExtractor(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class CallableParser:
-    callback: Callable[[ResponseContext[object], type[object]], ParseAttempt[object]]
+class _TypedCallableParser[T]:
+    model: type[T]
+    callback: Callable[[ResponseContext[object]], ParseAttempt[T]]
 
     def bind(self, response: ResponseContext[object]) -> BoundResponseParser:
-        return _BoundCallableParser(response, self.callback)
+        return _BoundTypedCallableParser(response, self.model, self.callback)
 
 
 @dataclass(frozen=True, slots=True)
-class _BoundCallableParser:
+class _BoundTypedCallableParser[T]:
     response: ResponseContext[object]
-    callback: Callable[[ResponseContext[object], type[object]], ParseAttempt[object]]
+    model: type[T]
+    callback: Callable[[ResponseContext[object]], ParseAttempt[T]]
 
-    def try_parse[T](self, model: type[T]) -> ParseAttempt[T]:
-        return cast(ParseAttempt[T], self.callback(self.response, cast(type[object], model)))
+    def try_parse[TResult](self, model: type[TResult]) -> ParseAttempt[TResult]:
+        if model is not self.model:
+            return NoMatch()
+        return cast(ParseAttempt[TResult], self.callback(self.response))
+
+
+def callable_parser[T](
+    model: type[T],
+    callback: Callable[[ResponseContext[object]], ParseAttempt[T]],
+) -> ResponseParser:
+    """Bind one response model to a typed single-argument parser callback."""
+
+    return _TypedCallableParser(model, callback)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,16 +216,20 @@ HTML_EXTRACTOR = HtmlExtractor()
 
 @dataclass(frozen=True, slots=True)
 class Json[T]:
-    model: type[T]
+    model: type[T] | None = None
     media_type: str = "application/json"
     extractor: ResponseExtractor = JSON_EXTRACTOR
+    status: StatusSelector = 200
+    when: ResponseCondition | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Html[T]:
-    model: type[T]
+    model: type[T] | None = None
     media_type: str = "text/html"
     extractor: ResponseExtractor = HTML_EXTRACTOR
+    status: StatusSelector = 200
+    when: ResponseCondition | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,7 +482,13 @@ class Responses[T]:
                 else:
                     matches.append((case, None))
                 continue
-            attempted.append(representation.model.__name__)
+            model = representation.model
+            if model is None:
+                malformed.append(
+                    (case, Malformed(TypeError("response representation model is unresolved")))
+                )
+                continue
+            attempted.append(model.__name__)
             decoder: ResponseParser | ResponseExtractor
             if isinstance(representation, Json | Html | Extracted):
                 extractor = representation.extractor
@@ -473,17 +496,17 @@ class Responses[T]:
                 if extractor_session is None:
                     extractor_session = extractor.bind(context)
                     extractor_sessions[id(extractor)] = extractor_session
-                primitive = extractor_session.extract(representation.model)
+                primitive = extractor_session.extract(model)
                 if isinstance(primitive, ParsedValue):
                     try:
                         sourced = _apply_header_sources(
-                            representation.model,
+                            model,
                             primitive.value,
                             context.headers,
                             context.models,
                         )
                         result: ParseAttempt[object] = ParsedValue(
-                            context.models.load(representation.model, sourced)
+                            context.models.load(model, sourced)
                         )
                     except Exception as exc:
                         result = Malformed(exc)
@@ -496,7 +519,7 @@ class Responses[T]:
                 if parser_session is None:
                     parser_session = parser.bind(context)
                     parser_sessions[id(parser)] = parser_session
-                result = parser_session.try_parse(representation.model)
+                result = parser_session.try_parse(model)
                 decoder = parser
             if isinstance(result, ParsedValue):
                 matches.append((case, result.value))
@@ -529,7 +552,9 @@ def JsonResponse[T](model: type[T]) -> Json[T]:
     return Json(model)
 
 
-def _representation_result_type(representation: ResponseRepresentation[object]) -> object:
+def _representation_result_type(
+    representation: ResponseRepresentation[object],
+) -> object | None:
     if isinstance(representation, Text):
         return str
     if isinstance(representation, Bytes):

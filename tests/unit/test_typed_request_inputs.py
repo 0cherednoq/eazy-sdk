@@ -55,6 +55,7 @@ class FlatBodyApi(SyncApi):
 
 
 class CreatePost(TypedDict):
+    owner_id: Annotated[int, Path()]
     user_id: Annotated[int, JsonField("userId")]
     title: Annotated[str, JsonField()]
     body: Annotated[str, JsonField()]
@@ -73,7 +74,6 @@ class UnpackedBodyApi(SyncApi):
     @api.post("/users/{owner_id}/posts", operation_id="unpackedBody", responses=RESPONSES)
     def create_post(
         self,
-        owner_id: Annotated[int, Path()],
         **request: Unpack[CreatePost],
     ) -> object:
         raise NotImplementedError

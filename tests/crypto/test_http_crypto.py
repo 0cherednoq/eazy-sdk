@@ -143,6 +143,7 @@ class AsyncPaymentsApi(AsyncApi):
     )
     async def create(
         self,
+        *,
         request: Annotated[CreatePayment, JsonBody()],
     ) -> PaymentResult:
         raise AssertionError("declaration body must not execute")
@@ -157,6 +158,7 @@ class SyncPaymentsApi(SyncApi):
     )
     def create(
         self,
+        *,
         request: Annotated[CreatePayment, JsonBody()],
     ) -> PaymentResult:
         raise AssertionError("declaration body must not execute")
@@ -202,7 +204,7 @@ async def test_async_http_field_and_encoded_crypto_wraps_codec_and_model_validat
         config=ClientConfig(),
     )
     envelope = await AsyncPaymentsApi(client).create.with_response(
-        CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+        request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
     )
     await client.aclose()
 
@@ -235,7 +237,7 @@ def test_sync_http_uses_the_same_crypto_profile() -> None:
         config=ClientConfig(),
     )
     result = SyncPaymentsApi(client).create(
-        CreatePayment(card=Card(number="5555", cvv="999"), amount=100)
+        request=CreatePayment(card=Card(number="5555", cvv="999"), amount=100)
     )
     client.close()
     assert result.receipt == "receipt-1"
@@ -256,6 +258,7 @@ async def test_field_only_crypto_preserves_json_media_type() -> None:
         @api.post("/field-only", responses=RESPONSES, crypto=field_profile)
         async def create(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -279,7 +282,7 @@ async def test_field_only_crypto_preserves_json_media_type() -> None:
     )
     try:
         result = await FieldOnlyApi(client).create(
-            CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+            request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
         )
     finally:
         await client.aclose()
@@ -292,6 +295,7 @@ async def test_whole_payload_crypto_uses_octet_stream_wire_default() -> None:
         @api.post("/default-wire", responses=RESPONSES, crypto=PAYMENT_CRYPTO)
         async def create(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -315,7 +319,7 @@ async def test_whole_payload_crypto_uses_octet_stream_wire_default() -> None:
     )
     try:
         result = await DefaultWireApi(client).create(
-            CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+            request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
         )
     finally:
         await client.aclose()
@@ -355,7 +359,7 @@ async def test_retry_runs_outbound_crypto_again_with_fresh_algorithm_state() -> 
         ),
     )
     result = await AsyncPaymentsApi(client).create(
-        CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+        request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
     )
     await client.aclose()
 
@@ -385,6 +389,7 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
         )
         def create(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -407,7 +412,7 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
     )
     with pytest.raises(CryptoRuntimeMismatch):
         InvalidApi(client).create(
-            CreatePayment(card=Card(number="1", cvv="2"), amount=1)
+            request=CreatePayment(card=Card(number="1", cvv="2"), amount=1)
         )
     client.close()
     assert calls == 0
@@ -418,6 +423,7 @@ async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> 
         @api.post("/scoped", responses=RESPONSES)
         async def encrypted(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -425,6 +431,7 @@ async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> 
         @api.post("/plain", responses=RESPONSES, crypto=None)
         async def plain(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -466,8 +473,8 @@ async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> 
         config=ClientConfig(crypto=registry),
     )
     request = CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
-    encrypted = await ScopedApi(client).encrypted(request)
-    plain = await ScopedApi(client).plain(request)
+    encrypted = await ScopedApi(client).encrypted(request=request)
+    plain = await ScopedApi(client).plain(request=request)
     await client.aclose()
     assert encrypted.receipt == "receipt-1"
     assert plain.payment_id == "pay-plain"
@@ -483,6 +490,7 @@ async def test_crypto_wire_rejects_manual_representation_header_before_network()
         )
         async def create(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
             content_type: Annotated[str, Header("Content-Type")],
         ) -> PaymentResult:
@@ -506,8 +514,8 @@ async def test_crypto_wire_rejects_manual_representation_header_before_network()
     )
     with pytest.raises(CryptoConfigurationError, match="owns HTTP representation headers"):
         await ConflictingApi(client).create(
-            CreatePayment(card=Card(number="1", cvv="2"), amount=1),
-            "application/json",
+            request=CreatePayment(card=Card(number="1", cvv="2"), amount=1),
+            content_type="application/json",
         )
     await client.aclose()
     assert calls == 0
@@ -531,6 +539,7 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
         )
         async def create(
             self,
+            *,
             request: Annotated[CreatePayment, JsonBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -561,7 +570,7 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
         ),
     )
     result = await SignedApi(client).create(
-        CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+        request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
     )
     await client.aclose()
     assert result.payment_id == "pay-1"
@@ -598,7 +607,7 @@ async def test_inbound_crypto_fails_closed_without_leaking_wire_data(
     try:
         with pytest.raises(error_type) as captured:
             await AsyncPaymentsApi(client).create(
-                CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
+                request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
             )
     finally:
         await client.aclose()
@@ -620,8 +629,8 @@ async def test_redirect_re_resolves_crypto_scope_and_rebuilds_from_logical_body(
         @api.post("/payments", responses=RESPONSES)
         async def create(
             self,
-            request: Annotated[CreatePayment, JsonBody()],
             *,
+            request: Annotated[CreatePayment, JsonBody()],
             options: CallOptions | None = None,
         ) -> PaymentResult:
             raise AssertionError
@@ -663,7 +672,7 @@ async def test_redirect_re_resolves_crypto_scope_and_rebuilds_from_logical_body(
     )
     try:
         result = await ScopedRedirectApi(client).create(
-            CreatePayment(card=Card(number="4111", cvv="123"), amount=500),
+            request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500),
             options=CallOptions(max_attempts=2, max_redirects=1),
         )
     finally:
@@ -690,6 +699,7 @@ async def test_content_coding_runs_before_whole_payload_encryption() -> None:
         )
         async def send(
             self,
+            *,
             body: Annotated[bytes, BytesBody(content_encoding="gzip")],
         ) -> None:
             raise AssertionError
@@ -711,7 +721,7 @@ async def test_content_coding_runs_before_whole_payload_encryption() -> None:
         config=ClientConfig(),
     )
     try:
-        await CompressedApi(client).send(b"compress me")
+        await CompressedApi(client).send(body=b"compress me")
     finally:
         await client.aclose()
 
@@ -726,6 +736,7 @@ async def test_whole_payload_crypto_rejects_stream_without_buffering_or_network(
         @api.post("/stream", responses=RESPONSES, crypto=stream_profile)
         async def upload(
             self,
+            *,
             body: Annotated[ReplayableBodyStream, ReplayableStreamBody()],
         ) -> PaymentResult:
             raise AssertionError
@@ -749,7 +760,9 @@ async def test_whole_payload_crypto_rejects_stream_without_buffering_or_network(
     try:
         with pytest.raises(CryptoStreamingUnsupported):
             await StreamApi(client).upload(
-                ReplayableBodyStream(lambda: BytesIO(b"secret-stream"), known_length=13)
+                body=ReplayableBodyStream(
+                    lambda: BytesIO(b"secret-stream"), known_length=13
+                )
             )
     finally:
         await client.aclose()

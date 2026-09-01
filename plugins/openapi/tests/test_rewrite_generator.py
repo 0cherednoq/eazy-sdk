@@ -378,9 +378,10 @@ async def test_generated_session_factory_hides_runtime_plumbing_and_executes(
             "handler",
             "credentials",
             "session",
-            "config",
-            "owns_handler",
-        }
+                "config",
+                "owns_handler",
+                "profile",
+            }
 
         httpserver.expect_request(
             "/login",

@@ -8,22 +8,23 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from eazy_sdk.ext import CallableParser, Malformed, NoMatch, ParsedValue, RequestScope
+from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope, callable_parser
 from eazy_sdk.protection import (
-    BeforeCall,
+    PrivateBindings,
+    ProtectionPersistence,
     ReplayPolicy,
-    ResponseReaction,
     ResponseSignal,
     SignalInterception,
-    SolutionFreshness,
-    SolutionTarget,
     SolverRequirement,
+    per_call,
+    per_match,
     safe_method,
 )
 
 from .core import (
     BodyAccess,
-    BoundProtection,
+    PresetBeforeCallPolicy,
+    PresetChallengePolicy,
     PresetId,
     ProtectionCapabilities,
     ProtectionTemplate,
@@ -88,10 +89,8 @@ def _attribute(html: str, name: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _parser(mode: RecaptchaMode) -> CallableParser:
-    def parse(context: Any, model: type[object]) -> Any:
-        if model is not RecaptchaChallenge:
-            return NoMatch()
+def _parser(mode: RecaptchaMode) -> Any:
+    def parse(context: Any) -> Any:
         if len(context.response.body) > MAX_HTML_BYTES:
             return Malformed(ValueError("reCAPTCHA HTML exceeds the parser limit"))
         text = context.text
@@ -135,7 +134,7 @@ def _parser(mode: RecaptchaMode) -> CallableParser:
             )
         )
 
-    return CallableParser(parse)
+    return callable_parser(RecaptchaChallenge, parse)
 
 
 def _widget(
@@ -144,11 +143,11 @@ def _widget(
     requirement: SolverRequirement[RecaptchaChallenge, RecaptchaToken],
     *,
     scope: RequestScope,
-    solver: Any | None,
-    apply: SolutionTarget | None,
+    apply: PrivateBindings[RecaptchaToken] | None,
     replay: ReplayPolicy | None,
     browser: bool,
-) -> BoundProtection:
+    persistence: ProtectionPersistence | None = None,
+) -> PresetChallengePolicy:
     parser = _parser(mode)
     signal = ResponseSignal(
         f"recaptcha.{name}",
@@ -158,19 +157,19 @@ def _widget(
         priority=10,
         interception=SignalInterception.DEFINITIVE,
     )
-    reaction = ResponseReaction(
-        signal,
-        requirement,
-        apply or form_field("g-recaptcha-response"),
-        replay or safe_method(max_replays=1),
-    )
     template = ProtectionTemplate(
         PresetId("recaptcha", name),
         1,
         requirement,
         ProtectionCapabilities(BodyAccess.BUFFERED, javascript=True, browser=browser),
     )
-    return template.bind(scope=scope, solver=solver, signals=(signal,), reactions=(reaction,))
+    return template.bind_challenge(
+        scope=scope,
+        signal=signal,
+        apply=apply or form_field("g-recaptcha-response"),
+        persistence=persistence or per_match(),
+        replay=replay or safe_method(max_replays=1),
+    )
 
 
 def _before(
@@ -179,40 +178,35 @@ def _before(
     requirement: SolverRequirement[RecaptchaChallenge, RecaptchaToken],
     *,
     scope: RequestScope,
-    solver: Any | None,
-    apply: SolutionTarget,
-    freshness: SolutionFreshness,
+    apply: PrivateBindings[RecaptchaToken],
+    persistence: ProtectionPersistence,
     browser: bool,
-) -> BoundProtection:
-    flow = BeforeCall(
-        None,
-        apply,
-        freshness,
-        challenge=challenge,
-        solver=requirement,
-    )
+) -> PresetBeforeCallPolicy:
     template = ProtectionTemplate(
         PresetId("recaptcha", name),
         1,
         requirement,
         ProtectionCapabilities(BodyAccess.NONE, javascript=True, browser=browser),
     )
-    return template.bind(scope=scope, solver=solver, before=(flow,))
+    return template.bind_before(
+        scope=scope,
+        apply=apply,
+        persistence=persistence,
+        challenge=challenge,
+    )
 
 
 def v2_checkbox(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
+    apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+) -> PresetChallengePolicy:
     return _widget(
         "v2-checkbox",
         RecaptchaMode.V2_CHECKBOX,
         V2_CHECKBOX_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply,
         replay=replay,
         browser=True,
@@ -222,16 +216,14 @@ def v2_checkbox(
 def v2_invisible(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
+    apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+) -> PresetChallengePolicy:
     return _widget(
         "v2-invisible",
         RecaptchaMode.V2_INVISIBLE,
         V2_INVISIBLE_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply,
         replay=replay,
         browser=True,
@@ -243,10 +235,9 @@ def v3_action(
     scope: RequestScope,
     site_key: str,
     action: str,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
-    freshness: SolutionFreshness = SolutionFreshness.PER_CALL,
-) -> BoundProtection:
+    apply: PrivateBindings[RecaptchaToken] | None = None,
+    persistence: ProtectionPersistence | None = None,
+) -> PresetBeforeCallPolicy:
     if not site_key or not action:
         raise ValueError("reCAPTCHA v3 requires non-empty site_key and action")
     return _before(
@@ -254,9 +245,8 @@ def v3_action(
         RecaptchaChallenge(site_key, RecaptchaMode.V3_ACTION, action=action),
         V3_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply or form_field("g-recaptcha-response"),
-        freshness=freshness,
+        persistence=persistence or per_call(),
         browser=False,
     )
 
@@ -264,16 +254,14 @@ def v3_action(
 def enterprise_checkbox(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
+    apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+) -> PresetChallengePolicy:
     return _widget(
         "enterprise-checkbox",
         RecaptchaMode.ENTERPRISE_CHECKBOX,
         ENTERPRISE_CHECKBOX_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply,
         replay=replay,
         browser=True,
@@ -286,10 +274,9 @@ def enterprise_score_action(
     project: str,
     site_key: str,
     action: str,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
-    freshness: SolutionFreshness = SolutionFreshness.PER_CALL,
-) -> BoundProtection:
+    apply: PrivateBindings[RecaptchaToken] | None = None,
+    persistence: ProtectionPersistence | None = None,
+) -> PresetBeforeCallPolicy:
     if not project or not site_key or not action:
         raise ValueError("Enterprise score action requires project, site_key and action")
     return _before(
@@ -302,9 +289,8 @@ def enterprise_score_action(
         ),
         ENTERPRISE_SCORE_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply or form_field("g-recaptcha-response"),
-        freshness=freshness,
+        persistence=persistence or per_call(),
         browser=False,
     )
 
@@ -312,16 +298,14 @@ def enterprise_score_action(
 def enterprise_policy_based_challenge(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
+    apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+) -> PresetChallengePolicy:
     return _widget(
         "enterprise-policy-based-challenge",
         RecaptchaMode.ENTERPRISE_POLICY,
         ENTERPRISE_POLICY_SOLVER,
         scope=scope,
-        solver=solver,
         apply=apply,
         replay=replay,
         browser=True,

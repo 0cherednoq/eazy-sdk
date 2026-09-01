@@ -1,83 +1,22 @@
 ---
 title: Protection
-description: Подключение Cloudflare, Turnstile или reCAPTCHA.
+description: Mandatory flows, proactive policies and conditional challenges.
 freshness: false
 ---
 
-Protection отделяет требование операции от реализации challenge flow. Декоратор говорит, какой
-typed result обязателен. `ClientConfig` определяет, как получить этот result и какой solver
-использовать.
+Protection разделяет обязательный flow операции, proactive before-call policy и conditional
+response challenge. Выбирайте ровно тот lifecycle, который соответствует протоколу сервера.
 
 ```bash
 uv add eazy-sdk-presets
 ```
 
-## Обязательная CAPTCHA перед login
+## Mandatory CAPTCHA перед login
 
-Публичная request-модель содержит только данные caller-а. Managed поля находятся в приватной
-wire-модели и заполняются одним protection result атомарно.
+Public request содержит только данные caller. Managed поля находятся в private wire-модели и
+заполняются одним protection result атомарно.
 
-```python
-from typing import Annotated, TypedDict, Unpack, cast
-
-from pydantic import BaseModel
-
-from eazy_sdk import AsyncApi, ClientConfig, api
-from eazy_sdk.protection import (
-    FromProtection,
-    ProtectionRequirement,
-    SolverBindings,
-    bind_solver,
-    protection_flow,
-)
-from eazy_sdk.request import BodyProjection, JsonBody
-
-class LoginRequest(TypedDict):
-    email: str
-    password: str
-
-class CaptchaResult(BaseModel):
-    challenge: str
-    token: str
-
-LOGIN_PROTECTION = ProtectionRequirement[CaptchaResult]("login-protection")
-
-class _LoginWireBody(LoginRequest):
-    captcha_challenge: Annotated[
-        str,
-        FromProtection(LOGIN_PROTECTION, "challenge"),
-    ]
-    captcha_token: Annotated[
-        str,
-        FromProtection(LOGIN_PROTECTION, "token"),
-    ]
-
-def login_to_wire(source: LoginRequest) -> _LoginWireBody:
-    # Reserved protection fields are deliberately absent until the attempt writer runs.
-    return cast(_LoginWireBody, dict(source))
-
-LOGIN_BODY = BodyProjection(
-    source=LoginRequest,
-    target=_LoginWireBody,
-    using=login_to_wire,
-    encoding=JsonBody(),
-)
-
-class AsyncAuthApi(AsyncApi):
-    @api.post(
-        "/auth/login",
-        operation_id="login",
-        responses=LOGIN_RESPONSES,
-        protections=(LOGIN_PROTECTION,),
-        body=LOGIN_BODY,
-    )
-    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
-        raise NotImplementedError
-```
-
-Зарегистрируйте bounded flow отдельно:
-
-```python
+```python target
 flow = protection_flow(
     LOGIN_PROTECTION,
     acquire=AsyncProtectionApi.acquire,
@@ -86,45 +25,78 @@ flow = protection_flow(
 )
 
 config = ClientConfig(
-    protections=(flow,),
-    protection_solvers=SolverBindings(
+    operation_protections=(flow,),
+    operation_protection_solvers=SolverBindings(
         bind_solver(LOGIN_PROTECTION, CaptchaSolver()),
     ),
 )
 ```
 
-Порядок выполнения фиксирован: `acquire → solve → verify → projection → private writers → login`.
-Для CSRF используйте только
-`acquire`. Для CAPTCHA без server-side verification пропустите `verify`. Один result может
-заполнить несколько `FromProtection` fields, включая поля вложенных target-моделей.
+Порядок фиксирован: `acquire → solve → verify → projection → private writers → request`.
 
-Если flow, solver или source field отсутствует, вызов завершается до acquire, middleware и сети.
-Solver можно заменить fake-реализацией в тесте без изменения операции.
+## Custom compound challenge
 
-## Conditional и domain protection
+Этот пример описывает KAD-подобный challenge, который возвращает две private cookies. Они
+отсутствуют в сигнатуре operation и не хранятся в auth registry.
 
-Challenge, который появляется только в конкретном ответе, остаётся response case. Автоматический
-solve/replay подключается как scoped client policy. Cloudflare и другие внешние WAF также
-принадлежат client policy, а не decorator операции.
+```python target
+from dataclasses import dataclass
 
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} Cloudflare
-:link: /guides/protection/cloudflare
-:link-type: doc
+from eazy_sdk import ClientConfig
+from eazy_sdk.protection import (
+    ChallengeSolverBindings,
+    ResponseSignal,
+    SolverRequirement,
+    bind_challenge_solver,
+    challenge_policy,
+    network_identity,
+    private_bindings,
+    private_cookie,
+    rejected_before_origin,
+    until_rejected,
+)
 
-Challenge Pages с clearance cookie.
-:::
-:::{grid-item-card} Turnstile
-:link: /guides/protection/turnstile
-:link-type: doc
+@dataclass(frozen=True)
+class KadChallenge:
+    revision: str
 
-Widget или preclearance перед запросом.
-:::
-:::{grid-item-card} reCAPTCHA
-:link: /guides/protection/recaptcha
-:link-type: doc
+@dataclass(frozen=True)
+class KadClearance:
+    pr_fp: str
+    wasm: str
 
-v2, v3 или Enterprise.
-:::
-::::
+KAD_WASM_SOLVER = SolverRequirement[KadChallenge, KadClearance]("kad.wasm")
+
+KAD_WASM_POLICY = challenge_policy(
+    identity="kad.wasm",
+    revision=1,
+    scope=host("kad.arbitr.ru"),
+    signal=KAD_CHALLENGE,
+    solver=KAD_WASM_SOLVER,
+    apply=private_bindings(
+        private_cookie("pr_fp", field="pr_fp"),
+        private_cookie("wasm", field="wasm"),
+    ),
+    persistence=until_rejected(scope=network_identity()),
+    replay=rejected_before_origin(max_replays=1),
+    challenge_identity=lambda challenge: challenge.revision,
+)
+
+config = ClientConfig(
+    challenge_policies=(KAD_WASM_POLICY,),
+    challenge_solvers=ChallengeSolverBindings(
+        bind_challenge_solver(KAD_WASM_SOLVER, KadSolver()),
+    ),
+)
+```
+
+Compiler проверяет conflicts с caller inputs, auth, dependency, signature и другими private
+writers. Runtime сначала выбирает и валидирует весь batch, затем применяет один patch. При
+повторном challenge старая revision инвалидируется; совместимые concurrent calls разделяют один
+solve по полному state key.
+
+## First-party presets
+
+- [Cloudflare Challenge Pages](/guides/protection/cloudflare)
+- [Turnstile](/guides/protection/turnstile)
+- [reCAPTCHA](/guides/protection/recaptcha)

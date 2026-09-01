@@ -251,8 +251,8 @@ async def _protected_call(
             path,
             operation_id="account",
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
-            signing=signing,  # type: ignore[arg-type]
+            security=security,
+            signing=signing,
             raw_response=True,
         )
         async def account(self) -> NormalizedResponse[object]:
@@ -271,7 +271,7 @@ def _sync_protected_call(client: Any, security: object) -> NormalizedResponse[ob
             "/account",
             operation_id="account",
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         def account(self) -> NormalizedResponse[object]:
@@ -901,12 +901,23 @@ def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() ->
         "BodyCodec",
         "api",
     } <= set(eazy_sdk.__all__)
-    verbs = {"delete", "get", "patch", "post", "put"}
+    verbs = {
+        "delete",
+        "get",
+        "head",
+        "options",
+        "patch",
+        "post",
+        "put",
+        "request",
+        "trace",
+    }
     assert eazy_sdk.api is api
     assert {name for name in dir(api) if not name.startswith("_")} == verbs
     for verb in verbs:
         assert callable(getattr(api, verb))
-        assert not hasattr(eazy_sdk, verb)
+        if verb != "request":  # the package also exposes the eazy_sdk.request module
+            assert not hasattr(eazy_sdk, verb)
         assert not hasattr(codegen_api, verb)
     assert set(clients_api.__all__) == {
         "AsyncClient",

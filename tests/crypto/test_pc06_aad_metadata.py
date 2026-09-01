@@ -122,13 +122,13 @@ RESPONSES = Responses[Payload](success={200: Json(Payload)})
 
 class AsyncMetadataApi(AsyncApi):
     @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, crypto_wire=HTTP_WIRE)
-    async def send(self, body: Annotated[Payload, JsonBody()]) -> Payload:
+    async def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
 
 class SyncMetadataApi(SyncApi):
     @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, crypto_wire=HTTP_WIRE)
-    def send(self, body: Annotated[Payload, JsonBody()]) -> Payload:
+    def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
 
@@ -149,7 +149,7 @@ class SigningCollisionApi(AsyncApi):
             ),
         ),
     )
-    async def send(self, body: Annotated[Payload, JsonBody()]) -> Payload:
+    async def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
 
@@ -182,7 +182,7 @@ async def test_http_async_resolves_typed_aad_and_binds_declared_metadata() -> No
         config=ClientConfig(dependencies=_dependencies()),
     )
     try:
-        result = await AsyncMetadataApi(client).send(Payload(value="request"))
+        result = await AsyncMetadataApi(client).send(body=Payload(value="request"))
     finally:
         await client.aclose()
     assert result == Payload(value="response")
@@ -197,7 +197,7 @@ def test_http_sync_uses_the_same_typed_aad_and_metadata_contract() -> None:
         config=ClientConfig(dependencies=_dependencies()),
     )
     try:
-        result = SyncMetadataApi(client).send(Payload(value="request"))
+        result = SyncMetadataApi(client).send(body=Payload(value="request"))
     finally:
         client.close()
     assert result == Payload(value="response")
@@ -221,7 +221,7 @@ async def test_http_metadata_collision_with_signing_fails_before_transport() -> 
     )
     try:
         with pytest.raises(CryptoConfigurationError, match="signing outputs"):
-            await SigningCollisionApi(client).send(Payload(value="request"))
+            await SigningCollisionApi(client).send(body=Payload(value="request"))
     finally:
         await client.aclose()
     assert calls == 0

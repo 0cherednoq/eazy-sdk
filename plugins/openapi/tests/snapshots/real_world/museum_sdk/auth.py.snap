@@ -1,5 +1,7 @@
 """Generated security scheme identities. Do not edit."""
 
+from __future__ import annotations
+
 from eazy_sdk.codegen import ApiKeyScheme, BasicScheme, BearerScheme, CookieScheme
 
 MUSEUM_PLACEHOLDER_AUTH = BasicScheme(name='MuseumPlaceholderAuth')

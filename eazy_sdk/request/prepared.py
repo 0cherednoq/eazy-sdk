@@ -164,6 +164,7 @@ class PreparedBodyView:
     media_type: str | None
     json_view: FrozenJsonValue | None = None
     form_fields: tuple[PreparedFormField, ...] | None = None
+    sensitive: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -603,11 +604,33 @@ def _cookies(
     *,
     operation_id: str,
 ) -> tuple[PreparedCookie, ...]:
+    from eazy_sdk._internal.http_compiler import ManagedCookieSetDescriptor
+
     output: list[PreparedCookie] = []
+    seen: set[bytes] = set()
     for slot in slots:
         if values.contains(slot):
             descriptor = descriptors[slot]
             value = values.require(slot)
+            if isinstance(descriptor, ManagedCookieSetDescriptor):
+                if not isinstance(value, tuple):
+                    raise BindingError("managed cookie set must be a validated tuple")
+                for item in value:
+                    if (
+                        not isinstance(item, tuple)
+                        or len(item) != 2
+                        or not isinstance(item[0], str)
+                        or not isinstance(item[1], str)
+                    ):
+                        raise BindingError("managed cookie set contains an invalid item")
+                    cookie_name = _header_name(item[0])
+                    if cookie_name in seen:
+                        raise PlanError(f"duplicate cookie wire name {item[0]!r}")
+                    seen.add(cookie_name)
+                    output.append(
+                        PreparedCookie(cookie_name, _header_value(b"Cookie", item[1]), slot)
+                    )
+                continue
             if isinstance(descriptor, Cookie):
                 value = _scalar_value(
                     descriptor.codec,
@@ -622,9 +645,13 @@ def _cookies(
                 else (wire_names[slot], _primitive(value))
             )
             if serialized is not None:
-                name, rendered = serialized
+                serialized_name, rendered = serialized
+                encoded_name = _header_name(serialized_name)
+                if encoded_name in seen:
+                    raise PlanError(f"duplicate cookie wire name {serialized_name!r}")
+                seen.add(encoded_name)
                 output.append(
-                    PreparedCookie(_header_name(name), _header_value(b"Cookie", rendered), slot)
+                    PreparedCookie(encoded_name, _header_value(b"Cookie", rendered), slot)
                 )
     return tuple(output)
 
@@ -664,11 +691,14 @@ def _body(
 ) -> tuple[BufferedBody | ReplayableBodyStream, PreparedBodyView, ZaprosBodyInput]:
     descriptor = layout.descriptor
     body_slots = layout.slots
+    body_sensitive = any(slot.secret for slot in body_slots)
     present_slots = tuple(slot for slot in body_slots if values.contains(slot))
     has_document_override = document_override is not _NO_BODY_DOCUMENT_OVERRIDE
-    if descriptor is None or (not layout.projected and not present_slots):
+    if descriptor is None or (
+        not layout.projected and not present_slots and not has_document_override
+    ):
         empty = BufferedBody(b"", None)
-        return empty, PreparedBodyView(b"", None), NoBodyInput()
+        return empty, PreparedBodyView(b"", None, sensitive=body_sensitive), NoBodyInput()
     value: object
     if layout.projected:
         if not has_document_override:
@@ -710,7 +740,9 @@ def _body(
         frozen = _freeze_json(semantic)
         return (
             BufferedBody(content, descriptor.content_type.encode("ascii")),
-            PreparedBodyView(content, descriptor.content_type, frozen),
+            PreparedBodyView(
+                content, descriptor.content_type, frozen, sensitive=body_sensitive
+            ),
             JsonInput(semantic),
         )
     if has_document_override and not layout.projected:
@@ -735,7 +767,12 @@ def _body(
         )
         return (
             BufferedBody(content, descriptor.content_type.encode("ascii")),
-            PreparedBodyView(content, descriptor.content_type, form_fields=tuple(fields)),
+            PreparedBodyView(
+                content,
+                descriptor.content_type,
+                form_fields=tuple(fields),
+                sensitive=body_sensitive,
+            ),
             FormInput(
                 tuple((field.name.decode("utf-8"), field.value.decode("utf-8")) for field in fields)
             ),
@@ -757,7 +794,7 @@ def _body(
         media_type = f"{descriptor.content_type}; boundary={actual_boundary}"
         return (
             BufferedBody(content, media_type.encode("ascii")),
-            PreparedBodyView(content, media_type),
+            PreparedBodyView(content, media_type, sensitive=body_sensitive),
             _multipart_input(mapping, actual_boundary),
         )
     if isinstance(descriptor, BytesBody):
@@ -773,7 +810,7 @@ def _body(
                 content,
                 descriptor.content_type.encode("ascii") if descriptor.content_type else None,
             ),
-            PreparedBodyView(content, descriptor.content_type),
+            PreparedBodyView(content, descriptor.content_type, sensitive=body_sensitive),
             ExactBodyInput(content, descriptor.content_type),
         )
     if isinstance(descriptor, ReplayableStreamBody):
@@ -785,7 +822,7 @@ def _body(
         probe.close()
         return (
             value,
-            PreparedBodyView(b"", descriptor.content_type),
+            PreparedBodyView(b"", descriptor.content_type, sensitive=body_sensitive),
             StreamBodyInput(value.factory, value.known_length, descriptor.content_type),
         )
     if isinstance(descriptor, BodyCodec):
@@ -801,7 +838,7 @@ def _body(
                 content,
                 custom_media_type.encode("ascii") if custom_media_type else None,
             ),
-            PreparedBodyView(content, custom_media_type),
+            PreparedBodyView(content, custom_media_type, sensitive=body_sensitive),
             ExactBodyInput(content, custom_media_type),
         )
     raise PlanError(f"unsupported body descriptor: {type(descriptor).__name__}")

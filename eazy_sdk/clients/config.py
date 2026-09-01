@@ -11,7 +11,13 @@ from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.middleware import MiddlewareRegistration
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
-from eazy_sdk.protection import SolverBindings, SolverRegistry
+from eazy_sdk.protection import (
+    BeforeCallPolicy,
+    ChallengePolicy,
+    ChallengeSolverBindings,
+    ProtectionFlow,
+    SolverBindings,
+)
 from eazy_sdk.ratelimit_runtime import RateLimiter
 from eazy_sdk.request import WireProfile
 
@@ -25,10 +31,14 @@ class ClientConfig:
 
     auth: Auth | None = None
     dependencies: DependencyRegistry | None = None
-    solvers: SolverRegistry | None = None
-    protection_solvers: SolverBindings = field(default_factory=SolverBindings)
-    signals: tuple[object, ...] = ()
-    protections: tuple[object, ...] = ()
+    operation_protections: tuple[ProtectionFlow[Any], ...] = ()
+    before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
+    challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
+    operation_protection_solvers: SolverBindings = field(default_factory=SolverBindings)
+    challenge_solvers: ChallengeSolverBindings = field(
+        default_factory=ChallengeSolverBindings
+    )
+    protection_session_identity: object | None = None
     middleware: tuple[MiddlewareRegistration, ...] = ()
     rate_limiter: RateLimiter | None = None
     key_provider: KeyProvider | None = None
@@ -46,6 +56,12 @@ class ClientConfig:
             raise ValueError("client retry budgets cannot be negative")
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("timeout must be positive")
+        if any(not isinstance(item, ProtectionFlow) for item in self.operation_protections):
+            raise TypeError("operation_protections accepts only ProtectionFlow values")
+        if any(not isinstance(item, BeforeCallPolicy) for item in self.before_call_policies):
+            raise TypeError("before_call_policies contains a malformed policy")
+        if any(not isinstance(item, ChallengePolicy) for item in self.challenge_policies):
+            raise TypeError("challenge_policies contains a malformed policy")
 
     def call_options(self) -> CallOptions:
         retry_replays = self.retry.retries
@@ -69,18 +85,18 @@ def _runtime_from_boundary(
 ) -> ExecutionRuntime:
     from eazy_sdk.auth.core import AuthProviders
     from eazy_sdk.dependencies import DependencyRegistry
-    from eazy_sdk.protection import SolverRegistry
-
     return ExecutionRuntime(
         handler_profile=profile,
         send=send,
         base_url=base_url,
         dependencies=config.dependencies or DependencyRegistry(),
         auth=(config.auth._runtime_providers() if config.auth is not None else AuthProviders()),
-        solvers=config.solvers or SolverRegistry(),
-        protection_solvers=config.protection_solvers,
-        signals=config.signals,
-        protections=config.protections,
+        operation_protections=config.operation_protections,
+        before_call_policies=config.before_call_policies,
+        challenge_policies=config.challenge_policies,
+        operation_protection_solvers=config.operation_protection_solvers,
+        challenge_solvers=config.challenge_solvers,
+        protection_session_identity=config.protection_session_identity,
         middleware=config.middleware,
         limiter=config.rate_limiter,
         key_provider=config.key_provider,

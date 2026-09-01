@@ -116,7 +116,6 @@ from eazy_sdk.request.signatures import (
 from eazy_sdk.response.cases import (
     AmbiguousResponseOutcome,
     BoundResponseExtractor,
-    CallableParser,
     ErrorOutcome,
     Malformed,
     MalformedOutcome,
@@ -128,6 +127,7 @@ from eazy_sdk.response.cases import (
     ResponseParser,
     SuccessOutcome,
     UnexpectedOutcome,
+    callable_parser,
 )
 
 __all__ = [
@@ -144,7 +144,6 @@ __all__ = [
     "BodyCodec",
     "BoundResponseExtractor",
     "BufferedBody",
-    "CallableParser",
     "CapabilityLevel",
     "CaptureEvidence",
     "CustomRequestSigner",
@@ -213,6 +212,7 @@ __all__ = [
     "UnexpectedOutcome",
     "UnsignedPreparedRequest",
     "bind_plan",
+    "callable_parser",
     "compile_dependency_order",
     "compile_layout",
     "compile_signatures",

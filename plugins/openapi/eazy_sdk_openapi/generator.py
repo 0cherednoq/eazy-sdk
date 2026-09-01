@@ -123,6 +123,8 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     lines = [
         '"""Generated declarative sync/async API methods. Do not edit."""',
         "",
+        "from __future__ import annotations",
+        "",
     ]
     if has_crypto:
         lines.extend(["from collections.abc import Mapping", ""])
@@ -140,7 +142,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             "from pydantic import ConfigDict, Field",
             "from zapros import AsyncBaseHandler, BaseHandler",
             "",
-            "from eazy_sdk import api",
+            "from eazy_sdk import AsyncSdk, HandlerProfile, SyncSdk, api, api_group",
             "from eazy_sdk.codegen import (",
             "    DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,",
             "    Client, ClientConfig,",
@@ -382,21 +384,24 @@ def _api_facade(
     session_auth: SessionAuthIR | None,
     has_protections: bool,
 ) -> list[str]:
+    sdk_base = "AsyncSdk" if asynchronous else "SyncSdk"
     lines = [
         "",
         "",
-        f"class {class_name}:",
-        f"    def __init__(self, client: {client_type}) -> None:",
-        "        self._client = client",
+        f"class {class_name}({sdk_base}):",
     ]
-    if not routers:
-        lines.append("        pass")
     for attribute, router_name, _operations in routers:
         bound_class = f"{router_prefix}{router_name}"
-        lines.append(f"        self.{attribute}: {bound_class} = {bound_class}(client)")
+        lines.append(f"    {attribute} = api_group({bound_class})")
     if not asynchronous and session_auth is not None:
         lines.extend(
             [
+                "",
+                (
+                    f"    def __init__(self, client: {client_type}, *, "
+                    "owns_client: bool = False) -> None:"
+                ),
+                "        super().__init__(client, owns_client=owns_client)",
                 "        auth_client = cast(AsyncClient, client._async_view())",
                 "        self._auth_api = auth_client.bind_sdk(AsyncAPI)",
             ]
@@ -408,10 +413,11 @@ def _api_facade(
             [
                 "        cls,",
                 "        *,",
-                "        base_url: str,",
+                "        base_url: str = '',",
                 f"        handler: {handler_base},",
                 "        config: ClientConfig | None = None,",
                 "        owns_handler: bool = True,",
+                "        profile: HandlerProfile | None = None,",
             ]
         )
     else:
@@ -419,12 +425,13 @@ def _api_facade(
             [
                 "        cls,",
                 "        *,",
-                "        base_url: str,",
+                "        base_url: str = '',",
                 f"        handler: {handler_base},",
                 f"        credentials: {session_auth.credentials_model} | None = None,",
                 f"        session: {session_auth.session_model} | None = None,",
                 "        config: ClientConfig | None = None,",
                 "        owns_handler: bool = True,",
+                "        profile: HandlerProfile | None = None,",
             ]
         )
     lines.extend(
@@ -440,17 +447,13 @@ def _api_facade(
         )
     lines.extend(
         [
-            f"        client = {client_type}(",
+            "        return super().from_handler(",
             "            base_url=base_url,",
             "            handler=handler,",
             "            config=config,",
             "            owns_handler=owns_handler,",
+            "            profile=profile,",
             "        )",
-            (
-                "        return client.bind_sdk(cls)"
-                if asynchronous
-                else "        return cls(client)"
-            ),
         ]
     )
     raw_client = "httpx.AsyncClient" if asynchronous else "httpx.Client"
@@ -490,34 +493,6 @@ def _api_facade(
             ]
         )
     lines.extend(["            config=config,", "        )"])
-    if asynchronous:
-        lines.extend(
-            [
-                "",
-                "    async def aclose(self) -> None:",
-                "        await self._client.aclose()",
-                "",
-                f"    async def __aenter__(self) -> {class_name}:",
-                "        return self",
-                "",
-                "    async def __aexit__(self, *args: object) -> None:",
-                "        await self.aclose()",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                "",
-                "    def close(self) -> None:",
-                "        self._client.close()",
-                "",
-                f"    def __enter__(self) -> {class_name}:",
-                "        return self",
-                "",
-                "    def __exit__(self, *args: object) -> None:",
-                "        self.close()",
-            ]
-        )
     return lines
 
 
@@ -618,7 +593,10 @@ def _protection_config(
         "def _protection_config(config: ClientConfig | None) -> ClientConfig:",
         "    base = config or ClientConfig()",
         f"    generated = {_tuple_expression(flows)}",
-        "    return replace(base, protections=(*generated, *base.protections))",
+        "    return replace(",
+        "        base,",
+        "        operation_protections=(*generated, *base.operation_protections),",
+        "    )",
     ]
 
 
@@ -693,6 +671,8 @@ def render_auth(ir: OpenAPIIR) -> str:
     lines = [
         '"""Generated security scheme identities. Do not edit."""',
         "",
+        "from __future__ import annotations",
+        "",
         "from eazy_sdk.codegen import ApiKeyScheme, BasicScheme, BearerScheme, CookieScheme",
         "",
     ]
@@ -713,6 +693,8 @@ def render_dependencies(ir: OpenAPIIR) -> str:
     models = _render_model_imports(model_bindings)
     lines = [
         '"""Generated dependency identities and typed provider facade. Do not edit."""',
+        "",
+        "from __future__ import annotations",
         "",
         "from typing import Literal",
         "",
@@ -752,7 +734,12 @@ def render_dependencies(ir: OpenAPIIR) -> str:
 
 
 def render_signatures(ir: OpenAPIIR) -> str:
-    lines = ['"""Generated imports for named signature descriptors. Do not edit."""', ""]
+    lines = [
+        '"""Generated imports for named signature descriptors. Do not edit."""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
     exports: list[str] = []
     for signature in ir.signature_profiles:
         module, attribute = signature.implementation.split(":", 1)
@@ -862,6 +849,8 @@ def generate_package(
 
 def render_model_base() -> str:
     return '''"""Generated OpenAPI model serialization policy. Do not edit."""
+
+from __future__ import annotations
 
 from typing import Any
 

@@ -97,7 +97,7 @@ def _raw_operation(
             "/protected",
             operation_id=operation_id,
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         async def protected(self) -> NormalizedResponse[object]:
@@ -108,7 +108,7 @@ def _raw_operation(
             "/protected",
             operation_id=operation_id,
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         def protected(self) -> NormalizedResponse[object]:

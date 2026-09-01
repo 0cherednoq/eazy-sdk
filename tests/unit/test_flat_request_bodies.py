@@ -4,9 +4,8 @@ from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 import pytest
 
-from eazy_sdk import ApiDefaults, SyncApi, api
+from eazy_sdk import ApiDefaults, OperationBindingError, SyncApi, api
 from eazy_sdk._internal import (
-    BindingError,
     CompiledContract,
     OperationValues,
     Set,
@@ -120,16 +119,18 @@ def test_typed_dict_root_body_is_validated_and_serialized_as_a_mapping() -> None
     assert body.content == b'{"name":"Ada","count":2}'
 
     compiled = _compiled("typed_dict_body")
-    with pytest.raises(TypeError, match=r"missing required field FlatJsonRequest\.count"):
+    with pytest.raises(OperationBindingError) as captured:
         OperationValues.from_bound(
             compiled.plan.shape,
             compiled.bind_input({"request": {"name": "Ada"}}),
         )
-    with pytest.raises(TypeError, match="expected <class 'int'>, got str"):
-        OperationValues.from_bound(
-            compiled.plan.shape,
-            compiled.bind_input({"request": {"name": "Ada", "count": "2"}}),
-        )
+    assert captured.value.code == "invalid_value"
+    assert captured.value.field == "request.count"
+
+    with pytest.raises(OperationBindingError) as captured:
+        compiled.bind_input({"request": {"name": "Ada", "count": "2"}})
+    assert captured.value.code == "invalid_value"
+    assert captured.value.field == "request"
 
 
 def test_flat_form_collection_uses_one_explicit_scalar_value() -> None:
@@ -175,11 +176,13 @@ def test_flat_body_field_can_be_patched_before_preparation() -> None:
 
 def test_missing_required_flat_body_field_fails_during_binding() -> None:
     compiled = _compiled("json_body")
-    with pytest.raises(BindingError, match=r"body\.ticket_count"):
+    with pytest.raises(OperationBindingError) as captured:
         OperationValues.from_bound(
             compiled.plan.shape,
             compiled.bind_input({"visitor_name": "Ada"}),
         )
+    assert captured.value.code == "missing_required"
+    assert captured.value.field == "ticket_count"
 
 
 def test_explicit_flat_body_order_uses_wire_names() -> None:

@@ -1,127 +1,179 @@
 ---
 title: API methods
-description: Декларативные sync/async HTTP-операции Eazy SDK.
+description: Декларативные sync/async HTTP-операции, сигнатуры и подготовка запросов.
 sources:
   - eazy_sdk.api
-api_fingerprint: "sha256:560e41ed637903b72ef9fa873d984dabb157b2f709e33a0b512e4561c6eb937e"
+  - eazy_sdk.preparation
+api_fingerprint: "sha256:b3d559cd4e9436c54be3a58972c5d1d8234e4149c93d62c4f0a1caec8084a397"
 ---
 
-Наследуйте `AsyncApi` или `SyncApi` и объявляйте HTTP-операции через узкий namespace `api`.
-Python-сигнатура метода становится публичной сигнатурой SDK. Тело метода не выполняется.
+Наследуйте `AsyncApi` или `SyncApi`. Сигнатура метода становится публичной сигнатурой SDK,
+а тело декларации не выполняется.
+
+## Явные keyword-only параметры
+
+Этот стиль удобен для hand-written SDK: Python defaults видны IDE и передаются в
+`BodyProjection` как обычные значения.
+
+```python
+from typing import Annotated
+
+from pydantic import BaseModel
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import Path, Query
+from eazy_sdk.response import Json
+
+class User(BaseModel):
+    id: int
+
+class UsersApi(AsyncApi):
+    @api.get("/users/{user_id}", response=Json())
+    async def get_user(
+        self,
+        *,
+        user_id: Annotated[int, Path()],
+        include: Annotated[str | None, Query()] = None,
+        page: Annotated[int, Query()] = 1,
+    ) -> User:
+        raise NotImplementedError
+```
+
+HTTP-параметры всегда keyword-only. Для запроса разрешён либо этот стиль, либо
+`**request: Unpack[TypedDict]`; смешивать их в одной операции нельзя. Единственное исключение —
+служебный `options: CallOptions | None = None`.
+
+## `Unpack[TypedDict]`
+
+Reusable и generated SDK могут сохранить именованную схему:
 
 ```python
 from typing import Annotated, NotRequired, TypedDict, Unpack
 
 from pydantic import BaseModel
-
-from eazy_sdk import SyncApi, api
-from eazy_sdk.clients import CallOptions
+from eazy_sdk import AsyncApi, api
 from eazy_sdk.request import Path, Query
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk.response import Json
 
 class User(BaseModel):
     id: int
-    name: str
-
-USER_RESPONSES = Responses[User](success=(Success(200, Json(User)),))
 
 class GetUserRequest(TypedDict):
     user_id: Annotated[int, Path()]
     include: NotRequired[Annotated[str, Query()]]
 
-class UsersApi(SyncApi):
-    @api.get("/users/{user_id}", operation_id="getUser", responses=USER_RESPONSES)
-    def get_user(
-        self,
-        *,
-        options: CallOptions | None = None,
-        **request: Unpack[GetUserRequest],
-    ):
+class GeneratedUsersApi(AsyncApi):
+    @api.get("/users/{user_id}", response=Json())
+    async def get_user(self, **request: Unpack[GetUserRequest]) -> User:
         raise NotImplementedError
 ```
 
-Тип `User` выводится из `Responses[User]`; дублировать его в return-аннотации пустой декларации не
-нужно. Обычный вызов возвращает `User`. Вызов `get_user.with_response(...)` возвращает
-`ResponseEnvelope[User, Any]` с распарсенным значением, status, headers и transport response.
+Оба стиля lower-ятся в один `MethodInputSchema` и один executor. Positional HTTP arguments не
+поддерживаются.
+
+## Ответ операции
+
+Для одной успешной case используйте `response=`. Модель берётся из обязательной return-аннотации:
+
+```python
+from typing import Annotated
+
+from pydantic import BaseModel
+from eazy_sdk import ApiDefaults, AsyncApi, api
+from eazy_sdk.request import Path
+from eazy_sdk.response import Error, Json
+
+class User(BaseModel):
+    id: int
+
+class NotFound(BaseModel):
+    detail: str
+
+class UserNotFound(Exception):
+    pass
+
+COMMON_ERRORS = ()
+
+class UsersApi(AsyncApi):
+    defaults = ApiDefaults(errors=COMMON_ERRORS)
+
+    @api.get(
+        "/users/{user_id}",
+        response=Json(status=200),
+        errors=(Error(404, Json(NotFound), exception=UserNotFound),),
+    )
+    async def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
+        raise NotImplementedError
+```
+
+Operation errors добавляются после `ApiDefaults.errors`. Передайте `inherit_errors=False`, чтобы
+отключить inherited cases. `response=` и `responses=` взаимоисключающие. Используйте полный
+`Responses[T]` для нескольких success cases, fallback и сложной arbitration.
 
 ## Namespace `api`
 
-Используйте один импорт:
+Стандартные decorators:
+
+- `api.get`, `api.post`, `api.put`, `api.patch`, `api.delete`;
+- `api.head`, `api.options`, `api.trace`.
+
+Для другого валидного HTTP token используйте единый generic entry point:
 
 ```python
-from eazy_sdk import api
+from pydantic import BaseModel
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.response import Json
+
+class Resources(BaseModel):
+    items: list[str]
+
+class ResourceApi(AsyncApi):
+    @api.request("PROPFIND", "/resources", response=Json())
+    async def resources(self) -> Resources:
+        raise NotImplementedError
 ```
 
-У объекта `api` ровно пять публичных атрибутов:
+Все helpers делегируют одному operation compiler. Невалидный token отклоняется при создании
+decorator.
 
-- `api.get`
-- `api.post`
-- `api.put`
-- `api.patch`
-- `api.delete`
-
-`SyncApi`, `AsyncApi`, runtime-типы и ad-hoc методы клиента в `api` не входят. Отдельные top-level
-verb imports не поддерживаются. Декораторов `head`, `options` и `trace` в текущем декларативном
-API нет.
-
-## Параметры HTTP-декоратора
-
-Все пять декораторов имеют одну сигнатуру.
+## Параметры decorator
 
 | Параметр | Назначение | Default |
 |---|---|---|
 | `path` | URL path с `{placeholder}` | обязательный |
-| `responses` | `Responses` с success/error/fallback cases | обязательный |
-| `operation_id` | Стабильная identity операции | имя функции |
-| `security` | Схема или policy авторизации | inherited |
-| `requires` | Typed dependencies операции | `()` |
-| `inject` | Request-owned значения, объявленные через `Inject` | `()` |
-| `signing` | Одна или несколько request signatures | inherited |
-| `crypto` | `PayloadCrypto` для request/response payload | inherited |
-| `crypto_wire` | Wire policy для encoded crypto | inherited |
-| `protections` | Обязательные `ProtectionRequirement` | `()` |
-| `body` | `BodyProjection` из public kwargs в private wire schema | `None` |
-| `wire` | `WireOptions` для порядка и exact protocol | `None` |
-| `tags` | Metadata для группировки и генерации | `()` |
-| `idempotent` | Явное доказательство безопасного replay | выводится из HTTP method |
-| `raw_response` | Вернуть normalized raw response | `False` |
+| `response` | Одна success representation | — |
+| `responses` | Полный `Responses` contract | — |
+| `errors` | Локальные typed error cases | `()` |
+| `inherit_errors` | Добавить `ApiDefaults.errors` | `True` |
+| `operation_id` | Стабильная identity операции | имя метода |
+| `security` | Auth scheme или policy | inherited |
+| `requires`, `inject` | Managed request dependencies | `()` |
+| `signing` | Request signatures | inherited |
+| `crypto`, `crypto_wire` | Payload crypto и wire policy | inherited |
+| `protections` | Mandatory protection requirements | `()` |
+| `body` | `BodyProjection` | `None` |
+| `wire` | `WireOptions` | `None` |
+| `tags` | Metadata | `()` |
+| `idempotent` | Явное replay-доказательство | выводится из method |
+| `raw_response` | Вернуть normalized response | `False` |
 
-## Наследуемые defaults
+`ApiDefaults` содержит `security`, `signing`, `crypto`, `crypto_wire` и `errors`.
 
-`ApiDefaults` содержит четыре поля: `security`, `signing`, `crypto` и `crypto_wire`.
+## Подготовка без отправки
+
+Bound operation поддерживает ту же sync/async форму через `.prepare(...)`:
 
 ```python
-from eazy_sdk import ApiDefaults, AsyncApi
-
-class PaymentsApi(AsyncApi):
-    defaults = ApiDefaults(
-        security=PAYMENT_AUTH,
-        signing=(PAYMENT_SIGNATURE,),
-        crypto=PAYMENT_CRYPTO,
-        crypto_wire=PAYMENT_WIRE,
-    )
+prepared = await users.get_user.prepare(
+    user_id=42,
+    options=PrepareOptions(resolve_managed=False),
+)
 ```
 
-Если аргумент декоратора не указан, операция наследует соответствующий default. Явное `None`
-отключает наследование для одной операции. Для `signing` пустой tuple также означает отсутствие
-подписей.
+`prepare` выполняет обычные bind/default/project/encode/sign стадии и останавливается на общей
+границе перед handler send. Pure mode не вызывает providers и возвращает
+`PreparationIncomplete`, если нужны managed values. Full mode (`resolve_managed=True`) использует
+test providers, но сеть всё равно не вызывается. `PreparedCall` редактирует secret headers,
+cookies, query и private body.
 
-## Правила сигнатуры метода
-
-- `AsyncApi` принимает только `async def`, `SyncApi` только `def`.
-- Первый параметр должен быть instance parameter (обычно `self`).
-- Каждая operation с HTTP input объявляет один именованный `TypedDict`. Обычные поля имеют ровно
-  один placement marker; поля `BodyProjection.source` намеренно остаются unplaced.
-- `options`, если он нужен, объявляется как keyword-only `CallOptions | None = None`.
-- `Responses[T]` задаёт тип успешного результата; return-аннотация пустой декларации необязательна.
-- Path placeholders должны точно совпадать с полями `Annotated[..., Path()]` request-`TypedDict`.
-- `operation_id` должен быть уникальным внутри API-класса.
-- Прямые HTTP-параметры в сигнатуре не используются. Раскрывайте request только как
-  `**request: Unpack[TypedDict]`; `CallOptions` является единственным отдельным control argument.
-
-Ошибки декларации обнаруживаются при создании API-класса, до создания клиента и сетевого вызова.
-
-> **Примечание:** `mypy --strict` отдельно запрещает любую функцию без return-аннотации кодом
-> `no-untyped-def`. Для модулей, содержащих только декларации API, отключите этот код через
-> `# mypy: disable-error-code="no-untyped-def"`. Тип вызова при этом остаётся `T` из
-> `Responses[T]`.
+Сохраняйте `raise NotImplementedError` как недостижимое тело обычной strict-mypy декларации.
+`...` приводит к `empty-body` ошибке type checker.

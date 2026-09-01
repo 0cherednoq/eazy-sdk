@@ -16,12 +16,12 @@ from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.sync_client import _SyncClientCore
 from eazy_sdk.ext import (
     BufferedBody,
-    CallableParser,
     ExecutionRuntime,
     HttpProtocol,
     OperationIdentity,
     PreparedRequest,
     ScopeContext,
+    callable_parser,
 )
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
@@ -30,13 +30,14 @@ from eazy_sdk.handlers import (
     RedirectControl,
 )
 from eazy_sdk.protection import (
+    ChallengeSolverBindings,
     MalformedSignal,
     SignalMatch,
-    SolverRegistry,
+    bind_challenge_solver,
     inspect_signals,
 )
 from eazy_sdk.request import (
-    Cookie,
+    Header,
     JsonField,
 )
 from eazy_sdk.response import (
@@ -61,7 +62,6 @@ class SyncRecaptchaApi(SyncApi):
         self,
         *,
         name: Annotated[str, JsonField()],
-        captcha_token: Annotated[str | None, JsonField()] = None,
     ) -> dict[str, object]:
         raise NotImplementedError
 
@@ -76,7 +76,6 @@ class AsyncRecaptchaApi(AsyncApi):
         self,
         *,
         name: Annotated[str, JsonField()],
-        captcha_token: Annotated[str | None, JsonField()] = None,
     ) -> dict[str, object]:
         raise NotImplementedError
 
@@ -87,11 +86,7 @@ class SyncClearanceApi(SyncApi):
         operation_id="protected",
         responses=Responses(success=(Success(200, Json(dict)),)),
     )
-    def protected(
-        self,
-        *,
-        cf_clearance: Annotated[str | None, Cookie("cf_clearance")] = None,
-    ) -> dict[str, object]:
+    def protected(self) -> dict[str, object]:
         raise NotImplementedError
 
 
@@ -101,11 +96,7 @@ class AsyncClearanceApi(AsyncApi):
         operation_id="protected",
         responses=Responses(success=(Success(200, Json(dict)),)),
     )
-    async def protected(
-        self,
-        *,
-        cf_clearance: Annotated[str | None, Cookie("cf_clearance")] = None,
-    ) -> dict[str, object]:
+    async def protected(self) -> dict[str, object]:
         raise NotImplementedError
 
 
@@ -145,18 +136,20 @@ def challenge_context(
 def test_cloudflare_uses_definitive_documented_header_not_status() -> None:
     guard = cloudflare.challenge_pages(scope=host("api.test"))
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
-    matched = inspect_signals(guard.signals, challenge_context(), scope)
+    matched = inspect_signals((guard.signal,), challenge_context(), scope)
     assert isinstance(matched, SignalMatch)
     challenge = cast(cloudflare.CloudflareChallenge, matched.value)
     assert challenge.site_key == "site"
     assert challenge.kind is cloudflare.CloudflareChallengeKind.MANAGED
-    assert inspect_signals(guard.signals, challenge_context(marker=None), scope) is None
+    assert inspect_signals((guard.signal,), challenge_context(marker=None), scope) is None
 
 
 def test_cloudflare_unknown_variant_stays_a_match_and_secrets_are_redacted() -> None:
     guard = cloudflare.challenge_pages(scope=host("api.test"))
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
-    matched = inspect_signals(guard.signals, challenge_context(b"<html>new mode</html>"), scope)
+    matched = inspect_signals(
+        (guard.signal,), challenge_context(b"<html>new mode</html>"), scope
+    )
     assert isinstance(matched, SignalMatch)
     challenge = cast(cloudflare.CloudflareChallenge, matched.value)
     assert challenge.kind is cloudflare.CloudflareChallengeKind.UNKNOWN
@@ -165,18 +158,20 @@ def test_cloudflare_unknown_variant_stays_a_match_and_secrets_are_redacted() -> 
     assert "secret" not in repr(solution.cookies[0])
 
 
-def test_binding_is_immutable_and_optional_solver_installs_by_identity() -> None:
+def test_binding_is_immutable_and_solver_binding_is_separate_by_identity() -> None:
     class Solver:
         async def solve(self, challenge: Any, context: Any) -> Any:
             return cloudflare.CloudflareClearance(())
 
-    original = cloudflare.challenge_pages(scope=host("api.test"), solver=Solver())
+    implementation = Solver()
+    original = cloudflare.challenge_pages(scope=host("api.test"))
     changed = original.extend_detection(lambda context: True)
     assert changed is not original
     assert changed.customized == frozenset({"detection"})
-    registry = SolverRegistry()
-    original.install(registry)
-    assert registry.get(original.solver_requirement) is original.solver
+    bindings = ChallengeSolverBindings(
+        bind_challenge_solver(original.solver, implementation)
+    )
+    assert bindings.get(original.solver) is implementation
 
 
 def test_all_recaptcha_lifecycles_have_distinct_factories() -> None:
@@ -238,7 +233,7 @@ def test_widget_fixture_matrix(factory: Any, filename: str, mode: object) -> Non
     preset = factory(scope=host("api.test"))
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
     context = challenge_context(fixture(filename), marker=None)
-    matched = inspect_signals(preset.signals, context, scope)
+    matched = inspect_signals((preset.signal,), context, scope)
     assert isinstance(matched, SignalMatch)
     challenge = cast(Any, matched.value)
     assert challenge.mode is mode
@@ -249,14 +244,14 @@ def test_widget_negative_and_malformed_fixtures() -> None:
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
     assert (
         inspect_signals(
-            preset.signals,
+            (preset.signal,),
             challenge_context(fixture("ordinary_page.html"), marker=None),
             scope,
         )
         is None
     )
     malformed = inspect_signals(
-        preset.signals,
+        (preset.signal,),
         challenge_context(fixture("turnstile_malformed.html"), marker=None),
         scope,
     )
@@ -267,7 +262,7 @@ def test_widget_unknown_oversized_and_custom_parser_paths() -> None:
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
     preset = cloudflare.turnstile_widget(scope=host("api.test"))
     unknown = inspect_signals(
-        preset.signals,
+        (preset.signal,),
         challenge_context(
             b'<div class="cf-turnstile" data-sitekey="site" data-size="future"></div>',
             marker=None,
@@ -280,7 +275,7 @@ def test_widget_unknown_oversized_and_custom_parser_paths() -> None:
     )
 
     oversized = inspect_signals(
-        preset.signals,
+        (preset.signal,),
         challenge_context(
             b'<div class="cf-turnstile" data-sitekey="site">' + b"x" * 1_000_001,
             marker=None,
@@ -289,18 +284,18 @@ def test_widget_unknown_oversized_and_custom_parser_paths() -> None:
     )
     assert isinstance(oversized, MalformedSignal)
 
-    def parse_custom(context: Any, model: type[object]) -> Any:
-        if model is cloudflare.TurnstileChallenge:
-            from eazy_sdk.ext import ParsedValue
+    def parse_custom(context: Any) -> Any:
+        from eazy_sdk.ext import ParsedValue
 
-            return ParsedValue(
-                cloudflare.TurnstileChallenge("custom", cloudflare.TurnstileMode.MANAGED)
-            )
-        raise AssertionError("unexpected model")
+        return ParsedValue(
+            cloudflare.TurnstileChallenge("custom", cloudflare.TurnstileMode.MANAGED)
+        )
 
-    replaced = preset.replace_parser(CallableParser(parse_custom))
+    replaced = preset.replace_parser(
+        callable_parser(cloudflare.TurnstileChallenge, parse_custom)
+    )
     custom = inspect_signals(
-        replaced.signals,
+        (replaced.signal,),
         challenge_context(fixture("turnstile_managed.html"), marker=None),
         scope,
     )
@@ -344,7 +339,6 @@ async def test_v3_before_call_solves_and_applies_before_first_send(client_type: 
         scope=operation("create"),
         site_key="site-public",
         action="create",
-        solver=solver,
         apply=json_field("captcha_token"),
     )
 
@@ -359,7 +353,15 @@ async def test_v3_before_call_solves_and_applies_before_first_send(client_type: 
             b'{"ok":true}',
         )
 
-    runtime = ExecutionRuntime(capabilities(), emit, "https://api.test", protections=(preset,))
+    runtime = ExecutionRuntime(
+        capabilities(),
+        emit,
+        "https://api.test",
+        before_call_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(preset.solver, solver)
+        ),
+    )
     client = client_type(runtime)
     if client_type is _AsyncClientCore:
         result = await AsyncRecaptchaApi(client).create(name="Ada")
@@ -386,7 +388,6 @@ async def test_preclearance_until_expiry_is_network_scoped_singleflight() -> Non
         scope=operation("protected"),
         site_key="site-public",
         page_url="https://api.test/challenge",
-        solver=solver,
     )
 
     async def emit(request: PreparedRequest, *, options: object) -> NormalizedResponse[object]:
@@ -403,7 +404,14 @@ async def test_preclearance_until_expiry_is_network_scoped_singleflight() -> Non
         )
 
     runtime = ExecutionRuntime(
-        capabilities(), emit, "https://api.test", protections=(preset,), network_identity="proxy-a"
+        capabilities(),
+        emit,
+        "https://api.test",
+        before_call_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(preset.solver, solver)
+        ),
+        network_identity="proxy-a",
     )
     client = _AsyncClientCore(runtime)
     api = AsyncClearanceApi(client)
@@ -415,10 +423,14 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
     class Solver:
         async def solve(self, challenge: Any, context: Any) -> cloudflare.CloudflareClearance:
             return cloudflare.CloudflareClearance(
-                (cloudflare.SecretCookie("cf_clearance", "secret-cookie"),)
+                (
+                    cloudflare.SecretCookie("cf_clearance", "secret-cookie"),
+                    cloudflare.SecretCookie("__cf_bm", "managed-cookie"),
+                )
             )
 
-    preset = cloudflare.challenge_pages(scope=host("api.test"), solver=Solver())
+    solver = Solver()
+    preset = cloudflare.challenge_pages(scope=host("api.test"))
 
     class GuardedApi(SyncApi):
         @api.get(
@@ -426,12 +438,7 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
             operation_id="guarded",
             responses=Responses(success=(Success(200, Json(dict)),)),
         )
-        def guarded(
-            self,
-            *,
-            cf_clearance: Annotated[str | None, Cookie("cf_clearance")] = None,
-            options: CallOptions | None = None,
-        ) -> dict[str, object]:
+        def guarded(self, *, options: CallOptions | None = None) -> dict[str, object]:
             raise NotImplementedError
 
     calls = 0
@@ -448,7 +455,9 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
                 fixture("cloudflare_managed.html"),
             )
         assert any(
-            field.name.lower() == b"cookie" and b"cf_clearance=secret-cookie" in field.value
+            field.name.lower() == b"cookie"
+            and b"cf_clearance=secret-cookie" in field.value
+            and b"__cf_bm=managed-cookie" in field.value
             for field in request.headers
         )
         return NormalizedResponse(
@@ -459,7 +468,16 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
             b'{"ok":true}',
         )
 
-    runtime = ExecutionRuntime(capabilities(), emit, "https://api.test", protections=(preset,))
+    runtime = ExecutionRuntime(
+        capabilities(),
+        emit,
+        "https://api.test",
+        challenge_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(preset.solver, solver)
+        ),
+        network_identity="proxy-a",
+    )
     result = GuardedApi(_SyncClientCore(runtime)).guarded(options=CallOptions(max_attempts=2))
     assert result == {"ok": True}
 
@@ -476,7 +494,6 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
         scope=operation("protected"),
         site_key="site",
         action="read",
-        solver=Solver(),
         apply=preset_header("X-Captcha"),
     )
 
@@ -486,14 +503,26 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
             operation_id="protected",
             responses=Responses(success=(Success(200, Json(dict)),)),
         )
-        def protected(self) -> dict[str, object]:
+        def protected(
+            self,
+            *,
+            captcha: Annotated[str | None, Header("X-Captcha")] = None,
+        ) -> dict[str, object]:
             raise NotImplementedError
 
     def emit(request: PreparedRequest, *, options: object) -> NormalizedResponse[object]:
         calls["emit"] += 1
         raise AssertionError("transport must not run")
 
-    runtime = ExecutionRuntime(capabilities(), emit, "https://api.test", protections=(preset,))
-    with pytest.raises(PlanError, match="solution target is not declared"):
+    runtime = ExecutionRuntime(
+        capabilities(),
+        emit,
+        "https://api.test",
+        before_call_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(preset.solver, Solver())
+        ),
+    )
+    with pytest.raises(PlanError, match="private binding conflicts"):
         IncompatibleApi(_SyncClientCore(runtime)).protected()
     assert calls == {"solver": 0, "emit": 0}

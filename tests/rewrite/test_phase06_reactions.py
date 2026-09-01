@@ -19,12 +19,12 @@ from eazy_sdk._internal import (
 )
 from eazy_sdk.ext import (
     BufferedBody,
-    CallableParser,
     ErrorOutcome,
     Malformed,
     NoMatch,
     ParsedValue,
     RequestPreparer,
+    callable_parser,
 )
 from eazy_sdk.protection import (
     BeforeCall,
@@ -104,11 +104,7 @@ class CloudflareChallenge:
     ray_id: str
 
 
-def challenge_parser(
-    response: ResponseContext[object], model: type[object]
-) -> ParseAttempt[object]:
-    if model is not CloudflareChallenge:
-        return NoMatch()
+def challenge_parser(response: ResponseContext[object]) -> ParseAttempt[CloudflareChallenge]:
     if b"cf-challenge" not in response.bytes:
         return NoMatch()
     if b"ray=" not in response.bytes:
@@ -140,7 +136,7 @@ def test_external_signal_prefilter_and_parser_run_before_endpoint_json_cases() -
         "cloudflare.challenge",
         RequestScope(hosts=frozenset({"api.example"})),
         CloudflareChallenge,
-        CallableParser(challenge_parser),
+        callable_parser(CloudflareChallenge, challenge_parser),
         prefilter=prefilter,
     )
     scope = ScopeContext(

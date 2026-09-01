@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from eazy_sdk._internal.errors import BindingError, GraphError, PatchError, PlanError
+from eazy_sdk._internal.errors import (
+    BindingError,
+    GraphError,
+    OperationBindingError,
+    PatchError,
+    PlanError,
+)
 from eazy_sdk.api import ApiDefaults, AsyncApi, SyncApi, api
 from eazy_sdk.clients import (
     AttemptLimitExceeded,
@@ -34,6 +40,12 @@ from eazy_sdk.models import (
     UnsupportedModelTypeError,
     default_model_adapters,
 )
+from eazy_sdk.preparation import (
+    PreparationIncomplete,
+    PreparedCall,
+    PreparedValue,
+    PrepareOptions,
+)
 from eazy_sdk.response import (
     AmbiguousResponseError,
     Html,
@@ -43,13 +55,20 @@ from eazy_sdk.response import (
     UnexpectedResponseError,
 )
 
-__version__ = "0.1.0a1"
+__version__ = "0.1.0"
 
 if TYPE_CHECKING:
     from eazy_sdk.clients import AsyncClient, Client
+    from eazy_sdk.sdk import AsyncSdk, SyncSdk, api_group
 
 
 def __getattr__(name: str) -> Any:
+    if name in {"AsyncSdk", "SyncSdk", "api_group"}:
+        from eazy_sdk.sdk import AsyncSdk, SyncSdk, api_group
+
+        value = {"AsyncSdk": AsyncSdk, "SyncSdk": SyncSdk, "api_group": api_group}[name]
+        globals()[name] = value
+        return value
     if name not in {"AsyncClient", "Client"}:
         raise AttributeError(name)
     from eazy_sdk.clients import AsyncClient, Client
@@ -66,6 +85,7 @@ __all__ = [
     "ApiDefaults",
     "AsyncApi",
     "AsyncClient",
+    "AsyncSdk",
     "AttemptLimitExceeded",
     "BindingError",
     "BodyCodec",
@@ -85,8 +105,13 @@ __all__ = [
     "ModelAdapterError",
     "ModelAdapterRegistry",
     "ModelField",
+    "OperationBindingError",
     "PatchError",
     "PlanError",
+    "PreparationIncomplete",
+    "PrepareOptions",
+    "PreparedCall",
+    "PreparedValue",
     "RedirectLimitExceeded",
     "ResponseEnvelope",
     "ResponseExtractor",
@@ -94,12 +119,14 @@ __all__ = [
     "ScalarCodec",
     "Scope",
     "SyncApi",
+    "SyncSdk",
     "TransportFailure",
     "UnexpectedResponseError",
     "UnsafeReplayError",
     "UnsupportedModelTypeError",
     "XPath",
     "api",
+    "api_group",
     "default_model_adapters",
     "parse_html",
 ]

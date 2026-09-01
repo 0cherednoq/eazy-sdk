@@ -1,16 +1,26 @@
 ---
 title: Protection
-description: Публичные captcha presets.
+description: Typed lifecycle policies, private bindings and managed clearance state.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:5c6561e89ffe2f0e16d9bc3332fd9f29a3f1d17e31e7b6bb071821acf9ab2733"
+api_fingerprint: "sha256:eb3e5e7a0b266af51aa26cba2d38623d0a36a744017e5fbdb46316b850af516b"
 ---
+
+Protection имеет три независимых lifecycle. Они не используют общий untyped registry.
+
+| Lifecycle | Config field | Когда выполняется |
+|---|---|---|
+| Mandatory operation flow | `operation_protections` | до конкретной operation |
+| Proactive policy | `before_call_policies` | до каждого подходящего call/attempt |
+| Conditional challenge | `challenge_policies` | после совпавшего response signal |
+
+Auth остаётся отдельным механизмом в `ClientConfig.auth`.
 
 ## Mandatory operation flow
 
-```python
+```python target
 requirement = ProtectionRequirement[Result]("login-protection")
 flow = protection_flow(
     requirement,
@@ -18,56 +28,54 @@ flow = protection_flow(
     solve=True,
     verify=ProtectionApi.verify,
 )
-solvers = SolverBindings(bind_solver(requirement, solver))
-```
 
-`ProtectionFlow` имеет три формы: acquire-only, acquire + solve и acquire + solve + verify.
-`FromProtection(requirement, field)` рекурсивно связывает typed result с точным полем private target
-модели `BodyProjection`. Все managed fields одного result применяются атомарно на каждой HTTP
-attempt после projection и до финальной target-валидации.
-
-Operation объявляет `protections=(requirement,)`; `ClientConfig` получает `protections=(flow,)` и
-`protection_solvers=solvers`. Missing flow, solver или field mapping завершается до сети.
-
-## Conditional and domain policies
-
-Conditional challenge остаётся response case/reaction. External WAF policy имеет reusable scope и
-также подключается через `ClientConfig.protections`.
-
-## Cloudflare
-
-```python
-cloudflare.challenge_pages(scope=..., solver=...)
-cloudflare.turnstile_widget(scope=..., solver=..., apply=...)
-cloudflare.turnstile_preclearance(
-    scope=...,
-    site_key=...,
-    page_url=...,
-    solver=...,
+config = ClientConfig(
+    operation_protections=(flow,),
+    operation_protection_solvers=SolverBindings(
+        bind_solver(requirement, solver),
+    ),
 )
 ```
 
-## reCAPTCHA
+Operation по-прежнему объявляет `protections=(requirement,)`. `FromProtection` связывает typed
+result с private target-моделью `BodyProjection`. Missing flow, solver или source field
+отклоняются до main request.
 
-```python
-recaptcha.v2_checkbox(scope=..., solver=...)
-recaptcha.v2_invisible(scope=..., solver=...)
-recaptcha.v3_action(
-    scope=...,
-    site_key=...,
-    action=...,
-    solver=...,
+## Conditional challenge
+
+`ChallengePolicy[TChallenge, TSolution]` содержит точный `scope`, один `signal`, solver
+requirement, `PrivateBindings`, persistence и replay policy. Solver регистрируется отдельно:
+
+```python target
+config = ClientConfig(
+    challenge_policies=(KAD_WASM_POLICY,),
+    challenge_solvers=ChallengeSolverBindings(
+        bind_challenge_solver(KAD_WASM_SOLVER, KadSolver()),
+    ),
 )
-recaptcha.enterprise_checkbox(scope=..., solver=...)
-recaptcha.enterprise_score_action(
-    scope=...,
-    project=...,
-    site_key=...,
-    action=...,
-    solver=...,
-)
-recaptcha.enterprise_policy_based_challenge(scope=..., solver=...)
 ```
 
-Presets возвращают scoped client policies. Captcha-specific names принадлежат конкретным vendor
-models; общая operation abstraction называется Protection.
+`private_header`, `private_query`, `private_cookie` и `private_body` резервируют wire targets в
+compiler layout, но не добавляют параметры в public method signature. `private_cookie_set`
+атомарно разворачивает именованный набор cookies, поэтому Cloudflare preset применяет все cookies
+из `CloudflareClearance.cookies`.
+
+## Persistence
+
+Доступны `per_match`, `per_call`, `per_attempt`, `until_expiry` и `until_rejected`.
+Shareable state ключуется identity/revision policy, solver, client/session/network scope и
+объявленной challenge identity. Expiry всегда ограничивает reuse сверху. Повторный definitive
+challenge инвалидирует применённую revision до replay.
+
+Для одинакового полного ключа acquisition выполняется single-flight. Отмена solve не публикует
+partial state. Все source fields и destinations валидируются до единственного immutable commit;
+ошибка одного binding не меняет attempt или cache. Managed slots помечены secret и значения не
+попадают в diagnostics.
+
+## Exceptions and replay
+
+- malformed policy или missing solver завершается до provider/transport I/O;
+- binding conflict завершается на compiler preflight;
+- missing solution field и invalid managed value вызывают `PlanError` без partial commit;
+- replay выполняется только при доказанной `ReplayPolicy` safety и заново запускает projection,
+  crypto, encoding и signing.

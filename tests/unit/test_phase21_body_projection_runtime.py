@@ -10,11 +10,11 @@ import msgspec
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, BodyProjectionError, JsonBody
+from eazy_sdk.request import BodyProjection, JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
 
@@ -341,12 +341,18 @@ async def test_projection_failures_are_safe_and_target_error_keeps_nested_path(
         sends += 1
         return httpx.Response(200, json={"ok": True})
 
-    with pytest.raises(BodyProjectionError) as captured:
+    with pytest.raises(OperationBindingError) as captured:
         await _execute(projection, handler, value=secret)
 
     message = str(captured.value)
     assert secret not in message
     assert captured.value.__cause__ is None
+    assert captured.value.operation_id == "operation"
+    assert captured.value.phase == "projection"
     assert sends == 0
     if failure == "target":
-        assert "account.login" in message
+        assert captured.value.code == "projection_target_invalid"
+        assert captured.value.field == "account.login"
+    else:
+        assert captured.value.code == "projection_failed"
+        assert captured.value.field is None

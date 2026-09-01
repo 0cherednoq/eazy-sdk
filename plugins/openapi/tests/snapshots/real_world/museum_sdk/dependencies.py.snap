@@ -1,5 +1,7 @@
 """Generated dependency identities and typed provider facade. Do not edit."""
 
+from __future__ import annotations
+
 from typing import Literal
 
 from eazy_sdk.codegen import (

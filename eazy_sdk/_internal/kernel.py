@@ -9,7 +9,14 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Any, Protocol, Self, Union, cast, get_args, get_origin, is_typeddict
 
-from .errors import BindingError, GraphError, PatchError, WriterConflictError
+from .errors import (
+    BindingError,
+    GraphError,
+    PatchError,
+    SlotBindingError,
+    SlotValueError,
+    WriterConflictError,
+)
 
 
 class SlotCardinality(Enum):
@@ -114,15 +121,34 @@ class OperationValues:
                 if not isinstance(binding.value, Sequence) or isinstance(
                     binding.value, str | bytes | bytearray
                 ):
-                    raise TypeError(
-                        f"expected a sequence for multi-value slot {slot.diagnostic_name!r}"
+                    raise SlotValueError(
+                        f"expected a sequence for multi-value slot {slot.diagnostic_name!r}",
+                        slot=slot,
                     )
-                values[index] = tuple(slot.validator(item) for item in binding.value)
+                try:
+                    values[index] = tuple(slot.validator(item) for item in binding.value)
+                except (TypeError, ValueError) as exc:
+                    raise SlotValueError(
+                        str(exc),
+                        slot=slot,
+                        path=_validation_error_path(exc),
+                    ) from None
             else:
-                values[index] = slot.validator(binding.value)
+                try:
+                    values[index] = slot.validator(binding.value)
+                except (TypeError, ValueError) as exc:
+                    raise SlotValueError(
+                        str(exc),
+                        slot=slot,
+                        path=_validation_error_path(exc),
+                    ) from None
         for index, slot in enumerate(shape.slots):
             if slot.required and values[index] is _MISSING:
-                raise BindingError(f"required slot has no value: {slot.diagnostic_name}")
+                raise SlotBindingError(
+                    "required slot has no value",
+                    slot=slot,
+                    reason="missing_required",
+                )
         return cls(shape, tuple(values))
 
     def contains(self, slot: ValueSlot[object]) -> bool:
@@ -531,9 +557,19 @@ def validate_annotation(value: object, annotation: object) -> None:
     raise TypeError(f"expected {annotation!r}, got {type(value).__name__}")
 
 
+def _validation_error_path(error: Exception) -> str | None:
+    message = str(error)
+    marker = "missing required field "
+    if marker not in message:
+        return None
+    path = message.partition(marker)[2]
+    _, separator, nested = path.partition(".")
+    return nested if separator else path
+
+
 def _matches(value: object, annotation: object) -> bool:
     try:
         validate_annotation(value, annotation)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
     return True

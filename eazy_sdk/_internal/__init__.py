@@ -1,6 +1,13 @@
 """Compiler/runtime internals shared by hand-written and generated contracts."""
 
-from .errors import BindingError, GraphError, PatchError, PlanError, WriterConflictError
+from .errors import (
+    BindingError,
+    GraphError,
+    OperationBindingError,
+    PatchError,
+    PlanError,
+    WriterConflictError,
+)
 from .http import RequestLocation
 from .http_compiler import HTTP_COMPILER_KIND, CompiledContract, compile_endpoint
 from .http_plan import (
@@ -72,6 +79,7 @@ __all__ = [
     "Malformed",
     "MethodInputSchema",
     "NoMatch",
+    "OperationBindingError",
     "OperationCallState",
     "OperationIdentity",
     "OperationMetadata",

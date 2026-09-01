@@ -141,8 +141,8 @@ class AsyncUsersApi(AsyncApi):
     @api.get("/users/{user_id}", operation_id="getUser", responses=USER_RESPONSES)
     async def get_user(  # type: ignore[no-untyped-def]
         self,
-        user_id: Annotated[int, Path()],
         *,
+        user_id: Annotated[int, Path()],
         include: Annotated[str | None, Query()] = None,
         options: CallOptions | None = None,
     ):
@@ -151,6 +151,7 @@ class AsyncUsersApi(AsyncApi):
     @api.post("/users", operation_id="createUser", responses=USER_RESPONSES)
     async def create_user(
         self,
+        *,
         request: Annotated[CreateUser, JsonBody()],
     ) -> User:
         raise AssertionError("declaration body must not execute")
@@ -160,8 +161,8 @@ class SyncUsersApi(SyncApi):
     @api.get("/users/{user_id}", operation_id="getUserSync", responses=USER_RESPONSES)
     def get_user(  # type: ignore[no-untyped-def]
         self,
-        user_id: Annotated[int, Path()],
         *,
+        user_id: Annotated[int, Path()],
         include: Annotated[str | None, Query()] = None,
         options: CallOptions | None = None,
     ):
@@ -176,6 +177,7 @@ class ProtectionApi(AsyncApi):
     @api.post("/protection/verify", operation_id="verifyProtection", responses=PROTECTION_RESPONSES)
     async def verify(
         self,
+        *,
         answer: Annotated[ChallengeAnswer, JsonBody()],
     ) -> ProtectionResult:
         raise AssertionError("declaration body must not execute")
@@ -300,7 +302,9 @@ def test_invalid_method_signatures_fail_during_class_creation() -> None:
 
         class BadPath(AsyncApi):
             @api.get("/users/{user_id}", responses=USER_RESPONSES)
-            async def get_user(self, other: Annotated[int, Path()]) -> User:
+            async def get_user(
+                self, *, other: Annotated[int, Path()]
+            ) -> User:
                 raise NotImplementedError
 
     with pytest.raises(TypeError, match="options must be keyword-only"):
@@ -356,8 +360,8 @@ async def test_mandatory_protection_verifies_and_injects_multiple_fields_atomica
             cookies={},
         ),
         config=ClientConfig(
-            protections=(flow,),
-            protection_solvers=SolverBindings(
+            operation_protections=(flow,),
+            operation_protection_solvers=SolverBindings(
                 bind_solver(LOGIN_PROTECTION, FakeSolver()),
             ),
         ),
@@ -388,7 +392,7 @@ async def test_missing_protection_solver_fails_before_acquire_or_main_network() 
             cookies={},
         ),
         config=ClientConfig(
-            protections=(
+            operation_protections=(
                 protection_flow(
                     LOGIN_PROTECTION,
                     acquire=ProtectionApi.acquire,
@@ -423,7 +427,9 @@ async def test_acquire_only_csrf_flow_injects_before_the_main_operation() -> Non
             cookies={},
         ),
         config=ClientConfig(
-            protections=(protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),)
+            operation_protections=(
+                protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+            )
         ),
     )
     await AuthApi(client).login_csrf(email="ada", password="secret")
@@ -474,7 +480,7 @@ async def test_mandatory_protection_injects_nested_target_paths() -> None:
             cookies={},
         ),
         config=ClientConfig(
-            protections=(
+            operation_protections=(
                 protection_flow(
                     LOGIN_PROTECTION,
                     acquire=ProtectionApi.acquire,
@@ -482,7 +488,7 @@ async def test_mandatory_protection_injects_nested_target_paths() -> None:
                     verify=ProtectionApi.verify,
                 ),
             ),
-            protection_solvers=SolverBindings(
+            operation_protection_solvers=SolverBindings(
                 bind_solver(LOGIN_PROTECTION, FakeSolver()),
             ),
             retry=RetryPolicy.safe(max_attempts=2),
@@ -562,7 +568,9 @@ async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:
             cookies={},
         ),
         config=ClientConfig(
-            protections=(protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),)
+            operation_protections=(
+                protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+            )
         ),
     )
     with pytest.raises(WriterConflictError, match="collide at 'csrf'"):
@@ -590,7 +598,9 @@ async def test_invalid_mandatory_protection_configuration_fails_before_network(
             headers={},
             cookies={},
         ),
-        config=ClientConfig(protections=configured if invalid_mapping else ()),
+        config=ClientConfig(
+            operation_protections=configured if invalid_mapping else ()
+        ),
     )
     call = AuthApi(client).login_invalid if invalid_mapping else AuthApi(client).login
     with pytest.raises(TypeError, match=r"missing protection flow|has no field"):

@@ -1,21 +1,22 @@
 [project]
 name = "eazy-sdk-sqlmodel"
-version = "0.1.0a1"
+version = "0.1.0"
 description = "SQLModel/SQLAlchemy async storage backend for Eazy SDK."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Eazy SDK contributors" }]
 keywords = ["sdk", "sqlmodel", "sqlalchemy", "storage"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.1.0a1,<0.2", "sqlmodel>=0.0.22", "aiosqlite>=0.20"]
+dependencies = ["eazy-sdk>=0.1.0,<0.2", "sqlmodel>=0.0.22", "aiosqlite>=0.20"]
 
 [project.scripts]
 eazy-sdk-sqlmodel-migrate = "eazy_sdk_sqlmodel.cli:main"

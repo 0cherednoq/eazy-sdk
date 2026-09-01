@@ -1,4 +1,6 @@
 """Generated imports for named signature descriptors. Do not edit."""
 
+from __future__ import annotations
+
 
 __all__ = []

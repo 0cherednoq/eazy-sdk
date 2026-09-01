@@ -129,7 +129,7 @@ def test_generation_matches_snapshot_and_passes_strict_mypy(
     assert "Unpack" in actual["client.py"]
     if case.package == "museum_sdk":
         assert "class AsyncTickets(AsyncApi):" in actual["client.py"]
-        assert "self.tickets: AsyncTickets = AsyncTickets(client)" in actual["client.py"]
+        assert "tickets = api_group(AsyncTickets)" in actual["client.py"]
         assert "Error as ErrorModel" in actual["client.py"]
         assert "    @api.post(" in actual["client.py"]
         assert "    async def buyMuseumTickets(" in actual["client.py"]

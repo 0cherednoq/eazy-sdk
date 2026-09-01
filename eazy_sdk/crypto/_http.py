@@ -84,7 +84,11 @@ async def protect_http_request(
         view = replace(
             view,
             headers=headers,
-            body=PreparedBodyView(content, wire.content_type),
+            body=PreparedBodyView(
+                content,
+                wire.content_type,
+                sensitive=view.body.sensitive,
+            ),
         )
     return replace(
         request,
@@ -255,7 +259,7 @@ def _decode_http_metadata(output: CryptoOutput[object], raw: str) -> object:
                 "HTTP crypto metadata supports str, bool, int and float outputs"
             )
         return output.validator(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         raise CryptoConfigurationError(f"invalid HTTP crypto metadata {output.name!r}") from None
 
 

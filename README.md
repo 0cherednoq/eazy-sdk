@@ -4,17 +4,16 @@ Eazy SDK is a transport-independent runtime for typed HTTP and async WebSocket S
 WebSocket use separate lifecycle runtimes while sharing model adapters, typed cases, auth values,
 and protection primitives.
 
-> **Status:** `0.1.0a1` is a public alpha. APIs may change before the stable release. Python 3.14+
-> is required.
+> **Status:** `0.1.0` is the first stable release. Python 3.13 or newer is required.
 
 ```bash
-pip install --pre "eazy-sdk[httpx,pydantic]==0.1.0a1"
+pip install "eazy-sdk[httpx,pydantic]==0.1.0"
 ```
 
 For WebSocket SDKs and AsyncAPI 3.0 generation:
 
 ```bash
-pip install --pre "eazy-sdk[websocket]==0.1.0a1" "eazy-sdk-asyncapi[yaml]==0.1.0a1"
+pip install "eazy-sdk[websocket]==0.1.0" "eazy-sdk-asyncapi[yaml]==0.1.0"
 eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
 ```
 

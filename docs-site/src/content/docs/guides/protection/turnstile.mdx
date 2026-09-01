@@ -1,58 +1,35 @@
 ---
 title: Turnstile
-description: Cloudflare Turnstile widget или preclearance.
+description: Typed Turnstile widget and proactive preclearance policies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:6786bfce2ded775810c886453428eeef9cf83e8ae9d2f5dde1b6804d200d2669"
+api_fingerprint: "sha256:dd382d82a7be4fd5dc5dc07ae5966a4bf65c47ea2f77889cf8aa57eb066d8b81"
 ---
 
-::::{tab-set}
-  :::{tab-item} Widget
+Widget и preclearance принадлежат разным lifecycle и поэтому подключаются в разные config fields.
 
-  Используйте этот вариант, когда Turnstile находится в ответе конкретной ручки.
+```python target
+widget = cloudflare.turnstile_widget(
+    scope=operation("login"),
+    apply=form_field("cf-turnstile-response"),
+)
 
-  ```python
-  from eazy_sdk_presets import cloudflare, form_field, operation
+preclearance = cloudflare.turnstile_preclearance(
+    scope=host("api.example.test"),
+    site_key="public-site-key",
+    page_url="https://api.example.test/login",
+)
 
-  protection = cloudflare.turnstile_widget(
-      scope=operation("login"),
-      solver=TurnstileSolver(),
-      apply=form_field("cf-turnstile-response"),
-  )
-  ```
-:::
-  :::{tab-item} Preclearance
-
-  Используйте этот вариант, когда clearance требуется до первого запроса.
-
-  ```python
-  from eazy_sdk_presets import cloudflare, host
-
-  protection = cloudflare.turnstile_preclearance(
-      scope=host("api.example.test"),
-      site_key="public-site-key",
-      page_url="https://api.example.test/login",
-      solver=TurnstileSolver(),
-  )
-  ```
-:::
-::::
-
-Передайте preset клиенту:
-
-```python
-client = Client(
-    base_url=base_url,
-    handler=handler,
-    config=ClientConfig(protections=(protection,)),
+config = ClientConfig(
+    challenge_policies=(widget,),
+    before_call_policies=(preclearance,),
+    challenge_solvers=ChallengeSolverBindings(
+        bind_challenge_solver(widget.solver, TurnstileTokenSolver()),
+        bind_challenge_solver(preclearance.solver, TurnstileClearanceSolver()),
+    ),
 )
 ```
 
-Widget preset является conditional response policy: solver запускается только после совпадения
-Turnstile response case. Preclearance выполняется до первого origin request в подходящем scope.
-Оба варианта используют replay coordinator и не отправляют повторно unsafe body без semantic
-proof.
-
-Для обязательных managed полей конкретной операции используйте `ProtectionRequirement` и
-`FromProtection`, показанные в {doc}`обзоре Protection </guides/protection/index>`.
+Widget решается только после matched response и использует replay safety. Preclearance решается до
+origin request, переиспользуется до expiry и привязан к network identity.

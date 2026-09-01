@@ -9,10 +9,6 @@ from typing import Literal
 from eazy_sdk.codecs import BodyCodec, ScalarCodec
 
 
-class BodyProjectionError(RuntimeError):
-    """A public-to-wire projection or its target validation failed safely."""
-
-
 @dataclass(frozen=True, slots=True)
 class JsonField:
     """Place one flat input field in an object-shaped JSON request body."""

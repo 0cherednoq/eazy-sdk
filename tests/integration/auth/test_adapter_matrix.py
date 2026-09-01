@@ -62,7 +62,7 @@ def _operation(
             url,
             operation_id=operation_id,
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         async def call(self, *, options: CallOptions | None = None) -> NormalizedResponse[object]:
@@ -73,7 +73,7 @@ def _operation(
             url,
             operation_id=operation_id,
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         def call(self, *, options: CallOptions | None = None) -> NormalizedResponse[object]:

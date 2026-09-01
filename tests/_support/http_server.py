@@ -185,7 +185,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD" and body:
             try:
                 self.wfile.write(body)
-            except ConnectionError, OSError:
+            except (ConnectionError, OSError):
                 # Timeout/disconnect tests deliberately close the client side first.
                 self.close_connection = True
 

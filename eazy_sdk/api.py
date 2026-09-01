@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from typing import (
     Any,
     Concatenate,
     ParamSpec,
     Protocol,
+    TypedDict,
     TypeVar,
+    Unpack,
     cast,
     get_args,
     get_type_hints,
@@ -23,13 +26,16 @@ from eazy_sdk._internal.input import inspect_method_input
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.clients.base import CallOptions
 from eazy_sdk.crypto import CryptoWire, PayloadCrypto
+from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protection import ProtectionRequirement
 from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
-from eazy_sdk.response import ResponseEnvelope, Responses
+from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
+from eazy_sdk.response.cases import ResponseRepresentation
 
 P = ParamSpec("P")
 T = TypeVar("T")
+TResult = TypeVar("TResult")
 TApi = TypeVar("TApi")
 TAsyncApi = TypeVar("TAsyncApi", bound="AsyncApi")
 TSyncApi = TypeVar("TSyncApi", bound="SyncApi")
@@ -48,6 +54,7 @@ class ApiDefaults:
     signing: tuple[RequestSignature, ...] = ()
     crypto: PayloadCrypto | None = None
     crypto_wire: CryptoWire | None = None
+    errors: tuple[Error[Any], ...] = ()
 
 
 class _AsyncClient(Protocol):
@@ -60,6 +67,14 @@ class _AsyncClient(Protocol):
         with_response: bool,
     ) -> TResult | ResponseEnvelope[TResult, Any]: ...
 
+    async def _prepare_operation[TResult](
+        self,
+        declaration: _OperationDeclaration[TResult],
+        values: dict[str, object],
+        *,
+        options: PrepareOptions,
+    ) -> PreparedCall: ...
+
 
 class _SyncClient(Protocol):
     def _execute_operation[TResult](
@@ -70,6 +85,14 @@ class _SyncClient(Protocol):
         options: CallOptions | None,
         with_response: bool,
     ) -> TResult | ResponseEnvelope[TResult, Any]: ...
+
+    def _prepare_operation[TResult](
+        self,
+        declaration: _OperationDeclaration[TResult],
+        values: dict[str, object],
+        *,
+        options: PrepareOptions,
+    ) -> PreparedCall: ...
 
 
 class _BoundAsyncOperation[**P, T]:
@@ -104,6 +127,19 @@ class _BoundAsyncOperation[**P, T]:
         )
         return cast(ResponseEnvelope[T, Any], result)
 
+    async def prepare(
+        self,
+        *args: Any,
+        options: PrepareOptions | None = None,
+        **kwargs: Any,
+    ) -> PreparedCall:
+        values, _ = self._descriptor._bind_arguments(self._api, *args, **kwargs)
+        return await self._api._client._prepare_operation(
+            self._descriptor.resolve(self._api.defaults),
+            values,
+            options=options or PrepareOptions(),
+        )
+
 
 class _BoundSyncOperation[**P, T]:
     def __init__(self, descriptor: _SyncOperationDescriptor[Any, P, T], api: SyncApi) -> None:
@@ -137,6 +173,19 @@ class _BoundSyncOperation[**P, T]:
         )
         return cast(ResponseEnvelope[T, Any], result)
 
+    def prepare(
+        self,
+        *args: Any,
+        options: PrepareOptions | None = None,
+        **kwargs: Any,
+    ) -> PreparedCall:
+        values, _ = self._descriptor._bind_arguments(self._api, *args, **kwargs)
+        return self._api._client._prepare_operation(
+            self._descriptor.resolve(self._api.defaults),
+            values,
+            options=options or PrepareOptions(),
+        )
+
 
 class _OperationDescriptorBase[TApi, **P, T]:
     def __init__(
@@ -150,6 +199,7 @@ class _OperationDescriptorBase[TApi, **P, T]:
         signing: object,
         crypto: object,
         crypto_wire: object,
+        inherit_errors: bool,
     ) -> None:
         self.declaration = operation
         self.signature = signature
@@ -159,6 +209,7 @@ class _OperationDescriptorBase[TApi, **P, T]:
         self.signing = signing
         self.crypto = crypto
         self.crypto_wire = crypto_wire
+        self.inherit_errors = inherit_errors
         self.__name__ = declaration.__name__
         self.__qualname__ = declaration.__qualname__
         self.__doc__ = declaration.__doc__
@@ -173,8 +224,16 @@ class _OperationDescriptorBase[TApi, **P, T]:
             signing = ()
         elif not isinstance(signing, tuple):
             signing = (signing,)
+        responses = cast(Responses[T], self.declaration.responses)
+        if self.inherit_errors and defaults.errors:
+            responses = Responses(
+                success=cast(tuple[Success[T], ...], responses.success),
+                errors=(*defaults.errors, *responses.errors),
+                fallback=responses.fallback,
+            )
         return replace(
             self.declaration,
+            responses=responses,
             security=cast(Any, security),
             signing=cast(tuple[RequestSignature, ...], signing),
             crypto=cast(PayloadCrypto | None, crypto),
@@ -195,10 +254,17 @@ class _OperationDescriptorBase[TApi, **P, T]:
         options = bound.arguments.pop("options", None)
         if options is not None and not isinstance(options, CallOptions):
             raise TypeError("options must be CallOptions or None")
+        projection_sources = {
+            field.python_name
+            for field in self.declaration.input_fields
+            if field.is_projection_source
+        }
         values = {
             name: value
             for name, value in bound.arguments.items()
-            if name in provided or self.signature.parameters[name].default is not None
+            if name in provided
+            or self.signature.parameters[name].default is not None
+            or name in projection_sources
         }
         if self.unpacked_parameter is not None:
             unpacked = values.pop(self.unpacked_parameter, {})
@@ -288,6 +354,8 @@ class _OperationDecorator[T]:
         tags: tuple[str, ...],
         idempotent: bool | None,
         raw_response: bool,
+        inherit_errors: bool,
+        singular_response: bool,
     ) -> None:
         self.method = method.upper()
         self.path = path
@@ -305,6 +373,8 @@ class _OperationDecorator[T]:
         self.tags = tags
         self.idempotent = idempotent
         self.raw_response = raw_response
+        self.inherit_errors = inherit_errors
+        self.singular_response = singular_response
 
     @overload
     def __call__(
@@ -329,6 +399,29 @@ class _OperationDecorator[T]:
         self_parameter = parameters[0].name
         operation_id = self.operation_id or declaration.__name__
         hints = get_type_hints(declaration, include_extras=True)
+        if self.singular_response:
+            annotated_result = hints.get("return")
+            if annotated_result is None:
+                raise TypeError(
+                    f"operation {operation_id!r} using response= requires a return annotation"
+                )
+            success = self.responses.success[0]
+            representation = success.response
+            if isinstance(representation, Json | Html):
+                if representation.model is not None and representation.model != annotated_result:
+                    raise TypeError(
+                        f"operation {operation_id!r} response model must match "
+                        "its return annotation"
+                    )
+                representation = replace(representation, model=annotated_result)
+                self.responses = Responses(
+                    success=cast(
+                        tuple[Success[T], ...],
+                        (replace(success, response=representation),),
+                    ),
+                    errors=self.responses.errors,
+                    fallback=self.responses.fallback,
+                )
         result_type = self.responses._result_type
         if result_type is None:
             result_type = hints.get("return")
@@ -393,25 +486,73 @@ class _OperationDecorator[T]:
             self.signing,
             self.crypto,
             self.crypto_wire,
+            self.inherit_errors,
         )
+
+
+class _SingularOperationDecorator:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._inner = _OperationDecorator[Any](*args, **kwargs)
+
+    @overload
+    def __call__(
+        self,
+        declaration: Callable[
+            Concatenate[TAsyncApi, P], Coroutine[Any, Any, TResult]
+        ],
+    ) -> _AsyncOperationDescriptor[TAsyncApi, P, TResult]: ...
+
+    @overload
+    def __call__(
+        self,
+        declaration: Callable[Concatenate[TSyncApi, P], TResult],
+    ) -> _SyncOperationDescriptor[TSyncApi, P, TResult]: ...
+
+    def __call__(
+        self,
+        declaration: Callable[Concatenate[TApi, P], Any],
+    ) -> object:
+        return self._inner(cast(Any, declaration))
+
+
+class _OperationOptions(TypedDict, total=False):
+    operation_id: str | None
+    security: object
+    requires: tuple[object, ...]
+    inject: tuple[object, ...]
+    signing: object
+    crypto: PayloadCrypto | None | _Inherit
+    crypto_wire: CryptoWire | None | _Inherit
+    protections: tuple[ProtectionRequirement[Any], ...]
+    body: BodyProjection[Any, Any] | None
+    wire: WireOptions | None
+    tags: tuple[str, ...]
+    idempotent: bool | None
+    raw_response: bool
+    errors: tuple[Error[Any], ...]
+    inherit_errors: bool
 
 
 class _Verb:
     def __init__(self, method: str) -> None:
-        self.method = method
+        if re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", method) is None:
+            raise ValueError(f"invalid HTTP method token: {method!r}")
+        self.method = method.upper()
 
+    @overload
     def __call__(
         self,
         path: str,
         *,
         operation_id: str | None = None,
         responses: Responses[T],
-        security: (
-            AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None | _Inherit
-        ) = _INHERIT,
+        response: None = None,
+        errors: tuple[Error[Any], ...] = (),
+        inherit_errors: bool = True,
+        security: object = _INHERIT,
         requires: tuple[object, ...] = (),
         inject: tuple[object, ...] = (),
-        signing: tuple[RequestSignature, ...] | RequestSignature | None | _Inherit = _INHERIT,
+        signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
         crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
         protections: tuple[ProtectionRequirement[Any], ...] = (),
@@ -420,12 +561,77 @@ class _Verb:
         tags: tuple[str, ...] = (),
         idempotent: bool | None = None,
         raw_response: bool = False,
-    ) -> _OperationDecorator[T]:
-        return _OperationDecorator(
+    ) -> _OperationDecorator[T]: ...
+
+    @overload
+    def __call__(
+        self,
+        path: str,
+        *,
+        operation_id: str | None = None,
+        response: ResponseRepresentation[Any],
+        responses: None = None,
+        errors: tuple[Error[Any], ...] = (),
+        inherit_errors: bool = True,
+        security: object = _INHERIT,
+        requires: tuple[object, ...] = (),
+        inject: tuple[object, ...] = (),
+        signing: object = _INHERIT,
+        crypto: PayloadCrypto | None | _Inherit = _INHERIT,
+        crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
+        protections: tuple[ProtectionRequirement[Any], ...] = (),
+        body: BodyProjection[Any, Any] | None = None,
+        wire: WireOptions | None = None,
+        tags: tuple[str, ...] = (),
+        idempotent: bool | None = None,
+        raw_response: bool = False,
+    ) -> _SingularOperationDecorator: ...
+
+    def __call__(
+        self,
+        path: str,
+        *,
+        operation_id: str | None = None,
+        responses: Responses[T] | None = None,
+        response: ResponseRepresentation[T] | None = None,
+        errors: tuple[Error[Any], ...] = (),
+        inherit_errors: bool = True,
+        security: object = _INHERIT,
+        requires: tuple[object, ...] = (),
+        inject: tuple[object, ...] = (),
+        signing: object = _INHERIT,
+        crypto: PayloadCrypto | None | _Inherit = _INHERIT,
+        crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
+        protections: tuple[ProtectionRequirement[Any], ...] = (),
+        body: BodyProjection[Any, Any] | None = None,
+        wire: WireOptions | None = None,
+        tags: tuple[str, ...] = (),
+        idempotent: bool | None = None,
+        raw_response: bool = False,
+    ) -> _OperationDecorator[Any] | _SingularOperationDecorator:
+        if responses is not None and response is not None:
+            raise TypeError("response= and responses= are mutually exclusive")
+        if responses is None and response is None:
+            raise TypeError("declare exactly one of response= or responses=")
+        normalized = responses
+        if response is not None:
+            normalized = _singular_responses(response, errors)
+        elif errors:
+            assert responses is not None
+            normalized = Responses(
+                success=cast(tuple[Success[T], ...], responses.success),
+                errors=(*responses.errors, *errors),
+                fallback=responses.fallback,
+            )
+        assert normalized is not None
+        decorator_type = (
+            _SingularOperationDecorator if response is not None else _OperationDecorator
+        )
+        return decorator_type(
             self.method,
             path,
             operation_id=operation_id,
-            responses=responses,
+            responses=normalized,
             security=security,
             requires=requires,
             inject=inject,
@@ -438,7 +644,18 @@ class _Verb:
             tags=tags,
             idempotent=idempotent,
             raw_response=raw_response,
+            inherit_errors=inherit_errors,
+            singular_response=response is not None,
         )
+
+
+def _singular_responses[T](
+    response: ResponseRepresentation[T],
+    errors: tuple[Error[Any], ...],
+) -> Responses[T]:
+    status = response.status if isinstance(response, Json | Html) else 200
+    condition = response.when if isinstance(response, Json | Html) else None
+    return Responses(success=(Success(status, response, condition),), errors=errors)
 
 
 def _validate_options(
@@ -491,9 +708,42 @@ class _ApiNamespace:
 
     delete = _Verb("DELETE")
     get = _Verb("GET")
+    head = _Verb("HEAD")
+    options = _Verb("OPTIONS")
     patch = _Verb("PATCH")
     post = _Verb("POST")
     put = _Verb("PUT")
+    trace = _Verb("TRACE")
+
+    @overload
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        responses: Responses[T],
+        response: None = None,
+        **kwargs: Unpack[_OperationOptions],
+    ) -> _OperationDecorator[T]: ...
+
+    @overload
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        response: ResponseRepresentation[Any],
+        responses: None = None,
+        **kwargs: Unpack[_OperationOptions],
+    ) -> _SingularOperationDecorator: ...
+
+    def request(
+        self, method: str, path: str, **kwargs: Any
+    ) -> _OperationDecorator[Any] | _SingularOperationDecorator:
+        return cast(
+            _OperationDecorator[Any] | _SingularOperationDecorator,
+            cast(Any, _Verb(method))(path, **kwargs),
+        )
 
 
 api = _ApiNamespace()

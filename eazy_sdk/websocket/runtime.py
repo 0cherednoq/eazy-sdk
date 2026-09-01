@@ -54,9 +54,25 @@ from ._artifacts import (
 from ._crypto import (
     apply_ws_crypto_metadata,
     protect_ws_document,
-    protect_ws_frame,
     unprotect_ws_frame,
     unprotect_ws_message,
+)
+from ._runtime_stages import (
+    ConnectAction,
+    DisconnectAction,
+    FailureState,
+    ReaderRoute,
+    ReconnectAction,
+    RecoveryMode,
+    WritePreparation,
+    connect_action,
+    disconnect_action,
+    failure_state,
+    prepare_write,
+    reconnect_action,
+    recovery_decision,
+    route_reader_message,
+    write_admitted,
 )
 from .auth import DynamicPerMessageAuth, ProtocolAuth, StaticUpgradeAuth
 from .errors import (
@@ -68,7 +84,7 @@ from .errors import (
     WsConnectError,
     WsQueueOverflowError,
 )
-from .frames import DEFAULT_FRAME_LIMITS, FrameLimits, frame_from_zapros, frame_to_zapros
+from .frames import DEFAULT_FRAME_LIMITS, FrameLimits, frame_from_zapros
 from .middleware import (
     ConnectionMiddlewareApplication,
     MessageMiddlewareApplication,
@@ -97,10 +113,8 @@ from .protection import (
     ProtectionSnapshot,
     apply_inbound_frame_transforms,
     apply_inbound_message_transforms,
-    apply_outbound_frame_transforms,
     apply_outbound_message_transforms,
     compile_message_transforms,
-    protection_snapshot,
 )
 from .protocols import (
     CloseDisposition,
@@ -490,9 +504,10 @@ class AsyncWsClient:
     async def connect(self) -> None:
         restore = False
         async with self._connect_lock:
-            if self._state is WsSessionState.READY:
+            admission = connect_action(self._state.value)
+            if admission is ConnectAction.RETURN_READY:
                 return
-            if self._state in {WsSessionState.CLOSING, WsSessionState.CLOSED}:
+            if admission is ConnectAction.REJECT_CLOSED:
                 raise WsClientClosedError("WebSocket client is closed")
             await self._teardown_connection()
             self._state = WsSessionState.CONNECTING
@@ -861,45 +876,42 @@ class AsyncWsClient:
         crypto: tuple[CompiledPayloadCrypto, WebSocketEncrypted] | None = None,
         operation_id: str | None = None,
     ) -> Message:
-        prepared = PreparedMessage(
-            envelope,
-            semantic_payload,
-            correlation,
-            channel,
-            self._generation,
-        )
-        protected, semantic_transforms = await self._apply_outbound_transforms(
-            prepared,
-            operation=operation,
-        )
-        encoded = self.protocol.codec.encode(protected.envelope)
+        crypto_context = None
         if crypto is not None:
-            encoded = await protect_ws_frame(
-                encoded,
-                crypto[0],
-                crypto[1],
-                context=await self._crypto_context(
-                    crypto[0],
+            compiled_crypto = crypto[0]
+
+            def prepare_crypto_context(frame_kind: str) -> Awaitable[WebSocketCryptoContext]:
+                return self._crypto_context(
+                    compiled_crypto,
                     operation_id or operation,
                     operation,
                     channel,
                     CryptoDirection.OUTBOUND,
                     CryptoStage.ENCODED,
-                    frame_kind=encoded.kind.value,
-                ),
-            )
-        protected_frame = apply_outbound_frame_transforms(
-            encoded, self.config.outbound_frame_transforms
+                    frame_kind=frame_kind,
+                )
+
+            crypto_context = prepare_crypto_context
+        result = await prepare_write(
+            WritePreparation(
+                envelope=envelope,
+                payload=semantic_payload,
+                correlation=correlation,
+                channel=channel,
+                generation=self._generation,
+                codec=self.protocol.codec,
+                exact_transforms=self.config.outbound_frame_transforms,
+                crypto=crypto,
+                crypto_context=crypto_context,
+                crypto_stages=_outbound_crypto_stages(crypto),
+            ),
+            prepare_semantic=lambda prepared: self._apply_outbound_transforms(
+                prepared,
+                operation=operation,
+            ),
         )
-        self._last_protection_snapshot = protection_snapshot(
-            protected,
-            protected_frame,
-            semantic=semantic_transforms,
-            exact=self.config.outbound_frame_transforms,
-            crypto_profile=crypto[0].profile.name if crypto is not None else None,
-            crypto_stages=_outbound_crypto_stages(crypto),
-        )
-        return frame_to_zapros(protected_frame)
+        self._last_protection_snapshot = result.snapshot
+        return result.frame
 
     async def _resolved_transforms(self) -> tuple[OutboundMessageTransform, ...]:
         resolved: list[OutboundMessageTransform] = []
@@ -1050,27 +1062,23 @@ class AsyncWsClient:
                 ),
                 outputs=crypto_outputs,
             )
-        if recovery:
-            if record.channel is None:
+        recovery_plan = recovery_decision(
+            requested=recovery,
+            channel=record.channel,
+            token=record.subscription._recovery_token() if recovery else None,
+        )
+        if recovery_plan.error is not None:
+            raise SubscriptionDisconnectedError(recovery_plan.error)
+        envelope: FrozenValue
+        if recovery_plan.mode is RecoveryMode.RECOVER:
+            assert record.channel is not None
+            assert recovery_plan.token is not None
+            built = self.protocol.build_recovery(record.channel, recovery_plan.token)
+            if built is None:
                 raise SubscriptionDisconnectedError(
-                    "protocol recovery requires a channel-routed subscription"
+                    "protocol does not support subscription recovery messages"
                 )
-            token = record.subscription._recovery_token()
-            if token is None:
-                recovery = False
-                envelope = self.protocol.build_outbound(
-                    record.discriminator,
-                    semantic_payload,
-                    correlation=record.correlation,
-                    channel=record.channel,
-                )
-            else:
-                built = self.protocol.build_recovery(record.channel, token)
-                if built is None:
-                    raise SubscriptionDisconnectedError(
-                        "protocol does not support subscription recovery messages"
-                    )
-                envelope = built
+            envelope = built
         else:
             envelope = self.protocol.build_outbound(
                 record.discriminator,
@@ -1080,49 +1088,17 @@ class AsyncWsClient:
             )
         if record.crypto is not None and record.crypto_wire is not None:
             envelope = apply_ws_crypto_metadata(envelope, record.crypto_wire, crypto_outputs)
-        prepared = PreparedMessage(
+        frame = await self._prepare_envelope(
             envelope,
             semantic_payload,
-            record.correlation,
-            record.channel,
-            self._generation,
-        )
-        protected, semantic_transforms = await self._apply_outbound_transforms(
-            prepared,
+            correlation=record.correlation,
+            channel=record.channel,
             operation=record.discriminator,
+            crypto=(record.crypto, record.crypto_wire)
+            if record.crypto is not None and record.crypto_wire is not None
+            else None,
+            operation_id=record.discriminator,
         )
-        encoded = self.protocol.codec.encode(protected.envelope)
-        if record.crypto is not None and record.crypto_wire is not None:
-            encoded = await protect_ws_frame(
-                encoded,
-                record.crypto,
-                record.crypto_wire,
-                context=await self._crypto_context(
-                    record.crypto,
-                    record.discriminator,
-                    record.discriminator,
-                    record.channel,
-                    CryptoDirection.OUTBOUND,
-                    CryptoStage.ENCODED,
-                    frame_kind=encoded.kind.value,
-                ),
-            )
-        protected_frame = apply_outbound_frame_transforms(
-            encoded, self.config.outbound_frame_transforms
-        )
-        self._last_protection_snapshot = protection_snapshot(
-            protected,
-            protected_frame,
-            semantic=semantic_transforms,
-            exact=self.config.outbound_frame_transforms,
-            crypto_profile=record.crypto.profile.name if record.crypto is not None else None,
-            crypto_stages=_outbound_crypto_stages(
-                (record.crypto, record.crypto_wire)
-                if record.crypto is not None and record.crypto_wire is not None
-                else None
-            ),
-        )
-        frame = frame_to_zapros(protected_frame)
         completion = asyncio.get_running_loop().create_future()
         self._enqueue(_WriteItem(frame, completion))
         try:
@@ -1239,14 +1215,16 @@ class AsyncWsClient:
 
     def _enqueue(self, item: _WriteItem, *, allow_handshaking: bool = False) -> None:
         queue = self._writer_queue
-        permitted = {WsSessionState.READY}
-        if allow_handshaking:
-            permitted.add(WsSessionState.HANDSHAKING)
-        if self._state not in permitted or queue is None:
+        if not write_admitted(
+            self._state.value,
+            allow_handshaking=allow_handshaking,
+            queue_present=queue is not None,
+        ):
             raise _AttemptDeliveryFailure(
                 RuntimeError("WebSocket connection is not ready"),
                 may_have_been_sent=False,
             )
+        assert queue is not None
         try:
             queue.put_nowait(item)
         except asyncio.QueueFull as exc:
@@ -1412,73 +1390,84 @@ class AsyncWsClient:
         message: ProtocolMessage,
         generation: ConnectionGeneration,
     ) -> None:
-        if message.terminal_error is not None and message.correlation is not None:
-            key = _PendingKey(generation, self._protocol_namespace, message.correlation)
-            pending = self._pending.pop(key, None)
-            if pending is not None and not pending.reply.done():
-                pending.reply.set_exception(message.terminal_error)
-                return
-            subscription = self._subscriptions_by_correlation.get(
+        key = (
+            _PendingKey(generation, self._protocol_namespace, message.correlation)
+            if message.correlation is not None
+            else None
+        )
+        pending = self._pending.get(key) if key is not None else None
+        correlation_subscription = (
+            self._subscriptions_by_correlation.get(
                 (self._protocol_namespace, message.correlation)
             )
-            if subscription is not None:
-                subscription.subscription._fail(message.terminal_error)
-                self._remove_subscription(subscription)
-                return
-        if message.kind is InboundMessageKind.REPLY and message.correlation is not None:
-            key = _PendingKey(generation, self._protocol_namespace, message.correlation)
-            pending = self._pending.pop(key, None)
-            if pending is not None and not pending.reply.done():
-                pending.reply.set_result(message)
-                return
-            subscription = self._subscriptions_by_correlation.get(
-                (self._protocol_namespace, message.correlation)
+            if message.correlation is not None
+            else None
+        )
+        channel_subscription = (
+            self._subscriptions_by_channel.get((self._protocol_namespace, message.channel))
+            if message.channel is not None
+            else None
+        )
+        complete_subscription = (
+            channel_subscription if message.channel is not None else correlation_subscription
+        )
+        decision = route_reader_message(
+            message,
+            pending_present=pending is not None,
+            pending_open=pending is not None and not pending.reply.done(),
+            correlation_subscription=correlation_subscription is not None,
+            channel_subscription=channel_subscription is not None,
+            complete_subscription=complete_subscription is not None,
+        )
+        if decision.discard_pending and key is not None:
+            self._pending.pop(key, None)
+        if decision.route is ReaderRoute.PENDING_ERROR:
+            assert pending is not None and message.terminal_error is not None
+            pending.reply.set_exception(message.terminal_error)
+            return
+        if decision.route is ReaderRoute.SUBSCRIPTION_ERROR:
+            assert correlation_subscription is not None and message.terminal_error is not None
+            correlation_subscription.subscription._fail(message.terminal_error)
+            self._remove_subscription(correlation_subscription)
+            return
+        if decision.route is ReaderRoute.PENDING_REPLY:
+            assert pending is not None
+            pending.reply.set_result(message)
+            return
+        if decision.route is ReaderRoute.SUBSCRIPTION_MESSAGE:
+            subscription = (
+                correlation_subscription
+                if message.kind is InboundMessageKind.REPLY
+                else channel_subscription
             )
-            if subscription is not None:
-                await self._publish_subscription(subscription, message, generation)
-                return
-        if message.kind is InboundMessageKind.EVENT and message.channel is not None:
-            subscription = self._subscriptions_by_channel.get(
-                (self._protocol_namespace, message.channel)
-            )
-            if subscription is not None:
-                await self._publish_subscription(subscription, message, generation)
-                return
-        if message.kind is InboundMessageKind.CONTROL:
-            if message.control is ControlKind.READY:
-                self._protocol_ready.set()
-                return
-            if message.control is ControlKind.PONG:
-                self._heartbeat_ack.set()
-                return
-            if message.control is ControlKind.PING:
-                envelope = self.protocol.build_control(ControlKind.PONG, message.payload)
-                if envelope is None:
-                    self._enqueue_control(PongMessage(b""))
-                else:
-                    await self._send_protocol_envelope(
-                        envelope,
-                        message.payload,
-                        correlation=None,
-                        channel=None,
-                        operation="pong",
-                        allow_handshaking=self._state is WsSessionState.HANDSHAKING,
-                    )
-                return
-            if message.control is ControlKind.COMPLETE:
-                record = None
-                if message.channel is not None:
-                    record = self._subscriptions_by_channel.get(
-                        (self._protocol_namespace, message.channel)
-                    )
-                elif message.correlation is not None:
-                    record = self._subscriptions_by_correlation.get(
-                        (self._protocol_namespace, message.correlation)
-                    )
-                if record is not None:
-                    record.subscription._complete()
-                    self._remove_subscription(record)
-                    return
+            assert subscription is not None
+            await self._publish_subscription(subscription, message, generation)
+            return
+        if decision.route is ReaderRoute.READY:
+            self._protocol_ready.set()
+            return
+        if decision.route is ReaderRoute.PONG:
+            self._heartbeat_ack.set()
+            return
+        if decision.route is ReaderRoute.PING:
+            envelope = self.protocol.build_control(ControlKind.PONG, message.payload)
+            if envelope is None:
+                self._enqueue_control(PongMessage(b""))
+            else:
+                await self._send_protocol_envelope(
+                    envelope,
+                    message.payload,
+                    correlation=None,
+                    channel=None,
+                    operation="pong",
+                    allow_handshaking=self._state is WsSessionState.HANDSHAKING,
+                )
+            return
+        if decision.route is ReaderRoute.SUBSCRIPTION_COMPLETE:
+            assert complete_subscription is not None
+            complete_subscription.subscription._complete()
+            self._remove_subscription(complete_subscription)
+            return
         self._dispatch_user_message(message)
 
     async def _publish_subscription(
@@ -1540,7 +1529,7 @@ class AsyncWsClient:
         completion = asyncio.get_running_loop().create_future()
         try:
             self._enqueue(_WriteItem(message, completion))
-        except WsQueueOverflowError, _AttemptDeliveryFailure:
+        except (WsQueueOverflowError, _AttemptDeliveryFailure):
             return
 
         def consume(future: asyncio.Future[None]) -> None:
@@ -1593,12 +1582,12 @@ class AsyncWsClient:
                 WsSessionState.CLOSED,
             }:
                 return
-            if fatal:
-                self._state = WsSessionState.FAILED
-            elif reconnect:
-                self._state = WsSessionState.RECONNECTING
-            else:
-                self._state = WsSessionState.IDLE
+            target = failure_state(fatal=fatal, reconnect=reconnect)
+            self._state = {
+                FailureState.FAILED: WsSessionState.FAILED,
+                FailureState.RECONNECTING: WsSessionState.RECONNECTING,
+                FailureState.IDLE: WsSessionState.IDLE,
+            }[target]
             self._fail_outstanding(cause)
             should_reconnect = self._disconnect_subscriptions(
                 cause,
@@ -1622,17 +1611,18 @@ class AsyncWsClient:
         retained = False
         for record in self._subscription_records():
             policy = record.subscription.resubscribe_policy
-            if fatal:
+            action = disconnect_action(policy, fatal=fatal, reconnect=reconnect)
+            if action is DisconnectAction.FAIL_FATAL:
                 record.subscription._fail(
                     SubscriptionDisconnectedError(f"fatal WebSocket disconnect: {cause}")
                 )
                 self._remove_subscription(record)
-            elif not reconnect:
+            elif action is DisconnectAction.FAIL_ENDED:
                 record.subscription._fail(
                     SubscriptionDisconnectedError(f"WebSocket subscription ended: {cause}")
                 )
                 self._remove_subscription(record)
-            elif isinstance(policy, NeverResubscribe):
+            elif action is DisconnectAction.FAIL_DISABLED:
                 record.subscription._fail(
                     SubscriptionDisconnectedError(
                         f"subscription disconnected and resubscribe is disabled: {cause}"
@@ -1669,9 +1659,7 @@ class AsyncWsClient:
         last_error: BaseException | None = None
         for delay in self.config.reconnect.delays:
             await self.config.sleep(delay)
-            if self._state in {WsSessionState.CLOSING, WsSessionState.CLOSED}:
-                return
-            if self._state is WsSessionState.READY:
+            if reconnect_action(self._state.value) is ReconnectAction.STOP:
                 return
             try:
                 await self.connect()

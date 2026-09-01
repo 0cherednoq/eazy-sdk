@@ -44,7 +44,7 @@ class _FormOperation:
                 self.url,
                 operation_id=self.operation_id,
                 responses=Responses(success=()),
-                security=self.security,  # type: ignore[arg-type]
+                security=self.security,
                 raw_response=True,
             )
             async def token(
@@ -67,7 +67,7 @@ class _FormOperation:
                 self.url,
                 operation_id=self.operation_id,
                 responses=Responses(success=()),
-                security=self.security,  # type: ignore[arg-type]
+                security=self.security,
                 raw_response=True,
             )
             def token(
@@ -99,7 +99,7 @@ class _GetOperation:
                 self.url,
                 operation_id=self.operation_id,
                 responses=Responses(success=()),
-                security=self.security,  # type: ignore[arg-type]
+                security=self.security,
                 raw_response=True,
             )
             async def value(
@@ -115,7 +115,7 @@ class _GetOperation:
                 self.url,
                 operation_id=self.operation_id,
                 responses=Responses(success=()),
-                security=self.security,  # type: ignore[arg-type]
+                security=self.security,
                 raw_response=True,
             )
             def value(

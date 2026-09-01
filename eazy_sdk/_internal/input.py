@@ -124,6 +124,12 @@ def inspect_method_input(
     fields: list[InputField] = []
     python_names: set[str] = set()
     unpacked_type: type[object] | None = None
+    direct_fields = 0
+    projection_fields = (
+        {field.name for field in TypedDictModelAdapter().fields(body_projection.source)}
+        if body_projection is not None and is_typeddict(body_projection.source)
+        else set()
+    )
     for parameter in signature.parameters.values():
         if parameter.name == self_parameter:
             continue
@@ -137,6 +143,11 @@ def inspect_method_input(
                 f"input field {parameter.name!r} in {operation_id!r} requires an annotation"
             )
         if parameter.kind is inspect.Parameter.VAR_KEYWORD:
+            if direct_fields:
+                raise PlanError(
+                    f"operation {operation_id!r} cannot mix direct request parameters "
+                    "with Unpack[TypedDict]"
+                )
             unpacked_type = _append_unpacked_fields(
                 fields,
                 python_names,
@@ -145,12 +156,31 @@ def inspect_method_input(
                 projection=body_projection,
             )
             continue
+        if unpacked_type is not None:
+            raise PlanError(
+                f"operation {operation_id!r} cannot mix direct request parameters "
+                "with Unpack[TypedDict]"
+            )
+        if parameter.kind is not inspect.Parameter.KEYWORD_ONLY:
+            raise PlanError(
+                f"request parameter {parameter.name!r} in {operation_id!r} "
+                "must be keyword-only"
+            )
+        direct_fields += 1
         if parameter.name in python_names:
             raise PlanError(
                 f"duplicate input field {parameter.name!r} in {operation_id!r}"
             )
         python_names.add(parameter.name)
         annotation, metadata, _ = _unwrap(declared_annotation)
+        is_projection_source = parameter.name in projection_fields
+        if is_projection_source and any(
+            isinstance(item, _PLACEMENT_TYPES) for item in metadata
+        ):
+            raise PlanError(
+                f"body projection source field {parameter.name!r} in "
+                f"{operation_id!r} also declares a placement"
+            )
         fields.append(
             _input_field(
                 parameter.name,
@@ -158,6 +188,7 @@ def inspect_method_input(
                 metadata,
                 required=parameter.default is inspect.Parameter.empty,
                 operation_id=operation_id,
+                allow_unplaced=is_projection_source,
             )
         )
 
@@ -187,6 +218,7 @@ def inspect_method_input(
     )
     _validate_projection_source(
         body_projection,
+        fields=fields,
         unpacked_type=unpacked_type,
         operation_id=operation_id,
     )
@@ -418,6 +450,7 @@ def _validate_path(fields: list[InputField], *, path: str, operation_id: str) ->
 def _validate_projection_source(
     projection: BodyProjection[object, object] | None,
     *,
+    fields: list[InputField],
     unpacked_type: type[object] | None,
     operation_id: str,
 ) -> None:
@@ -427,12 +460,13 @@ def _validate_projection_source(
         raise PlanError(
             f"body projection source for {operation_id!r} must be a TypedDict"
         )
-    if unpacked_type is None:
-        raise PlanError(
-            f"body projection for {operation_id!r} requires Unpack[TypedDict] method input"
-        )
     adapter = TypedDictModelAdapter()
-    public_fields = {field.name: field for field in adapter.fields(unpacked_type)}
+    public_fields = {field.python_name: field for field in fields}
+    unpacked_fields = (
+        {field.name: field for field in adapter.fields(unpacked_type)}
+        if unpacked_type is not None
+        else {}
+    )
     for source_field in adapter.fields(projection.source):
         public_field = public_fields.get(source_field.name)
         if public_field is None:
@@ -445,8 +479,14 @@ def _validate_projection_source(
                 f"body projection source field {source_field.name!r} in {operation_id!r} "
                 "has an incompatible annotation"
             )
-        if public_field.required is not source_field.required:
+        available = (
+            unpacked_fields[source_field.name].required
+            if source_field.name in unpacked_fields
+            else True
+        )
+        if source_field.required and not available:
             raise PlanError(
                 f"body projection source field {source_field.name!r} in {operation_id!r} "
-                "has incompatible requiredness"
+                "has incompatible requiredness: it is required but can be omitted "
+                "from the public input"
             )

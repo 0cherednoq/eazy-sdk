@@ -1,17 +1,17 @@
 ---
 title: Clients
-description: Публичные Zapros-backed клиенты Eazy SDK.
+description: Zapros-backed clients, root SDK lifecycle и ad-hoc HTTP.
 sources:
   - eazy_sdk.Client
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:20cd0bb87459f777a37117e2f99ebdaea1d4795db74d58fac01efda8437a1f31"
+  - eazy_sdk.sdk
+api_fingerprint: "sha256:72e6cb2a1edfb89c80b99cc5d1eb869da77f96604aa1451b200f651d02474c32"
 ---
 
-`Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Это единственная
-transport extension boundary: отдельные Eazy SDK adapter protocols и factory wrappers не
-используются.
+`Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
+единственной transport extension boundary.
 
 ```python
 from zapros import AsyncStdNetworkHandler
@@ -25,40 +25,54 @@ client = AsyncClient(
 )
 ```
 
-По умолчанию клиент владеет handler и закрывает его. Для общего handler укажите
-`owns_handler=False`. Несовпадение sync/async handler отклоняется в конструкторе.
+По умолчанию client владеет handler. Передайте `owns_handler=False`, если lifecycle handler
+остаётся у caller. Sync client отклоняет async handler и наоборот.
 
-`CallOptions` управляет timeout, redirect/retry budgets и replay одного вызова. Eazy SDK не
-использует middleware, retry, redirect, cookie store или auth Zapros: эти политики остаются в общем
-executor и каждый новый attempt создаёт новый Zapros `Request`.
+`CallOptions` управляет timeout, retry/redirect budgets и replay одного вызова. Auth,
+middleware, retry, redirect, rate limit и protection остаются в общем executor; каждый attempt
+создаёт новый Zapros `Request`.
 
-`client.bind_sdk(factory)` — публичный authoring API, а не private hook. Он создаёт root facade для
-hand-written SDK. Если session service вызывает
-`context.sdk`, runtime использует ту же фабрику для non-owning scoped facade с общим handler и
-parent lifecycle graph. Generated SDK вызывает этот метод внутри `from_handler(...)`; consumer его
-не повторяет. Объявите reusable `session_scheme(...)` в API defaults и настройте её через
-`.configure(...)`; тогда factory остаётся обычным классом: `sdk = client.bind_sdk(StoreSdk)`, без
-`Any`, `type(self)` и closure с security.
+## Root SDK convenience
 
-`ClientConfig.crypto` принимает scoped `CryptoRegistry`. Прямой `crypto=` в API decorator имеет
-приоритет, а `crypto=None` отключает inherited profile. Полный контракт описан в
-{doc}`руководстве по шифрованию payload </guides/payload-crypto>`.
-
-## First-party handlers
-
-HTTPX, Requests и curl_cffi подключаются обычными Zapros handlers из `eazy_sdk.handlers`:
+`SyncSdk`, `AsyncSdk` и `api_group()` создают typed root без forwarding wrappers:
 
 ```python
-import httpx
+from eazy_sdk import AsyncSdk, api_group
 
-from eazy_sdk import Client
-from eazy_sdk.handlers.httpx import HttpxHandler
+class StoreSdk(AsyncSdk):
+    users = api_group(UsersApi)
+    orders = api_group(OrdersApi)
 
-client = Client(
+async with StoreSdk.from_handler(
+    handler=handler,
     base_url="https://api.example",
-    handler=HttpxHandler(httpx.Client(), owns_client=True),
-)
+) as sdk:
+    user = await sdk.users.get_user(user_id=42)
 ```
+
+Группы создаются лениво и используют тот же client. Ownership задаётся явно:
+
+| Конструктор | Кто закрывает ресурсы |
+|---|---|
+| `from_handler(..., owns_handler=True)` | root → новый client → handler |
+| `from_handler(..., owns_handler=False)` | root закрывает client, caller сохраняет handler |
+| `from_client(client)` | caller сохраняет client |
+| `from_client(client, owns_client=True)` | root закрывает client |
+
+`from_handler()` регистрирует scoped SDK factory через существующий `bind_sdk()` lifecycle.
+Scoped auth facades никогда не владеют parent resources.
+
+Root и API groups не сериализуют пользовательские вызовы: независимые calls можно выполнять
+конкурентно в пределах concurrency-контракта выбранного handler. Встроенные auth/protection caches
+сами обеспечивают заявленный single-flight. Не запускайте новые calls одновременно с
+`close()`/`aclose()`; закрытие выполняется после завершения использующих root задач.
+
+## Client configuration
+
+`ClientConfig` включает dependencies, auth, middleware, retry, rate limiter, signing key provider,
+crypto и typed protection policies. Protection lifecycle разделён на
+`operation_protections`, `before_call_policies`, `challenge_policies`,
+`operation_protection_solvers` и `challenge_solvers`.
 
 ## Ad-hoc HTTP
 
@@ -67,11 +81,21 @@ response = await client.request(
     "PATCH",
     "/experimental",
     params={"dry_run": "true"},
-    headers={"X-Trace": "trace-42"},
     json={"enabled": True},
     options=CallOptions(timeout=3.0),
 )
 ```
 
-`request`, `get` и `post` возвращают `NormalizedResponse`. Повторяющиеся query names запрещены;
-коллекция должна использовать одно строковое значение или явный scalar codec.
+`delete`, `get`, `head`, `options`, `patch`, `post`, `put` и `trace` возвращают
+`NormalizedResponse` и делегируют тому же `request(...)`. Повторяющиеся query names запрещены;
+collection требует явного scalar codec.
+
+## Stability и extension boundaries
+
+| Поверхность | Статус | Правило расширения |
+|---|---|---|
+| `SyncSdk`, `AsyncSdk`, `api_group`, `Client`, `AsyncClient` | Public | Используйте напрямую; ownership всегда задаётся конструктором |
+| `api.*`, request markers, `Responses`, `ResponseParser` | Public authoring/SPI | Реализуйте документированные protocol-ы, не наследуйтесь от internal compiler types |
+| Zapros `BaseHandler` / `AsyncBaseHandler` | Transport SPI | Единственная граница собственной сетевой интеграции |
+| `eazy_sdk.testing` | Public test support | Наблюдает фактический Zapros request, не заменяет preparation |
+| `eazy_sdk._internal.*`, executor stages и compiled records | Private | Не импортируйте и не сохраняйте их между версиями |

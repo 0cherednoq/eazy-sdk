@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from eazy_sdk._internal.errors import GraphError, PlanError
 from eazy_sdk._internal.http_compiler import CompiledContract
@@ -150,6 +150,43 @@ class SolverRegistry:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ChallengeSolverBinding[TChallenge, TSolution]:
+    """Bind one conditional/before-call solver requirement to its implementation."""
+
+    requirement: SolverRequirement[TChallenge, TSolution]
+    solver: ChallengeSolver[TChallenge, TSolution]
+
+
+def bind_challenge_solver[TChallenge, TSolution](
+    requirement: SolverRequirement[TChallenge, TSolution],
+    solver: ChallengeSolver[TChallenge, TSolution],
+) -> ChallengeSolverBinding[TChallenge, TSolution]:
+    return ChallengeSolverBinding(requirement, solver)
+
+
+@dataclass(frozen=True, slots=True)
+class ChallengeSolverBindings:
+    """Immutable solver bindings used by typed protection policies."""
+
+    bindings: tuple[ChallengeSolverBinding[Any, Any], ...] = ()
+
+    def __init__(self, *bindings: ChallengeSolverBinding[Any, Any]) -> None:
+        identities = [id(binding.requirement) for binding in bindings]
+        if len(identities) != len(set(identities)):
+            raise ValueError("a challenge solver requirement can be bound only once")
+        object.__setattr__(self, "bindings", bindings)
+
+    def get[TChallenge, TSolution](
+        self,
+        requirement: SolverRequirement[TChallenge, TSolution],
+    ) -> ChallengeSolver[TChallenge, TSolution] | None:
+        for binding in self.bindings:
+            if binding.requirement is requirement:
+                return cast(ChallengeSolver[TChallenge, TSolution], binding.solver)
+        return None
+
+
 class SignalInterception(Enum):
     DEFINITIVE = "definitive"
     ADVISORY = "advisory"
@@ -250,6 +287,296 @@ class SolutionFreshness(Enum):
     PER_CALL = "per-call"
     PER_ATTEMPT = "per-attempt"
     UNTIL_EXPIRY = "until-expiry"
+
+
+class ProtectionPersistenceMode(Enum):
+    PER_MATCH = "per-match"
+    PER_CALL = "per-call"
+    PER_ATTEMPT = "per-attempt"
+    UNTIL_EXPIRY = "until-expiry"
+    UNTIL_REJECTED = "until-rejected"
+
+
+class ProtectionStateScope(Enum):
+    CLIENT = "client"
+    SESSION = "session"
+    NETWORK_IDENTITY = "network-identity"
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionStateKey:
+    """Declare which client/session/network identity owns managed protection state."""
+
+    scope: ProtectionStateScope
+
+
+def client_identity() -> ProtectionStateKey:
+    return ProtectionStateKey(ProtectionStateScope.CLIENT)
+
+
+def session_identity() -> ProtectionStateKey:
+    return ProtectionStateKey(ProtectionStateScope.SESSION)
+
+
+def network_identity() -> ProtectionStateKey:
+    return ProtectionStateKey(ProtectionStateScope.NETWORK_IDENTITY)
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionPersistence:
+    mode: ProtectionPersistenceMode
+    scope: ProtectionStateKey = ProtectionStateKey(ProtectionStateScope.CLIENT)
+
+
+_CLIENT_STATE_KEY = ProtectionStateKey(ProtectionStateScope.CLIENT)
+
+
+def per_match() -> ProtectionPersistence:
+    return ProtectionPersistence(ProtectionPersistenceMode.PER_MATCH)
+
+
+def per_call() -> ProtectionPersistence:
+    return ProtectionPersistence(ProtectionPersistenceMode.PER_CALL)
+
+
+def per_attempt() -> ProtectionPersistence:
+    return ProtectionPersistence(ProtectionPersistenceMode.PER_ATTEMPT)
+
+
+def until_expiry(
+    *, scope: ProtectionStateKey = _CLIENT_STATE_KEY
+) -> ProtectionPersistence:
+    return ProtectionPersistence(ProtectionPersistenceMode.UNTIL_EXPIRY, scope)
+
+
+def until_rejected(
+    *, scope: ProtectionStateKey = _CLIENT_STATE_KEY
+) -> ProtectionPersistence:
+    return ProtectionPersistence(ProtectionPersistenceMode.UNTIL_REJECTED, scope)
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateBinding:
+    """One compiler-reserved private write that is absent from the public call signature."""
+
+    location: SolutionLocation
+    name: str
+    field: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("private binding target name must not be empty")
+        if self.field == "":
+            raise ValueError("private binding source field must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateCookieSetBinding:
+    """Expand an iterable solution field into a managed set of named cookies."""
+
+    field: str = "cookies"
+    name_field: str = "name"
+    value_field: str = "value"
+
+    def __post_init__(self) -> None:
+        if not self.field or not self.name_field or not self.value_field:
+            raise ValueError("private cookie-set fields must not be empty")
+
+
+type PrivateBindingTarget = PrivateBinding | PrivateCookieSetBinding
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateBindings[TSolution]:
+    targets: tuple[PrivateBindingTarget, ...]
+
+    def __init__(self, *targets: PrivateBindingTarget) -> None:
+        if not targets:
+            raise ValueError("private bindings require at least one target")
+        if len(targets) != len(set(targets)):
+            raise ValueError("private binding targets must be unique")
+        object.__setattr__(self, "targets", targets)
+
+
+def private_bindings[TSolution](
+    *targets: PrivateBindingTarget,
+) -> PrivateBindings[TSolution]:
+    return PrivateBindings(*targets)
+
+
+def private_header(name: str, *, field: str | None = None) -> PrivateBinding:
+    return PrivateBinding(SolutionLocation.HEADER, name, field)
+
+
+def private_query(name: str, *, field: str | None = None) -> PrivateBinding:
+    return PrivateBinding(SolutionLocation.QUERY, name, field)
+
+
+def private_cookie(name: str, *, field: str | None = None) -> PrivateBinding:
+    return PrivateBinding(SolutionLocation.COOKIE, name, field)
+
+
+def private_body(name: str, *, field: str | None = None) -> PrivateBinding:
+    return PrivateBinding(SolutionLocation.BODY, name, field)
+
+
+def private_cookie_set(
+    *,
+    field: str = "cookies",
+    name_field: str = "name",
+    value_field: str = "value",
+) -> PrivateCookieSetBinding:
+    return PrivateCookieSetBinding(field, name_field, value_field)
+
+
+@runtime_checkable
+class ChallengePolicy[TChallenge, TSolution](Protocol):
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def scope(self) -> RequestScope: ...
+
+    @property
+    def signal(self) -> ResponseSignal[TChallenge]: ...
+
+    @property
+    def solver(self) -> SolverRequirement[TChallenge, TSolution]: ...
+
+    @property
+    def apply(self) -> PrivateBindings[TSolution]: ...
+
+    @property
+    def persistence(self) -> ProtectionPersistence: ...
+
+    @property
+    def replay(self) -> ReplayPolicy: ...
+
+    @property
+    def challenge_identity(self) -> Callable[[TChallenge], Hashable] | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ChallengePolicySpec[TChallenge, TSolution]:
+    identity: str
+    revision: int
+    scope: RequestScope
+    signal: ResponseSignal[TChallenge]
+    solver: SolverRequirement[TChallenge, TSolution]
+    apply: PrivateBindings[TSolution]
+    persistence: ProtectionPersistence
+    replay: ReplayPolicy
+    challenge_identity: Callable[[TChallenge], Hashable] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.identity:
+            raise ValueError("challenge policy identity must not be empty")
+        if self.revision < 1:
+            raise ValueError("challenge policy revision must be positive")
+        if self.signal.scope != self.scope:
+            raise ValueError("challenge policy and signal scopes must match")
+
+
+def challenge_policy[TChallenge, TSolution](
+    *,
+    scope: RequestScope,
+    signal: ResponseSignal[TChallenge],
+    solver: SolverRequirement[TChallenge, TSolution],
+    apply: PrivateBindings[TSolution],
+    persistence: ProtectionPersistence,
+    replay: ReplayPolicy,
+    identity: str | None = None,
+    revision: int = 1,
+    challenge_identity: Callable[[TChallenge], Hashable] | None = None,
+) -> ChallengePolicySpec[TChallenge, TSolution]:
+    return ChallengePolicySpec(
+        identity or solver.name,
+        revision,
+        scope,
+        signal,
+        solver,
+        apply,
+        persistence,
+        replay,
+        challenge_identity,
+    )
+
+
+@runtime_checkable
+class BeforeCallPolicy[TChallenge, TSolution](Protocol):
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def scope(self) -> RequestScope: ...
+
+    @property
+    def acquire(self) -> object | None: ...
+
+    @property
+    def challenge(self) -> TChallenge | None: ...
+
+    @property
+    def solver(self) -> SolverRequirement[TChallenge, TSolution] | None: ...
+
+    @property
+    def apply(self) -> PrivateBindings[TSolution]: ...
+
+    @property
+    def persistence(self) -> ProtectionPersistence: ...
+
+
+@dataclass(frozen=True, slots=True)
+class BeforeCallPolicySpec[TChallenge, TSolution]:
+    identity: str
+    revision: int
+    scope: RequestScope
+    acquire: object | None
+    challenge: TChallenge | None
+    solver: SolverRequirement[TChallenge, TSolution] | None
+    apply: PrivateBindings[TSolution]
+    persistence: ProtectionPersistence
+
+    def __post_init__(self) -> None:
+        if not self.identity:
+            raise ValueError("before-call policy identity must not be empty")
+        if self.revision < 1:
+            raise ValueError("before-call policy revision must be positive")
+        has_acquire = self.acquire is not None
+        has_solver = self.challenge is not None and self.solver is not None
+        if has_acquire == has_solver:
+            raise ValueError(
+                "before-call policy requires exactly one of acquire or challenge+solver"
+            )
+
+
+def before_call_policy[TChallenge, TSolution](
+    *,
+    identity: str,
+    scope: RequestScope,
+    apply: PrivateBindings[TSolution],
+    persistence: ProtectionPersistence,
+    acquire: object | None = None,
+    challenge: TChallenge | None = None,
+    solver: SolverRequirement[TChallenge, TSolution] | None = None,
+    revision: int = 1,
+) -> BeforeCallPolicySpec[TChallenge, TSolution]:
+    return BeforeCallPolicySpec(
+        identity,
+        revision,
+        scope,
+        acquire,
+        challenge,
+        solver,
+        apply,
+        persistence,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +689,61 @@ def solution_patch(
     if slot is None:
         raise PlanError(f"solution target is not declared: {target.location.value}.{target.name}")
     return ValuePatch((Set(slot, selected),))
+
+
+def private_bindings_patch[TSolution](
+    compiled: CompiledContract[object],
+    bindings: PrivateBindings[TSolution],
+    solution: TSolution,
+) -> ValuePatch:
+    """Validate every managed destination, then return one all-or-nothing patch."""
+
+    from eazy_sdk._internal.http_compiler import ManagedCookieSetDescriptor
+
+    operations: list[Set[object]] = []
+    fixed_cookie_names = {
+        name
+        for name, slot in compiled.cookie_slots.items()
+        if not isinstance(compiled.descriptors[slot], ManagedCookieSetDescriptor)
+    }
+    dynamic_names: set[str] = set()
+    for target in bindings.targets:
+        slot = compiled.private_binding_slots.get(target)
+        if slot is None:
+            raise PlanError("private binding target was not reserved by the compiler")
+        if isinstance(target, PrivateCookieSetBinding):
+            raw = _select_solution(solution, target.field)
+            if isinstance(raw, str | bytes | bytearray) or not isinstance(raw, Iterable):
+                raise PlanError("private cookie-set source must be an iterable")
+            cookies: list[tuple[str, str]] = []
+            for item in raw:
+                name = _select_solution(item, target.name_field)
+                value = _select_solution(item, target.value_field)
+                if not isinstance(name, str) or not name:
+                    raise PlanError("private cookie-set item has an invalid name")
+                if not isinstance(value, str):
+                    raise PlanError(f"private cookie {name!r} value must be a string")
+                if any(character in name for character in "\r\n\x00;= "):
+                    raise PlanError("private cookie-set item has an invalid name")
+                if any(character in value for character in "\r\n\x00"):
+                    raise PlanError(f"private cookie {name!r} has an invalid value")
+                if name in fixed_cookie_names or name in dynamic_names:
+                    raise PlanError(f"private cookie destination conflicts: {name!r}")
+                dynamic_names.add(name)
+                cookies.append((name, value))
+            operations.append(Set(slot, tuple(cookies)))
+            continue
+        selected = _select_solution(solution, target.field)
+        if target.location is SolutionLocation.HEADER:
+            rendered = str(selected)
+            if any(character in rendered for character in "\r\n\x00"):
+                raise PlanError(f"private header {target.name!r} has an invalid value")
+        elif target.location is SolutionLocation.COOKIE:
+            rendered = str(selected)
+            if any(character in rendered for character in "\r\n\x00"):
+                raise PlanError(f"private cookie {target.name!r} has an invalid value")
+        operations.append(Set(slot, selected))
+    return ValuePatch(tuple(operations))
 
 
 def _validate_solution_target(compiled: CompiledContract[object], target: SolutionTarget) -> None:

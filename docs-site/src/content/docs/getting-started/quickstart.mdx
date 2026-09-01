@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.Client
   - eazy_sdk.request
   - eazy_sdk.response
-api_fingerprint: "sha256:5342ddfcf9c76ef0dd83f0a0f20189cff62d4891fd137d879b197cc06a654058"
+api_fingerprint: "sha256:7c21cf32b7d4b4c34a76719e6b5384448370c47a6e9593351c1110050ce4c126"
 ---
 
 За пять минут соберём метод SDK интернет-магазина: запросим товар по ID и получим проверенный
@@ -44,7 +44,7 @@ class StoreApi(SyncApi):
         "/v1/products/{product_id}",
         responses=Responses[Product](success=(Success(200, Json(Product)),)),
     )
-    def product(self, **request: Unpack[GetProductRequest]):
+    def product(self, **request: Unpack[GetProductRequest]) -> Product:
         raise NotImplementedError
 
 def store(request: httpx.Request) -> httpx.Response:
@@ -81,12 +81,17 @@ Mechanical keyboard 12900
 `Path()` подставил `42` в URL. `Json(Product)` разобрал JSON и проверил поля через Pydantic. Тело
 метода не выполнялось: декоратор использовал его сигнатуру как контракт запроса.
 
-`api` содержит только HTTP-декораторы `get`, `post`, `put`, `patch` и `delete`. Классы `SyncApi` и
-`AsyncApi` импортируются отдельно, как показано в примере.
+Указывайте return-аннотацию у каждой hand-written декларации. Такое объявление проходит
+`mypy --strict` без отключения `no-untyped-def`. Оставляйте `raise NotImplementedError` в теле:
+runtime его не вызывает, а обычное тело `...` mypy считает ошибкой `empty-body`.
 
-Для POST/PUT public request также остаётся одним `Unpack[TypedDict]`. Если внешний API требует
-nested JSON, не добавляйте caller-у wrapper dict: `BodyProjection` связывает плоские kwargs с
-private wire schema и повторяет mapping/validation/encoding на каждой retry или redirect attempt.
+`api` содержит стандартные HTTP-декораторы, включая `head`, `options` и `trace`;
+`api.request(method, ...)` принимает другой валидный HTTP token. Классы `SyncApi` и `AsyncApi`
+импортируются отдельно, как показано в примере.
+
+Для POST/PUT выберите direct keyword-only параметры или один `Unpack[TypedDict]`. Если внешний API
+требует nested JSON, не добавляйте caller-у wrapper dict: `BodyProjection` связывает плоские kwargs
+с private wire schema и повторяет mapping/validation/encoding на каждой retry или redirect attempt.
 
 Продолжите со {doc}`сквозным примером SDK магазина </more/examples/store-sdk>`. Там этот метод вырастает
 в клиент с JSON body, ошибками API, авторизацией, подписью, шифрованием и WebSocket.

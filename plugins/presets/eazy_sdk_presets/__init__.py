@@ -3,7 +3,8 @@
 from . import cloudflare, recaptcha
 from .core import (
     BodyAccess,
-    BoundProtection,
+    PresetBeforeCallPolicy,
+    PresetChallengePolicy,
     PresetId,
     ProtectionCapabilities,
     ProtectionTemplate,
@@ -20,7 +21,8 @@ from .core import (
 
 __all__ = [
     "BodyAccess",
-    "BoundProtection",
+    "PresetBeforeCallPolicy",
+    "PresetChallengePolicy",
     "PresetId",
     "ProtectionCapabilities",
     "ProtectionTemplate",

@@ -11,7 +11,6 @@ from eazy_sdk.codecs import (
 
 from .descriptors import (
     BodyProjection,
-    BodyProjectionError,
     BytesBody,
     Form,
     FormBody,
@@ -64,7 +63,6 @@ from .signatures import (
 __all__ = [
     "BodyCodec",
     "BodyProjection",
-    "BodyProjectionError",
     "BytesBody",
     "Cookie",
     "DeclarativeSignature",

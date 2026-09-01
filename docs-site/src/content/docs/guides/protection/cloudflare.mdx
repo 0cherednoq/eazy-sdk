@@ -1,58 +1,20 @@
 ---
 title: Cloudflare Challenge Pages
-description: Получение clearance cookie после Cloudflare challenge.
+description: Managed multi-cookie clearance after a Cloudflare challenge.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:6786bfce2ded775810c886453428eeef9cf83e8ae9d2f5dde1b6804d200d2669"
+api_fingerprint: "sha256:dd382d82a7be4fd5dc5dc07ae5966a4bf65c47ea2f77889cf8aa57eb066d8b81"
 ---
 
-## Challenge
+Preset распознаёт definitive challenge по `cf-mitigated: challenge` и HTML content type. Status
+сам по себе недостаточен.
 
-:::::{grid} 1 1 2 2
-:class-container: http-exchange
-:gutter: 2
+```python target
+from datetime import UTC, datetime, timedelta
 
-::::{grid-item}
-:class: http-panel http-panel--request
-
-**→ Request** · ``GET /account``
-
-```json
-{
-  "method": "GET",
-  "url": "/account",
-  "headers": {"Accept": "application/json"},
-  "body": null
-}
-```
-::::
-
-::::{grid-item}
-:class: http-panel http-panel--response
-
-**← Response** · ``403 Forbidden``
-
-```json
-{
-  "status": 403,
-  "headers": {
-    "Content-Type": "text/html",
-    "cf-mitigated": "challenge",
-    "cf-ray": "fixture-ray"
-  },
-  "body": "<html><title>Just a moment...</title></html>"
-}
-```
-::::
-:::::
-
-## Preset
-
-```python
-from datetime import datetime
-
-from eazy_sdk import Client, ClientConfig
+from eazy_sdk import ClientConfig
+from eazy_sdk.protection import ChallengeSolverBindings, bind_challenge_solver
 from eazy_sdk_presets import cloudflare, host
 
 class CloudflareSolver:
@@ -60,20 +22,20 @@ class CloudflareSolver:
         return cloudflare.CloudflareClearance(
             cookies=(
                 cloudflare.SecretCookie("cf_clearance", "clearance-value"),
+                cloudflare.SecretCookie("__cf_bm", "managed-value"),
             ),
-            expires_at=datetime.fromisoformat("2030-01-01T00:00:00+00:00"),
+            expires_at=datetime.now(UTC) + timedelta(minutes=30),
         )
 
-protection = cloudflare.challenge_pages(
-    scope=host("api.example.test"),
-    solver=CloudflareSolver(),
-)
-
-client = Client(
-    base_url=base_url,
-    handler=handler,
-    config=ClientConfig(protections=(protection,)),
+policy = cloudflare.challenge_pages(scope=host("api.example.test"))
+config = ClientConfig(
+    challenge_policies=(policy,),
+    challenge_solvers=ChallengeSolverBindings(
+        bind_challenge_solver(policy.solver, CloudflareSolver()),
+    ),
 )
 ```
 
-Замените пример solver реализацией вашего captcha-сервиса или браузерного адаптера.
+Все элементы `CloudflareClearance.cookies` применяются одним private batch. По умолчанию state
+живёт `until_rejected` в network identity scope. Новый proxy/User-Agent не получает старый
+clearance; повторный challenge инвалидирует применённый набор перед replay.

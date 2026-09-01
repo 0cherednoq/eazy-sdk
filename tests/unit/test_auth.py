@@ -229,7 +229,7 @@ def _call(
             "/auth",
             operation_id=operation_id,
             responses=Responses(success=()),
-            security=security,  # type: ignore[arg-type]
+            security=security,
             raw_response=True,
         )
         def auth(

@@ -8,23 +8,27 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from eazy_sdk.ext import CallableParser, Malformed, NoMatch, ParsedValue, RequestScope
+from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope, callable_parser
 from eazy_sdk.protection import (
-    BeforeCall,
+    PrivateBindings,
+    ProtectionPersistence,
     ReplayPolicy,
-    ResponseReaction,
     ResponseSignal,
     SignalInterception,
-    SolutionFreshness,
-    SolutionTarget,
     SolverRequirement,
-    cookie_target,
+    network_identity,
+    per_match,
+    private_bindings,
+    private_cookie_set,
     safe_method,
+    until_expiry,
+    until_rejected,
 )
 
 from .core import (
     BodyAccess,
-    BoundProtection,
+    PresetBeforeCallPolicy,
+    PresetChallengePolicy,
     PresetId,
     ProtectionCapabilities,
     ProtectionTemplate,
@@ -101,8 +105,8 @@ def _challenge_prefilter(context: Any) -> bool:
     )
 
 
-def _parse_challenge(context: Any, model: type[object]) -> Any:
-    if model is not CloudflareChallenge or not _challenge_prefilter(context):
+def _parse_challenge(context: Any) -> Any:
+    if not _challenge_prefilter(context):
         return NoMatch()
     if len(context.response.body) > MAX_HTML_BYTES:
         return Malformed(ValueError("Cloudflare challenge HTML exceeds the parser limit"))
@@ -132,15 +136,15 @@ def _parse_challenge(context: Any, model: type[object]) -> Any:
     )
 
 
-CLOUDFLARE_PARSER = CallableParser(_parse_challenge)
+CLOUDFLARE_PARSER = callable_parser(CloudflareChallenge, _parse_challenge)
 
 
 def challenge_pages(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+    persistence: ProtectionPersistence | None = None,
+) -> PresetChallengePolicy:
     signal = ResponseSignal(
         "cloudflare.challenge-page",
         scope,
@@ -150,14 +154,12 @@ def challenge_pages(
         priority=1000,
         interception=SignalInterception.DEFINITIVE,
     )
-    reaction = ResponseReaction(
-        signal,
-        CHALLENGE_SOLVER,
-        cookie_target("cf_clearance", value_field="primary_cookie"),
-        replay or safe_method(max_replays=1),
-    )
-    return CHALLENGE_TEMPLATE.bind(
-        scope=scope, solver=solver, signals=(signal,), reactions=(reaction,)
+    return CHALLENGE_TEMPLATE.bind_challenge(
+        scope=scope,
+        signal=signal,
+        apply=private_bindings(private_cookie_set(field="cookies")),
+        persistence=persistence or until_rejected(scope=network_identity()),
+        replay=replay or safe_method(max_replays=1),
     )
 
 
@@ -197,8 +199,8 @@ def _turnstile_prefilter(context: Any) -> bool:
     return b"cf-turnstile" in context.response.body[:65_536].lower()
 
 
-def _parse_turnstile(context: Any, model: type[object]) -> Any:
-    if model is not TurnstileChallenge or not _turnstile_prefilter(context):
+def _parse_turnstile(context: Any) -> Any:
+    if not _turnstile_prefilter(context):
         return NoMatch()
     if len(context.response.body) > MAX_HTML_BYTES:
         return Malformed(ValueError("Turnstile HTML exceeds the parser limit"))
@@ -230,16 +232,16 @@ def _parse_turnstile(context: Any, model: type[object]) -> Any:
     )
 
 
-TURNSTILE_PARSER = CallableParser(_parse_turnstile)
+TURNSTILE_PARSER = callable_parser(TurnstileChallenge, _parse_turnstile)
 
 
 def turnstile_widget(
     *,
     scope: RequestScope,
-    solver: Any | None = None,
-    apply: SolutionTarget | None = None,
+    apply: PrivateBindings[TurnstileToken] | None = None,
     replay: ReplayPolicy | None = None,
-) -> BoundProtection:
+    persistence: ProtectionPersistence | None = None,
+) -> PresetChallengePolicy:
     signal = ResponseSignal(
         "cloudflare.turnstile-widget",
         scope,
@@ -248,19 +250,19 @@ def turnstile_widget(
         prefilter=_turnstile_prefilter,
         interception=SignalInterception.DEFINITIVE,
     )
-    reaction = ResponseReaction(
-        signal,
-        TURNSTILE_SOLVER,
-        apply or form_field("cf-turnstile-response"),
-        replay or safe_method(max_replays=1),
-    )
     template = ProtectionTemplate(
         PresetId("cloudflare", "turnstile-widget"),
         1,
         TURNSTILE_SOLVER,
         ProtectionCapabilities(BodyAccess.BUFFERED, javascript=True, browser=True),
     )
-    return template.bind(scope=scope, solver=solver, signals=(signal,), reactions=(reaction,))
+    return template.bind_challenge(
+        scope=scope,
+        signal=signal,
+        apply=apply or form_field("cf-turnstile-response"),
+        persistence=persistence or per_match(),
+        replay=replay or safe_method(max_replays=1),
+    )
 
 
 def turnstile_preclearance(
@@ -268,19 +270,11 @@ def turnstile_preclearance(
     scope: RequestScope,
     site_key: str,
     page_url: str,
-    solver: Any | None = None,
-    freshness: SolutionFreshness = SolutionFreshness.UNTIL_EXPIRY,
-) -> BoundProtection:
+    persistence: ProtectionPersistence | None = None,
+) -> PresetBeforeCallPolicy:
     if not site_key or not page_url:
         raise ValueError("Turnstile pre-clearance requires site_key and page_url")
     challenge = TurnstileChallenge(site_key, TurnstileMode.MANAGED, page_url)
-    flow = BeforeCall(
-        None,
-        cookie_target("cf_clearance", value_field="primary_cookie"),
-        freshness,
-        challenge=challenge,
-        solver=PRECLEARANCE_SOLVER,
-    )
     template = ProtectionTemplate(
         PresetId("cloudflare", "turnstile-preclearance"),
         1,
@@ -293,7 +287,12 @@ def turnstile_preclearance(
             sticky_network_identity=True,
         ),
     )
-    return template.bind(scope=scope, solver=solver, before=(flow,))
+    return template.bind_before(
+        scope=scope,
+        apply=private_bindings(private_cookie_set(field="cookies")),
+        persistence=persistence or until_expiry(scope=network_identity()),
+        challenge=challenge,
+    )
 
 
 __all__ = [
