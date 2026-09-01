@@ -17,15 +17,7 @@ from eazy_sdk._internal import (
     apply_patch_atomic,
     compile_endpoint,
 )
-from eazy_sdk.ext import (
-    BufferedBody,
-    ErrorOutcome,
-    Malformed,
-    NoMatch,
-    ParsedValue,
-    RequestPreparer,
-    callable_parser,
-)
+from eazy_sdk.ext import Malformed, NoMatch, ParsedValue
 from eazy_sdk.protection import (
     BeforeCall,
     ReactionBudget,
@@ -46,6 +38,7 @@ from eazy_sdk.protection import (
     validate_before_call_cycles,
 )
 from eazy_sdk.request import Header, JsonBody, Path
+from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 from eazy_sdk.response import (
     Error,
     Json,
@@ -53,8 +46,12 @@ from eazy_sdk.response import (
     ResponseContext,
     Responses,
     Success,
+    callable_parser,
 )
-from eazy_sdk.response.cases import ParseAttempt
+from eazy_sdk.response.cases import (
+    ErrorOutcome,
+    ParseAttempt,
+)
 
 
 @dataclass(frozen=True)

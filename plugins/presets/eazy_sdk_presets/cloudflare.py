@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope, callable_parser
+from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope
 from eazy_sdk.protection import (
     PrivateBindings,
     ProtectionPersistence,
@@ -24,6 +24,7 @@ from eazy_sdk.protection import (
     until_expiry,
     until_rejected,
 )
+from eazy_sdk.response import callable_parser
 
 from .core import (
     BodyAccess,

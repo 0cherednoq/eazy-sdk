@@ -10,13 +10,13 @@ from eazy_sdk._internal import OperationValues
 from eazy_sdk._internal.errors import PlanError
 from eazy_sdk._internal.http_operation import _OperationDeclaration
 from eazy_sdk._internal.input import inspect_method_input
-from eazy_sdk.ext import RequestPreparer
 from eazy_sdk.request import (
     Cookie,
     Header,
     Path,
     Query,
 )
+from eazy_sdk.request.prepared import RequestPreparer
 from eazy_sdk.response import Responses
 
 pytestmark = pytest.mark.unit

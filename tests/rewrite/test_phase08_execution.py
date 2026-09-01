@@ -9,23 +9,15 @@ import pytest
 
 from eazy_sdk import ApiDefaults, AsyncApi, SyncApi, api
 from eazy_sdk.auth import BearerScheme
+from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import (
     CallOptions,
 )
 from eazy_sdk.clients.async_client import _AsyncClientCore
+from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
 from eazy_sdk.dependencies import dependency, field
-from eazy_sdk.ext import (
-    AuthProviderIdentity,
-    AuthProviders,
-    ExecutionRuntime,
-    HttpProtocol,
-    ParsedValue,
-    PreparedRequest,
-    ReplayableBodyStream,
-    StaticAuthProvider,
-    callable_parser,
-)
+from eazy_sdk.ext import ParsedValue
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
     CapabilityLevel,
@@ -72,7 +64,21 @@ from eazy_sdk.request import (
     hmac_sha256,
     method,
 )
-from eazy_sdk.response import Error, Headers, Json, NormalizedResponse, Responses, Success, Text
+from eazy_sdk.request.prepared import (
+    HttpProtocol,
+    PreparedRequest,
+    ReplayableBodyStream,
+)
+from eazy_sdk.response import (
+    Error,
+    Headers,
+    Json,
+    NormalizedResponse,
+    Responses,
+    Success,
+    Text,
+    callable_parser,
+)
 
 CAPABILITIES = HandlerProfile(
     protocols=frozenset({HttpProtocol.HTTP_1_1}),

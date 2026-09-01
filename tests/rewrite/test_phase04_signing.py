@@ -19,21 +19,6 @@ from eazy_sdk._internal import (
     ScopeContext,
     compile_endpoint,
 )
-from eazy_sdk.ext import (
-    BufferedBody,
-    RequestPreparer,
-    SignatureIdentity,
-    SignatureOutput,
-    SignaturePlan,
-    SigningInput,
-    UnsignedPreparedRequest,
-    compile_signatures,
-    custom_signature,
-    reserve_outputs,
-    select_signatures,
-    sign_prepared,
-    whole_prepared_request,
-)
 from eazy_sdk.handlers import EmitOptions, ZaprosSyncEmitter
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import (
@@ -65,7 +50,24 @@ from eazy_sdk.request import (
 from eazy_sdk.request import (
     unsigned as unsigned_signing,
 )
-from eazy_sdk.request.signatures import SignatureResult
+from eazy_sdk.request.prepared import (
+    BufferedBody,
+    RequestPreparer,
+    UnsignedPreparedRequest,
+)
+from eazy_sdk.request.signatures import (
+    SignatureIdentity,
+    SignatureOutput,
+    SignaturePlan,
+    SignatureResult,
+    SigningInput,
+    compile_signatures,
+    custom_signature,
+    reserve_outputs,
+    select_signatures,
+    sign_prepared,
+    whole_prepared_request,
+)
 from tests._support.raw_capture import RawCaptureServer
 
 KEY = SigningKeyRequirement("payment-key")

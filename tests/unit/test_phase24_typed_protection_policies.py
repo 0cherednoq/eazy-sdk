@@ -16,13 +16,8 @@ from eazy_sdk.auth import BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions, ClientConfig
 from eazy_sdk.clients.async_client import _AsyncClientCore
-from eazy_sdk.ext import (
-    ExecutionRuntime,
-    HttpProtocol,
-    ParsedValue,
-    PreparedRequest,
-    callable_parser,
-)
+from eazy_sdk.clients.executor import ExecutionRuntime
+from eazy_sdk.ext import ParsedValue
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportFailure
 from eazy_sdk.protection import (
     ChallengeSolverBindings,
@@ -46,7 +41,8 @@ from eazy_sdk.protection import (
     until_expiry,
     until_rejected,
 )
-from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success
+from eazy_sdk.request.prepared import HttpProtocol, PreparedRequest
+from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success, callable_parser
 
 
 @dataclass(frozen=True, slots=True)

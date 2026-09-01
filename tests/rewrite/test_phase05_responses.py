@@ -6,16 +6,6 @@ from typing import cast
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk.ext import (
-    AmbiguousResponseOutcome,
-    ErrorOutcome,
-    Malformed,
-    MalformedOutcome,
-    NoMatch,
-    ParsedValue,
-    SuccessOutcome,
-    UnexpectedOutcome,
-)
 from eazy_sdk.response import (
     ApiError,
     Bytes,
@@ -29,7 +19,18 @@ from eazy_sdk.response import (
     Success,
     Text,
 )
-from eazy_sdk.response.cases import BoundResponseParser, ParseAttempt
+from eazy_sdk.response.cases import (
+    AmbiguousResponseOutcome,
+    BoundResponseParser,
+    ErrorOutcome,
+    Malformed,
+    MalformedOutcome,
+    NoMatch,
+    ParseAttempt,
+    ParsedValue,
+    SuccessOutcome,
+    UnexpectedOutcome,
+)
 
 
 class Payment(BaseModel):

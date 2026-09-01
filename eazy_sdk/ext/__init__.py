@@ -1,230 +1,55 @@
-"""Advanced extension boundary for application-defined codecs and handlers."""
+"""Implementation contracts for application-defined Eazy SDK extensions.
 
-from eazy_sdk._internal import OperationIdentity, RequestScope, ScopeContext, bind_plan
-from eazy_sdk.accounts.session import (
-    LifecycleGraph,
-    MemorySessionStore,
-    SessionAcquirer,
-    SessionKey,
-    SessionRefresher,
-    SessionRevision,
-    SessionStore,
-    StoredSession,
-)
-from eazy_sdk.auth.core import (
-    AuthExecution,
-    AuthLocation,
-    AuthPlacement,
-    AuthProviderIdentity,
-    AuthProviders,
-    ResolvedAuth,
-    StaticAuthProvider,
-    resolve_security,
-)
-from eazy_sdk.auth.session_runtime import (
-    AuthFlowContext,
-    SessionAuth,
-    SessionCodec,
-    SessionProvider,
-)
-from eazy_sdk.clients.executor import ExecutionCore, ExecutionResult, ExecutionRuntime
-from eazy_sdk.codecs import (
-    BodyCodec,
-    DefaultScalarCodec,
-    DelimitedScalarCodec,
-    EncodeContext,
-    ScalarCodec,
-    ScalarEncodeContext,
-)
-from eazy_sdk.dependencies import (
-    _AttributeSelector as AttributeSelector,
-)
-from eazy_sdk.dependencies import (
-    _BindingOperation as BindingOperation,
-)
-from eazy_sdk.dependencies import (
-    _compile_dependency_order as compile_dependency_order,
-)
-from eazy_sdk.dependencies import (
-    _DependencyCaches as DependencyCaches,
-)
-from eazy_sdk.dependencies import (
-    _IdentitySelector as IdentitySelector,
-)
-from eazy_sdk.dependencies import (
-    _LogicalBinding as LogicalBinding,
-)
-from eazy_sdk.dependencies import (
-    _lower_requirements as lower_requirements,
-)
-from eazy_sdk.dependencies import (
-    _MappingSelector as MappingSelector,
-)
-from eazy_sdk.dependencies import (
-    _RequestRequirement as RequestRequirement,
-)
-from eazy_sdk.dependencies import (
-    _resolve_requirements as resolve_requirements,
-)
-from eazy_sdk.dependencies import (
-    _ResultBinding as ResultBinding,
-)
-from eazy_sdk.handlers import (
-    AutomaticHeaderPolicy,
-    CapabilityLevel,
-    CaptureEvidence,
-    EmitOptions,
-    HandlerProfile,
-    RedirectControl,
-    validate_profile,
-)
-from eazy_sdk.request.prepared import (
-    BufferedBody,
-    HeaderField,
-    HttpProtocol,
-    PreparedBodyView,
-    PreparedCookie,
-    PreparedFormField,
-    PreparedHeader,
-    PreparedQueryPair,
-    PreparedRequest,
-    PreparedRequestView,
-    ReplayableBodyStream,
-    RequestLayout,
-    RequestPreparer,
-    ReservedOutput,
-    UnsignedPreparedRequest,
-    compile_layout,
-)
+Declarative authoring objects live in their feature namespaces.  This module is intentionally
+small: it contains only protocols, immutable contexts/results, and factories needed to implement
+custom codecs, response parsers/extractors, request scopes, and procedural signing hooks.
+"""
+
+from eazy_sdk._internal import OperationIdentity, RequestScope, ScopeContext
+from eazy_sdk.codecs import BodyCodec, EncodeContext, ScalarCodec, ScalarEncodeContext
 from eazy_sdk.request.signatures import (
+    CustomCanonicalizer,
     CustomRequestSigner,
-    CustomSignature,
-    SignatureIdentity,
-    SignatureOutput,
-    SignaturePlan,
     SignatureResult,
     SigningInput,
-    compile_signatures,
     custom_base,
     custom_signature,
     read_set,
-    reserve_outputs,
-    select_signatures,
-    sign_prepared,
     whole_prepared_request,
 )
 from eazy_sdk.response.cases import (
-    AmbiguousResponseOutcome,
     BoundResponseExtractor,
-    ErrorOutcome,
+    BoundResponseParser,
     Malformed,
-    MalformedOutcome,
     NoMatch,
     ParseAttempt,
     ParsedValue,
     ResponseExtractor,
-    ResponseOutcome,
     ResponseParser,
-    SuccessOutcome,
-    UnexpectedOutcome,
-    callable_parser,
 )
 
 __all__ = [
-    "AmbiguousResponseOutcome",
-    "AttributeSelector",
-    "AuthExecution",
-    "AuthFlowContext",
-    "AuthLocation",
-    "AuthPlacement",
-    "AuthProviderIdentity",
-    "AuthProviders",
-    "AutomaticHeaderPolicy",
-    "BindingOperation",
     "BodyCodec",
     "BoundResponseExtractor",
-    "BufferedBody",
-    "CapabilityLevel",
-    "CaptureEvidence",
+    "BoundResponseParser",
+    "CustomCanonicalizer",
     "CustomRequestSigner",
-    "CustomSignature",
-    "DefaultScalarCodec",
-    "DelimitedScalarCodec",
-    "DependencyCaches",
-    "EmitOptions",
     "EncodeContext",
-    "ErrorOutcome",
-    "ExecutionCore",
-    "ExecutionResult",
-    "ExecutionRuntime",
-    "HandlerProfile",
-    "HeaderField",
-    "HttpProtocol",
-    "IdentitySelector",
-    "LifecycleGraph",
-    "LogicalBinding",
     "Malformed",
-    "MalformedOutcome",
-    "MappingSelector",
-    "MemorySessionStore",
     "NoMatch",
     "OperationIdentity",
     "ParseAttempt",
     "ParsedValue",
-    "PreparedBodyView",
-    "PreparedCookie",
-    "PreparedFormField",
-    "PreparedHeader",
-    "PreparedQueryPair",
-    "PreparedRequest",
-    "PreparedRequestView",
-    "RedirectControl",
-    "ReplayableBodyStream",
-    "RequestLayout",
-    "RequestPreparer",
-    "RequestRequirement",
     "RequestScope",
-    "ReservedOutput",
-    "ResolvedAuth",
     "ResponseExtractor",
-    "ResponseOutcome",
     "ResponseParser",
-    "ResultBinding",
     "ScalarCodec",
     "ScalarEncodeContext",
     "ScopeContext",
-    "SessionAcquirer",
-    "SessionAuth",
-    "SessionCodec",
-    "SessionKey",
-    "SessionProvider",
-    "SessionRefresher",
-    "SessionRevision",
-    "SessionStore",
-    "SignatureIdentity",
-    "SignatureOutput",
-    "SignaturePlan",
     "SignatureResult",
     "SigningInput",
-    "StaticAuthProvider",
-    "StoredSession",
-    "SuccessOutcome",
-    "UnexpectedOutcome",
-    "UnsignedPreparedRequest",
-    "bind_plan",
-    "callable_parser",
-    "compile_dependency_order",
-    "compile_layout",
-    "compile_signatures",
     "custom_base",
     "custom_signature",
-    "lower_requirements",
     "read_set",
-    "reserve_outputs",
-    "resolve_requirements",
-    "resolve_security",
-    "select_signatures",
-    "sign_prepared",
-    "validate_profile",
     "whole_prepared_request",
 ]

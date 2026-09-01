@@ -7,9 +7,10 @@ from eazy_sdk import ApiDefaults, AsyncApi, SyncApi, api
 from eazy_sdk._internal.http_compiler import compile_endpoint
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
+from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
-from eazy_sdk.ext import ExecutionRuntime, PreparedRequest
 from eazy_sdk.handlers import EmitOptions, TransportFailure
+from eazy_sdk.request.prepared import PreparedRequest
 from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success
 from tests.rewrite.test_phase08_execution import CAPABILITIES
 

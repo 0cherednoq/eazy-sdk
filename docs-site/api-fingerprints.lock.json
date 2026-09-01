@@ -34,6 +34,12 @@
       "eazy_sdk.dependencies": "sha256:38eec4adc9e85f772d5f54672428702651da1b1e107a00c9033ce5305c5a1ac2"
     }
   },
+  "api-reference/extensions.mdx": {
+    "fingerprint": "sha256:012dbcc053bce0d35124b6e8fcc2d99267c63c8053981242c1d42902d1691397",
+    "symbols": {
+      "eazy_sdk.ext": "sha256:45ed3ce9b0fea181381ca072254ec72a67be75ea23641f6c417a29dd812aa739"
+    }
+  },
   "api-reference/middleware.mdx": {
     "fingerprint": "sha256:821721a7f18827f10341d3f45137847c424ab5238c1777ffec5688c27c37698e",
     "symbols": {

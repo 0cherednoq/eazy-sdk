@@ -12,7 +12,6 @@ from eazy_sdk._internal import (
     ValuePatch,
     apply_patch_atomic,
 )
-from eazy_sdk.ext import BufferedBody, RequestPreparer, UnsignedPreparedRequest
 from eazy_sdk.request import (
     DelimitedScalarCodec,
     Form,
@@ -22,6 +21,7 @@ from eazy_sdk.request import (
     Part,
     WireOptions,
 )
+from eazy_sdk.request.prepared import BufferedBody, RequestPreparer, UnsignedPreparedRequest
 from eazy_sdk.response import Responses
 
 

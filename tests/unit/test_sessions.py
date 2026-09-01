@@ -6,14 +6,16 @@ from dataclasses import dataclass
 import pytest
 
 from eazy_sdk import PlanError
-from eazy_sdk.auth import AuthCredentialsRequiredError, BearerScheme
-from eazy_sdk.ext import (
+from eazy_sdk.accounts.session import (
     MemorySessionStore,
-    SessionAuth,
     SessionKey,
-    SessionProvider,
     SessionRevision,
     StoredSession,
+)
+from eazy_sdk.auth import AuthCredentialsRequiredError, BearerScheme
+from eazy_sdk.auth.session_runtime import (
+    SessionAuth,
+    SessionProvider,
 )
 
 pytestmark = pytest.mark.unit

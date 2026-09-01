@@ -5,8 +5,8 @@ from typing import Annotated, Any, assert_type
 
 from eazy_sdk import AsyncApi, SyncApi, api
 from eazy_sdk.clients.async_client import _AsyncClientCore
+from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
-from eazy_sdk.ext import BufferedBody, ExecutionRuntime, HttpProtocol, PreparedRequest
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
     CapabilityLevel,
@@ -15,6 +15,7 @@ from eazy_sdk.handlers import (
     RedirectControl,
 )
 from eazy_sdk.request import Query
+from eazy_sdk.request.prepared import BufferedBody, HttpProtocol, PreparedRequest
 from eazy_sdk.response import (
     Headers,
     Json,

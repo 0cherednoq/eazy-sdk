@@ -33,7 +33,6 @@ from eazy_sdk.auth import (
     session_scheme,
 )
 from eazy_sdk.exceptions import HeaderValidationError
-from eazy_sdk.ext import MalformedOutcome, SuccessOutcome
 from eazy_sdk.request import (
     JsonBody,
     SigningKey,
@@ -51,6 +50,7 @@ from eazy_sdk.response import (
     ResponseContext,
     Responses,
 )
+from eazy_sdk.response.cases import MalformedOutcome, SuccessOutcome
 from tests._support.zapros_clients import client_from_httpx
 
 

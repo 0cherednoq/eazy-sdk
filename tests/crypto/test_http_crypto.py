@@ -35,7 +35,6 @@ from eazy_sdk.crypto import (
     http_encrypted,
     payload_crypto,
 )
-from eazy_sdk.ext import ReplayableBodyStream
 from eazy_sdk.request import (
     BytesBody,
     Header,
@@ -47,6 +46,7 @@ from eazy_sdk.request import (
     header_output,
     hmac_sha256,
 )
+from eazy_sdk.request.prepared import ReplayableBodyStream
 from eazy_sdk.response import Empty, Json, ResponseEnvelope, Responses, Success
 from tests._support.zapros_clients import client_from_httpx
 

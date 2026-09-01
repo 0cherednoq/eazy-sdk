@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-xml"
-version = "0.1.0"
+version = "0.2.0a1"
 description = "Pluggable stdlib XML request and response codecs for Eazy SDK."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -9,14 +9,14 @@ license-files = ["LICENSE"]
 authors = [{ name = "Eazy SDK contributors" }]
 keywords = ["sdk", "xml", "codec"]
 classifiers = [
-  "Development Status :: 5 - Production/Stable",
+  "Development Status :: 3 - Alpha",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.1.0,<0.2"]
+dependencies = ["eazy-sdk>=0.2.0a1,<0.3"]
 
 [build-system]
 requires = ["hatchling"]

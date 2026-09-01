@@ -8,7 +8,6 @@ import requests
 from zapros import URL, Headers, Request
 
 from eazy_sdk._internal.http_plan import WireRequirement, WireRequirements
-from eazy_sdk.ext import HttpProtocol
 from eazy_sdk.handlers import (
     CapabilityLevel,
     CapabilityMismatch,
@@ -17,6 +16,7 @@ from eazy_sdk.handlers import (
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from eazy_sdk.handlers.requests import RequestsHandler
+from eazy_sdk.request.prepared import HttpProtocol
 
 
 def test_sync_zapros_handler_preserves_request_and_repeated_response_headers() -> None:

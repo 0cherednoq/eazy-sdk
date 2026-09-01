@@ -19,13 +19,6 @@ from eazy_sdk._internal import (
     compile_endpoint,
 )
 from eazy_sdk._internal.errors import BindingError, PlanError
-from eazy_sdk.ext import (
-    BufferedBody,
-    PreparedRequest,
-    ReplayableBodyStream,
-    RequestPreparer,
-    UnsignedPreparedRequest,
-)
 from eazy_sdk.models import (
     ModelAdapterRegistry,
     ModelDumpMode,
@@ -44,6 +37,13 @@ from eazy_sdk.request import (
     Query,
     ReplayableStreamBody,
     WireOptions,
+)
+from eazy_sdk.request.prepared import (
+    BufferedBody,
+    PreparedRequest,
+    ReplayableBodyStream,
+    RequestPreparer,
+    UnsignedPreparedRequest,
 )
 
 

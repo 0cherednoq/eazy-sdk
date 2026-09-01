@@ -20,7 +20,7 @@ from eazy_sdk.auth import (
     all_of,
     any_of,
 )
-from eazy_sdk.ext import AuthProviderIdentity, AuthProviders, StaticAuthProvider
+from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.response import NormalizedResponse, Responses
 from eazy_sdk.response.normalized import cast_headers
 from tests._support.zapros_clients import client_from_httpx

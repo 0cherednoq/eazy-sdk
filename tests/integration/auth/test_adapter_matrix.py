@@ -8,6 +8,12 @@ import pytest
 from pytest_httpserver import HTTPServer
 
 from eazy_sdk import AsyncApi, SyncApi, api
+from eazy_sdk.accounts.session import (
+    MemorySessionStore,
+    SessionKey,
+    SessionRevision,
+    StoredSession,
+)
 from eazy_sdk.auth import (
     ApiKeyScheme,
     Auth,
@@ -18,19 +24,13 @@ from eazy_sdk.auth import (
     all_of,
     any_of,
 )
-from eazy_sdk.clients import CallOptions
-from eazy_sdk.ext import (
+from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
+from eazy_sdk.auth.session_runtime import (
     AuthFlowContext,
-    AuthProviderIdentity,
-    AuthProviders,
-    MemorySessionStore,
     SessionAuth,
-    SessionKey,
     SessionProvider,
-    SessionRevision,
-    StaticAuthProvider,
-    StoredSession,
 )
+from eazy_sdk.clients import CallOptions
 from eazy_sdk.response import NormalizedResponse, Responses
 from tests._support.client_harness import ClientHarness, HarnessOperation
 

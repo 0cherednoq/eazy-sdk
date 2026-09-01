@@ -1,0 +1,209 @@
+---
+title: Extension SPI
+description: Контракты для собственных codecs, response parsers, scopes и procedural signing.
+sources:
+  - eazy_sdk.ext
+api_fingerprint: "sha256:012dbcc053bce0d35124b6e8fcc2d99267c63c8053981242c1d42902d1691397"
+---
+
+`eazy_sdk.ext` — узкая implementation boundary для авторов расширений. Это не сокращённый импорт
+всего SDK и не доступ к compiler/runtime. Декларативные объекты импортируются из
+`eazy_sdk.request`, `eazy_sdk.response`, `eazy_sdk.protection` и `eazy_sdk.handlers`.
+
+:::{warning} Alpha-контракт
+Проект находится в alpha. Все имена из `eazy_sdk.ext.__all__` публичны в пределах конкретной
+версии, но могут измениться в следующем alpha-релизе без compatibility alias. Всё, чего нет в
+`__all__`, а также `eazy_sdk._internal`, executor stages и prepared/compiler records — private.
+:::
+
+## Выберите семейство
+
+| Задача | Реализуйте | Получите от runtime | Верните |
+|---|---|---|---|
+| Особые bytes request body | `BodyCodec` | `EncodeContext` | `bytes` |
+| Особое scalar-представление | `ScalarCodec` | `ScalarEncodeContext` | `str` |
+| Один parser для нескольких response models | `ResponseParser` и `BoundResponseParser` | response context при `bind` | `ParseAttempt[T]` |
+| Извлечение primitives из особого response format | `ResponseExtractor` и `BoundResponseExtractor` | response context при `bind` | `ParseAttempt[object]` |
+| Особая canonical base | `CustomCanonicalizer` | `SigningInput` | `bytes` |
+| Полностью особая подпись | `CustomRequestSigner` | `SigningInput`, optional key | `SignatureResult` |
+| Scope/predicate, зависящий от запроса | `RequestScope` или чтение `ScopeContext` | method, host, path и `OperationIdentity` | match decision |
+
+## Scope и predicate context
+
+`RequestScope` фильтрует правила по scheme, host, path prefix, HTTP method и operation id.
+`ScopeContext` — фактический request context для проверки. Его поле `operation` содержит
+`OperationIdentity`; сравнивайте `operation.operation_id`, не identity Python-объекта.
+
+```python
+from eazy_sdk.ext import RequestScope
+
+PAYMENTS = RequestScope(
+    hosts=frozenset({"api.example.test"}),
+    path_prefixes=("/payments/",),
+    methods=frozenset({"POST"}),
+)
+```
+
+Обычно `ScopeContext` и `OperationIdentity` создаёт runtime. Конструировать их вручную нужно только
+в unit-тесте собственного predicate. `RequestScope.to_dict()` и `from_dict()` предназначены для
+конфигурации, но не сериализуют callback или другие extension implementations.
+
+## Request codecs
+
+`BodyCodec` имеет `name`, optional `media_type` и метод
+`encode(value, EncodeContext) -> bytes`. `ScalarCodec` имеет `name` и
+`encode(value, ScalarEncodeContext) -> str`. Context передаёт operation id; scalar context также
+передаёт location и wire name.
+
+```python
+import json
+from typing import Annotated, TypedDict, Unpack
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.ext import EncodeContext, ScalarEncodeContext
+from eazy_sdk.response import Responses
+
+class CanonicalJson:
+    name = "canonical-json"
+    media_type = "application/vnd.example+json"
+
+    def encode(self, value: object, context: EncodeContext) -> bytes:
+        return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+class PipeSeparated:
+    name = "pipe-separated"
+
+    def encode(self, value: object, context: ScalarEncodeContext) -> str:
+        if not isinstance(value, list):
+            raise TypeError("PipeSeparated expects a list")
+        return "|".join(str(item) for item in value)
+
+class UploadRequest(TypedDict):
+    body: Annotated[dict[str, object], CanonicalJson()]
+
+class UploadsApi(SyncApi):
+    @api.post("/uploads", responses=Responses(success=()), raw_response=True)
+    def upload(self, **request: Unpack[UploadRequest]) -> object:
+        raise NotImplementedError
+```
+
+`EncodeContext` и `ScalarEncodeContext` immutable. Codec не получает client, transport или
+prepared request и не должен выполнять network I/O. Для встроенных codecs и их настройки
+используйте `eazy_sdk.codecs` или `eazy_sdk.request`.
+
+## Response parser и extractor
+
+`ResponseParser.bind(context)` возвращает `BoundResponseParser` для одного ответа.
+`try_parse(Model)` может вызываться для нескольких candidate models. Он возвращает ровно один из:
+
+- `ParsedValue(value)` — model распознана;
+- `NoMatch()` — parser не применим к этой model или response;
+- `Malformed(cause, details=None)` — format подходил, но данные повреждены.
+
+Union этих трёх результатов называется `ParseAttempt[T]`. Не бросайте parse exception наружу:
+заверните его в `Malformed`. Для callback, заранее связанного с одной model, используйте
+`eazy_sdk.response.callable_parser`; собственный `ResponseParser` нужен для multi-model parser.
+
+```python
+import json
+from dataclasses import dataclass
+from typing import cast
+
+from eazy_sdk.ext import (
+    BoundResponseParser,
+    Malformed,
+    NoMatch,
+    ParseAttempt,
+    ParsedValue,
+)
+from eazy_sdk.response import Parsed, ResponseContext, Responses, Success
+
+@dataclass
+class User:
+    name: str
+
+class BoundVendorParser:
+    def __init__(self, context: ResponseContext[object]) -> None:
+        self.context = context
+
+    def try_parse[T](self, model: type[T]) -> ParseAttempt[T]:
+        if model is not User:
+            return NoMatch()
+        try:
+            document = json.loads(self.context.bytes)
+            user = User(name=str(document["display_name"]))
+        except (KeyError, TypeError, ValueError) as error:
+            return Malformed(error)
+        return cast(ParseAttempt[T], ParsedValue(user))
+
+class VendorParser:
+    def bind(self, context: ResponseContext[object]) -> BoundResponseParser:
+        return BoundVendorParser(context)
+
+RESPONSES = Responses(
+    success=(Success(200, Parsed(User, using=VendorParser())),),
+)
+```
+
+`ResponseExtractor` отличается тем, что возвращает semantic primitives для последующей загрузки
+model через registry. Его bound-часть — `BoundResponseExtractor.extract(model)`. Оба протокола
+публичны также из `eazy_sdk.response`, потому что `Extracted(...)` является обычной response
+декларацией.
+
+## Procedural signing
+
+Для стандартной HMAC используйте декларативные компоненты из `eazy_sdk.request`. Extension SPI
+нужен только для особой canonical base или полностью нестандартного алгоритма.
+
+`CustomCanonicalizer.build(SigningInput) -> bytes` читает immutable prepared view.
+`custom_base(...)` связывает implementation с объявленным read set. `read_set(...)` строит read set
+из декларативных signature components; `whole_prepared_request()` выбирает весь prepared request.
+
+`CustomRequestSigner.sign(SigningInput, SigningKey | None) -> SignatureResult` возвращает mapping
+только для заранее объявленных outputs. `custom_signature(...)` связывает signer, reads, outputs и
+optional key requirement.
+
+```python
+import hashlib
+
+from eazy_sdk.ext import (
+    SignatureResult,
+    SigningInput,
+    custom_signature,
+    whole_prepared_request,
+)
+from eazy_sdk.request import SigningKey, header_output
+
+SIGNATURE_HEADER = header_output("X-Vendor-Signature")
+
+class VendorSigner:
+    def sign(self, signing: SigningInput, key: SigningKey | None) -> SignatureResult:
+        request = signing.request
+        digest = hashlib.sha256(request.method + b"\n" + request.target).hexdigest()
+        return SignatureResult({SIGNATURE_HEADER: digest})
+
+VENDOR_SIGNATURE = custom_signature(
+    signer=VendorSigner(),
+    reads=whole_prepared_request(),
+    outputs=(SIGNATURE_HEADER,),
+    name="vendor-sha256",
+)
+```
+
+Передайте `VENDOR_SIGNATURE` в `signing=(VENDOR_SIGNATURE,)` у API decorator. Runtime проверяет
+undeclared/missing outputs до отправки. `SigningInput` не даёт мутировать prepared request;
+`SignatureResult` не может добавлять новый target, который не был зарезервирован compiler-ом.
+
+## Полный экспорт namespace
+
+| Семейство | Все имена в `eazy_sdk.ext.__all__` |
+|---|---|
+| Scope/predicate | `OperationIdentity`, `RequestScope`, `ScopeContext` |
+| Codecs | `BodyCodec`, `EncodeContext`, `ScalarCodec`, `ScalarEncodeContext` |
+| Response | `BoundResponseExtractor`, `BoundResponseParser`, `Malformed`, `NoMatch`, `ParseAttempt`, `ParsedValue`, `ResponseExtractor`, `ResponseParser` |
+| Signing | `CustomCanonicalizer`, `CustomRequestSigner`, `SignatureResult`, `SigningInput`, `custom_base`, `custom_signature`, `read_set`, `whole_prepared_request` |
+
+`ExecutionCore`, `ExecutionRuntime`, `PreparedRequest`, `RequestPreparer`, dependency caches/lowering,
+auth resolution, session storage и `compile_*`/`select_*`/`sign_prepared` не являются SPI. Тесты SDK,
+которые намеренно проверяют эти стадии, импортируют их из owning internal modules и принимают риск
+поломки на любом commit.

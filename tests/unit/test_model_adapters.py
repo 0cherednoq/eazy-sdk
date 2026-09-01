@@ -17,7 +17,6 @@ from eazy_sdk._internal import (
     compile_endpoint,
 )
 from eazy_sdk._internal.http_plan import ExecutionPlan
-from eazy_sdk.ext import BufferedBody, RequestPreparer
 from eazy_sdk.models import (
     AmbiguousModelAdapterError,
     DataclassModelAdapter,
@@ -27,6 +26,7 @@ from eazy_sdk.models import (
     default_model_adapters,
 )
 from eazy_sdk.request import FormBody, JsonBody, MultipartBody
+from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 from eazy_sdk.response import (
     Extracted,
     Json,

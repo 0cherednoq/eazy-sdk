@@ -10,24 +10,23 @@ from curl_cffi import requests as curl_requests
 from pytest_httpserver import HTTPServer, RequestMatcher
 
 from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk.accounts.session import (
+    MemorySessionStore,
+    SessionKey,
+    SessionRevision,
+    StoredSession,
+)
 from eazy_sdk.auth import (
     Auth,
     AuthScheme,
 )
-from eazy_sdk.auth.core import AttributeSessionSelector
-from eazy_sdk.clients import CallOptions, UnsafeReplayError
-from eazy_sdk.ext import (
+from eazy_sdk.auth.core import AttributeSessionSelector, AuthLocation, AuthPlacement, AuthProviders
+from eazy_sdk.auth.session_runtime import (
     AuthFlowContext,
-    AuthLocation,
-    AuthPlacement,
-    AuthProviders,
-    MemorySessionStore,
     SessionAuth,
-    SessionKey,
     SessionProvider,
-    SessionRevision,
-    StoredSession,
 )
+from eazy_sdk.clients import CallOptions, UnsafeReplayError
 from eazy_sdk.response import NormalizedResponse, ResponseContext, Responses
 from tests._support.zapros_clients import client_from_curl_cffi, client_from_httpx
 

@@ -11,8 +11,8 @@ from eazy_sdk._internal import (
     compile_endpoint,
 )
 from eazy_sdk.codecs import EncodeContext, ScalarEncodeContext
-from eazy_sdk.ext import BufferedBody, RequestPreparer
 from eazy_sdk.request import Query
+from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 
 
 @dataclass(frozen=True)

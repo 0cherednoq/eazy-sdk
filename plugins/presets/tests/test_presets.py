@@ -13,15 +13,11 @@ from eazy_sdk_presets import header as preset_header
 from eazy_sdk import AsyncApi, PlanError, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
+from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
 from eazy_sdk.ext import (
-    BufferedBody,
-    ExecutionRuntime,
-    HttpProtocol,
     OperationIdentity,
-    PreparedRequest,
     ScopeContext,
-    callable_parser,
 )
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
@@ -40,6 +36,7 @@ from eazy_sdk.request import (
     Header,
     JsonField,
 )
+from eazy_sdk.request.prepared import BufferedBody, HttpProtocol, PreparedRequest
 from eazy_sdk.response import (
     Headers,
     Json,
@@ -47,6 +44,7 @@ from eazy_sdk.response import (
     ResponseContext,
     Responses,
     Success,
+    callable_parser,
 )
 
 FIXTURES = Path(__file__).with_name("fixtures")

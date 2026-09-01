@@ -19,6 +19,7 @@ from eazy_sdk._internal import (
     apply_patch_atomic,
     compile_endpoint,
 )
+from eazy_sdk.accounts.session import LifecycleGraph, MemorySessionStore, SessionKey
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthScheme,
@@ -27,31 +28,41 @@ from eazy_sdk.auth import (
     all_of,
     any_of,
 )
-from eazy_sdk.auth.core import AttributeSessionSelector
+from eazy_sdk.auth.core import (
+    AttributeSessionSelector,
+    AuthLocation,
+    AuthPlacement,
+    AuthProviderIdentity,
+    AuthProviders,
+    StaticAuthProvider,
+    resolve_security,
+)
+from eazy_sdk.auth.session_runtime import SessionAuth, SessionProvider
 from eazy_sdk.dependencies import (
     DependencyCachePolicy,
     DependencyRegistry,
     RequestDependency,
 )
-from eazy_sdk.ext import (
-    AttributeSelector,
-    AuthLocation,
-    AuthPlacement,
-    AuthProviderIdentity,
-    AuthProviders,
-    BindingOperation,
-    DependencyCaches,
-    LifecycleGraph,
-    MemorySessionStore,
-    RequestRequirement,
-    ResultBinding,
-    SessionAuth,
-    SessionKey,
-    SessionProvider,
-    StaticAuthProvider,
-    compile_dependency_order,
-    resolve_requirements,
-    resolve_security,
+from eazy_sdk.dependencies import (
+    _AttributeSelector as AttributeSelector,
+)
+from eazy_sdk.dependencies import (
+    _BindingOperation as BindingOperation,
+)
+from eazy_sdk.dependencies import (
+    _compile_dependency_order as compile_dependency_order,
+)
+from eazy_sdk.dependencies import (
+    _DependencyCaches as DependencyCaches,
+)
+from eazy_sdk.dependencies import (
+    _RequestRequirement as RequestRequirement,
+)
+from eazy_sdk.dependencies import (
+    _resolve_requirements as resolve_requirements,
+)
+from eazy_sdk.dependencies import (
+    _ResultBinding as ResultBinding,
 )
 from eazy_sdk.request import Path
 from eazy_sdk.storage.session_bridge import RepositorySessionStore
@@ -227,7 +238,7 @@ class UserAuthService:
         self.recursive = recursive
 
     async def acquire(self, credentials: Credentials, context: object) -> UserSession:
-        from eazy_sdk.ext import AuthFlowContext
+        from eazy_sdk.auth.session_runtime import AuthFlowContext
 
         flow = cast(AuthFlowContext[ScopedSdk], context)
         self.calls += 1
@@ -339,7 +350,7 @@ class Repository:
 
 @pytest.mark.asyncio
 async def test_generic_storage_bridge_round_trip_and_revision_safe_invalidation() -> None:
-    from eazy_sdk.ext import SessionRevision
+    from eazy_sdk.accounts.session import SessionRevision
 
     repository = Repository()
     store = RepositorySessionStore(repository, Codec())
