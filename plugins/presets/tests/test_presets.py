@@ -9,8 +9,9 @@ from typing import Annotated, Any, cast
 import pytest
 from eazy_sdk_presets import cloudflare, host, json_field, operation, recaptcha
 from eazy_sdk_presets import header as preset_header
+from zapros import AsyncBaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, PlanError, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, PlanError, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
@@ -28,6 +29,11 @@ from eazy_sdk.handlers import (
 from eazy_sdk.protection import (
     ChallengeSolverBindings,
     MalformedSignal,
+    MissingSolverError,
+    NetworkIdentity,
+    NetworkIdentityRequiredError,
+    ProtectionCapabilityMismatch,
+    ProtectionIdentityMismatch,
     SignalMatch,
     bind_challenge_solver,
     inspect_signals,
@@ -167,7 +173,11 @@ def test_binding_is_immutable_and_solver_binding_is_separate_by_identity() -> No
     assert changed is not original
     assert changed.customized == frozenset({"detection"})
     bindings = ChallengeSolverBindings(
-        bind_challenge_solver(original.solver, implementation)
+        bind_challenge_solver(
+            original.solver,
+            implementation,
+            capabilities=original.capabilities,
+        )
     )
     assert bindings.get(original.solver) is implementation
 
@@ -357,7 +367,11 @@ async def test_v3_before_call_solves_and_applies_before_first_send(client_type: 
         "https://api.test",
         before_call_policies=(preset,),
         challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+            bind_challenge_solver(
+                preset.solver,
+                solver,
+                capabilities=preset.capabilities,
+            )
         ),
     )
     client = client_type(runtime)
@@ -378,6 +392,7 @@ async def test_preclearance_until_expiry_is_network_scoped_singleflight() -> Non
             self.calls += 1
             return cloudflare.CloudflareClearance(
                 (cloudflare.SecretCookie("cf_clearance", "secret-cookie"),),
+                expected_identity=context.network_identity,
                 expires_at=datetime.now(UTC) + timedelta(minutes=5),
             )
 
@@ -407,9 +422,13 @@ async def test_preclearance_until_expiry_is_network_scoped_singleflight() -> Non
         "https://api.test",
         before_call_policies=(preset,),
         challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+            bind_challenge_solver(
+                preset.solver,
+                solver,
+                capabilities=preset.capabilities,
+            )
         ),
-        network_identity="proxy-a",
+        network_identity=NetworkIdentity(proxy="proxy-a"),
     )
     client = _AsyncClientCore(runtime)
     api = AsyncClearanceApi(client)
@@ -424,7 +443,8 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
                 (
                     cloudflare.SecretCookie("cf_clearance", "secret-cookie"),
                     cloudflare.SecretCookie("__cf_bm", "managed-cookie"),
-                )
+                ),
+                expected_identity=context.network_identity,
             )
 
     solver = Solver()
@@ -472,12 +492,256 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
         "https://api.test",
         challenge_policies=(preset,),
         challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+            bind_challenge_solver(
+                preset.solver,
+                solver,
+                capabilities=preset.capabilities,
+            )
         ),
-        network_identity="proxy-a",
+        network_identity=NetworkIdentity(proxy="proxy-a"),
     )
     result = GuardedApi(_SyncClientCore(runtime)).guarded(options=CallOptions(max_attempts=2))
     assert result == {"ok": True}
+
+
+def test_with_protection_is_immutable_and_rejects_duplicate_policy_identity() -> None:
+    original = ClientConfig(auth_retries=0)
+    preset = cloudflare.challenge_pages(scope=host("api.test"))
+
+    configured = original.with_protection(preset)
+
+    assert original.challenge_policies == ()
+    assert configured.challenge_policies == (preset,)
+    assert configured.challenge_solvers.bindings == ()
+    with pytest.raises(ValueError, match="duplicate protection policy identity"):
+        configured.with_protection(
+            cloudflare.challenge_pages(scope=host("other.test"))
+        )
+
+
+@pytest.mark.asyncio
+async def test_unbound_installed_preset_fails_before_public_handler() -> None:
+    class Handler(AsyncBaseHandler):
+        async def ahandle(self, request: Request) -> Response:
+            raise AssertionError("handler must not run")
+
+        async def aclose(self) -> None:
+            return None
+
+    preset = recaptcha.v3_action(
+        scope=operation("create"),
+        site_key="site-public",
+        action="create",
+        apply=json_field("captcha_token"),
+    )
+    config = ClientConfig(auth_retries=0).with_protection(preset)
+
+    async with AsyncClient(
+        base_url="https://api.test",
+        handler=Handler(),
+        config=config,
+    ) as client:
+        with pytest.raises(
+            MissingSolverError,
+            match=r"missing solver: google\.recaptcha-v3",
+        ):
+            await AsyncRecaptchaApi(client).create(name="Ada")
+
+
+@pytest.mark.asyncio
+async def test_public_async_client_supplies_network_identity_to_cloudflare_replay() -> None:
+    class Solver:
+        capabilities = cloudflare.CHALLENGE_TEMPLATE.capabilities
+
+        def __init__(self) -> None:
+            self.identities: list[NetworkIdentity | None] = []
+
+        async def solve(self, challenge: Any, context: Any) -> cloudflare.CloudflareClearance:
+            self.identities.append(context.network_identity)
+            return cloudflare.CloudflareClearance(
+                (cloudflare.SecretCookie("cf_clearance", "secret-cookie"),),
+                expected_identity=context.network_identity,
+            )
+
+    class Handler(AsyncBaseHandler):
+        calls = 0
+
+        async def ahandle(self, request: Request) -> Response:
+            self.calls += 1
+            if self.calls == 1:
+                return Response(
+                    403,
+                    [("Content-Type", "text/html"), ("cf-mitigated", "challenge")],
+                    content=fixture("cloudflare_managed.html"),
+                    request=request,
+                )
+            assert "cf_clearance=secret-cookie" in request.headers["Cookie"]
+            return Response(
+                200,
+                [("Content-Type", "application/json")],
+                content=b'{"ok":true}',
+                request=request,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    identity = NetworkIdentity(
+        proxy="proxy-a",
+        user_agent="ua-a",
+        browser_profile="chrome",
+    )
+    solver = Solver()
+    preset = cloudflare.challenge_pages(scope=host("api.test"), solver=solver)
+    config = ClientConfig(
+        network_identity=identity,
+        auth_retries=0,
+    ).with_protection(preset)
+    handler = Handler()
+
+    async with AsyncClient(
+        base_url="https://api.test",
+        handler=handler,
+        config=config,
+    ) as client:
+        result = await AsyncClearanceApi(client).protected()
+
+    assert result == {"ok": True}
+    assert solver.identities == [identity]
+    assert handler.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_public_async_client_rejects_network_policy_before_handler_without_identity() -> None:
+    class Solver:
+        async def solve(self, challenge: Any, context: Any) -> cloudflare.CloudflareClearance:
+            raise AssertionError("solver must not run")
+
+    class Handler(AsyncBaseHandler):
+        calls = 0
+
+        async def ahandle(self, request: Request) -> Response:
+            self.calls += 1
+            raise AssertionError("handler must not run")
+
+        async def aclose(self) -> None:
+            return None
+
+    preset = cloudflare.challenge_pages(scope=host("api.test"))
+    config = ClientConfig(
+        challenge_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(
+                preset.solver,
+                Solver(),
+                capabilities=preset.capabilities,
+            )
+        ),
+        auth_retries=0,
+    )
+    handler = Handler()
+
+    async with AsyncClient(
+        base_url="https://api.test",
+        handler=handler,
+        config=config,
+    ) as client:
+        with pytest.raises(NetworkIdentityRequiredError, match=r"cloudflare\.challenge-pages"):
+            await AsyncClearanceApi(client).protected()
+
+    assert handler.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_public_client_rejects_missing_solver_capabilities_before_handler() -> None:
+    class Solver:
+        async def solve(self, challenge: Any, context: Any) -> cloudflare.CloudflareClearance:
+            raise AssertionError("solver must not run")
+
+    class Handler(AsyncBaseHandler):
+        calls = 0
+
+        async def ahandle(self, request: Request) -> Response:
+            self.calls += 1
+            raise AssertionError("handler must not run")
+
+        async def aclose(self) -> None:
+            return None
+
+    preset = cloudflare.challenge_pages(
+        scope=host("api.test"),
+        solver=Solver(),
+    )
+    config = ClientConfig(
+        network_identity=NetworkIdentity(proxy="proxy-a", user_agent="ua-a"),
+        auth_retries=0,
+    ).with_protection(preset)
+    handler = Handler()
+
+    async with AsyncClient(
+        base_url="https://api.test",
+        handler=handler,
+        config=config,
+    ) as client:
+        with pytest.raises(ProtectionCapabilityMismatch, match="browser") as captured:
+            await AsyncClearanceApi(client).protected()
+
+    assert captured.value.policy == "cloudflare.challenge-pages"
+    assert handler.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_clearance_identity_mismatch_is_not_published_or_replayed() -> None:
+    class Solver:
+        async def solve(self, challenge: Any, context: Any) -> cloudflare.CloudflareClearance:
+            return cloudflare.CloudflareClearance(
+                (cloudflare.SecretCookie("cf_clearance", "secret-cookie"),),
+                expected_identity=NetworkIdentity(proxy="proxy-b", user_agent="ua-b"),
+            )
+
+    class Handler(AsyncBaseHandler):
+        calls = 0
+
+        async def ahandle(self, request: Request) -> Response:
+            self.calls += 1
+            return Response(
+                403,
+                [("Content-Type", "text/html"), ("cf-mitigated", "challenge")],
+                content=fixture("cloudflare_managed.html"),
+                request=request,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    preset = cloudflare.challenge_pages(scope=host("api.test"))
+    config = ClientConfig(
+        challenge_policies=(preset,),
+        challenge_solvers=ChallengeSolverBindings(
+            bind_challenge_solver(
+                preset.solver,
+                Solver(),
+                capabilities=preset.capabilities,
+            )
+        ),
+        network_identity=NetworkIdentity(proxy="proxy-a", user_agent="ua-a"),
+        auth_retries=0,
+    )
+    handler = Handler()
+
+    async with AsyncClient(
+        base_url="https://api.test",
+        handler=handler,
+        config=config,
+    ) as client:
+        with pytest.raises(
+            ProtectionIdentityMismatch,
+            match=r"cloudflare\.challenge-pages",
+        ):
+            await AsyncClearanceApi(client).protected()
+        assert client._runtime._protection_state == {}
+
+    assert handler.calls == 1
 
 
 def test_incompatible_application_is_rejected_before_solver_or_transport() -> None:
@@ -518,7 +782,11 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
         "https://api.test",
         before_call_policies=(preset,),
         challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, Solver())
+            bind_challenge_solver(
+                preset.solver,
+                Solver(),
+                capabilities=preset.capabilities,
+            )
         ),
     )
     with pytest.raises(PlanError, match="private binding conflicts"):

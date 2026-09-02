@@ -10,6 +10,7 @@ from typing import Any
 
 from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope
 from eazy_sdk.protection import (
+    ChallengeSolver,
     PrivateBindings,
     ProtectionPersistence,
     ReplayPolicy,
@@ -148,6 +149,7 @@ def _widget(
     replay: ReplayPolicy | None,
     browser: bool,
     persistence: ProtectionPersistence | None = None,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
 ) -> PresetChallengePolicy:
     parser = _parser(mode)
     signal = ResponseSignal(
@@ -170,6 +172,7 @@ def _widget(
         apply=apply or form_field("g-recaptcha-response"),
         persistence=persistence or per_match(),
         replay=replay or safe_method(max_replays=1),
+        solver=solver,
     )
 
 
@@ -182,6 +185,7 @@ def _before(
     apply: PrivateBindings[RecaptchaToken],
     persistence: ProtectionPersistence,
     browser: bool,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
 ) -> PresetBeforeCallPolicy:
     template = ProtectionTemplate(
         PresetId("recaptcha", name),
@@ -194,12 +198,14 @@ def _before(
         apply=apply,
         persistence=persistence,
         challenge=challenge,
+        solver=solver,
     )
 
 
 def v2_checkbox(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
 ) -> PresetChallengePolicy:
@@ -211,12 +217,14 @@ def v2_checkbox(
         apply=apply,
         replay=replay,
         browser=True,
+        solver=solver,
     )
 
 
 def v2_invisible(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
 ) -> PresetChallengePolicy:
@@ -228,6 +236,7 @@ def v2_invisible(
         apply=apply,
         replay=replay,
         browser=True,
+        solver=solver,
     )
 
 
@@ -236,6 +245,7 @@ def v3_action(
     scope: RequestScope,
     site_key: str,
     action: str,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     persistence: ProtectionPersistence | None = None,
 ) -> PresetBeforeCallPolicy:
@@ -249,12 +259,14 @@ def v3_action(
         apply=apply or form_field("g-recaptcha-response"),
         persistence=persistence or per_call(),
         browser=False,
+        solver=solver,
     )
 
 
 def enterprise_checkbox(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
 ) -> PresetChallengePolicy:
@@ -266,6 +278,7 @@ def enterprise_checkbox(
         apply=apply,
         replay=replay,
         browser=True,
+        solver=solver,
     )
 
 
@@ -275,6 +288,7 @@ def enterprise_score_action(
     project: str,
     site_key: str,
     action: str,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     persistence: ProtectionPersistence | None = None,
 ) -> PresetBeforeCallPolicy:
@@ -293,12 +307,14 @@ def enterprise_score_action(
         apply=apply or form_field("g-recaptcha-response"),
         persistence=persistence or per_call(),
         browser=False,
+        solver=solver,
     )
 
 
 def enterprise_policy_based_challenge(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
     apply: PrivateBindings[RecaptchaToken] | None = None,
     replay: ReplayPolicy | None = None,
 ) -> PresetChallengePolicy:
@@ -310,6 +326,7 @@ def enterprise_policy_based_challenge(
         apply=apply,
         replay=replay,
         browser=True,
+        solver=solver,
     )
 
 

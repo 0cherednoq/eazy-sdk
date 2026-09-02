@@ -5,9 +5,11 @@ import hmac
 from dataclasses import dataclass
 from typing import Annotated
 
+import pytest
 from zapros import BaseHandler, Request, Response
 
 from eazy_sdk import CSS, Client, ClientConfig, RetryPolicy, SyncApi, api
+from eazy_sdk.protection import NetworkIdentity
 from eazy_sdk.request import (
     JsonBody,
     SigningKey,
@@ -109,6 +111,8 @@ class HtmlApi(SyncApi):
 
 
 class HtmlHandler(BaseHandler):
+    network_identity: NetworkIdentity | None = None
+
     def handle(self, request: Request) -> Response:
         return Response(
             200,
@@ -126,3 +130,21 @@ def test_sdk_html_response_flows_through_fake_zapros_handler() -> None:
         page = HtmlApi(client).page()
 
     assert page == PageTitle("From Zapros")
+
+
+def test_handler_network_identity_is_the_client_source_of_truth() -> None:
+    identity = NetworkIdentity(proxy="proxy-a", user_agent="ua-a")
+    handler = HtmlHandler()
+    handler.network_identity = identity
+
+    with Client(base_url="https://example.test", handler=handler) as client:
+        assert client._runtime.network_identity is identity
+
+
+def test_client_rejects_conflicting_handler_and_config_network_identities() -> None:
+    handler = HtmlHandler()
+    handler.network_identity = NetworkIdentity(proxy="proxy-a")
+    config = ClientConfig(network_identity=NetworkIdentity(proxy="proxy-b"))
+
+    with pytest.raises(ValueError, match="conflicting network identities"):
+        Client(base_url="https://example.test", handler=handler, config=config)

@@ -4,7 +4,7 @@ description: Typed reCAPTCHA v2, v3 and Enterprise policies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:923d9f72f2fb8f68b12b3a2b39ab65b2ca44a6de875ef7e7311c5c9287adf313"
+api_fingerprint: "sha256:ab4f74e08913a742d76ae74cc36256f1bcedec36f346d19f123b6cc21afd3500"
 ---
 
 v2/checkbox policies реагируют на response challenge. v3/action и Enterprise score policies
@@ -13,6 +13,7 @@ v2/checkbox policies реагируют на response challenge. v3/action и En
 ```python target
 v2 = recaptcha.v2_checkbox(
     scope=operation("login"),
+    solver=RecaptchaV2Solver(),
     apply=form_field("g-recaptcha-response"),
 )
 
@@ -20,19 +21,16 @@ v3 = recaptcha.v3_action(
     scope=operation("createAccount"),
     site_key="public-site-key",
     action="create_account",
+    solver=RecaptchaV3Solver(),
     apply=form_field("g-recaptcha-response"),
 )
 
-config = ClientConfig(
-    challenge_policies=(v2,),
-    before_call_policies=(v3,),
-    challenge_solvers=ChallengeSolverBindings(
-        bind_challenge_solver(v2.solver, RecaptchaV2Solver()),
-        bind_challenge_solver(v3.solver, RecaptchaV3Solver()),
-    ),
-)
+config = ClientConfig().with_protection(v2, v3)
 ```
 
 `scope=operation(...)` ограничивает policy одной operation identity. Solver возвращает typed
 solution и не мутирует request, cache или retry coordinator. Private token field отсутствует в
 public method signature и добавляется перед projection/encoding/signing нужного attempt.
+Direct solver должен объявить свои `ProtectionCapabilities`. Если solver предоставляет SDK-level
+DI, не передавайте его factory и установите returned preset через `with_protection()`; missing
+binding останется типизированной preflight-ошибкой.

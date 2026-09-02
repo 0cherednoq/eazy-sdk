@@ -5,7 +5,7 @@ sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:eb3e5e7a0b266af51aa26cba2d38623d0a36a744017e5fbdb46316b850af516b"
+api_fingerprint: "sha256:f68c209ff5610f466331ced49894dc0d31ccb8e31aeb783d6d1339d724efa32f"
 ---
 
 Protection имеет три независимых lifecycle. Они не используют общий untyped registry.
@@ -17,6 +17,21 @@ Protection имеет три независимых lifecycle. Они не ис�
 | Conditional challenge | `challenge_policies` | после совпавшего response signal |
 
 Auth остаётся отдельным механизмом в `ClientConfig.auth`.
+
+First-party presets возвращают installable policy. Рекомендуемый config path:
+
+```python target
+config = ClientConfig(network_identity=identity).with_protection(
+    cloudflare.challenge_pages(
+        scope=host("api.example.test"),
+        solver=CloudflareSolver(),
+    )
+)
+```
+
+`with_protection()` возвращает новый `ClientConfig`, детерминированно добавляет lifecycle policy и
+solver binding и отклоняет duplicate policy identity или solver requirement. Исходный config не
+изменяется. Unbound preset поддерживает SDK-level DI и падает с `MissingSolverError` на preflight.
 
 ## Mandatory operation flow
 
@@ -44,7 +59,9 @@ result с private target-моделью `BodyProjection`. Missing flow, solver �
 ## Conditional challenge
 
 `ChallengePolicy[TChallenge, TSolution]` содержит точный `scope`, один `signal`, solver
-requirement, `PrivateBindings`, persistence и replay policy. Solver регистрируется отдельно:
+requirement, `PrivateBindings`, persistence, replay policy, capability requirements и optional
+solution-identity expectation. Для custom framework policy solver можно зарегистрировать через
+advanced low-level collections:
 
 ```python target
 config = ClientConfig(
@@ -72,6 +89,29 @@ partial state. Все source fields и destinations валидируются д�
 ошибка одного binding не меняет attempt или cache. Managed slots помечены secret и значения не
 попадают в diagnostics.
 
+## Network identity
+
+| Type | Contract |
+|---|---|
+| `NetworkIdentity` | Immutable redacted identity: proxy label, User-Agent, address family and browser profile |
+| `StaticNetworkIdentity` | Provider, который возвращает одно identity для всех attempts |
+| `NetworkIdentityProvider.current(context)` | Возвращает identity для конкретных operation, attempt и URL |
+| `NetworkIdentityExpectation` | Выбирает expected identity из typed solution до state publication |
+
+`ClientConfig.network_identity` подходит custom handler. First-party handlers также принимают
+`network_identity`; если config и handler задают разные источники, client отклоняет конфигурацию.
+Для rotation один provider instance должен управлять connection profile handler-а и возвращать
+runtime ту же redacted identity. Network-scoped policy без source падает с
+`NetworkIdentityRequiredError` до providers и emit.
+
+## Capabilities
+
+`ProtectionCapabilities` разделяет requirements policy и capabilities solver-а. Preflight
+проверяет `response_body`, `cookie_jar`, `javascript`, `browser` и `sticky_network_identity`.
+`CapableChallengeSolver.capabilities` или явный `bind_challenge_solver(..., capabilities=...)`
+объявляет возможности реализации. `ProtectionCapabilityMismatch` перечисляет только policy и
+missing dimensions, без identity values или secrets.
+
 ## Exceptions and replay
 
 - malformed policy или missing solver завершается до provider/transport I/O;
@@ -79,3 +119,8 @@ partial state. Все source fields и destinations валидируются д�
 - missing solution field и invalid managed value вызывают `PlanError` без partial commit;
 - replay выполняется только при доказанной `ReplayPolicy` safety и заново запускает projection,
   crypto, encoding и signing.
+
+`ReplayPolicy.max_replays` не может быть отрицательным. Ноль отключает protection replay и не
+уменьшает обычный attempt limit. `idempotency_key(name)` принимает только непустое валидное HTTP
+field name; `proof_name` запрещён для остальных safety modes. Lifetime state задаётся только через
+`ProtectionPersistence`.

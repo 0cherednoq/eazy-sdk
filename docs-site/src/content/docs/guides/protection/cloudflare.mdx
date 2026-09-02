@@ -4,7 +4,7 @@ description: Managed multi-cookie clearance after a Cloudflare challenge.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:dd382d82a7be4fd5dc5dc07ae5966a4bf65c47ea2f77889cf8aa57eb066d8b81"
+api_fingerprint: "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c"
 ---
 
 Preset распознаёт definitive challenge по `cf-mitigated: challenge` и HTML content type. Status
@@ -14,28 +14,55 @@ Preset распознаёт definitive challenge по `cf-mitigated: challenge` 
 from datetime import UTC, datetime, timedelta
 
 from eazy_sdk import ClientConfig
-from eazy_sdk.protection import ChallengeSolverBindings, bind_challenge_solver
+from eazy_sdk.protection import (
+    BodyAccess,
+    NetworkIdentity,
+    ProtectionCapabilities,
+)
 from eazy_sdk_presets import cloudflare, host
 
 class CloudflareSolver:
+    capabilities = ProtectionCapabilities(
+        response_body=BodyAccess.BUFFERED,
+        cookie_jar=True,
+        javascript=True,
+        browser=True,
+        sticky_network_identity=True,
+    )
+
     async def solve(self, challenge, context):
         return cloudflare.CloudflareClearance(
             cookies=(
                 cloudflare.SecretCookie("cf_clearance", "clearance-value"),
                 cloudflare.SecretCookie("__cf_bm", "managed-value"),
             ),
+            expected_identity=context.network_identity,
             expires_at=datetime.now(UTC) + timedelta(minutes=30),
         )
 
-policy = cloudflare.challenge_pages(scope=host("api.example.test"))
-config = ClientConfig(
-    challenge_policies=(policy,),
-    challenge_solvers=ChallengeSolverBindings(
-        bind_challenge_solver(policy.solver, CloudflareSolver()),
-    ),
+policy = cloudflare.challenge_pages(
+    scope=host("api.example.test"),
+    solver=CloudflareSolver(),
 )
+config = ClientConfig(
+    network_identity=NetworkIdentity(
+        proxy="edge-proxy-1",
+        user_agent="Mozilla/5.0 ...",
+        browser_profile="chrome",
+    ),
+).with_protection(policy)
 ```
 
 Все элементы `CloudflareClearance.cookies` применяются одним private batch. По умолчанию state
 живёт `until_rejected` в network identity scope. Новый proxy/User-Agent не получает старый
 clearance; повторный challenge инвалидирует применённый набор перед replay.
+
+`NetworkIdentity` содержит стабильные идентификаторы connection profile, а не proxy credentials.
+Значения скрыты в `repr` и diagnostics. Solver возвращает identity текущей attempt в
+`expected_identity`; несовпадение вызывает `ProtectionIdentityMismatch` до cache commit и replay.
+Если proxy/UA/profile ротируются, передайте один `NetworkIdentityProvider` и в handler, и в
+`ClientConfig`. Два разных источника client отклоняет до первого provider call.
+
+Runtime проверяет capability declaration solver-а до transport I/O. Отсутствующие `javascript`,
+`browser`, `cookie_jar` или `sticky_network_identity` перечисляются в redacted
+`ProtectionCapabilityMismatch`.

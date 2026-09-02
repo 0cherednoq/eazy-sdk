@@ -4,7 +4,7 @@ description: Ограничение частоты фактических HTTP-�
 sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.ratelimit_runtime
-api_fingerprint: "sha256:2803283a530154f60243f4282c8f3aac102b807f6e77a7277e29b653012885ae"
+api_fingerprint: "sha256:95534c111fdbf06939ea4ae86f799b46630f47bd1dfc31907d3ee812b2927648"
 ---
 
 Реализуйте limiter и передайте его в `ClientConfig`. Limiter резервирует право на фактическую
@@ -29,6 +29,9 @@ client = Client(
 Conditional challenge replay получает новую reservation. Single-flight solve и managed
 protection cache сами по себе reservation не потребляют: limiter вызывается только перед
 фактическим transport send.
+
+`ClientConfig.with_protection()` сохраняет существующий limiter в новом immutable config; preset
+не создаёт отдельный transport path или reservation mechanism.
 
 Limiter применяется перед каждой отправкой, включая retry и redirect.
 

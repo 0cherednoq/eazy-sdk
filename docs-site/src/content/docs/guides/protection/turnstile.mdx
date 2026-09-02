@@ -4,14 +4,16 @@ description: Typed Turnstile widget and proactive preclearance policies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:dd382d82a7be4fd5dc5dc07ae5966a4bf65c47ea2f77889cf8aa57eb066d8b81"
+api_fingerprint: "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c"
 ---
 
-Widget и preclearance принадлежат разным lifecycle и поэтому подключаются в разные config fields.
+Widget и preclearance принадлежат разным lifecycle. Installable presets сами выбирают правильные
+collections; caller устанавливает оба через один immutable merge.
 
 ```python target
 widget = cloudflare.turnstile_widget(
     scope=operation("login"),
+    solver=TurnstileTokenSolver(),
     apply=form_field("cf-turnstile-response"),
 )
 
@@ -19,17 +21,15 @@ preclearance = cloudflare.turnstile_preclearance(
     scope=host("api.example.test"),
     site_key="public-site-key",
     page_url="https://api.example.test/login",
+    solver=TurnstileClearanceSolver(),
 )
 
 config = ClientConfig(
-    challenge_policies=(widget,),
-    before_call_policies=(preclearance,),
-    challenge_solvers=ChallengeSolverBindings(
-        bind_challenge_solver(widget.solver, TurnstileTokenSolver()),
-        bind_challenge_solver(preclearance.solver, TurnstileClearanceSolver()),
-    ),
-)
+    network_identity=identity,
+).with_protection(widget, preclearance)
 ```
 
 Widget решается только после matched response и использует replay safety. Preclearance решается до
-origin request, переиспользуется до expiry и привязан к network identity.
+origin request, переиспользуется до expiry и привязан к network identity. Оба solver-а явно
+объявляют `ProtectionCapabilities`; clearance solver возвращает
+`expected_identity=context.network_identity`.

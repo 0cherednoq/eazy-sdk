@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from enum import Enum
 from typing import Any
 
 from eazy_sdk.ext import RequestScope
 from eazy_sdk.protection import (
+    BodyAccess,
+    ChallengeSolver,
+    ChallengeSolverBinding,
+    NetworkIdentityExpectation,
     PrivateBindings,
+    ProtectionBundle,
+    ProtectionCapabilities,
     ProtectionPersistence,
     ResponseSignal,
     SolverRequirement,
+    bind_challenge_solver,
     client_identity,
     private_bindings,
     private_body,
@@ -38,20 +44,6 @@ class PresetId:
         return f"{self.vendor}.{self.name}"
 
 
-class BodyAccess(Enum):
-    NONE = "none"
-    BUFFERED = "buffered"
-
-
-@dataclass(frozen=True, slots=True)
-class ProtectionCapabilities:
-    response_body: BodyAccess = BodyAccess.NONE
-    cookie_jar: bool = False
-    javascript: bool = False
-    browser: bool = False
-    sticky_network_identity: bool = False
-
-
 @dataclass(frozen=True, slots=True)
 class PresetChallengePolicy:
     id: PresetId
@@ -65,7 +57,17 @@ class PresetChallengePolicy:
     replay: Any
     capabilities: ProtectionCapabilities
     challenge_identity: Any | None = None
+    expected_identity: NetworkIdentityExpectation[Any] | None = None
+    solver_binding: ChallengeSolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
+
+    def to_bundle(self) -> ProtectionBundle:
+        return ProtectionBundle(
+            challenge_policies=(self,),
+            challenge_solver_bindings=(
+                (self.solver_binding,) if self.solver_binding is not None else ()
+            ),
+        )
 
     def replace_parser(self, parser: Any) -> PresetChallengePolicy:
         if not callable(getattr(parser, "bind", None)):
@@ -108,7 +110,17 @@ class PresetBeforeCallPolicy:
     apply: PrivateBindings[Any]
     persistence: ProtectionPersistence
     capabilities: ProtectionCapabilities
+    expected_identity: NetworkIdentityExpectation[Any] | None = None
+    solver_binding: ChallengeSolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
+
+    def to_bundle(self) -> ProtectionBundle:
+        return ProtectionBundle(
+            before_call_policies=(self,),
+            challenge_solver_bindings=(
+                (self.solver_binding,) if self.solver_binding is not None else ()
+            ),
+        )
 
     def replace_application(self, target: PrivateBindings[Any]) -> PresetBeforeCallPolicy:
         return replace(
@@ -134,19 +146,30 @@ class ProtectionTemplate[TChallenge, TSolution]:
         persistence: ProtectionPersistence,
         replay: Any,
         challenge_identity: Any | None = None,
+        expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
+        solver: ChallengeSolver[TChallenge, TSolution] | None = None,
     ) -> PresetChallengePolicy:
         return PresetChallengePolicy(
-            self.id,
-            str(self.id),
-            self.revision,
-            scope,
-            signal,
-            self.solver_requirement,
-            apply,
-            persistence,
-            replay,
-            self.capabilities,
-            challenge_identity,
+            id=self.id,
+            identity=str(self.id),
+            revision=self.revision,
+            scope=scope,
+            signal=signal,
+            solver=self.solver_requirement,
+            apply=apply,
+            persistence=persistence,
+            replay=replay,
+            capabilities=self.capabilities,
+            challenge_identity=challenge_identity,
+            expected_identity=expected_identity,
+            solver_binding=(
+                bind_challenge_solver(
+                    self.solver_requirement,
+                    solver,
+                )
+                if solver is not None
+                else None
+            ),
         )
 
     def bind_before(
@@ -156,18 +179,29 @@ class ProtectionTemplate[TChallenge, TSolution]:
         apply: PrivateBindings[TSolution],
         persistence: ProtectionPersistence,
         challenge: TChallenge,
+        expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
+        solver: ChallengeSolver[TChallenge, TSolution] | None = None,
     ) -> PresetBeforeCallPolicy:
         return PresetBeforeCallPolicy(
-            self.id,
-            str(self.id),
-            self.revision,
-            scope,
-            None,
-            challenge,
-            self.solver_requirement,
-            apply,
-            persistence,
-            self.capabilities,
+            id=self.id,
+            identity=str(self.id),
+            revision=self.revision,
+            scope=scope,
+            acquire=None,
+            challenge=challenge,
+            solver=self.solver_requirement,
+            apply=apply,
+            persistence=persistence,
+            capabilities=self.capabilities,
+            expected_identity=expected_identity,
+            solver_binding=(
+                bind_challenge_solver(
+                    self.solver_requirement,
+                    solver,
+                )
+                if solver is not None
+                else None
+            ),
         )
 
 

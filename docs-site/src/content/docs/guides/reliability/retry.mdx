@@ -5,7 +5,7 @@ sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.RetryPolicy
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:0b1d6b6eee028bc8a0fbd91fc93441b7e55c62ee0352fb3613b5cab69e92586c"
+api_fingerprint: "sha256:80fe207f2b30d4664ad472bcfa30ea4e82a9dc6bfb4b7f0890b295ea87a4d964"
 ---
 
 Настройте retry один раз в `ClientConfig` и при необходимости сузьте budget через `CallOptions`
@@ -36,6 +36,10 @@ ciphertext и nonce предыдущей попытки не переиспол�
 Protection reaction имеет независимый replay budget из `ReplayPolicy`. Каждый такой replay
 заново применяет актуальные private bindings, projection, crypto, encoding и signing; истёкший
 или rejected managed state не переиспользуется.
+
+`max_replays` проверяется при создании policy: отрицательное значение запрещено, а ноль отключает
+protection replay и не уменьшает обычный attempt limit. Idempotency proof должен быть непустым
+валидным HTTP field name.
 
 ## Budgets
 

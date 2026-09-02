@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -87,21 +88,30 @@ from eazy_sdk.models import (
 from eazy_sdk.preparation import PreparationIncomplete, PreparedCall, PrepareOptions
 from eazy_sdk.protection import (
     BeforeCallPolicy,
+    BodyAccess,
     ChallengePolicy,
     ChallengeSolver,
     ChallengeSolverBindings,
     MissingSolverError,
+    NetworkIdentity,
+    NetworkIdentityContext,
+    NetworkIdentityExpectation,
+    NetworkIdentityProvider,
+    NetworkIdentityRequiredError,
     PrivateBindings,
+    ProtectionCapabilities,
+    ProtectionCapabilityMismatch,
     ProtectionFlow,
+    ProtectionIdentityMismatch,
     ProtectionPersistence,
     ProtectionPersistenceMode,
     ProtectionStateScope,
-    ReactionBudget,
     SolveContext,
     SolverBindings,
     ensure_replay_allowed,
     inspect_signals,
     private_bindings_patch,
+    resolve_network_identity,
 )
 from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimiter
 from eazy_sdk.request import (
@@ -124,11 +134,7 @@ from eazy_sdk.response import (
     ResponseEnvelope,
     Responses,
 )
-from eazy_sdk.response.cases import (
-    AttemptIdentity,
-    OperationInfo,
-    PreparedRequestSummary,
-)
+from eazy_sdk.response.cases import AttemptIdentity, OperationInfo, PreparedRequestSummary
 
 from ._http_stages import (
     AuthRefreshTransition,
@@ -142,6 +148,16 @@ from ._http_stages import (
     build_request_document,
     decide_response,
 )
+
+
+@dataclass(slots=True)
+class _ReactionBudget:
+    remaining: int
+
+    def consume(self) -> None:
+        if self.remaining <= 0:
+            raise PlanError("response reaction budget exhausted")
+        self.remaining -= 1
 
 type KeyProvider = Callable[[SigningKeyRequirement], SigningKey]
 type Observer = Callable[[str, object | None], None]
@@ -179,6 +195,8 @@ class _CompiledChallengePolicy:
     persistence: ProtectionPersistence
     replay: Any
     challenge_identity: Callable[[Any], object] | None
+    capabilities: ProtectionCapabilities
+    expected_identity: NetworkIdentityExpectation[Any] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +208,8 @@ class _CompiledBeforeCallPolicy:
     solver: Any | None
     apply: PrivateBindings[Any]
     persistence: ProtectionPersistence
+    capabilities: ProtectionCapabilities
+    expected_identity: NetworkIdentityExpectation[Any] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +222,37 @@ class _ManagedProtectionState:
 
 
 type _ProtectionCacheKey = tuple[object, ...]
+
+
+@dataclass(slots=True)
+class _ProtectionLockEntry:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+
+
+@dataclass(slots=True)
+class _ProtectionLockRegistry:
+    _entries: dict[_ProtectionCacheKey, _ProtectionLockEntry] = field(
+        default_factory=dict
+    )
+
+    @asynccontextmanager
+    async def hold(self, key: _ProtectionCacheKey) -> AsyncIterator[None]:
+        entry = self._entries.get(key)
+        if entry is None:
+            entry = _ProtectionLockEntry()
+            self._entries[key] = entry
+        entry.users += 1
+        try:
+            async with entry.lock:
+                yield
+        finally:
+            entry.users -= 1
+            if entry.users == 0 and self._entries.get(key) is entry:
+                self._entries.pop(key)
+
+    def __len__(self) -> int:
+        return len(self._entries)
 
 
 @dataclass(slots=True)
@@ -223,14 +274,14 @@ class ExecutionRuntime:
     observer: Observer | None = None
     models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
     profile: WireProfile | None = None
-    network_identity: object | None = None
+    network_identity: NetworkIdentity | NetworkIdentityProvider | None = None
     crypto: CryptoRegistry = field(default_factory=CryptoRegistry)
     allow_async_crypto: bool = True
     _protection_state: dict[_ProtectionCacheKey, _ManagedProtectionState] = field(
         default_factory=dict, init=False, repr=False
     )
-    _protection_locks: dict[_ProtectionCacheKey, asyncio.Lock] = field(
-        default_factory=dict, init=False, repr=False
+    _protection_locks: _ProtectionLockRegistry = field(
+        default_factory=_ProtectionLockRegistry, init=False, repr=False
     )
     _protection_generation: int = field(default=0, init=False, repr=False)
 
@@ -385,6 +436,20 @@ class ExecutionCore:
             for policy in self.runtime.challenge_policies
             if policy.scope.matches(scope_context)
         )
+        network_scoped = tuple(
+            policy.identity
+            for policy in before_call_policies
+            if policy.persistence.scope.scope is ProtectionStateScope.NETWORK_IDENTITY
+        ) + tuple(
+            policy.identity
+            for policy in challenge_policies
+            if policy.persistence.scope.scope is ProtectionStateScope.NETWORK_IDENTITY
+        )
+        if network_scoped and self.runtime.network_identity is None:
+            raise NetworkIdentityRequiredError(
+                "network-scoped protection requires a public network identity: "
+                + ", ".join(network_scoped)
+            )
         compiled_contract = (
             replace(
                 contract,
@@ -398,7 +463,14 @@ class ExecutionCore:
             compiled_contract,
             scope=compiled_contract.scope,
             requirements=wire_requirements(compiled_contract),
-            fingerprint_context=self.runtime.models.fingerprint_components(),
+            fingerprint_context=(
+                *self.runtime.models.fingerprint_components(),
+                *_protection_fingerprint_components(
+                    before_call_policies,
+                    challenge_policies,
+                    self.runtime,
+                ),
+            ),
             private_bindings=(
                 tuple(item.apply for item in before_call_policies)
                 + tuple(item.apply for item in challenge_policies)
@@ -424,6 +496,14 @@ class ExecutionCore:
                 raise MissingSolverError(
                     f"missing solver: {challenge_policy_item.solver.name}"
                 )
+            _validate_protection_capabilities(
+                challenge_policy_item.identity,
+                challenge_policy_item.capabilities,
+                self.runtime.challenge_solvers.capabilities_for(
+                    challenge_policy_item.solver
+                ),
+                has_network_identity=self.runtime.network_identity is not None,
+            )
         for before_policy_item in before_call_policies:
             if (
                 before_policy_item.solver is not None
@@ -432,6 +512,17 @@ class ExecutionCore:
                 raise MissingSolverError(
                     f"missing solver: {before_policy_item.solver.name}"
                 )
+            solver_capabilities = (
+                self.runtime.challenge_solvers.capabilities_for(before_policy_item.solver)
+                if before_policy_item.solver is not None
+                else ProtectionCapabilities()
+            )
+            _validate_protection_capabilities(
+                before_policy_item.identity,
+                before_policy_item.capabilities,
+                solver_capabilities,
+                has_network_identity=self.runtime.network_identity is not None,
+            )
         context = CallMiddlewareContext[T](
             compiled.plan.operation, _normalize_arguments(compiled, arguments)
         )
@@ -502,17 +593,23 @@ class ExecutionCore:
         initial_compiled_crypto: CompiledPayloadCrypto | None,
     ) -> ExecutionResult[T]:
         values = bound
+        initial_url = _contract_url(self.runtime.base_url, compiled.contract.path)
+        first_network_identity = resolve_network_identity(
+            self.runtime.network_identity,
+            NetworkIdentityContext(compiled.plan.operation, 1, initial_url),
+        )
         mandatory_results = (
             await self._acquire_mandatory_protections(
                 compiled,
                 options,
                 mandatory,
+                first_network_identity,
             )
             if mandatory is not None
             else {}
         )
         dependencies = _DependencyCaches()
-        reaction_budget = ReactionBudget(
+        reaction_budget = _ReactionBudget(
             sum(item.replay.max_replays for item in challenge_policies)
         )
         call_states: dict[str, _ManagedProtectionState] = {}
@@ -530,6 +627,15 @@ class ExecutionCore:
             self._observe("start_attempt", {"number": number, "kind": attempt_kind})
             dependencies.attempt.clear()
             attempt_values = values
+            current_url = next_url or initial_url
+            attempt_network_identity = (
+                first_network_identity
+                if number == 1
+                else resolve_network_identity(
+                    self.runtime.network_identity,
+                    NetworkIdentityContext(compiled.plan.operation, number, current_url),
+                )
+            )
             for before_policy_item in before_call_policies:
                 state, shared = await self._before_call_state(
                     before_policy_item,
@@ -538,6 +644,7 @@ class ExecutionCore:
                     options,
                     number,
                     call_states,
+                    attempt_network_identity,
                 )
                 attempt_values = _apply_managed_state(
                     compiled,
@@ -549,7 +656,11 @@ class ExecutionCore:
                     applied_shared[before_policy_item.identity] = shared
             for challenge_policy_item in challenge_policies:
                 local = call_states.get(challenge_policy_item.identity)
-                shared = _find_shared_state(self.runtime, challenge_policy_item)
+                shared = _find_shared_state(
+                    self.runtime,
+                    challenge_policy_item,
+                    attempt_network_identity,
+                )
                 selected_state = local or (shared[1] if shared is not None else None)
                 if selected_state is None:
                     continue
@@ -566,7 +677,6 @@ class ExecutionCore:
                     ProtectionPersistenceMode.PER_ATTEMPT,
                 }:
                     call_states.pop(challenge_policy_item.identity, None)
-            current_url = next_url or _contract_url(self.runtime.base_url, compiled.contract.path)
             selected_crypto = _resolve_http_crypto(contract, self.runtime.crypto, current_url)
             compiled_crypto = (
                 initial_compiled_crypto
@@ -928,6 +1038,7 @@ class ExecutionCore:
                     number,
                     call_states,
                     applied_shared.get(matched_policy.identity),
+                    attempt_network_identity,
                 )
                 call_states[matched_policy.identity] = state
                 if shared is not None:
@@ -963,6 +1074,7 @@ class ExecutionCore:
         options: Any,
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
+        network_identity: NetworkIdentity | None,
     ) -> tuple[
         _ManagedProtectionState,
         tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
@@ -970,7 +1082,7 @@ class ExecutionCore:
         mode = policy.persistence.mode
         if mode is ProtectionPersistenceMode.PER_CALL and policy.identity in call_states:
             return call_states[policy.identity], None
-        shared = _find_shared_state(self.runtime, policy)
+        shared = _find_shared_state(self.runtime, policy, network_identity)
         if shared is not None:
             return shared[1], shared
 
@@ -978,22 +1090,36 @@ class ExecutionCore:
         if policy.solver is not None:
             solver = self.runtime.challenge_solvers.get(policy.solver)
             assert solver is not None
-        key = _protection_cache_key(self.runtime, policy, solver, policy.challenge)
+        key = _protection_cache_key(
+            self.runtime,
+            policy,
+            solver,
+            policy.challenge,
+            network_identity,
+        )
 
         async def acquire() -> object:
             if policy.acquire is not None:
                 acquired = await self.execute(policy.acquire.call({}), options=options)
-                return acquired.value
-            assert solver is not None and policy.challenge is not None
-            return await solver.solve(
-                policy.challenge,
-                SolveContext(
-                    compiled.plan.operation,
-                    None,
-                    attempt,
-                    network_identity=cast(Any, self.runtime.network_identity),
-                ),
+                solution = acquired.value
+            else:
+                assert solver is not None and policy.challenge is not None
+                solution = await solver.solve(
+                    policy.challenge,
+                    SolveContext(
+                        compiled.plan.operation,
+                        None,
+                        attempt,
+                        network_identity=network_identity,
+                    ),
+                )
+            _validate_solution_identity(
+                policy.identity,
+                policy.expected_identity,
+                solution,
+                network_identity,
             )
+            return solution
 
         if _is_shared(mode):
             state, committed_key = await self._shared_state(
@@ -1024,24 +1150,38 @@ class ExecutionCore:
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
         rejected: tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
+        network_identity: NetworkIdentity | None,
     ) -> tuple[
         _ManagedProtectionState,
         tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
     ]:
         solver = self.runtime.challenge_solvers.get(policy.solver)
         assert solver is not None
-        key = _protection_cache_key(self.runtime, policy, solver, challenge)
+        key = _protection_cache_key(
+            self.runtime,
+            policy,
+            solver,
+            challenge,
+            network_identity,
+        )
 
         async def solve() -> object:
-            return await solver.solve(
+            solution = await solver.solve(
                 challenge,
                 SolveContext(
                     compiled.plan.operation,
                     response,
                     attempt,
-                    network_identity=cast(Any, self.runtime.network_identity),
+                    network_identity=network_identity,
                 ),
             )
+            _validate_solution_identity(
+                policy.identity,
+                policy.expected_identity,
+                solution,
+                network_identity,
+            )
+            return solution
 
         if _is_shared(policy.persistence.mode):
             state, committed_key = await self._shared_state(
@@ -1073,8 +1213,7 @@ class ExecutionCore:
         *,
         rejected: tuple[_ProtectionCacheKey, _ManagedProtectionState] | None = None,
     ) -> tuple[_ManagedProtectionState, _ProtectionCacheKey | None]:
-        lock = self.runtime._protection_locks.setdefault(key, asyncio.Lock())
-        async with lock:
+        async with self.runtime._protection_locks.hold(key):
             if rejected is not None:
                 rejected_key, rejected_state = rejected
                 if self.runtime._protection_state.get(rejected_key) is rejected_state:
@@ -1097,6 +1236,7 @@ class ExecutionCore:
         compiled: Any,
         options: Any,
         preparation: _MandatoryPreparation,
+        network_identity: NetworkIdentity | None,
     ) -> dict[int, object]:
         results: dict[int, object] = {}
         for flow, acquire, verify in preparation.flows:
@@ -1111,7 +1251,7 @@ class ExecutionCore:
                         compiled.plan.operation,
                         None,
                         0,
-                        network_identity=cast(Any, self.runtime.network_identity),
+                        network_identity=network_identity,
                     ),
                 )
             if verify is not None:
@@ -1129,6 +1269,85 @@ class ExecutionCore:
             self.runtime.observer(phase, value)
 
 
+def _validate_protection_capabilities(
+    identity: str,
+    required: ProtectionCapabilities,
+    solver: ProtectionCapabilities,
+    *,
+    has_network_identity: bool,
+) -> None:
+    provided = ProtectionCapabilities(
+        response_body=BodyAccess.BUFFERED,
+        cookie_jar=True,
+        javascript=solver.javascript,
+        browser=solver.browser,
+        sticky_network_identity=has_network_identity,
+    )
+    missing = required.missing_from(provided)
+    if missing:
+        raise ProtectionCapabilityMismatch(identity, missing)
+
+
+def _protection_fingerprint_components(
+    before: tuple[_CompiledBeforeCallPolicy, ...],
+    challenge: tuple[_CompiledChallengePolicy, ...],
+    runtime: ExecutionRuntime,
+) -> tuple[str, ...]:
+    components: list[str] = []
+    for lifecycle, policies in (("before", before), ("challenge", challenge)):
+        for policy in policies:
+            solver = (
+                runtime.challenge_solvers.capabilities_for(policy.solver)
+                if policy.solver is not None
+                else ProtectionCapabilities()
+            )
+            expectation = policy.expected_identity
+            components.append(
+                ":".join(
+                    (
+                        "protection",
+                        lifecycle,
+                        policy.identity,
+                        str(policy.revision),
+                        _capability_fingerprint(policy.capabilities),
+                        _capability_fingerprint(solver),
+                        (
+                            f"identity={expectation.field},{expectation.required}"
+                            if expectation is not None
+                            else "identity=none"
+                        ),
+                        f"identity-source={runtime.network_identity is not None}",
+                    )
+                )
+            )
+    return tuple(components)
+
+
+def _capability_fingerprint(capabilities: ProtectionCapabilities) -> str:
+    return ",".join(
+        (
+            f"body={capabilities.response_body.value}",
+            f"cookies={capabilities.cookie_jar}",
+            f"javascript={capabilities.javascript}",
+            f"browser={capabilities.browser}",
+            f"sticky={capabilities.sticky_network_identity}",
+        )
+    )
+
+
+def _validate_solution_identity(
+    policy: str,
+    expectation: NetworkIdentityExpectation[Any] | None,
+    solution: object,
+    actual: NetworkIdentity | None,
+) -> None:
+    if expectation is None:
+        return
+    expected = expectation.select(solution)
+    if expected is not None and expected != actual:
+        raise ProtectionIdentityMismatch(policy)
+
+
 def _compile_challenge_policy(
     policy: ChallengePolicy[Any, Any],
 ) -> _CompiledChallengePolicy:
@@ -1141,14 +1360,16 @@ def _compile_challenge_policy(
     if policy.signal.scope != policy.scope:
         raise TypeError("challenge policy and signal scopes must match")
     return _CompiledChallengePolicy(
-        policy.identity,
-        policy.revision,
-        policy.signal,
-        policy.solver,
-        policy.apply,
-        policy.persistence,
-        policy.replay,
-        policy.challenge_identity,
+        identity=policy.identity,
+        revision=policy.revision,
+        signal=policy.signal,
+        solver=policy.solver,
+        apply=policy.apply,
+        persistence=policy.persistence,
+        replay=policy.replay,
+        challenge_identity=policy.challenge_identity,
+        capabilities=policy.capabilities,
+        expected_identity=policy.expected_identity,
     )
 
 
@@ -1167,13 +1388,15 @@ def _compile_before_call_policy(
         else None
     )
     return _CompiledBeforeCallPolicy(
-        policy.identity,
-        policy.revision,
-        acquire,
-        policy.challenge,
-        policy.solver,
-        policy.apply,
-        policy.persistence,
+        identity=policy.identity,
+        revision=policy.revision,
+        acquire=acquire,
+        challenge=policy.challenge,
+        solver=policy.solver,
+        apply=policy.apply,
+        persistence=policy.persistence,
+        capabilities=policy.capabilities,
+        expected_identity=policy.expected_identity,
     )
 
 
@@ -1223,6 +1446,7 @@ def _protection_cache_key(
     policy: _CompiledChallengePolicy | _CompiledBeforeCallPolicy,
     solver: ChallengeSolver[Any, Any] | None,
     challenge: object | None,
+    network_identity: NetworkIdentity | None,
 ) -> _ProtectionCacheKey:
     if isinstance(policy, _CompiledChallengePolicy):
         challenge_identity = (
@@ -1236,13 +1460,17 @@ def _protection_cache_key(
         hash(challenge_identity)
     except TypeError as exc:
         raise TypeError("protection challenge identity must be hashable") from exc
-    return (*_protection_cache_prefix(runtime, policy, solver), challenge_identity)
+    return (
+        *_protection_cache_prefix(runtime, policy, solver, network_identity),
+        challenge_identity,
+    )
 
 
 def _protection_cache_prefix(
     runtime: ExecutionRuntime,
     policy: _CompiledChallengePolicy | _CompiledBeforeCallPolicy,
     solver: ChallengeSolver[Any, Any] | None,
+    network_identity: NetworkIdentity | None,
 ) -> _ProtectionCacheKey:
     if isinstance(policy, _CompiledChallengePolicy):
         provider_identity = policy.solver
@@ -1256,9 +1484,9 @@ def _protection_cache_prefix(
     elif scope is ProtectionStateScope.SESSION:
         owner = _hashable_identity(runtime.protection_session_identity)
     else:
-        if runtime.network_identity is None:
+        if network_identity is None:
             raise PlanError("network-scoped protection requires a network identity")
-        owner = _hashable_identity(runtime.network_identity)
+        owner = network_identity
     return (
         policy.identity,
         policy.revision,
@@ -1280,6 +1508,7 @@ def _hashable_identity(value: object) -> object:
 def _find_shared_state(
     runtime: ExecutionRuntime,
     policy: _CompiledChallengePolicy | _CompiledBeforeCallPolicy,
+    network_identity: NetworkIdentity | None,
 ) -> tuple[_ProtectionCacheKey, _ManagedProtectionState] | None:
     if not _is_shared(policy.persistence.mode):
         return None
@@ -1288,7 +1517,7 @@ def _find_shared_state(
         if policy.solver is not None
         else None
     )
-    prefix = _protection_cache_prefix(runtime, policy, solver)
+    prefix = _protection_cache_prefix(runtime, policy, solver, network_identity)
     candidates: list[tuple[_ProtectionCacheKey, _ManagedProtectionState]] = []
     for key, state in tuple(runtime._protection_state.items()):
         if key[:-1] != prefix:

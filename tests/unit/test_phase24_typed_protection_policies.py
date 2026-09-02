@@ -21,7 +21,9 @@ from eazy_sdk.ext import ParsedValue
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportFailure
 from eazy_sdk.protection import (
     ChallengeSolverBindings,
+    NetworkIdentity,
     ProtectionPersistenceMode,
+    ReplayDeniedError,
     ResponseSignal,
     SolveContext,
     SolverRequirement,
@@ -79,7 +81,12 @@ KAD_SIGNAL = ResponseSignal(
 )
 
 
-def _policy(*, persistence: Any | None = None, revision: int = 7) -> Any:
+def _policy(
+    *,
+    persistence: Any | None = None,
+    replay: Any | None = None,
+    revision: int = 7,
+) -> Any:
     return challenge_policy(
         identity="kad.wasm",
         revision=revision,
@@ -93,7 +100,7 @@ def _policy(*, persistence: Any | None = None, revision: int = 7) -> Any:
             private_query("kad_trace", field="trace"),
         ),
         persistence=persistence or until_rejected(scope=network_identity()),
-        replay=safe_method(max_replays=2),
+        replay=replay or safe_method(max_replays=2),
         challenge_identity=lambda challenge: challenge.revision,
     )
 
@@ -156,7 +163,7 @@ def _runtime(
         challenge_solvers=ChallengeSolverBindings(
             bind_challenge_solver(selected.solver, solver)
         ),
-        network_identity="proxy-a|ua-a",
+        network_identity=NetworkIdentity(proxy="proxy-a", user_agent="ua-a"),
     )
 
 
@@ -197,6 +204,15 @@ async def test_compound_private_bindings_are_atomic_absent_from_signature_and_re
 
 @pytest.mark.asyncio
 async def test_repeated_challenge_invalidates_revision_and_network_change_does_not_reuse() -> None:
+    class IdentityProvider:
+        def __init__(self) -> None:
+            self.identity = NetworkIdentity(proxy="proxy-a", user_agent="ua-a")
+            self.attempts: list[int] = []
+
+        def current(self, context: Any) -> NetworkIdentity:
+            self.attempts.append(context.attempt)
+            return self.identity
+
     class Solver:
         calls = 0
 
@@ -220,15 +236,30 @@ async def test_repeated_challenge_invalidates_revision_and_network_change_does_n
         return _response(request, 403, b'{"revision":1}')
 
     runtime = _runtime(emit, solver)
+    identities = IdentityProvider()
+    runtime.network_identity = identities
     client = ProtectedApi(_AsyncClientCore(runtime))
     assert await client.protected() == {"ok": True}
     # Force the origin to reject the cached first clearance.
     assert await client.protected() == {"ok": True}
     assert solver.calls == 2
 
-    runtime.network_identity = "proxy-b|ua-b"
+    identities.identity = NetworkIdentity(proxy="proxy-b", user_agent="ua-b")
     assert await client.protected() == {"ok": True}
     assert solver.calls == 3
+    assert identities.attempts == [1, 2, 1, 2, 1, 2]
+
+
+def test_network_identity_repr_redacts_values() -> None:
+    identity = NetworkIdentity(
+        proxy="http://user:secret@proxy.test",
+        user_agent="secret-user-agent",
+        browser_profile="chrome-secret",
+    )
+
+    rendered = repr(identity)
+    assert "proxy" in rendered and "user_agent" in rendered and "browser_profile" in rendered
+    assert "secret" not in rendered
 
 
 @pytest.mark.asyncio
@@ -291,11 +322,114 @@ async def test_concurrent_matches_share_one_solve() -> None:
             return _response(request, 403, b'{"revision":1}')
         return _response(request, 200, b'{"ok":true}')
 
-    client = ProtectedApi(_AsyncClientCore(_runtime(emit, solver)))
+    runtime = _runtime(emit, solver)
+    client = ProtectedApi(_AsyncClientCore(runtime))
     results = await asyncio.gather(client.protected(), client.protected())
     assert results[0] == {"ok": True}
     assert results[1] == {"ok": True}
     assert solver.calls == 1
+    assert len(runtime._protection_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_unique_challenge_keys_do_not_accumulate_singleflight_locks() -> None:
+    class Solver:
+        calls = 0
+
+        async def solve(self, challenge: Challenge, context: SolveContext) -> Clearance:
+            self.calls += 1
+            return Clearance(f"fp-{self.calls}", "wasm", "trace")
+
+    solver = Solver()
+    emits = 0
+
+    async def emit(
+        request: PreparedRequest,
+        *,
+        options: EmitOptions,
+    ) -> NormalizedResponse[object]:
+        nonlocal emits
+        emits += 1
+        if emits % 2:
+            return _response(request, 403, f'{{"revision":{emits}}}'.encode())
+        return _response(request, 200, b'{"ok":true}')
+
+    runtime = _runtime(emit, solver)
+    client = ProtectedApi(_AsyncClientCore(runtime))
+    for _ in range(1_000):
+        assert await client.protected() == {"ok": True}
+
+    assert solver.calls == 1_000
+    assert len(runtime._protection_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_waiter_cancellation_keeps_same_key_singleflight_and_cleans_lock() -> None:
+    solver_started = asyncio.Event()
+    release_solver = asyncio.Event()
+    second_challenged = asyncio.Event()
+
+    class Solver:
+        calls = 0
+
+        async def solve(self, challenge: Challenge, context: SolveContext) -> Clearance:
+            self.calls += 1
+            solver_started.set()
+            await release_solver.wait()
+            return Clearance("fp", "wasm", "trace")
+
+    initial_emits = 0
+
+    async def emit(
+        request: PreparedRequest,
+        *,
+        options: EmitOptions,
+    ) -> NormalizedResponse[object]:
+        nonlocal initial_emits
+        if _header(request, b"cookie") is None:
+            initial_emits += 1
+            if initial_emits == 2:
+                second_challenged.set()
+            return _response(request, 403, b'{"revision":1}')
+        return _response(request, 200, b'{"ok":true}')
+
+    runtime = _runtime(emit, Solver())
+    client = ProtectedApi(_AsyncClientCore(runtime))
+    holder = asyncio.create_task(client.protected())
+    await solver_started.wait()
+    waiter = asyncio.create_task(client.protected())
+    await second_challenged.wait()
+    await asyncio.sleep(0)
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    release_solver.set()
+
+    assert await holder == {"ok": True}
+    assert len(runtime._protection_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_zero_replay_budget_emits_once_and_never_solves_or_replays() -> None:
+    class Solver:
+        async def solve(self, challenge: Challenge, context: SolveContext) -> Clearance:
+            raise AssertionError("solver must not run")
+
+    emits = 0
+
+    async def emit(
+        request: PreparedRequest,
+        *,
+        options: EmitOptions,
+    ) -> NormalizedResponse[object]:
+        nonlocal emits
+        emits += 1
+        return _response(request, 403, b'{"revision":1}')
+
+    runtime = _runtime(emit, Solver(), policy=_policy(replay=safe_method(max_replays=0)))
+    with pytest.raises(ReplayDeniedError, match="replay is disabled"):
+        await ProtectedApi(_AsyncClientCore(runtime)).protected()
+    assert emits == 1
 
 
 @pytest.mark.asyncio
@@ -328,8 +462,43 @@ async def test_cancelled_solve_does_not_publish_partial_state() -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert runtime._protection_state == {}
+    assert len(runtime._protection_locks) == 0
     assert await client.protected() == {"ok": True}
     assert solver.calls == 2
+    assert len(runtime._protection_locks) == 0
+
+
+@pytest.mark.asyncio
+async def test_solver_exception_does_not_retain_singleflight_lock() -> None:
+    class Solver:
+        calls = 0
+
+        async def solve(self, challenge: Challenge, context: SolveContext) -> Clearance:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("solver failed")
+            return Clearance("fp", "wasm", "trace")
+
+    async def emit(
+        request: PreparedRequest,
+        *,
+        options: EmitOptions,
+    ) -> NormalizedResponse[object]:
+        if _header(request, b"cookie") is None:
+            return _response(request, 403, b'{"revision":1}')
+        return _response(request, 200, b'{"ok":true}')
+
+    solver = Solver()
+    runtime = _runtime(emit, solver)
+    client = ProtectedApi(_AsyncClientCore(runtime))
+    with pytest.raises(RuntimeError, match="solver failed"):
+        await client.protected()
+    assert len(runtime._protection_locks) == 0
+    assert runtime._protection_state == {}
+
+    assert await client.protected() == {"ok": True}
+    assert solver.calls == 2
+    assert len(runtime._protection_locks) == 0
 
 
 @pytest.mark.asyncio

@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Protocol, cast, runtime_checkable
 
-from eazy_sdk._internal.errors import GraphError, PlanError
+from eazy_sdk._internal.errors import PlanError
 from eazy_sdk._internal.http_compiler import CompiledContract
 from eazy_sdk._internal.http_plan import RequestScope, ScopeContext
 from eazy_sdk._internal.kernel import OperationIdentity, OperationValues, Set, ValuePatch
-from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request.prepared import BufferedBody, ReplayableBodyStream
 from eazy_sdk.response import ResponseContext
 from eazy_sdk.response.cases import (
-    Error,
-    ErrorOutcome,
     Malformed,
     NoMatch,
     ParsedValue,
@@ -30,6 +28,71 @@ class NetworkIdentity:
     proxy: str | None = None
     user_agent: str | None = None
     address_family: str | None = None
+    browser_profile: str | None = None
+
+    def __post_init__(self) -> None:
+        if not any(
+            value
+            for value in (
+                self.proxy,
+                self.user_agent,
+                self.address_family,
+                self.browser_profile,
+            )
+        ):
+            raise ValueError("network identity must declare at least one dimension")
+
+    def __repr__(self) -> str:
+        dimensions = tuple(
+            name
+            for name, value in (
+                ("proxy", self.proxy),
+                ("user_agent", self.user_agent),
+                ("address_family", self.address_family),
+                ("browser_profile", self.browser_profile),
+            )
+            if value is not None
+        )
+        return f"NetworkIdentity(dimensions={dimensions!r}, values=<redacted>)"
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkIdentityContext:
+    operation: OperationIdentity
+    attempt: int
+    url: str
+
+
+@runtime_checkable
+class NetworkIdentityProvider(Protocol):
+    def current(self, context: NetworkIdentityContext) -> NetworkIdentity: ...
+
+
+@dataclass(frozen=True, slots=True)
+class StaticNetworkIdentity:
+    identity: NetworkIdentity
+
+    def current(self, context: NetworkIdentityContext) -> NetworkIdentity:
+        return self.identity
+
+
+type NetworkIdentitySource = NetworkIdentity | NetworkIdentityProvider
+
+
+class NetworkIdentityRequiredError(PlanError):
+    pass
+
+
+def resolve_network_identity(
+    source: NetworkIdentitySource | None,
+    context: NetworkIdentityContext,
+) -> NetworkIdentity | None:
+    if source is None:
+        return None
+    identity = source if isinstance(source, NetworkIdentity) else source.current(context)
+    if not isinstance(identity, NetworkIdentity):
+        raise TypeError("network identity provider must return NetworkIdentity")
+    return identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +106,78 @@ class SolveContext:
 
 class ChallengeSolver[TChallenge, TSolution](Protocol):
     async def solve(self, challenge: TChallenge, context: SolveContext) -> TSolution: ...
+
+
+class BodyAccess(Enum):
+    NONE = "none"
+    BUFFERED = "buffered"
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionCapabilities:
+    response_body: BodyAccess = BodyAccess.NONE
+    cookie_jar: bool = False
+    javascript: bool = False
+    browser: bool = False
+    sticky_network_identity: bool = False
+
+    def missing_from(self, provided: ProtectionCapabilities) -> tuple[str, ...]:
+        missing: list[str] = []
+        if (
+            self.response_body is BodyAccess.BUFFERED
+            and provided.response_body is not BodyAccess.BUFFERED
+        ):
+            missing.append("response_body=buffered")
+        for name in ("cookie_jar", "javascript", "browser", "sticky_network_identity"):
+            if getattr(self, name) and not getattr(provided, name):
+                missing.append(name)
+        return tuple(missing)
+
+
+@runtime_checkable
+class CapableChallengeSolver(Protocol):
+    @property
+    def capabilities(self) -> ProtectionCapabilities: ...
+
+
+class ProtectionCapabilityMismatch(PlanError):
+    def __init__(self, policy: str, dimensions: tuple[str, ...]) -> None:
+        self.policy = policy
+        self.dimensions = dimensions
+        super().__init__(policy, dimensions)
+
+    def __str__(self) -> str:
+        return f"protection capability mismatch for {self.policy}: " + ", ".join(
+            self.dimensions
+        )
+
+
+class ProtectionIdentityMismatch(PlanError):
+    def __init__(self, policy: str) -> None:
+        self.policy = policy
+        super().__init__(policy)
+
+    def __str__(self) -> str:
+        return f"protection solution identity mismatch for {self.policy}"
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkIdentityExpectation[TSolution]:
+    field: str = "expected_identity"
+    required: bool = True
+
+    def select(self, solution: TSolution) -> NetworkIdentity | None:
+        if isinstance(solution, Mapping):
+            selected = solution.get(self.field)
+        else:
+            selected = getattr(solution, self.field, None)
+        if selected is None:
+            if self.required:
+                raise PlanError("protection solution is missing its expected network identity")
+            return None
+        if not isinstance(selected, NetworkIdentity):
+            raise PlanError("protection solution expected identity must be NetworkIdentity")
+        return selected
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -130,39 +265,25 @@ class SolverRequirement[TChallenge, TSolution]:
     name: str
 
 
-class SolverRegistry:
-    def __init__(self) -> None:
-        self._values: dict[int, ChallengeSolver[Any, Any]] = {}
-
-    def register[TChallenge, TSolution](
-        self,
-        requirement: SolverRequirement[TChallenge, TSolution],
-        solver: ChallengeSolver[TChallenge, TSolution],
-    ) -> None:
-        self._values[id(requirement)] = solver
-
-    def get[TChallenge, TSolution](
-        self, requirement: SolverRequirement[TChallenge, TSolution]
-    ) -> ChallengeSolver[TChallenge, TSolution] | None:
-        return cast(
-            ChallengeSolver[TChallenge, TSolution] | None,
-            self._values.get(id(requirement)),
-        )
-
-
 @dataclass(frozen=True, slots=True)
 class ChallengeSolverBinding[TChallenge, TSolution]:
     """Bind one conditional/before-call solver requirement to its implementation."""
 
     requirement: SolverRequirement[TChallenge, TSolution]
     solver: ChallengeSolver[TChallenge, TSolution]
+    capabilities: ProtectionCapabilities = ProtectionCapabilities()
 
 
 def bind_challenge_solver[TChallenge, TSolution](
     requirement: SolverRequirement[TChallenge, TSolution],
     solver: ChallengeSolver[TChallenge, TSolution],
+    *,
+    capabilities: ProtectionCapabilities | None = None,
 ) -> ChallengeSolverBinding[TChallenge, TSolution]:
-    return ChallengeSolverBinding(requirement, solver)
+    provided = capabilities
+    if provided is None and isinstance(solver, CapableChallengeSolver):
+        provided = solver.capabilities
+    return ChallengeSolverBinding(requirement, solver, provided or ProtectionCapabilities())
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +306,15 @@ class ChallengeSolverBindings:
             if binding.requirement is requirement:
                 return cast(ChallengeSolver[TChallenge, TSolution], binding.solver)
         return None
+
+    def capabilities_for(
+        self,
+        requirement: SolverRequirement[Any, Any],
+    ) -> ProtectionCapabilities:
+        for binding in self.bindings:
+            if binding.requirement is requirement:
+                return binding.capabilities
+        return ProtectionCapabilities()
 
 
 class SignalInterception(Enum):
@@ -263,13 +393,6 @@ class SolutionLocation(Enum):
     BODY = "body"
 
 
-@dataclass(frozen=True, slots=True)
-class SolutionTarget:
-    location: SolutionLocation
-    name: str
-    value_field: str | None = None
-
-
 class ReplaySafety(Enum):
     SAFE_METHOD = "safe-method"
     IDEMPOTENCY_KEY = "idempotency-key"
@@ -280,13 +403,6 @@ class ReplaySafety(Enum):
 class BodyReplayPolicy(Enum):
     REQUIRE_REPLAYABLE = "require-replayable"
     DENY = "deny"
-
-
-class SolutionFreshness(Enum):
-    PER_MATCH = "per-match"
-    PER_CALL = "per-call"
-    PER_ATTEMPT = "per-attempt"
-    UNTIL_EXPIRY = "until-expiry"
 
 
 class ProtectionPersistenceMode(Enum):
@@ -458,6 +574,12 @@ class ChallengePolicy[TChallenge, TSolution](Protocol):
     @property
     def challenge_identity(self) -> Callable[[TChallenge], Hashable] | None: ...
 
+    @property
+    def capabilities(self) -> ProtectionCapabilities: ...
+
+    @property
+    def expected_identity(self) -> NetworkIdentityExpectation[TSolution] | None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class ChallengePolicySpec[TChallenge, TSolution]:
@@ -470,6 +592,8 @@ class ChallengePolicySpec[TChallenge, TSolution]:
     persistence: ProtectionPersistence
     replay: ReplayPolicy
     challenge_identity: Callable[[TChallenge], Hashable] | None = None
+    capabilities: ProtectionCapabilities = ProtectionCapabilities()
+    expected_identity: NetworkIdentityExpectation[TSolution] | None = None
 
     def __post_init__(self) -> None:
         if not self.identity:
@@ -491,17 +615,21 @@ def challenge_policy[TChallenge, TSolution](
     identity: str | None = None,
     revision: int = 1,
     challenge_identity: Callable[[TChallenge], Hashable] | None = None,
+    capabilities: ProtectionCapabilities | None = None,
+    expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
 ) -> ChallengePolicySpec[TChallenge, TSolution]:
     return ChallengePolicySpec(
-        identity or solver.name,
-        revision,
-        scope,
-        signal,
-        solver,
-        apply,
-        persistence,
-        replay,
-        challenge_identity,
+        identity=identity or solver.name,
+        revision=revision,
+        scope=scope,
+        signal=signal,
+        solver=solver,
+        apply=apply,
+        persistence=persistence,
+        replay=replay,
+        challenge_identity=challenge_identity,
+        capabilities=capabilities or ProtectionCapabilities(),
+        expected_identity=expected_identity,
     )
 
 
@@ -531,6 +659,12 @@ class BeforeCallPolicy[TChallenge, TSolution](Protocol):
     @property
     def persistence(self) -> ProtectionPersistence: ...
 
+    @property
+    def capabilities(self) -> ProtectionCapabilities: ...
+
+    @property
+    def expected_identity(self) -> NetworkIdentityExpectation[TSolution] | None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class BeforeCallPolicySpec[TChallenge, TSolution]:
@@ -542,6 +676,8 @@ class BeforeCallPolicySpec[TChallenge, TSolution]:
     solver: SolverRequirement[TChallenge, TSolution] | None
     apply: PrivateBindings[TSolution]
     persistence: ProtectionPersistence
+    capabilities: ProtectionCapabilities = ProtectionCapabilities()
+    expected_identity: NetworkIdentityExpectation[TSolution] | None = None
 
     def __post_init__(self) -> None:
         if not self.identity:
@@ -566,17 +702,45 @@ def before_call_policy[TChallenge, TSolution](
     challenge: TChallenge | None = None,
     solver: SolverRequirement[TChallenge, TSolution] | None = None,
     revision: int = 1,
+    capabilities: ProtectionCapabilities | None = None,
+    expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
 ) -> BeforeCallPolicySpec[TChallenge, TSolution]:
     return BeforeCallPolicySpec(
-        identity,
-        revision,
-        scope,
-        acquire,
-        challenge,
-        solver,
-        apply,
-        persistence,
+        identity=identity,
+        revision=revision,
+        scope=scope,
+        acquire=acquire,
+        challenge=challenge,
+        solver=solver,
+        apply=apply,
+        persistence=persistence,
+        capabilities=capabilities or ProtectionCapabilities(),
+        expected_identity=expected_identity,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionBundle:
+    operation_protections: tuple[ProtectionFlow[Any], ...] = ()
+    before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
+    challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
+    operation_solver_bindings: tuple[SolverBinding[Any, Any], ...] = ()
+    challenge_solver_bindings: tuple[ChallengeSolverBinding[Any, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not any(
+            (
+                self.operation_protections,
+                self.before_call_policies,
+                self.challenge_policies,
+            )
+        ):
+            raise ValueError("protection bundle must contain at least one policy or flow")
+
+
+@runtime_checkable
+class InstallableProtection(Protocol):
+    def to_bundle(self) -> ProtectionBundle: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -585,23 +749,15 @@ class ReplayPolicy:
     safety: ReplaySafety
     proof_name: str | None = None
     body: BodyReplayPolicy = BodyReplayPolicy.REQUIRE_REPLAYABLE
-    freshness: SolutionFreshness = SolutionFreshness.PER_MATCH
 
-
-@dataclass(frozen=True, slots=True, eq=False)
-class ResponseReaction[TEvent, TSolution]:
-    source: Error[TEvent] | ResponseSignal[TEvent]
-    solver: SolverRequirement[TEvent, TSolution]
-    apply: SolutionTarget
-    replay: ReplayPolicy
-    priority: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class ReplayAction:
-    patch: ValuePatch
-    reaction: ResponseReaction[object, object]
-    solution: object
+    def __post_init__(self) -> None:
+        if self.max_replays < 0:
+            raise ValueError("replay budget cannot be negative")
+        if self.safety is ReplaySafety.IDEMPOTENCY_KEY:
+            if self.proof_name is None or not _HTTP_FIELD_NAME.fullmatch(self.proof_name):
+                raise ValueError("idempotency proof must be a valid HTTP field name")
+        elif self.proof_name is not None:
+            raise ValueError("replay proof applies only to idempotency-key safety")
 
 
 class MissingSolverError(PlanError):
@@ -610,85 +766,6 @@ class MissingSolverError(PlanError):
 
 class ReplayDeniedError(PlanError):
     pass
-
-
-class ReactionBudgetExceeded(PlanError):
-    pass
-
-
-@dataclass(slots=True)
-class ReactionBudget:
-    remaining: int
-
-    def consume(self) -> None:
-        if self.remaining <= 0:
-            raise ReactionBudgetExceeded("response reaction budget exhausted")
-        self.remaining -= 1
-
-
-async def react(
-    event: ErrorOutcome[object] | SignalMatch[object],
-    reactions: tuple[ResponseReaction[object, object], ...],
-    *,
-    solvers: SolverRegistry,
-    compiled: CompiledContract[object],
-    values: OperationValues,
-    solve_context: SolveContext,
-    budget: ReactionBudget,
-    body: BufferedBody | ReplayableBodyStream,
-    origin_may_have_executed: bool,
-) -> ReplayAction | None:
-    source = event.case if isinstance(event, ErrorOutcome) else event.signal
-    candidates = sorted(
-        (reaction for reaction in reactions if reaction.source is source),
-        key=lambda reaction: reaction.priority,
-        reverse=True,
-    )
-    if not candidates:
-        return None
-    if len(candidates) > 1 and candidates[0].priority == candidates[1].priority:
-        raise PlanError("ambiguous response reactions with equal priority")
-    reaction = candidates[0]
-    solver = solvers.get(reaction.solver)
-    if solver is None:
-        return None
-    ensure_replay_allowed(
-        compiled,
-        values,
-        body,
-        reaction.replay,
-        origin_may_have_executed=origin_may_have_executed,
-    )
-    budget.consume()
-    challenge = event.error if isinstance(event, ErrorOutcome) else event.value
-    solution = await solver.solve(challenge, solve_context)
-    patch = solution_patch(compiled, values, reaction.apply, solution)
-    return ReplayAction(patch, reaction, solution)
-
-
-def solution_patch(
-    compiled: CompiledContract[object],
-    values: OperationValues,
-    target: SolutionTarget,
-    solution: object,
-) -> ValuePatch:
-    selected = _select_solution(solution, target.value_field)
-    if target.location is SolutionLocation.HEADER:
-        slot = compiled.header_slots.get(target.name)
-    elif target.location is SolutionLocation.QUERY:
-        slot = compiled.query_slots.get(target.name)
-    elif target.location is SolutionLocation.COOKIE:
-        slot = compiled.cookie_slots.get(target.name)
-    else:
-        slot = compiled.body_field_slots.get(target.name)
-        if slot is None:
-            slot = compiled.body_slot
-        if slot is compiled.body_slot and slot is not None:
-            original = values.require(slot)
-            selected = _replace_body_field(original, target.name, selected)
-    if slot is None:
-        raise PlanError(f"solution target is not declared: {target.location.value}.{target.name}")
-    return ValuePatch((Set(slot, selected),))
 
 
 def private_bindings_patch[TSolution](
@@ -746,20 +823,6 @@ def private_bindings_patch[TSolution](
     return ValuePatch(tuple(operations))
 
 
-def _validate_solution_target(compiled: CompiledContract[object], target: SolutionTarget) -> None:
-    """Reject an application target that the endpoint did not declare, before any I/O."""
-    if target.location is SolutionLocation.HEADER:
-        slot = compiled.header_slots.get(target.name)
-    elif target.location is SolutionLocation.QUERY:
-        slot = compiled.query_slots.get(target.name)
-    elif target.location is SolutionLocation.COOKIE:
-        slot = compiled.cookie_slots.get(target.name)
-    else:
-        slot = compiled.body_field_slots.get(target.name) or compiled.body_slot
-    if slot is None:
-        raise PlanError(f"solution target is not declared: {target.location.value}.{target.name}")
-
-
 def ensure_replay_allowed(
     compiled: CompiledContract[object],
     values: OperationValues,
@@ -789,75 +852,6 @@ def ensure_replay_allowed(
     }:
         return
     raise ReplayDeniedError(f"unsafe replay is not proven for {method}")
-
-
-@dataclass(frozen=True, slots=True)
-class CaptchaStep:
-    case: object
-    solve_with: SolverRequirement[object, object]
-    verify: object
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class BeforeCall:
-    acquire: object | None
-    apply: SolutionTarget
-    freshness: SolutionFreshness
-    captcha: CaptchaStep | None = None
-    challenge: object | None = None
-    solver: SolverRequirement[Any, Any] | None = None
-
-
-def validate_before_call_cycles(contracts: tuple[object, ...]) -> None:
-    edges: dict[int, tuple[object, ...]] = {}
-    for contract in contracts:
-        flows = cast(tuple[BeforeCall, ...], getattr(contract, "before", ()))
-        targets: list[object] = []
-        for flow in flows:
-            if flow.acquire is not None:
-                targets.append(flow.acquire)
-            if flow.captcha is not None:
-                targets.append(flow.captcha.verify)
-        edges[id(contract)] = tuple(targets)
-    by_id = {id(contract): contract for contract in contracts}
-    active: list[int] = []
-    visited: set[int] = set()
-
-    def visit(identity: int) -> None:
-        if identity in active:
-            start = active.index(identity)
-            path = [
-                getattr(by_id[item], "operation_id", repr(by_id[item]))
-                for item in (*active[start:], identity)
-            ]
-            raise GraphError("before-call cycle: " + " -> ".join(path))
-        if identity in visited:
-            return
-        visited.add(identity)
-        active.append(identity)
-        for target in edges.get(identity, ()):
-            if id(target) in by_id:
-                visit(id(target))
-        active.pop()
-
-    for contract in contracts:
-        visit(id(contract))
-
-
-def header_target(name: str, *, value_field: str | None = None) -> SolutionTarget:
-    return SolutionTarget(SolutionLocation.HEADER, name, value_field)
-
-
-def query_target(name: str, *, value_field: str | None = None) -> SolutionTarget:
-    return SolutionTarget(SolutionLocation.QUERY, name, value_field)
-
-
-def cookie_target(name: str, *, value_field: str | None = None) -> SolutionTarget:
-    return SolutionTarget(SolutionLocation.COOKIE, name, value_field)
-
-
-def body_field(name: str, *, value_field: str | None = None) -> SolutionTarget:
-    return SolutionTarget(SolutionLocation.BODY, name, value_field)
 
 
 def safe_method(*, max_replays: int = 1) -> ReplayPolicy:
@@ -890,14 +884,82 @@ def _select_solution(solution: object, field_name: str | None) -> object:
         raise PlanError(f"solution field is missing: {field_name}") from exc
 
 
-def _replace_body_field(body: object, name: str, value: object) -> object:
-    if isinstance(body, Mapping):
-        return {**body, name: value}
-    models = default_model_adapters()
-    try:
-        dumped = models.dump_model(body)
-    except TypeError as exc:
-        raise PlanError("body solution target requires a mapping or registered model") from exc
-    if not isinstance(dumped, Mapping):
-        raise PlanError("body model adapter must produce a mapping")
-    return models.load(type(body), {**dumped, name: value})
+_HTTP_FIELD_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+
+
+__all__ = [
+    "AmbiguousSignal",
+    "BeforeCallPolicy",
+    "BeforeCallPolicySpec",
+    "BodyAccess",
+    "BodyReplayPolicy",
+    "CapableChallengeSolver",
+    "ChallengePolicy",
+    "ChallengePolicySpec",
+    "ChallengeSolver",
+    "ChallengeSolverBinding",
+    "ChallengeSolverBindings",
+    "FromProtection",
+    "InstallableProtection",
+    "MalformedSignal",
+    "MissingSolverError",
+    "NetworkIdentity",
+    "NetworkIdentityContext",
+    "NetworkIdentityExpectation",
+    "NetworkIdentityProvider",
+    "NetworkIdentityRequiredError",
+    "NetworkIdentitySource",
+    "PrivateBinding",
+    "PrivateBindingTarget",
+    "PrivateBindings",
+    "PrivateCookieSetBinding",
+    "ProtectionBundle",
+    "ProtectionCapabilities",
+    "ProtectionCapabilityMismatch",
+    "ProtectionFlow",
+    "ProtectionIdentityMismatch",
+    "ProtectionPersistence",
+    "ProtectionPersistenceMode",
+    "ProtectionRequirement",
+    "ProtectionSolver",
+    "ProtectionStateKey",
+    "ProtectionStateScope",
+    "ReplayDeniedError",
+    "ReplayPolicy",
+    "ReplaySafety",
+    "ResponseSignal",
+    "SignalInterception",
+    "SignalMatch",
+    "SignalOutcome",
+    "SolutionLocation",
+    "SolveContext",
+    "SolverBinding",
+    "SolverBindings",
+    "SolverRequirement",
+    "StaticNetworkIdentity",
+    "before_call_policy",
+    "bind_challenge_solver",
+    "bind_solver",
+    "challenge_policy",
+    "client_identity",
+    "idempotency_key",
+    "inspect_signals",
+    "network_identity",
+    "per_attempt",
+    "per_call",
+    "per_match",
+    "private_bindings",
+    "private_body",
+    "private_cookie",
+    "private_cookie_set",
+    "private_header",
+    "private_query",
+    "protection_flow",
+    "rejected_before_execution",
+    "rejected_before_origin",
+    "resolve_network_identity",
+    "safe_method",
+    "session_identity",
+    "until_expiry",
+    "until_rejected",
+]

@@ -10,6 +10,9 @@ from typing import Any
 
 from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope
 from eazy_sdk.protection import (
+    ChallengeSolver,
+    NetworkIdentity,
+    NetworkIdentityExpectation,
     PrivateBindings,
     ProtectionPersistence,
     ReplayPolicy,
@@ -66,7 +69,7 @@ class SecretCookie:
 @dataclass(frozen=True, slots=True)
 class CloudflareClearance:
     cookies: tuple[SecretCookie, ...]
-    user_agent: str | None = None
+    expected_identity: NetworkIdentity | None = None
     expires_at: datetime | None = None
 
     @property
@@ -77,7 +80,7 @@ class CloudflareClearance:
 
     def __repr__(self) -> str:
         return (
-            "CloudflareClearance(cookies=<redacted>, user_agent=<redacted>, "
+            "CloudflareClearance(cookies=<redacted>, expected_identity=<redacted>, "
             f"expires_at={self.expires_at!r})"
         )
 
@@ -143,6 +146,7 @@ CLOUDFLARE_PARSER = callable_parser(CloudflareChallenge, _parse_challenge)
 def challenge_pages(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[CloudflareChallenge, CloudflareClearance] | None = None,
     replay: ReplayPolicy | None = None,
     persistence: ProtectionPersistence | None = None,
 ) -> PresetChallengePolicy:
@@ -161,6 +165,8 @@ def challenge_pages(
         apply=private_bindings(private_cookie_set(field="cookies")),
         persistence=persistence or until_rejected(scope=network_identity()),
         replay=replay or safe_method(max_replays=1),
+        expected_identity=NetworkIdentityExpectation(),
+        solver=solver,
     )
 
 
@@ -239,6 +245,7 @@ TURNSTILE_PARSER = callable_parser(TurnstileChallenge, _parse_turnstile)
 def turnstile_widget(
     *,
     scope: RequestScope,
+    solver: ChallengeSolver[TurnstileChallenge, TurnstileToken] | None = None,
     apply: PrivateBindings[TurnstileToken] | None = None,
     replay: ReplayPolicy | None = None,
     persistence: ProtectionPersistence | None = None,
@@ -263,6 +270,7 @@ def turnstile_widget(
         apply=apply or form_field("cf-turnstile-response"),
         persistence=persistence or per_match(),
         replay=replay or safe_method(max_replays=1),
+        solver=solver,
     )
 
 
@@ -271,6 +279,7 @@ def turnstile_preclearance(
     scope: RequestScope,
     site_key: str,
     page_url: str,
+    solver: ChallengeSolver[TurnstileChallenge, CloudflareClearance] | None = None,
     persistence: ProtectionPersistence | None = None,
 ) -> PresetBeforeCallPolicy:
     if not site_key or not page_url:
@@ -293,6 +302,8 @@ def turnstile_preclearance(
         apply=private_bindings(private_cookie_set(field="cookies")),
         persistence=persistence or until_expiry(scope=network_identity()),
         challenge=challenge,
+        expected_identity=NetworkIdentityExpectation(),
+        solver=solver,
     )
 
 

@@ -9,20 +9,20 @@ and protection primitives.
 
 ```bash
 pip install \
-  "eazy-sdk[httpx,pydantic] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a1/eazy_sdk-0.2.0a1-py3-none-any.whl"
+  "eazy-sdk[httpx,pydantic] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a2/eazy_sdk-0.2.0a2-py3-none-any.whl"
 ```
 
 For WebSocket SDKs and AsyncAPI 3.0 generation:
 
 ```bash
 pip install \
-  "eazy-sdk[websocket] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a1/eazy_sdk-0.2.0a1-py3-none-any.whl" \
-  "eazy-sdk-asyncapi[yaml] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a1/eazy_sdk_asyncapi-0.2.0a1-py3-none-any.whl"
+  "eazy-sdk[websocket] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a2/eazy_sdk-0.2.0a2-py3-none-any.whl" \
+  "eazy-sdk-asyncapi[yaml] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a2/eazy_sdk_asyncapi-0.2.0a2-py3-none-any.whl"
 eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
 ```
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
 import httpx
 from pydantic import BaseModel
@@ -41,13 +41,9 @@ class User(BaseModel):
 USER_RESPONSES = Responses(success=(Success(200, Json(User)),))
 
 
-class GetUserRequest(TypedDict):
-    user_id: Annotated[int, Path()]
-
-
 class UsersApi(SyncApi):
     @api.get("/users/{user_id}", operation_id="getUser", responses=USER_RESPONSES)
-    def get_user(self, **request: Unpack[GetUserRequest]) -> User:
+    def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
         raise NotImplementedError
 
 
@@ -60,8 +56,13 @@ user = users.get_user(user_id=42)
 envelope = users.get_user.with_response(user_id=42)
 ```
 
-`api` is the narrow HTTP-decorator namespace. Its public attributes are exactly `get`, `post`,
-`put`, `patch`, and `delete`; import `SyncApi`, `AsyncApi`, and runtime types separately.
+`api` is the narrow HTTP-decorator namespace. It provides `get`, `post`, `put`, `patch`, `delete`,
+`head`, `options`, `trace`, and `request`; import `SyncApi`, `AsyncApi`, and runtime types
+separately.
+
+For reusable or generated request schemas, expose the same inputs through
+`**request: Unpack[TypedDict]`. Both authoring styles compile to the same request plan; do not mix
+them in one operation.
 
 When caller-facing kwargs and the protocol JSON have different shapes, declare one
 `BodyProjection`. The public method stays flat while the target model owns nesting, aliases,

@@ -21,7 +21,7 @@ uv add "eazy-sdk[httpx,pydantic]"
 ## Создайте `quickstart.py`
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
 import httpx
 from pydantic import BaseModel
@@ -36,15 +36,12 @@ class Product(BaseModel):
     title: str
     price: int
 
-class GetProductRequest(TypedDict):
-    product_id: Annotated[int, Path()]
-
 class StoreApi(SyncApi):
     @api.get(
         "/v1/products/{product_id}",
         responses=Responses[Product](success=(Success(200, Json(Product)),)),
     )
-    def product(self, **request: Unpack[GetProductRequest]) -> Product:
+    def product(self, *, product_id: Annotated[int, Path()]) -> Product:
         raise NotImplementedError
 
 def store(request: httpx.Request) -> httpx.Response:

@@ -72,5 +72,6 @@ mutants/
 
 # Local AI-assisted development notes and instructions
 *.md
+!plugins/*/README.md
 /.claude/
 /docs/

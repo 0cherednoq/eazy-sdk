@@ -7,7 +7,7 @@ sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
   - eazy_sdk.sdk
-api_fingerprint: "sha256:72e6cb2a1edfb89c80b99cc5d1eb869da77f96604aa1451b200f651d02474c32"
+api_fingerprint: "sha256:77111b5798dc306d70beb59bb3163ca8d79ab64226dea327f8b4265908561b55"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -70,9 +70,14 @@ Root и API groups не сериализуют пользовательские 
 ## Client configuration
 
 `ClientConfig` включает dependencies, auth, middleware, retry, rate limiter, signing key provider,
-crypto и typed protection policies. Protection lifecycle разделён на
+crypto, `network_identity` и typed protection policies. First-party preset устанавливайте через
+immutable `config.with_protection(preset)`; low-level protection lifecycle разделён на
 `operation_protections`, `before_call_policies`, `challenge_policies`,
 `operation_protection_solvers` и `challenge_solvers`.
+
+`network_identity` принимает `NetworkIdentity` или per-attempt `NetworkIdentityProvider`.
+First-party handler может объявить тот же source. Разные sources в config и handler отклоняются до
+provider и transport I/O.
 
 ## Ad-hoc HTTP
 

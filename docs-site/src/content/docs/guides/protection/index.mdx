@@ -11,6 +11,25 @@ response challenge. Выбирайте ровно тот lifecycle, которы
 uv add eazy-sdk-presets
 ```
 
+## Установите first-party preset
+
+Передайте solver factory и установите returned preset одним immutable выражением. Preset сам
+маршрутизирует policy в `before_call_policies` или `challenge_policies` и добавляет solver binding.
+
+```python target
+guard = cloudflare.challenge_pages(
+    scope=host("api.example.test"),
+    solver=CloudflareSolver(),
+)
+
+config = ClientConfig(
+    network_identity=identity,
+).with_protection(guard)
+```
+
+Не передавайте solver, если framework связывает solvers через SDK-level DI. В этом случае bundle
+сохраняет unbound requirement, а missing binding обнаруживается до providers и transport I/O.
+
 ## Mandatory CAPTCHA перед login
 
 Public request содержит только данные caller. Managed поля находятся в private wire-модели и
@@ -34,7 +53,7 @@ config = ClientConfig(
 
 Порядок фиксирован: `acquire → solve → verify → projection → private writers → request`.
 
-## Custom compound challenge
+## Advanced: custom compound challenge
 
 Этот пример описывает KAD-подобный challenge, который возвращает две private cookies. Они
 отсутствуют в сигнатуре operation и не хранятся в auth registry.
@@ -90,10 +109,29 @@ config = ClientConfig(
 )
 ```
 
+Low-level lifecycle collections и `ChallengeSolverBindings` нужны авторам frameworks и custom
+policies. Для first-party presets используйте `with_protection()`.
+
 Compiler проверяет conflicts с caller inputs, auth, dependency, signature и другими private
 writers. Runtime сначала выбирает и валидирует весь batch, затем применяет один patch. При
 повторном challenge старая revision инвалидируется; совместимые concurrent calls разделяют один
 solve по полному state key.
+
+## Network identity и capabilities
+
+Network-scoped policies требуют `NetworkIdentity` или `NetworkIdentityProvider`. Runtime разрешает
+identity отдельно для каждой attempt и использует одно значение для cache/single-flight key,
+`SolveContext`, solution validation и handler-owned connection profile. Rotating handler и config
+должны ссылаться на один provider instance; конфликт двух источников отклоняется до I/O.
+
+Solver явно объявляет `ProtectionCapabilities`: buffered response, cookie jar, JavaScript, browser
+и sticky network identity. Missing capability вызывает `ProtectionCapabilityMismatch` до solve и
+emit. Clearance solution может объявить `expected_identity`; mismatch вызывает
+`ProtectionIdentityMismatch` до publication. Ошибки и `repr` не содержат proxy credentials,
+cookies или identity values.
+
+Shared state использует single-flight по полному key. Lock удаляется после последнего holder или
+waiter, включая exception и cancellation; cached state живёт независимо от lock object.
 
 ## First-party presets
 

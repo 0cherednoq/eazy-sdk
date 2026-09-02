@@ -16,6 +16,7 @@ from eazy_sdk.handlers.profile import (
     HandlerProfile,
     RedirectControl,
 )
+from eazy_sdk.protection import NetworkIdentity, NetworkIdentityProvider
 from eazy_sdk.request.prepared import HttpProtocol
 
 _VERSION = version("httpx")
@@ -45,10 +46,15 @@ class HttpxHandler(BaseHandler):
     profile = HTTPX_HANDLER_PROFILE
 
     def __init__(
-        self, client: httpx.Client | None = None, *, owns_client: bool | None = None
+        self,
+        client: httpx.Client | None = None,
+        *,
+        owns_client: bool | None = None,
+        network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
     ) -> None:
         self._owned = client is None if owns_client is None else owns_client
         self.client = client or httpx.Client(headers={}, cookies={})
+        self.network_identity = network_identity
 
     def handle(self, request: Request) -> Response:
         native = httpx.Request(
@@ -70,10 +76,15 @@ class AsyncHttpxHandler(AsyncBaseHandler):
     profile = HTTPX_HANDLER_PROFILE
 
     def __init__(
-        self, client: httpx.AsyncClient | None = None, *, owns_client: bool | None = None
+        self,
+        client: httpx.AsyncClient | None = None,
+        *,
+        owns_client: bool | None = None,
+        network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
     ) -> None:
         self._owned = client is None if owns_client is None else owns_client
         self.client = client or httpx.AsyncClient(headers={}, cookies={})
+        self.network_identity = network_identity
 
     async def ahandle(self, request: Request) -> Response:
         native = httpx.Request(
