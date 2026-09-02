@@ -34,7 +34,7 @@ from eazy_sdk.handlers import (
     HandlerProfile,
     RedirectControl,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     ChallengeSolverBindings,
     SolveContext,
     SolverRequirement,

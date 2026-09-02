@@ -843,7 +843,7 @@ def _reserve_private_bindings(
     body_field_slots: Mapping[str, ValueSlot[object]],
     body_projection: BodyProjection[object, object] | None,
 ) -> tuple[dict[object, ValueSlot[object]], tuple[PrivateBodyWriter, ...]]:
-    from eazy_sdk.protection import (
+    from eazy_sdk.protection.advanced import (
         PrivateBinding,
         PrivateBindings,
         PrivateCookieSetBinding,
@@ -987,7 +987,7 @@ def _compile_private_wire_writers(
     target: object,
     models: ModelAdapterRegistry,
 ) -> tuple[PrivateWireWriter, ...]:
-    from eazy_sdk.protection import FromProtection
+    from eazy_sdk.protection.advanced import FromProtection
 
     writers: list[PrivateWireWriter] = []
 

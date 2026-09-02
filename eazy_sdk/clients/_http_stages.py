@@ -18,7 +18,7 @@ from eazy_sdk._internal.http_compiler import CompiledContract
 from eazy_sdk.clients.base import RedirectLimitExceeded, UnsafeReplayError
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, ModelDumpMode
-from eazy_sdk.protection import SignalMatch, SignalOutcome
+from eazy_sdk.protection.advanced import SignalMatch, SignalOutcome
 from eazy_sdk.request import MultipartBody
 from eazy_sdk.request.prepared import _NO_BODY_DOCUMENT_OVERRIDE
 from eazy_sdk.response import NormalizedResponse

@@ -13,11 +13,11 @@
     }
   },
   "api-reference/clients.mdx": {
-    "fingerprint": "sha256:77111b5798dc306d70beb59bb3163ca8d79ab64226dea327f8b4265908561b55",
+    "fingerprint": "sha256:b0e8654e131379b8bc6892ade42ce43aecc9e4794dc407e34741ab6388e9cc73",
     "symbols": {
       "eazy_sdk.AsyncClient": "sha256:8b216cf182d48317cae3d785e6ada6608c475beacda6bd9464da00475f452a0e",
       "eazy_sdk.Client": "sha256:db50e70e4213e6c49c7785dd9035546968856093ff251541f159d266880eaa61",
-      "eazy_sdk.ClientConfig": "sha256:1ed7f718a07312a3b0b5f55eba2ea16e82d9eea3f91247c83a0c422c23e680ea",
+      "eazy_sdk.ClientConfig": "sha256:7ee37b2a0d2f8b17b30efbe22a9e495de69e32ae4d76ee1bad8377c6af2dd9ad",
       "eazy_sdk.clients.CallOptions": "sha256:fda10bef5760218a10458522467d5a2c9946a5cafbfec69356698274859e00db",
       "eazy_sdk.sdk": "sha256:a394c8753439b3ab45a0637fe9130d860e73802c9eeca1e9ec557bbf47859190"
     }
@@ -61,9 +61,10 @@
     }
   },
   "api-reference/protection.mdx": {
-    "fingerprint": "sha256:f68c209ff5610f466331ced49894dc0d31ccb8e31aeb783d6d1339d724efa32f",
+    "fingerprint": "sha256:a1662c9dddc06fdb3e380e46ab43080a1556cd0a8e111082ec44101a5269967a",
     "symbols": {
-      "eazy_sdk.protection": "sha256:b038500aa636b6fcc8e45c85240c041a8b361befea5ee9d095f3af8a1b3d52f2",
+      "eazy_sdk.protection": "sha256:1075538ba0768143940836f99736c932c31e2d2d413bd415510f76a89a13566f",
+      "eazy_sdk.protection.advanced": "sha256:2cecb2002b94385ef172af12078eb046da5a2d3d3fb0d4501ceafd97eaa07114",
       "eazy_sdk_presets.cloudflare": "sha256:d53d2694d5f59cc37702a3e7bb0c43671c92291f0705246d4a9a802fb9636495",
       "eazy_sdk_presets.recaptcha": "sha256:a33b7b88b8717a7327b88f564bab5da70baf85a9e6a77afb8211166fc50ded35"
     }
@@ -247,30 +248,30 @@
     }
   },
   "guides/protection/cloudflare.mdx": {
-    "fingerprint": "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c",
+    "fingerprint": "sha256:cf6a26152e0189cdc69f3d46d4fcd6c88c44fead142d6cc0e3a0b2873c8b3894",
     "symbols": {
-      "eazy_sdk.protection": "sha256:b038500aa636b6fcc8e45c85240c041a8b361befea5ee9d095f3af8a1b3d52f2",
+      "eazy_sdk.protection": "sha256:1075538ba0768143940836f99736c932c31e2d2d413bd415510f76a89a13566f",
       "eazy_sdk_presets.cloudflare": "sha256:d53d2694d5f59cc37702a3e7bb0c43671c92291f0705246d4a9a802fb9636495"
     }
   },
   "guides/protection/recaptcha.mdx": {
-    "fingerprint": "sha256:ab4f74e08913a742d76ae74cc36256f1bcedec36f346d19f123b6cc21afd3500",
+    "fingerprint": "sha256:1a0d7c3c58f650af65bdbbd5564397377156e956ee57f7516f461bc6a523b25c",
     "symbols": {
-      "eazy_sdk.protection": "sha256:b038500aa636b6fcc8e45c85240c041a8b361befea5ee9d095f3af8a1b3d52f2",
+      "eazy_sdk.protection": "sha256:1075538ba0768143940836f99736c932c31e2d2d413bd415510f76a89a13566f",
       "eazy_sdk_presets.recaptcha": "sha256:a33b7b88b8717a7327b88f564bab5da70baf85a9e6a77afb8211166fc50ded35"
     }
   },
   "guides/protection/turnstile.mdx": {
-    "fingerprint": "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c",
+    "fingerprint": "sha256:cf6a26152e0189cdc69f3d46d4fcd6c88c44fead142d6cc0e3a0b2873c8b3894",
     "symbols": {
-      "eazy_sdk.protection": "sha256:b038500aa636b6fcc8e45c85240c041a8b361befea5ee9d095f3af8a1b3d52f2",
+      "eazy_sdk.protection": "sha256:1075538ba0768143940836f99736c932c31e2d2d413bd415510f76a89a13566f",
       "eazy_sdk_presets.cloudflare": "sha256:d53d2694d5f59cc37702a3e7bb0c43671c92291f0705246d4a9a802fb9636495"
     }
   },
   "guides/reliability/rate-limit.mdx": {
-    "fingerprint": "sha256:95534c111fdbf06939ea4ae86f799b46630f47bd1dfc31907d3ee812b2927648",
+    "fingerprint": "sha256:2b8f726ca3a553b5a31a9543981080837deecb3d7c834c10b0d77158b003a033",
     "symbols": {
-      "eazy_sdk.ClientConfig": "sha256:1ed7f718a07312a3b0b5f55eba2ea16e82d9eea3f91247c83a0c422c23e680ea",
+      "eazy_sdk.ClientConfig": "sha256:7ee37b2a0d2f8b17b30efbe22a9e495de69e32ae4d76ee1bad8377c6af2dd9ad",
       "eazy_sdk.ratelimit_runtime": "sha256:3c9dfce1d02b0a5d4e205f66a78b17cdb81c9c7e146fb52c169c95e366fb02b2"
     }
   },
@@ -281,9 +282,9 @@
     }
   },
   "guides/reliability/retry.mdx": {
-    "fingerprint": "sha256:80fe207f2b30d4664ad472bcfa30ea4e82a9dc6bfb4b7f0890b295ea87a4d964",
+    "fingerprint": "sha256:f9e9464ae2c945ae26e56ae27e01013b2e72140ab573b17020009cf4e6cb001b",
     "symbols": {
-      "eazy_sdk.ClientConfig": "sha256:1ed7f718a07312a3b0b5f55eba2ea16e82d9eea3f91247c83a0c422c23e680ea",
+      "eazy_sdk.ClientConfig": "sha256:7ee37b2a0d2f8b17b30efbe22a9e495de69e32ae4d76ee1bad8377c6af2dd9ad",
       "eazy_sdk.RetryPolicy": "sha256:e4d4e7f990bde277571cd1f2c07311dbd92f00eddf6426c94c29ec1467f3e7b9",
       "eazy_sdk.clients.CallOptions": "sha256:fda10bef5760218a10458522467d5a2c9946a5cafbfec69356698274859e00db"
     }

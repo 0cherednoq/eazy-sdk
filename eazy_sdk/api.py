@@ -27,7 +27,7 @@ from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.clients.base import CallOptions
 from eazy_sdk.crypto import CryptoWire, PayloadCrypto
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
-from eazy_sdk.protection import ProtectionRequirement
+from eazy_sdk.protection.advanced import ProtectionRequirement
 from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success

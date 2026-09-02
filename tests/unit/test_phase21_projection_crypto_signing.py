@@ -34,7 +34,7 @@ from eazy_sdk.crypto import (
     payload_crypto,
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.protection import FromProtection, ProtectionRequirement
+from eazy_sdk.protection.advanced import FromProtection, ProtectionRequirement
 from eazy_sdk.request import (
     BodyProjection,
     JsonBody,

@@ -6,14 +6,11 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from eazy_sdk.ext import RequestScope
-from eazy_sdk.protection import (
-    BodyAccess,
+from eazy_sdk.protection.advanced import (
     ChallengeSolver,
     ChallengeSolverBinding,
-    NetworkIdentityExpectation,
     PrivateBindings,
     ProtectionBundle,
-    ProtectionCapabilities,
     ProtectionPersistence,
     ResponseSignal,
     SolverRequirement,
@@ -24,13 +21,13 @@ from eazy_sdk.protection import (
     private_header,
     private_query,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     per_call as protection_per_call,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     per_match as protection_per_match,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     until_expiry as protection_until_expiry,
 )
 
@@ -55,9 +52,7 @@ class PresetChallengePolicy:
     apply: PrivateBindings[Any]
     persistence: ProtectionPersistence
     replay: Any
-    capabilities: ProtectionCapabilities
     challenge_identity: Any | None = None
-    expected_identity: NetworkIdentityExpectation[Any] | None = None
     solver_binding: ChallengeSolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
 
@@ -109,8 +104,6 @@ class PresetBeforeCallPolicy:
     solver: SolverRequirement[Any, Any]
     apply: PrivateBindings[Any]
     persistence: ProtectionPersistence
-    capabilities: ProtectionCapabilities
-    expected_identity: NetworkIdentityExpectation[Any] | None = None
     solver_binding: ChallengeSolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
 
@@ -135,7 +128,6 @@ class ProtectionTemplate[TChallenge, TSolution]:
     id: PresetId
     revision: int
     solver_requirement: SolverRequirement[TChallenge, TSolution]
-    capabilities: ProtectionCapabilities
 
     def bind_challenge(
         self,
@@ -146,7 +138,6 @@ class ProtectionTemplate[TChallenge, TSolution]:
         persistence: ProtectionPersistence,
         replay: Any,
         challenge_identity: Any | None = None,
-        expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
         solver: ChallengeSolver[TChallenge, TSolution] | None = None,
     ) -> PresetChallengePolicy:
         return PresetChallengePolicy(
@@ -159,9 +150,7 @@ class ProtectionTemplate[TChallenge, TSolution]:
             apply=apply,
             persistence=persistence,
             replay=replay,
-            capabilities=self.capabilities,
             challenge_identity=challenge_identity,
-            expected_identity=expected_identity,
             solver_binding=(
                 bind_challenge_solver(
                     self.solver_requirement,
@@ -179,7 +168,6 @@ class ProtectionTemplate[TChallenge, TSolution]:
         apply: PrivateBindings[TSolution],
         persistence: ProtectionPersistence,
         challenge: TChallenge,
-        expected_identity: NetworkIdentityExpectation[TSolution] | None = None,
         solver: ChallengeSolver[TChallenge, TSolution] | None = None,
     ) -> PresetBeforeCallPolicy:
         return PresetBeforeCallPolicy(
@@ -192,8 +180,6 @@ class ProtectionTemplate[TChallenge, TSolution]:
             solver=self.solver_requirement,
             apply=apply,
             persistence=persistence,
-            capabilities=self.capabilities,
-            expected_identity=expected_identity,
             solver_binding=(
                 bind_challenge_solver(
                     self.solver_requirement,
@@ -245,11 +231,9 @@ def until_expiry() -> ProtectionPersistence:
 
 
 __all__ = [
-    "BodyAccess",
     "PresetBeforeCallPolicy",
     "PresetChallengePolicy",
     "PresetId",
-    "ProtectionCapabilities",
     "ProtectionTemplate",
     "form_field",
     "header",

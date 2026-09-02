@@ -9,32 +9,28 @@ from enum import Enum
 from typing import Any
 
 from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     ChallengeSolver,
-    NetworkIdentity,
-    NetworkIdentityExpectation,
     PrivateBindings,
     ProtectionPersistence,
     ReplayPolicy,
     ResponseSignal,
     SignalInterception,
     SolverRequirement,
-    network_identity,
     per_match,
     private_bindings,
     private_cookie_set,
     safe_method,
+    session_identity,
     until_expiry,
     until_rejected,
 )
 from eazy_sdk.response import callable_parser
 
 from .core import (
-    BodyAccess,
     PresetBeforeCallPolicy,
     PresetChallengePolicy,
     PresetId,
-    ProtectionCapabilities,
     ProtectionTemplate,
     form_field,
 )
@@ -69,7 +65,6 @@ class SecretCookie:
 @dataclass(frozen=True, slots=True)
 class CloudflareClearance:
     cookies: tuple[SecretCookie, ...]
-    expected_identity: NetworkIdentity | None = None
     expires_at: datetime | None = None
 
     @property
@@ -79,10 +74,7 @@ class CloudflareClearance:
         return self.cookies[0].value
 
     def __repr__(self) -> str:
-        return (
-            "CloudflareClearance(cookies=<redacted>, expected_identity=<redacted>, "
-            f"expires_at={self.expires_at!r})"
-        )
+        return f"CloudflareClearance(cookies=<redacted>, expires_at={self.expires_at!r})"
 
 
 CHALLENGE_SOLVER = SolverRequirement[CloudflareChallenge, CloudflareClearance](
@@ -92,13 +84,6 @@ CHALLENGE_TEMPLATE = ProtectionTemplate(
     PresetId("cloudflare", "challenge-pages"),
     1,
     CHALLENGE_SOLVER,
-    ProtectionCapabilities(
-        BodyAccess.BUFFERED,
-        cookie_jar=True,
-        javascript=True,
-        browser=True,
-        sticky_network_identity=True,
-    ),
 )
 
 
@@ -163,9 +148,8 @@ def challenge_pages(
         scope=scope,
         signal=signal,
         apply=private_bindings(private_cookie_set(field="cookies")),
-        persistence=persistence or until_rejected(scope=network_identity()),
+        persistence=persistence or until_rejected(scope=session_identity()),
         replay=replay or safe_method(max_replays=1),
-        expected_identity=NetworkIdentityExpectation(),
         solver=solver,
     )
 
@@ -262,7 +246,6 @@ def turnstile_widget(
         PresetId("cloudflare", "turnstile-widget"),
         1,
         TURNSTILE_SOLVER,
-        ProtectionCapabilities(BodyAccess.BUFFERED, javascript=True, browser=True),
     )
     return template.bind_challenge(
         scope=scope,
@@ -289,20 +272,12 @@ def turnstile_preclearance(
         PresetId("cloudflare", "turnstile-preclearance"),
         1,
         PRECLEARANCE_SOLVER,
-        ProtectionCapabilities(
-            BodyAccess.NONE,
-            cookie_jar=True,
-            javascript=True,
-            browser=True,
-            sticky_network_identity=True,
-        ),
     )
     return template.bind_before(
         scope=scope,
         apply=private_bindings(private_cookie_set(field="cookies")),
-        persistence=persistence or until_expiry(scope=network_identity()),
+        persistence=persistence or until_expiry(scope=session_identity()),
         challenge=challenge,
-        expected_identity=NetworkIdentityExpectation(),
         solver=solver,
     )
 

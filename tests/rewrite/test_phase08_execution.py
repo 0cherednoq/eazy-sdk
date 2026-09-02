@@ -36,7 +36,7 @@ from eazy_sdk.middleware import (
     attempt_middleware,
     call_middleware,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     BeforeCallPolicy,
     ChallengeSolverBindings,
     ResponseSignal,

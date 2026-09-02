@@ -55,7 +55,7 @@ from eazy_sdk.response import (
     UnexpectedResponseError,
 )
 
-__version__ = "0.2.0a2"
+__version__ = "0.2.0a3"
 
 if TYPE_CHECKING:
     from eazy_sdk.clients import AsyncClient, Client

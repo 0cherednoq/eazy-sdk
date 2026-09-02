@@ -6,19 +6,16 @@ DI; presets perform no hidden network I/O and do not own retries.
 
 ```python
 from eazy_sdk import ClientConfig
-from eazy_sdk.protection import NetworkIdentity
 from eazy_sdk_presets import cloudflare, host
 
 guard = cloudflare.challenge_pages(
     scope=host("api.example"),
     solver=my_solver,
 )
-config = ClientConfig(
-    network_identity=NetworkIdentity(proxy="edge-proxy-1"),
-).with_protection(guard)
+config = ClientConfig().with_protection(guard)
 ```
 
-The solver declares its JavaScript/browser capabilities. Network-scoped clearance solvers also
-return the attempt's `context.network_identity` as `expected_identity`; mismatches fail before
-state publication or replay. The core package remains installable without presets or
-browser/parser dependencies.
+The solver implements only the typed challenge-to-solution contract. Browser, JavaScript, remote
+API, and WASM choices stay inside the solver. Managed clearance belongs to one client/handler
+session. To rotate a proxy or browser profile, create a new handler and SDK client for the new
+lease. The core package remains installable without presets or browser/parser dependencies.

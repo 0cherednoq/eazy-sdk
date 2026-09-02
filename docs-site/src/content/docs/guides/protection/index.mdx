@@ -1,137 +1,146 @@
 ---
 title: Protection
-description: Mandatory flows, proactive policies and conditional challenges.
+description: Install first-party anti-bot presets or define a typed response guard.
 freshness: false
 ---
 
-Protection разделяет обязательный flow операции, proactive before-call policy и conditional
-response challenge. Выбирайте ровно тот lifecycle, который соответствует протоколу сервера.
+Use protection guards when an operation can return a challenge that must be solved before a safe
+replay. A guard detects the challenge, calls one typed solver, applies the complete solution before
+request preparation, and sends a newly prepared request through the same handler session.
 
 ```bash
 uv add eazy-sdk-presets
 ```
 
-## Установите first-party preset
+## Install a first-party preset
 
-Передайте solver factory и установите returned preset одним immutable выражением. Preset сам
-маршрутизирует policy в `before_call_policies` или `challenge_policies` и добавляет solver binding.
+Create the handler and solver in your SDK composition root. Install the returned preset with one
+immutable `with_protection()` call:
 
 ```python target
+from eazy_sdk import ClientConfig
+from eazy_sdk_presets import cloudflare, host
+
+
 guard = cloudflare.challenge_pages(
     scope=host("api.example.test"),
-    solver=CloudflareSolver(),
+    solver=CloudflareSolver(browser_pool),
 )
 
-config = ClientConfig(
-    network_identity=identity,
-).with_protection(guard)
+config = ClientConfig().with_protection(guard)
 ```
 
-Не передавайте solver, если framework связывает solvers через SDK-level DI. В этом случае bundle
-сохраняет unbound requirement, а missing binding обнаруживается до providers и transport I/O.
+The solver implements `Challenge -> Solution`. Whether it uses a browser, JavaScript, WASM, or a
+remote API is private to the solver. The runtime does not require implementation flags.
 
-## Mandatory CAPTCHA перед login
+## Define a custom response guard
 
-Public request содержит только данные caller. Managed поля находятся в private wire-модели и
-заполняются одним protection result атомарно.
-
-```python target
-flow = protection_flow(
-    LOGIN_PROTECTION,
-    acquire=AsyncProtectionApi.acquire,
-    solve=True,
-    verify=AsyncProtectionApi.verify,
-)
-
-config = ClientConfig(
-    operation_protections=(flow,),
-    operation_protection_solvers=SolverBindings(
-        bind_solver(LOGIN_PROTECTION, CaptchaSolver()),
-    ),
-)
-```
-
-Порядок фиксирован: `acquire → solve → verify → projection → private writers → request`.
-
-## Advanced: custom compound challenge
-
-Этот пример описывает KAD-подобный challenge, который возвращает две private cookies. Они
-отсутствуют в сигнатуре operation и не хранятся в auth registry.
+Use `challenge_guard()` for a custom protocol. The detector receives an immutable
+`ResponseContext` and returns either one typed challenge or `None`.
 
 ```python target
 from dataclasses import dataclass
 
 from eazy_sdk import ClientConfig
 from eazy_sdk.protection import (
-    ChallengeSolverBindings,
-    ResponseSignal,
-    SolverRequirement,
-    bind_challenge_solver,
-    challenge_policy,
-    network_identity,
-    private_bindings,
-    private_cookie,
+    MalformedChallengeError,
+    SolveContext,
+    challenge_guard,
     rejected_before_origin,
-    until_rejected,
+    solution_fields,
 )
+from eazy_sdk.response import ResponseContext
+from eazy_sdk_presets import host
+
 
 @dataclass(frozen=True)
 class KadChallenge:
-    revision: str
+    revision: int
+
 
 @dataclass(frozen=True)
 class KadClearance:
     pr_fp: str
     wasm: str
 
-KAD_WASM_SOLVER = SolverRequirement[KadChallenge, KadClearance]("kad.wasm")
 
-KAD_WASM_POLICY = challenge_policy(
-    identity="kad.wasm",
-    revision=1,
+def detect_kad(context: ResponseContext[object]) -> KadChallenge | None:
+    if context.response.status_code != 403:
+        return None
+    document = context.json
+    if document.error is not None or not isinstance(document.value, dict):
+        raise MalformedChallengeError("invalid KAD challenge document")
+    revision = document.value.get("revision")
+    if not isinstance(revision, int):
+        raise MalformedChallengeError("challenge revision is missing")
+    return KadChallenge(revision)
+
+
+class KadSolver:
+    async def solve(
+        self,
+        challenge: KadChallenge,
+        context: SolveContext,
+    ) -> KadClearance:
+        return await solve_with_shared_session(challenge)
+
+
+guard = challenge_guard(
+    name="kad.wasm",
     scope=host("kad.arbitr.ru"),
-    signal=KAD_CHALLENGE,
-    solver=KAD_WASM_SOLVER,
-    apply=private_bindings(
-        private_cookie("pr_fp", field="pr_fp"),
-        private_cookie("wasm", field="wasm"),
+    detect=detect_kad,
+    solver=KadSolver(),
+    apply=solution_fields(
+        cookies={"pr_fp": "pr_fp", "wasm": "wasm"},
     ),
-    persistence=until_rejected(scope=network_identity()),
     replay=rejected_before_origin(max_replays=1),
-    challenge_identity=lambda challenge: challenge.revision,
 )
 
-config = ClientConfig(
-    challenge_policies=(KAD_WASM_POLICY,),
-    challenge_solvers=ChallengeSolverBindings(
-        bind_challenge_solver(KAD_WASM_SOLVER, KadSolver()),
-    ),
-)
+config = ClientConfig().with_protection(guard)
 ```
 
-Low-level lifecycle collections и `ChallengeSolverBindings` нужны авторам frameworks и custom
-policies. Для first-party presets используйте `with_protection()`.
+`solution_fields()` reserves every destination during compilation. At runtime the complete batch
+is validated before one atomic patch. The detector and solver never receive a mutable or prepared
+request. Every replay reruns dependencies, auth, projection, crypto, encoding, preparation, and
+signing.
 
-Compiler проверяет conflicts с caller inputs, auth, dependency, signature и другими private
-writers. Runtime сначала выбирает и валидирует весь batch, затем применяет один patch. При
-повторном challenge старая revision инвалидируется; совместимые concurrent calls разделяют один
-solve по полному state key.
+## Own transport affinity in the composition root
 
-## Network identity и capabilities
+Managed clearance belongs to one SDK client and its handler session. Keep proxy, User-Agent, and
+browser impersonation fixed for that lifecycle. Rotate them by acquiring a new lease and creating
+a new handler and client:
 
-Network-scoped policies требуют `NetworkIdentity` или `NetworkIdentityProvider`. Runtime разрешает
-identity отдельно для каждой attempt и использует одно значение для cache/single-flight key,
-`SolveContext`, solution validation и handler-owned connection profile. Rotating handler и config
-должны ссылаться на один provider instance; конфликт двух источников отклоняется до I/O.
+```python target
+async with proxy_pool.acquire() as lease:
+    async with create_sdk(proxy=lease.url) as sdk:
+        return await run_operation(sdk)
+```
 
-Solver явно объявляет `ProtectionCapabilities`: buffered response, cookie jar, JavaScript, browser
-и sticky network identity. Missing capability вызывает `ProtectionCapabilityMismatch` до solve и
-emit. Clearance solution может объявить `expected_identity`; mismatch вызывает
-`ProtectionIdentityMismatch` до publication. Ошибки и `repr` не содержат proxy credentials,
-cookies или identity values.
+A new client starts with empty protection state. Eazy SDK does not infer or verify that an arbitrary
+solver shares the handler's network path. If the protocol requires one browser or HTTP session,
+construct the solver and handler from the same session or lease in `create_sdk()`.
 
-Shared state использует single-flight по полному key. Lock удаляется после последнего holder или
-waiter, включая exception и cancellation; cached state живёт независимо от lock object.
+## Handle stage-specific errors
+
+- `ProtectionConfigurationError` reports malformed guards, missing solvers, or destination
+  conflicts before transport I/O.
+- `ChallengeDetectionError` wraps an unexpected detector exception.
+- `ChallengeSolveError` wraps a solver failure.
+- `ChallengeApplicationError` reports an invalid solution batch before replay.
+- `ReplayDeniedError` reports an exhausted budget or an unproven replay.
+
+Stage errors retain the original exception as `__cause__`. Their own message contains policy and
+attempt metadata, not response bodies, cookies, credentials, or solver secrets.
+
+## Use the advanced SPI for framework lowering
+
+SDK and plugin authors who generate policies can import low-level signal, requirement, binding,
+persistence, and bundle contracts from `eazy_sdk.protection.advanced`. Application code should use
+`challenge_guard()` or a first-party preset instead.
+
+Mandatory operation flows remain in the advanced SPI because they bind generated operation
+results into compiler-reserved fields. They are independent from response challenge guards and
+from auth/session storage.
 
 ## First-party presets
 

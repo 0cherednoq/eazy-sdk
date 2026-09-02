@@ -22,7 +22,6 @@ from eazy_sdk.handlers.profile import (
     HandlerProfile,
     RedirectControl,
 )
-from eazy_sdk.protection import NetworkIdentity, NetworkIdentityProvider
 from eazy_sdk.request.prepared import HttpProtocol
 
 _CURL_IMPLICIT_HEADERS = ("Accept", "Accept-Encoding", "Content-Type", "User-Agent")
@@ -66,12 +65,10 @@ class CurlCffiZaprosHandler(BaseHandler):
         *,
         impersonate: BrowserTypeLiteral | None = None,
         owns_session: bool | None = None,
-        network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
         self._session = session or curl_requests.Session()
         self._impersonate = impersonate
-        self.network_identity = network_identity
 
     def handle(self, request: Request) -> Response:
         body, materialized_stream = _read_sync_body(request.body)
@@ -106,12 +103,10 @@ class AsyncCurlCffiZaprosHandler(AsyncBaseHandler):
         *,
         impersonate: BrowserTypeLiteral | None = None,
         owns_session: bool | None = None,
-        network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
         self._session = session or curl_requests.AsyncSession()
         self._impersonate = impersonate
-        self.network_identity = network_identity
 
     async def ahandle(self, request: Request) -> Response:
         body, materialized_stream = await _read_async_body(request.body)

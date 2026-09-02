@@ -4,7 +4,7 @@ description: Typed reCAPTCHA v2, v3 and Enterprise policies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:ab4f74e08913a742d76ae74cc36256f1bcedec36f346d19f123b6cc21afd3500"
+api_fingerprint: "sha256:1a0d7c3c58f650af65bdbbd5564397377156e956ee57f7516f461bc6a523b25c"
 ---
 
 v2/checkbox policies реагируют на response challenge. v3/action и Enterprise score policies
@@ -31,6 +31,7 @@ config = ClientConfig().with_protection(v2, v3)
 `scope=operation(...)` ограничивает policy одной operation identity. Solver возвращает typed
 solution и не мутирует request, cache или retry coordinator. Private token field отсутствует в
 public method signature и добавляется перед projection/encoding/signing нужного attempt.
-Direct solver должен объявить свои `ProtectionCapabilities`. Если solver предоставляет SDK-level
-DI, не передавайте его factory и установите returned preset через `with_protection()`; missing
-binding останется типизированной preflight-ошибкой.
+Direct solver implements only the typed challenge-to-token contract. JavaScript, browser, WASM,
+and remote API choices remain private to the solver. If a framework provides SDK-level solver DI,
+omit the direct solver and install the returned preset through `with_protection()`; a missing
+binding remains a typed preflight error.

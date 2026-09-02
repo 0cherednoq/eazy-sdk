@@ -15,7 +15,6 @@ from eazy_sdk.handlers.profile import (
     HandlerProfile,
     RedirectControl,
 )
-from eazy_sdk.protection import NetworkIdentity, NetworkIdentityProvider
 from eazy_sdk.request.prepared import HttpProtocol
 
 _VERSION = version("requests")
@@ -55,14 +54,12 @@ class RequestsHandler(BaseHandler):
         session: requests.Session | None = None,
         *,
         owns_session: bool | None = None,
-        network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
         self.session = session or requests.Session()
         if session is None:
             self.session.headers.clear()
             self.session.cookies.clear()
-        self.network_identity = network_identity
 
     def handle(self, request: Request) -> Response:
         body = _content(request.body)

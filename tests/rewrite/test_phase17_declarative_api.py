@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from eazy_sdk import ApiDefaults, AsyncApi, ClientConfig, SyncApi, api
 from eazy_sdk._internal import PlanError, PlanNodeKind, WriterConflictError
 from eazy_sdk.clients import CallOptions, RetryPolicy
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     FromProtection,
     ProtectionRequirement,
     SolveContext,

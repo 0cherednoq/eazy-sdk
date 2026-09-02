@@ -2,11 +2,9 @@
 
 from . import cloudflare, recaptcha
 from .core import (
-    BodyAccess,
     PresetBeforeCallPolicy,
     PresetChallengePolicy,
     PresetId,
-    ProtectionCapabilities,
     ProtectionTemplate,
     form_field,
     header,
@@ -20,11 +18,9 @@ from .core import (
 )
 
 __all__ = [
-    "BodyAccess",
     "PresetBeforeCallPolicy",
     "PresetChallengePolicy",
     "PresetId",
-    "ProtectionCapabilities",
     "ProtectionTemplate",
     "cloudflare",
     "form_field",

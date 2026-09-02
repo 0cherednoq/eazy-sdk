@@ -1,14 +1,14 @@
 ---
 title: Turnstile
-description: Typed Turnstile widget and proactive preclearance policies.
+description: Install typed Turnstile widget and proactive preclearance guards.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c"
+api_fingerprint: "sha256:cf6a26152e0189cdc69f3d46d4fcd6c88c44fead142d6cc0e3a0b2873c8b3894"
 ---
 
-Widget и preclearance принадлежат разным lifecycle. Installable presets сами выбирают правильные
-collections; caller устанавливает оба через один immutable merge.
+Widget and preclearance guards use different lifecycle stages. Install both descriptors through one
+immutable config merge:
 
 ```python target
 widget = cloudflare.turnstile_widget(
@@ -24,12 +24,14 @@ preclearance = cloudflare.turnstile_preclearance(
     solver=TurnstileClearanceSolver(),
 )
 
-config = ClientConfig(
-    network_identity=identity,
-).with_protection(widget, preclearance)
+config = ClientConfig().with_protection(widget, preclearance)
 ```
 
-Widget решается только после matched response и использует replay safety. Preclearance решается до
-origin request, переиспользуется до expiry и привязан к network identity. Оба solver-а явно
-объявляют `ProtectionCapabilities`; clearance solver возвращает
-`expected_identity=context.network_identity`.
+The widget solver runs only after a matching response and uses the configured replay proof.
+Preclearance runs before the origin request and can be reused until expiry within the current
+handler session.
+
+Both solvers implement only their typed challenge-to-solution contract. The runtime does not ask
+whether they use JavaScript, a browser, WASM, or an external service. If preclearance and HTTP must
+share a network path, build both from the same fixed session or lease. Rotate transport by creating
+a new client.

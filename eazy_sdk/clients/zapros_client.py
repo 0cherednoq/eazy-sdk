@@ -26,7 +26,6 @@ from eazy_sdk.handlers import (
     ZaprosAsyncEmitter,
     ZaprosSyncEmitter,
 )
-from eazy_sdk.protection import NetworkIdentity, NetworkIdentityProvider
 
 from .async_client import _AsyncClientCore
 from .config import ClientConfig, _runtime_from_boundary
@@ -79,7 +78,7 @@ class Client(_SyncClientCore[Response]):
             base_url=base_url,
             config=selected,
             allow_async_crypto=False,
-            network_identity=_select_network_identity(selected, handler),
+            protection_session_owner=handler,
         )
         super().__init__(
             runtime,
@@ -94,9 +93,12 @@ class Client(_SyncClientCore[Response]):
     def close(self) -> None:
         if not self._closed:
             self._closed = True
-            super().close()
-            if self.owns_handler:
-                _remember_closed_handler(self.handler)
+            try:
+                super().close()
+            finally:
+                self._runtime.close_protection_session()
+                if self.owns_handler:
+                    _remember_closed_handler(self.handler)
 
     def __enter__(self) -> Client:
         super().__enter__()
@@ -144,7 +146,7 @@ class AsyncClient(_AsyncClientCore[Response]):
             base_url=base_url,
             config=selected,
             allow_async_crypto=True,
-            network_identity=_select_network_identity(selected, handler),
+            protection_session_owner=handler,
         )
         super().__init__(
             runtime,
@@ -159,9 +161,12 @@ class AsyncClient(_AsyncClientCore[Response]):
     async def aclose(self) -> None:
         if not self._closed:
             self._closed = True
-            await super().aclose()
-            if self.owns_handler:
-                _remember_closed_handler(self.handler)
+            try:
+                await super().aclose()
+            finally:
+                self._runtime.close_protection_session()
+                if self.owns_handler:
+                    _remember_closed_handler(self.handler)
 
     async def __aenter__(self) -> AsyncClient:
         await super().__aenter__()
@@ -171,27 +176,5 @@ class AsyncClient(_AsyncClientCore[Response]):
         if self._closed:
             raise RuntimeError("Eazy SDK AsyncClient is closed")
         return await super()._run(call, options)
-
-
-def _select_network_identity(
-    config: ClientConfig,
-    handler: object,
-) -> NetworkIdentity | NetworkIdentityProvider | None:
-    configured = config.network_identity
-    declared = getattr(handler, "network_identity", None)
-    if declared is not None and not isinstance(declared, NetworkIdentity | NetworkIdentityProvider):
-        raise TypeError(
-            "handler network_identity must be NetworkIdentity or NetworkIdentityProvider"
-        )
-    if configured is not None and declared is not None:
-        same_source = configured is declared or (
-            isinstance(configured, NetworkIdentity)
-            and isinstance(declared, NetworkIdentity)
-            and configured == declared
-        )
-        if not same_source:
-            raise ValueError("client config and handler declare conflicting network identities")
-    return configured if configured is not None else declared
-
 
 __all__ = ["AsyncClient", "Client"]

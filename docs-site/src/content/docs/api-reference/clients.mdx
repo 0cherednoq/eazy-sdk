@@ -7,7 +7,7 @@ sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
   - eazy_sdk.sdk
-api_fingerprint: "sha256:77111b5798dc306d70beb59bb3163ca8d79ab64226dea327f8b4265908561b55"
+api_fingerprint: "sha256:b0e8654e131379b8bc6892ade42ce43aecc9e4794dc407e34741ab6388e9cc73"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -70,14 +70,15 @@ Root и API groups не сериализуют пользовательские 
 ## Client configuration
 
 `ClientConfig` включает dependencies, auth, middleware, retry, rate limiter, signing key provider,
-crypto, `network_identity` и typed protection policies. First-party preset устанавливайте через
-immutable `config.with_protection(preset)`; low-level protection lifecycle разделён на
+crypto и typed protection policies. First-party preset или custom `challenge_guard()`
+устанавливайте через immutable `config.with_protection(guard)`; low-level protection lifecycle
+разделён на
 `operation_protections`, `before_call_policies`, `challenge_policies`,
 `operation_protection_solvers` и `challenge_solvers`.
 
-`network_identity` принимает `NetworkIdentity` или per-attempt `NetworkIdentityProvider`.
-First-party handler может объявить тот же source. Разные sources в config и handler отклоняются до
-provider и transport I/O.
+Managed protection state принадлежит одному client/handler session и очищается при закрытии
+client. Proxy, User-Agent и impersonation задаются при construction handler-а. Для rotation
+создайте новый handler и client; per-attempt transport identity provider отсутствует.
 
 ## Ad-hoc HTTP
 

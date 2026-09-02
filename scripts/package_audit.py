@@ -45,7 +45,22 @@ FORBIDDEN_CORE = (
     "eazy_sdk/response/media.py",
     "eazy_sdk/response/result.py",
     "eazy_sdk/response/streaming.py",
+    "eazy_sdk/protection.py",
     "eazy_sdk/validation/",
+)
+
+REQUIRED_PHASE29_CORE = (
+    "eazy_sdk/protection/__init__.py",
+    "eazy_sdk/protection/advanced.py",
+)
+
+FORBIDDEN_PHASE29_SOURCE = (
+    "BodyAccess",
+    "CapableChallengeSolver",
+    "NetworkIdentity",
+    "ProtectionCapabilities",
+    "ProtectionCapabilityMismatch",
+    "resolve_network_identity",
 )
 
 FORBIDDEN_PHASE17_SOURCE = (
@@ -153,6 +168,11 @@ def audit(directory: Path) -> None:
                     for path in FORBIDDEN_CORE
                     if any(name == path or name.startswith(path) for name in names)
                 )
+                failures.extend(
+                    f"{wheel.name}: missing phase-29 path {path}"
+                    for path in REQUIRED_PHASE29_CORE
+                    if path not in names
+                )
                 mandatory = [
                     value
                     for value in metadata.get_all("Requires-Dist", [])
@@ -193,6 +213,11 @@ def audit(directory: Path) -> None:
                             failures.append(
                                 f"{wheel.name}: removed phase-20 API {fragment!r} in {name}"
                             )
+                    for fragment in FORBIDDEN_PHASE29_SOURCE:
+                        if fragment in source:
+                            failures.append(
+                                f"{wheel.name}: removed phase-29 API {fragment!r} in {name}"
+                            )
                     if not name.startswith("eazy_sdk/models/"):
                         for fragment in FORBIDDEN_MODEL_DUCK_TYPING:
                             if fragment in source:
@@ -203,17 +228,46 @@ def audit(directory: Path) -> None:
 
         sdist = _sdist_for(directory, package)
         with tarfile.open(sdist, "r:gz") as archive:
-            names = [member.name for member in archive.getmembers()]
+            members = archive.getmembers()
+            names = [member.name for member in members]
             if not any(name.endswith(f"/{marker}") for name in names):
                 failures.append(f"{sdist.name}: missing {marker}")
             if not any(name.endswith("/LICENSE") for name in names):
                 failures.append(f"{sdist.name}: missing packaged LICENSE text")
+            if package == "eazy_sdk":
+                failures.extend(
+                    f"{sdist.name}: contains legacy path {path}"
+                    for path in FORBIDDEN_CORE
+                    if any(
+                        name.endswith(f"/{path}")
+                        or f"/{path}" in name
+                        for name in names
+                    )
+                )
+                failures.extend(
+                    f"{sdist.name}: missing phase-29 path {path}"
+                    for path in REQUIRED_PHASE29_CORE
+                    if not any(name.endswith(f"/{path}") for name in names)
+                )
+                for member in members:
+                    if not member.isfile() or not member.name.endswith(".py"):
+                        continue
+                    extracted = archive.extractfile(member)
+                    if extracted is None:
+                        continue
+                    source = extracted.read().decode("utf-8")
+                    for fragment in FORBIDDEN_PHASE29_SOURCE:
+                        if fragment in source:
+                            failures.append(
+                                f"{sdist.name}: removed phase-29 API {fragment!r} "
+                                f"in {member.name}"
+                            )
 
     if failures:
         raise RuntimeError("\n".join(failures))
     print(
         "OK: wheels/sdists have matching release metadata, licenses, typing markers, "
-        "the Zapros boundary, and no legacy paths"
+        "the Zapros boundary, the phase-29 protection package, and no legacy paths"
     )
 
 

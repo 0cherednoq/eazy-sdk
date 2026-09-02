@@ -18,7 +18,7 @@ from eazy_sdk.clients._http_stages import (
 )
 from eazy_sdk.clients.base import RedirectLimitExceeded, UnsafeReplayError
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
-from eazy_sdk.protection import SignalMatch
+from eazy_sdk.protection.advanced import SignalMatch
 from eazy_sdk.response import Headers, Json, NormalizedResponse, Success
 from eazy_sdk.response.cases import SuccessOutcome, UnexpectedOutcome
 

@@ -31,7 +31,7 @@ from eazy_sdk.dependencies import (
     field,
     value,
 )
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     FromProtection,
     ProtectionRequirement,
     protection_flow,

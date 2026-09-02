@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any
 
 from eazy_sdk.ext import Malformed, NoMatch, ParsedValue, RequestScope
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     ChallengeSolver,
     PrivateBindings,
     ProtectionPersistence,
@@ -24,11 +24,9 @@ from eazy_sdk.protection import (
 from eazy_sdk.response import callable_parser
 
 from .core import (
-    BodyAccess,
     PresetBeforeCallPolicy,
     PresetChallengePolicy,
     PresetId,
-    ProtectionCapabilities,
     ProtectionTemplate,
     form_field,
 )
@@ -147,7 +145,6 @@ def _widget(
     scope: RequestScope,
     apply: PrivateBindings[RecaptchaToken] | None,
     replay: ReplayPolicy | None,
-    browser: bool,
     persistence: ProtectionPersistence | None = None,
     solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
 ) -> PresetChallengePolicy:
@@ -164,7 +161,6 @@ def _widget(
         PresetId("recaptcha", name),
         1,
         requirement,
-        ProtectionCapabilities(BodyAccess.BUFFERED, javascript=True, browser=browser),
     )
     return template.bind_challenge(
         scope=scope,
@@ -184,14 +180,12 @@ def _before(
     scope: RequestScope,
     apply: PrivateBindings[RecaptchaToken],
     persistence: ProtectionPersistence,
-    browser: bool,
     solver: ChallengeSolver[RecaptchaChallenge, RecaptchaToken] | None = None,
 ) -> PresetBeforeCallPolicy:
     template = ProtectionTemplate(
         PresetId("recaptcha", name),
         1,
         requirement,
-        ProtectionCapabilities(BodyAccess.NONE, javascript=True, browser=browser),
     )
     return template.bind_before(
         scope=scope,
@@ -216,7 +210,6 @@ def v2_checkbox(
         scope=scope,
         apply=apply,
         replay=replay,
-        browser=True,
         solver=solver,
     )
 
@@ -235,7 +228,6 @@ def v2_invisible(
         scope=scope,
         apply=apply,
         replay=replay,
-        browser=True,
         solver=solver,
     )
 
@@ -258,7 +250,6 @@ def v3_action(
         scope=scope,
         apply=apply or form_field("g-recaptcha-response"),
         persistence=persistence or per_call(),
-        browser=False,
         solver=solver,
     )
 
@@ -277,7 +268,6 @@ def enterprise_checkbox(
         scope=scope,
         apply=apply,
         replay=replay,
-        browser=True,
         solver=solver,
     )
 
@@ -306,7 +296,6 @@ def enterprise_score_action(
         scope=scope,
         apply=apply or form_field("g-recaptcha-response"),
         persistence=persistence or per_call(),
-        browser=False,
         solver=solver,
     )
 
@@ -325,7 +314,6 @@ def enterprise_policy_based_challenge(
         scope=scope,
         apply=apply,
         replay=replay,
-        browser=True,
         solver=solver,
     )
 

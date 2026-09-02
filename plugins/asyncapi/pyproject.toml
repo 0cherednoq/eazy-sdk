@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-asyncapi"
-version = "0.2.0a2"
+version = "0.2.0a3"
 description = "AsyncAPI 3.0 WebSocket SDK generator targeting Eazy SDK."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -16,7 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a2,<0.3"]
+dependencies = ["eazy-sdk>=0.2.0a3,<0.3"]
 
 [project.optional-dependencies]
 yaml = ["PyYAML>=6"]

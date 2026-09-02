@@ -1,126 +1,119 @@
 ---
 title: Protection
-description: Typed lifecycle policies, private bindings and managed clearance state.
+description: High-level response guards, replay policy, errors, and advanced lowering SPI.
 sources:
   - eazy_sdk.protection
+  - eazy_sdk.protection.advanced
   - eazy_sdk_presets.cloudflare
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:f68c209ff5610f466331ced49894dc0d31ccb8e31aeb783d6d1339d724efa32f"
+api_fingerprint: "sha256:a1662c9dddc06fdb3e380e46ab43080a1556cd0a8e111082ec44101a5269967a"
 ---
 
-Protection имеет три независимых lifecycle. Они не используют общий untyped registry.
+`eazy_sdk.protection` is the application-facing response-guard API. It contains solver and context
+protocols, the `challenge_guard()` builder, declarative solution destinations, replay helpers, and
+stage-specific errors. Compiler, registry, and persistence contracts are not exported here.
 
-| Lifecycle | Config field | Когда выполняется |
-|---|---|---|
-| Mandatory operation flow | `operation_protections` | до конкретной operation |
-| Proactive policy | `before_call_policies` | до каждого подходящего call/attempt |
-| Conditional challenge | `challenge_policies` | после совпавшего response signal |
+## Installable guards
 
-Auth остаётся отдельным механизмом в `ClientConfig.auth`.
-
-First-party presets возвращают installable policy. Рекомендуемый config path:
-
-```python target
-config = ClientConfig(network_identity=identity).with_protection(
-    cloudflare.challenge_pages(
-        scope=host("api.example.test"),
-        solver=CloudflareSolver(),
-    )
-)
-```
-
-`with_protection()` возвращает новый `ClientConfig`, детерминированно добавляет lifecycle policy и
-solver binding и отклоняет duplicate policy identity или solver requirement. Исходный config не
-изменяется. Unbound preset поддерживает SDK-level DI и падает с `MissingSolverError` на preflight.
-
-## Mandatory operation flow
-
-```python target
-requirement = ProtectionRequirement[Result]("login-protection")
-flow = protection_flow(
-    requirement,
-    acquire=ProtectionApi.acquire,
-    solve=True,
-    verify=ProtectionApi.verify,
-)
-
-config = ClientConfig(
-    operation_protections=(flow,),
-    operation_protection_solvers=SolverBindings(
-        bind_solver(requirement, solver),
-    ),
-)
-```
-
-Operation по-прежнему объявляет `protections=(requirement,)`. `FromProtection` связывает typed
-result с private target-моделью `BodyProjection`. Missing flow, solver или source field
-отклоняются до main request.
-
-## Conditional challenge
-
-`ChallengePolicy[TChallenge, TSolution]` содержит точный `scope`, один `signal`, solver
-requirement, `PrivateBindings`, persistence, replay policy, capability requirements и optional
-solution-identity expectation. Для custom framework policy solver можно зарегистрировать через
-advanced low-level collections:
-
-```python target
-config = ClientConfig(
-    challenge_policies=(KAD_WASM_POLICY,),
-    challenge_solvers=ChallengeSolverBindings(
-        bind_challenge_solver(KAD_WASM_SOLVER, KadSolver()),
-    ),
-)
-```
-
-`private_header`, `private_query`, `private_cookie` и `private_body` резервируют wire targets в
-compiler layout, но не добавляют параметры в public method signature. `private_cookie_set`
-атомарно разворачивает именованный набор cookies, поэтому Cloudflare preset применяет все cookies
-из `CloudflareClearance.cookies`.
-
-## Persistence
-
-Доступны `per_match`, `per_call`, `per_attempt`, `until_expiry` и `until_rejected`.
-Shareable state ключуется identity/revision policy, solver, client/session/network scope и
-объявленной challenge identity. Expiry всегда ограничивает reuse сверху. Повторный definitive
-challenge инвалидирует применённую revision до replay.
-
-Для одинакового полного ключа acquisition выполняется single-flight. Отмена solve не публикует
-partial state. Все source fields и destinations валидируются до единственного immutable commit;
-ошибка одного binding не меняет attempt или cache. Managed slots помечены secret и значения не
-попадают в diagnostics.
-
-## Network identity
-
-| Type | Contract |
+| Symbol | Contract |
 |---|---|
-| `NetworkIdentity` | Immutable redacted identity: proxy label, User-Agent, address family and browser profile |
-| `StaticNetworkIdentity` | Provider, который возвращает одно identity для всех attempts |
-| `NetworkIdentityProvider.current(context)` | Возвращает identity для конкретных operation, attempt и URL |
-| `NetworkIdentityExpectation` | Выбирает expected identity из typed solution до state publication |
+| `ChallengeSolver[TChallenge, TSolution]` | Async `solve(challenge, context) -> solution` protocol |
+| `SolveContext` | Operation identity, immutable response context, attempt number, and optional deadline |
+| `InstallableProtection` | Structural object consumed by `ClientConfig.with_protection()` |
+| `challenge_guard()` | Lowers one detector, solver, solution mapping, and replay policy into the shared executor |
 
-`ClientConfig.network_identity` подходит custom handler. First-party handlers также принимают
-`network_identity`; если config и handler задают разные источники, client отклоняет конфигурацию.
-Для rotation один provider instance должен управлять connection profile handler-а и возвращать
-runtime ту же redacted identity. Network-scoped policy без source падает с
-`NetworkIdentityRequiredError` до providers и emit.
+```python target
+guard = challenge_guard(
+    name="vendor.challenge",
+    scope=host("api.example.test"),
+    detect=detect_challenge,
+    solver=VendorSolver(),
+    apply=solution_fields(cookies={"clearance": "token"}),
+    replay=safe_method(max_replays=1),
+)
 
-## Capabilities
+config = ClientConfig().with_protection(guard)
+```
 
-`ProtectionCapabilities` разделяет requirements policy и capabilities solver-а. Preflight
-проверяет `response_body`, `cookie_jar`, `javascript`, `browser` и `sticky_network_identity`.
-`CapableChallengeSolver.capabilities` или явный `bind_challenge_solver(..., capabilities=...)`
-объявляет возможности реализации. `ProtectionCapabilityMismatch` перечисляет только policy и
-missing dimensions, без identity values или secrets.
+`challenge_guard()` requires a non-empty name, a callable detector, an async-compatible solver,
+and a mapping created by `solution_fields()`. It returns an immutable installable descriptor and
+performs no response inspection or network I/O during configuration.
 
-## Exceptions and replay
+The detector receives `ResponseContext[object]` and returns `TChallenge | None`. `None` means no
+match. Raise `MalformedChallengeError` when the response is recognized but malformed. Any other
+detector exception becomes `ChallengeDetectionError` with the original exception as `__cause__`.
 
-- malformed policy или missing solver завершается до provider/transport I/O;
-- binding conflict завершается на compiler preflight;
-- missing solution field и invalid managed value вызывают `PlanError` без partial commit;
-- replay выполняется только при доказанной `ReplayPolicy` safety и заново запускает projection,
-  crypto, encoding и signing.
+## Solution destinations
 
-`ReplayPolicy.max_replays` не может быть отрицательным. Ноль отключает protection replay и не
-уменьшает обычный attempt limit. `idempotency_key(name)` принимает только непустое валидное HTTP
-field name; `proof_name` запрещён для остальных safety modes. Lifetime state задаётся только через
-`ProtectionPersistence`.
+`solution_fields()` maps destination names to fields on the typed solution:
+
+| Parameter | Destination |
+|---|---|
+| `headers={"X-Token": "token"}` | Fixed request header |
+| `query={"challenge": "token"}` | Fixed query field |
+| `cookies={"clearance": "token"}` | Fixed request cookie |
+| `body={"captcha.token": "token"}` | Private semantic body path |
+| `cookie_set=solution_cookie_set()` | Dynamic iterable of named cookies |
+
+All destinations are reserved by the endpoint compiler. A conflict with caller, auth, dependency,
+signature, or another private writer fails before solver or transport I/O. Runtime selects and
+validates the complete solution batch before one atomic patch. It never mutates a
+`PreparedRequest`.
+
+## Replay helpers
+
+| Helper | Proof |
+|---|---|
+| `safe_method(max_replays=1)` | Allows replay only for GET, HEAD, or OPTIONS |
+| `idempotency_key(name, max_replays=1)` | Requires the compiled request to contain the named header |
+| `rejected_before_execution(max_replays=1)` | Protocol proves the request was rejected before execution |
+| `rejected_before_origin(max_replays=1)` | Protocol proves the request did not reach the origin |
+
+`ReplayPolicy.max_replays` must be nonnegative. A zero budget disables challenge replay. A replay
+uses a new attempt and reruns dependency, auth, projection, crypto, encoding, preparation, and
+signing stages.
+
+## Managed state and session affinity
+
+Reusable solution state lives only in one `ExecutionRuntime`, which is owned by one SDK client and
+handler session. Session-scoped state keys use the actual handler object supplied at the client
+boundary. Closing the client clears all managed solutions and single-flight entries.
+
+Proxy, User-Agent, address-family, and impersonation configuration belongs to handler/session
+construction. Eazy SDK has no per-attempt transport identity provider. Create a new handler and
+client when rotating transport configuration. A new client does not reuse the previous client's
+protection state.
+
+Solver technology is not part of preflight. Browser, JavaScript, WASM, and remote API solvers all
+implement the same typed protocol. Preflight retains facts the runtime can prove: solver presence,
+compiled destination validity, body replayability, semantic replay proof, finite budgets, and
+`HandlerProfile` wire fidelity.
+
+## Errors
+
+| Stage | Error | Raised when |
+|---|---|---|
+| Configuration | `ProtectionConfigurationError` | Guard or lowering is malformed, a solver is missing, or destinations conflict |
+| Detection | `ChallengeDetectionError` | A detector raises an unexpected exception |
+| Solve | `ChallengeSolveError` | A solver fails |
+| Application | `ChallengeApplicationError` | A solution field or destination value is invalid |
+| Replay | `ReplayDeniedError` | Replayability, semantic proof, or budget is insufficient |
+
+Stage errors expose policy/attempt metadata and preserve `__cause__`. Their messages do not include
+response bodies, solution values, cookies, credentials, proxy configuration, or solver secrets.
+
+## Advanced lowering SPI
+
+`eazy_sdk.protection.advanced` is the only import path for framework and generated-policy
+contracts. Its exact `__all__` contains:
+
+- conditional and proactive policy protocols/specs;
+- `ResponseSignal` and typed signal outcomes;
+- `SolverRequirement`, solver bindings, and immutable binding registries;
+- `PrivateBindings` plus header, query, cookie, dynamic-cookie, and body targets;
+- `ProtectionPersistence` modes and client/session state scopes;
+- mandatory operation protection flows and `FromProtection`;
+- the internal installable lowering value `ProtectionBundle`.
+
+Concrete cache entries, lock registries, compilation helpers, signal arbitration helpers, and
+solution patch functions are private. Applications should not import the advanced SPI.

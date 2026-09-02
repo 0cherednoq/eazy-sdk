@@ -33,7 +33,6 @@ from eazy_sdk.accounts.session import (
     LifecycleGraph as ResolutionGraph,
 )
 from eazy_sdk.models import default_model_adapters
-from eazy_sdk.protection import NetworkIdentity
 from eazy_sdk.response import ResponseEnvelope
 
 from .cookies import HttpCookieSession, parse_session_cookie
@@ -88,7 +87,6 @@ class AuthFlowContext[TSdk]:
     sdk: TSdk
     session_key: SessionKey
     deadline: datetime | None
-    network_identity: NetworkIdentity | None
     resolution_graph: ResolutionGraph
     _responses: list[object] = field(default_factory=list, repr=False, compare=False)
 
@@ -189,7 +187,6 @@ class SessionProvider[TCredentials, TSession, TSdk]:
         return AuthFlowContext(
             self._sdk_factory(graph),
             self.config.key,
-            None,
             None,
             graph,
         )

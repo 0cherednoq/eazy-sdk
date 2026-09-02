@@ -33,6 +33,7 @@ REMOVED_MODULES = (
     "eazy_sdk/auth/state.py",
     "eazy_sdk/storage/auth_bridge.py",
     "eazy_sdk/storage/authstore.py",
+    "eazy_sdk/protection.py",
 )
 
 REMOVED_SYMBOLS = {
@@ -77,6 +78,19 @@ REMOVED_SYMBOLS = {
     "apply_inbound_message_protectors",
     "apply_outbound_message_protectors",
     "compile_protectors",
+    "BodyAccess",
+    "CapableChallengeSolver",
+    "NetworkIdentity",
+    "NetworkIdentityContext",
+    "NetworkIdentityExpectation",
+    "NetworkIdentityProvider",
+    "NetworkIdentityRequiredError",
+    "NetworkIdentitySource",
+    "ProtectionCapabilities",
+    "ProtectionCapabilityMismatch",
+    "ProtectionIdentityMismatch",
+    "StaticNetworkIdentity",
+    "resolve_network_identity",
 }
 
 PHASE17_PUBLIC_TEXT = (
@@ -142,6 +156,13 @@ HIDDEN_PUBLIC_SYMBOLS = {
     },
     "eazy_sdk.request": {"PreparedRequest", "RequestPreparer", "SignaturePlan"},
     "eazy_sdk.dependencies": {"DependencyCaches", "RequestRequirement", "ResultBinding"},
+    "eazy_sdk.protection": {
+        "ChallengeSolverBindings",
+        "PrivateBindings",
+        "ProtectionBundle",
+        "ResponseSignal",
+        "SolverRequirement",
+    },
 }
 
 LEGACY_FACTORY_OPTION = re.compile(
@@ -351,7 +372,16 @@ def audit() -> list[str]:
             f"{[path.as_posix() for path in compiler_entry_definitions]!r}"
         )
 
-    public_text_roots = (ROOT / "examples", ROOT / "docs-site" / "src", ROOT / "README.md")
+    public_text_roots = (
+        ROOT / "examples",
+        ROOT / "docs-site" / "src",
+        ROOT / "plugins" / "asyncapi" / "README.md",
+        ROOT / "plugins" / "openapi" / "README.md",
+        ROOT / "plugins" / "presets" / "README.md",
+        ROOT / "plugins" / "sqlmodel" / "README.md",
+        ROOT / "plugins" / "xml" / "README.md",
+        ROOT / "README.md",
+    )
     for entry in public_text_roots:
         paths = (entry,) if entry.is_file() else entry.rglob("*")
         for path in paths:

@@ -1,68 +1,76 @@
 ---
 title: Cloudflare Challenge Pages
-description: Managed multi-cookie clearance after a Cloudflare challenge.
+description: Detect a Cloudflare challenge and replay with managed clearance cookies.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
-api_fingerprint: "sha256:23f4379f2433c2c14ba4d78f95d509dc3a36fe9432637ac052a32d6d2dd0c19c"
+api_fingerprint: "sha256:cf6a26152e0189cdc69f3d46d4fcd6c88c44fead142d6cc0e3a0b2873c8b3894"
 ---
 
-Preset распознаёт definitive challenge по `cf-mitigated: challenge` и HTML content type. Status
-сам по себе недостаточен.
+The preset recognizes a definitive challenge from `cf-mitigated: challenge` and an HTML content
+type. Status alone is not enough.
 
 ```python target
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
-from eazy_sdk import ClientConfig
-from eazy_sdk.protection import (
-    BodyAccess,
-    NetworkIdentity,
-    ProtectionCapabilities,
-)
+import httpx
+
+from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+from eazy_sdk.protection import SolveContext
 from eazy_sdk_presets import cloudflare, host
 
-class CloudflareSolver:
-    capabilities = ProtectionCapabilities(
-        response_body=BodyAccess.BUFFERED,
-        cookie_jar=True,
-        javascript=True,
-        browser=True,
-        sticky_network_identity=True,
-    )
 
-    async def solve(self, challenge, context):
+class CloudflareSolver:
+    def __init__(self, session: httpx.AsyncClient) -> None:
+        self.session = session
+
+    async def solve(
+        self,
+        challenge: cloudflare.CloudflareChallenge,
+        context: SolveContext,
+    ) -> cloudflare.CloudflareClearance:
+        cookies = await solve_with_service(self.session, challenge)
         return cloudflare.CloudflareClearance(
-            cookies=(
-                cloudflare.SecretCookie("cf_clearance", "clearance-value"),
-                cloudflare.SecretCookie("__cf_bm", "managed-value"),
+            cookies=tuple(
+                cloudflare.SecretCookie(cookie.name, cookie.value)
+                for cookie in cookies
             ),
-            expected_identity=context.network_identity,
             expires_at=datetime.now(UTC) + timedelta(minutes=30),
         )
 
-policy = cloudflare.challenge_pages(
-    scope=host("api.example.test"),
-    solver=CloudflareSolver(),
-)
-config = ClientConfig(
-    network_identity=NetworkIdentity(
-        proxy="edge-proxy-1",
-        user_agent="Mozilla/5.0 ...",
-        browser_profile="chrome",
-    ),
-).with_protection(policy)
+
+@asynccontextmanager
+async def create_sdk(proxy: str) -> AsyncIterator[AsyncClient]:
+    async with httpx.AsyncClient(proxy=proxy) as session:
+        handler = AsyncHttpxHandler(session, owns_client=False)
+        guard = cloudflare.challenge_pages(
+            scope=host("api.example.test"),
+            solver=CloudflareSolver(session),
+        )
+        config = ClientConfig().with_protection(guard)
+        async with AsyncClient(
+            base_url="https://api.example.test",
+            handler=handler,
+            config=config,
+        ) as client:
+            yield client
 ```
 
-Все элементы `CloudflareClearance.cookies` применяются одним private batch. По умолчанию state
-живёт `until_rejected` в network identity scope. Новый proxy/User-Agent не получает старый
-clearance; повторный challenge инвалидирует применённый набор перед replay.
+All items in `CloudflareClearance.cookies` are validated and applied as one private batch. The
+default state lifetime is `until_rejected` within the current handler session. A repeated
+definitive challenge invalidates the applied clearance before solving and replaying again.
 
-`NetworkIdentity` содержит стабильные идентификаторы connection profile, а не proxy credentials.
-Значения скрыты в `repr` и diagnostics. Solver возвращает identity текущей attempt в
-`expected_identity`; несовпадение вызывает `ProtectionIdentityMismatch` до cache commit и replay.
-Если proxy/UA/profile ротируются, передайте один `NetworkIdentityProvider` и в handler, и в
-`ClientConfig`. Два разных источника client отклоняет до первого provider call.
+The factory gives the handler and solver the same fixed native session. The solver does not declare
+browser or JavaScript capabilities; those are implementation details. A browser-backed factory can
+apply the same construction with one browser context or lease.
 
-Runtime проверяет capability declaration solver-а до transport I/O. Отсутствующие `javascript`,
-`browser`, `cookie_jar` или `sticky_network_identity` перечисляются в redacted
-`ProtectionCapabilityMismatch`.
+Keep transport configuration fixed for the client lifecycle. To rotate a proxy, User-Agent, or
+impersonation profile, close the current client and create a new handler and client. The new client
+starts with empty managed clearance state.
+
+The preset performs no browser automation itself. It only parses sanitized challenge metadata,
+calls the supplied solver, applies returned cookies, and asks the shared executor for a safe
+replay.

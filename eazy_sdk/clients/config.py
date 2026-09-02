@@ -11,14 +11,13 @@ from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.middleware import MiddlewareRegistration
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
     BeforeCallPolicy,
     ChallengePolicy,
     ChallengeSolverBindings,
     InstallableProtection,
-    NetworkIdentity,
-    NetworkIdentityProvider,
     ProtectionBundle,
+    ProtectionConfigurationError,
     ProtectionFlow,
     SolverBindings,
 )
@@ -42,8 +41,6 @@ class ClientConfig:
     challenge_solvers: ChallengeSolverBindings = field(
         default_factory=ChallengeSolverBindings
     )
-    protection_session_identity: object | None = None
-    network_identity: NetworkIdentity | NetworkIdentityProvider | None = None
     middleware: tuple[MiddlewareRegistration, ...] = ()
     rate_limiter: RateLimiter | None = None
     key_provider: KeyProvider | None = None
@@ -86,12 +83,20 @@ class ClientConfig:
 
     def with_protection(
         self,
-        *protections: ProtectionBundle | InstallableProtection,
+        *protections: InstallableProtection,
     ) -> ClientConfig:
-        bundles = tuple(
-            item if isinstance(item, ProtectionBundle) else item.to_bundle()
-            for item in protections
-        )
+        bundles: list[ProtectionBundle] = []
+        for item in protections:
+            if not isinstance(item, InstallableProtection):
+                raise ProtectionConfigurationError(
+                    "with_protection accepts only installable protection descriptors"
+                )
+            bundle = item.to_bundle()
+            if not isinstance(bundle, ProtectionBundle):
+                raise ProtectionConfigurationError(
+                    "installable protection returned a malformed lowering bundle"
+                )
+            bundles.append(bundle)
         operation_protections = self.operation_protections + tuple(
             flow for bundle in bundles for flow in bundle.operation_protections
         )
@@ -146,7 +151,7 @@ def _runtime_from_boundary(
     base_url: str,
     config: ClientConfig,
     allow_async_crypto: bool,
-    network_identity: NetworkIdentity | NetworkIdentityProvider | None = None,
+    protection_session_owner: object | None = None,
 ) -> ExecutionRuntime:
     from eazy_sdk.auth.core import AuthProviders
     from eazy_sdk.dependencies import DependencyRegistry
@@ -161,10 +166,7 @@ def _runtime_from_boundary(
         challenge_policies=config.challenge_policies,
         operation_protection_solvers=config.operation_protection_solvers,
         challenge_solvers=config.challenge_solvers,
-        protection_session_identity=config.protection_session_identity,
-        network_identity=(
-            network_identity if network_identity is not None else config.network_identity
-        ),
+        protection_session_owner=protection_session_owner,
         middleware=config.middleware,
         limiter=config.rate_limiter,
         key_provider=config.key_provider,

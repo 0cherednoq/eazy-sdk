@@ -19,9 +19,10 @@ from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.ext import ParsedValue
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportFailure
-from eazy_sdk.protection import (
+from eazy_sdk.protection.advanced import (
+    ChallengeApplicationError,
+    ChallengeSolveError,
     ChallengeSolverBindings,
-    NetworkIdentity,
     ProtectionPersistenceMode,
     ReplayDeniedError,
     ResponseSignal,
@@ -30,7 +31,6 @@ from eazy_sdk.protection import (
     before_call_policy,
     bind_challenge_solver,
     challenge_policy,
-    network_identity,
     per_attempt,
     per_call,
     per_match,
@@ -99,7 +99,7 @@ def _policy(
             private_header("X-KAD-Trace", field="trace"),
             private_query("kad_trace", field="trace"),
         ),
-        persistence=persistence or until_rejected(scope=network_identity()),
+        persistence=persistence or until_rejected(scope=session_identity()),
         replay=replay or safe_method(max_replays=2),
         challenge_identity=lambda challenge: challenge.revision,
     )
@@ -163,7 +163,6 @@ def _runtime(
         challenge_solvers=ChallengeSolverBindings(
             bind_challenge_solver(selected.solver, solver)
         ),
-        network_identity=NetworkIdentity(proxy="proxy-a", user_agent="ua-a"),
     )
 
 
@@ -203,16 +202,7 @@ async def test_compound_private_bindings_are_atomic_absent_from_signature_and_re
 
 
 @pytest.mark.asyncio
-async def test_repeated_challenge_invalidates_revision_and_network_change_does_not_reuse() -> None:
-    class IdentityProvider:
-        def __init__(self) -> None:
-            self.identity = NetworkIdentity(proxy="proxy-a", user_agent="ua-a")
-            self.attempts: list[int] = []
-
-        def current(self, context: Any) -> NetworkIdentity:
-            self.attempts.append(context.attempt)
-            return self.identity
-
+async def test_repeated_challenge_invalidates_and_new_runtime_does_not_reuse() -> None:
     class Solver:
         calls = 0
 
@@ -236,30 +226,16 @@ async def test_repeated_challenge_invalidates_revision_and_network_change_does_n
         return _response(request, 403, b'{"revision":1}')
 
     runtime = _runtime(emit, solver)
-    identities = IdentityProvider()
-    runtime.network_identity = identities
     client = ProtectedApi(_AsyncClientCore(runtime))
     assert await client.protected() == {"ok": True}
     # Force the origin to reject the cached first clearance.
     assert await client.protected() == {"ok": True}
     assert solver.calls == 2
 
-    identities.identity = NetworkIdentity(proxy="proxy-b", user_agent="ua-b")
-    assert await client.protected() == {"ok": True}
+    replacement = _runtime(emit, solver)
+    assert replacement._protection_state == {}
+    assert await ProtectedApi(_AsyncClientCore(replacement)).protected() == {"ok": True}
     assert solver.calls == 3
-    assert identities.attempts == [1, 2, 1, 2, 1, 2]
-
-
-def test_network_identity_repr_redacts_values() -> None:
-    identity = NetworkIdentity(
-        proxy="http://user:secret@proxy.test",
-        user_agent="secret-user-agent",
-        browser_profile="chrome-secret",
-    )
-
-    rendered = repr(identity)
-    assert "proxy" in rendered and "user_agent" in rendered and "browser_profile" in rendered
-    assert "secret" not in rendered
 
 
 @pytest.mark.asyncio
@@ -282,19 +258,15 @@ async def test_session_scope_and_policy_revision_partition_managed_state() -> No
 
     policy = _policy(persistence=until_rejected(scope=session_identity()))
     runtime = _runtime(emit, solver, policy=policy)
-    runtime.protection_session_identity = "session-a"
+    runtime.protection_session_owner = object()
     client = ProtectedApi(_AsyncClientCore(runtime))
     await client.protected()
     await client.protected()
     assert solver.calls == 1
 
-    runtime.protection_session_identity = "session-b"
-    await client.protected()
-    assert solver.calls == 2
-
     runtime.challenge_policies = (_policy(persistence=policy.persistence, revision=8),)
     await client.protected()
-    assert solver.calls == 3
+    assert solver.calls == 2
 
 
 @pytest.mark.asyncio
@@ -491,8 +463,9 @@ async def test_solver_exception_does_not_retain_singleflight_lock() -> None:
     solver = Solver()
     runtime = _runtime(emit, solver)
     client = ProtectedApi(_AsyncClientCore(runtime))
-    with pytest.raises(RuntimeError, match="solver failed"):
+    with pytest.raises(ChallengeSolveError, match="solve failed") as captured:
         await client.protected()
+    assert isinstance(captured.value.__cause__, RuntimeError)
     assert len(runtime._protection_locks) == 0
     assert runtime._protection_state == {}
 
@@ -524,8 +497,9 @@ async def test_failed_compound_binding_commits_neither_replay_nor_cache() -> Non
 
     runtime = _runtime(emit, solver)
     client = ProtectedApi(_AsyncClientCore(runtime))
-    with pytest.raises(PlanError, match="solution field is missing: wasm"):
+    with pytest.raises(ChallengeApplicationError, match="application failed") as captured:
         await client.protected()
+    assert isinstance(captured.value.__cause__, PlanError)
     assert emits == 1
     assert runtime._protection_state == {}
     assert await client.protected() == {"ok": True}
@@ -663,11 +637,9 @@ def test_malformed_policy_is_rejected_by_strict_typing(tmp_path: Path) -> None:
     source.write_text(
         """
 from eazy_sdk.clients import ClientConfig
-from eazy_sdk_presets import ProtectionCapabilities
 
 ClientConfig(challenge_policies=(object(),))
 ClientConfig(challenge_polices=())
-ProtectionCapabilities(cookie_jarr=True)
 """,
         encoding="utf-8",
     )
@@ -681,4 +653,3 @@ ProtectionCapabilities(cookie_jarr=True)
     assert result.returncode == 1
     assert "challenge_policies" in result.stdout
     assert "challenge_polices" in result.stdout
-    assert "cookie_jarr" in result.stdout
