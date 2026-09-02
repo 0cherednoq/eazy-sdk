@@ -4,7 +4,7 @@ Eazy SDK is a transport-independent runtime for typed HTTP and async WebSocket S
 WebSocket use separate lifecycle runtimes while sharing model adapters, typed cases, auth values,
 and protection primitives.
 
-> **Status:** `0.2.0a1` is an alpha release with a breaking extension-SPI cleanup. Python 3.13 or
+> **Status:** `0.2.0a2` is an alpha release with a breaking protection-API cleanup. Python 3.13 or
 > newer is required. Release artifacts are hosted on GitHub; PyPI publication is deferred.
 
 ```bash
