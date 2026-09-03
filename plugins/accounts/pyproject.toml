@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-accounts"
-version = "0.2.0a3"
+version = "0.2.0a4"
 description = "Account registration, verification and multi-account storage for Eazy SDK."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -16,7 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a3,<0.3"]
+dependencies = ["eazy-sdk>=0.2.0a4,<0.3"]
 
 [build-system]
 requires = ["hatchling"]

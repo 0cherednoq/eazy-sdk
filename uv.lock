@@ -676,7 +676,7 @@ wheels = [
 
 [[package]]
 name = "eazy-sdk"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "." }
 dependencies = [
     { name = "zapros" },
@@ -844,7 +844,7 @@ docs = [
 
 [[package]]
 name = "eazy-sdk-accounts"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/accounts" }
 dependencies = [
     { name = "eazy-sdk" },
@@ -855,7 +855,7 @@ requires-dist = [{ name = "eazy-sdk", editable = "." }]
 
 [[package]]
 name = "eazy-sdk-asyncapi"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/asyncapi" }
 dependencies = [
     { name = "eazy-sdk" },
@@ -875,7 +875,7 @@ provides-extras = ["yaml"]
 
 [[package]]
 name = "eazy-sdk-html"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/html" }
 dependencies = [
     { name = "eazy-sdk" },
@@ -895,7 +895,7 @@ provides-extras = ["parsel"]
 
 [[package]]
 name = "eazy-sdk-openapi"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/openapi" }
 dependencies = [
     { name = "datamodel-code-generator" },
@@ -919,7 +919,7 @@ provides-extras = ["yaml"]
 
 [[package]]
 name = "eazy-sdk-presets"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/presets" }
 dependencies = [
     { name = "eazy-sdk" },
@@ -943,7 +943,7 @@ provides-extras = ["browser", "selectolax"]
 
 [[package]]
 name = "eazy-sdk-sqlmodel"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/sqlmodel" }
 dependencies = [
     { name = "aiosqlite" },
@@ -962,7 +962,7 @@ requires-dist = [
 
 [[package]]
 name = "eazy-sdk-xml"
-version = "0.2.0a3"
+version = "0.2.0a4"
 source = { editable = "plugins/xml" }
 dependencies = [
     { name = "eazy-sdk" },

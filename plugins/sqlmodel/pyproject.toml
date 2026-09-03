@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-sqlmodel"
-version = "0.2.0a3"
+version = "0.2.0a4"
 description = "SQLModel/SQLAlchemy async storage backend for Eazy SDK."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -16,7 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a3,<0.3", "eazy-sdk-accounts>=0.2.0a3,<0.3", "sqlmodel>=0.0.22", "aiosqlite>=0.20"]
+dependencies = ["eazy-sdk>=0.2.0a4,<0.3", "eazy-sdk-accounts>=0.2.0a4,<0.3", "sqlmodel>=0.0.22", "aiosqlite>=0.20"]
 
 [project.scripts]
 eazy-sdk-sqlmodel-migrate = "eazy_sdk_sqlmodel.cli:main"
