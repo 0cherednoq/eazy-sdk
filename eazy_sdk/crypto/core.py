@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal, Protocol, cast, get_args, get_origin
 
-from eazy_sdk._internal.kernel import PythonTypeValidator, ValueValidator
+from eazy_sdk.core.errors import ConfigurationError, EazySdkError
+from eazy_sdk.core.kernel import PythonTypeValidator, ValueValidator
 from eazy_sdk.dependencies import RequestDependency
 from eazy_sdk.models import ModelAdapterRegistry
 from eazy_sdk.models.adapters import unwrap_annotated
@@ -238,11 +239,11 @@ type EncryptEncodedAlgorithm = EncodedEncryptor | AsyncEncodedEncryptor
 type DecryptEncodedAlgorithm = EncodedDecryptor | AsyncEncodedDecryptor
 
 
-class CryptoError(Exception):
+class CryptoError(EazySdkError):
     """Base class for safe payload-crypto failures."""
 
 
-class CryptoConfigurationError(CryptoError, ValueError):
+class CryptoConfigurationError(CryptoError, ConfigurationError, ValueError):
     pass
 
 
@@ -254,23 +255,23 @@ class PayloadDecryptionError(CryptoError):
     pass
 
 
-class EncryptedMediaTypeMismatch(PayloadDecryptionError):
+class EncryptedMediaTypeMismatchError(PayloadDecryptionError):
     pass
 
 
-class EncryptedFrameKindMismatch(PayloadDecryptionError):
+class EncryptedFrameKindMismatchError(PayloadDecryptionError):
     pass
 
 
-class CryptoLimitExceeded(CryptoError):
+class CryptoLimitError(CryptoError):
     pass
 
 
-class CryptoStreamingUnsupported(CryptoConfigurationError):
+class CryptoStreamingUnsupportedError(CryptoConfigurationError):
     pass
 
 
-class CryptoRuntimeMismatch(CryptoConfigurationError):
+class CryptoRuntimeMismatchError(CryptoConfigurationError):
     pass
 
 
@@ -950,15 +951,15 @@ __all__ = [
     "CryptoError",
     "CryptoInput",
     "CryptoInputScope",
-    "CryptoLimitExceeded",
+    "CryptoLimitError",
     "CryptoOutput",
     "CryptoOutputValue",
     "CryptoRegistry",
     "CryptoResult",
     "CryptoRule",
-    "CryptoRuntimeMismatch",
+    "CryptoRuntimeMismatchError",
     "CryptoStage",
-    "CryptoStreamingUnsupported",
+    "CryptoStreamingUnsupportedError",
     "CryptoValues",
     "CryptoWire",
     "DecryptEncoded",
@@ -967,8 +968,8 @@ __all__ = [
     "EncodedEncryptor",
     "EncryptEncoded",
     "EncryptField",
-    "EncryptedFrameKindMismatch",
-    "EncryptedMediaTypeMismatch",
+    "EncryptedFrameKindMismatchError",
+    "EncryptedMediaTypeMismatchError",
     "FrozenArray",
     "FrozenObject",
     "FrozenValue",

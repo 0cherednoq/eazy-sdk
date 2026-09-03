@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 import pytest
 from zapros.websocket import TextMessage
 
-from eazy_sdk._internal.kernel import Malformed, MalformedCase, ParsedValue
+from eazy_sdk.core.kernel import Malformed, MalformedCase, ParsedValue
 from eazy_sdk.websocket import (
     AsyncWsApi,
     AsyncWsClient,

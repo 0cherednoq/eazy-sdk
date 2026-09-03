@@ -759,7 +759,7 @@ def test_canonical_protection_flow_generates_typed_wire_injection(tmp_path: Path
     login = next(item for item in ir.operations if item.operation_id == "login")
     assert login.protections[0].outputs[1].source == "answer"
     source = render_client(ir)
-    assert "LOGIN_PROTECTION = ProtectionRequirement[ProtectionResult]" in source
+    assert "LOGIN_PROTECTION = SolverRequirement[Any, ProtectionResult]" in source
     assert "class LoginRequestBody(OpenAPIModel):" in source
     assert "captcha_challenge" not in source.split(
         "class _LoginProjectionTarget", 1

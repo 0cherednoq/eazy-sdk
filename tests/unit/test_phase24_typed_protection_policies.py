@@ -11,25 +11,28 @@ from typing import Any, cast
 import pytest
 
 from eazy_sdk import AsyncApi, PlanError, api
-from eazy_sdk._internal import RequestScope
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions, ClientConfig
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
+from eazy_sdk.core import (
+    RequestScope,
+)
 from eazy_sdk.ext import ParsedValue
-from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportFailure
+from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportError
 from eazy_sdk.protection.advanced import (
     ChallengeApplicationError,
     ChallengeSolveError,
-    ChallengeSolverBindings,
+    ProtectionBundle,
     ProtectionPersistenceMode,
     ReplayDeniedError,
     ResponseSignal,
     SolveContext,
+    SolverBindings,
     SolverRequirement,
     before_call_policy,
-    bind_challenge_solver,
+    bind_solver,
     challenge_policy,
     per_attempt,
     per_call,
@@ -160,8 +163,8 @@ def _runtime(
         "https://kad.test",
         auth=auth or AuthProviders(),
         challenge_policies=(selected,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(selected.solver, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(selected.solver, solver)
         ),
     )
 
@@ -581,7 +584,7 @@ async def test_before_call_per_call_and_per_attempt_lifetimes(
         )
         assert _header(request, b"x-before-token") == expected
         if sends == 1:
-            raise TransportFailure("phase24", "emit", 1, OSError("retry"))
+            raise TransportError("phase24", "emit", 1, OSError("retry"))
         return _response(request, 200, b'{"ok":true}')
 
     runtime = ExecutionRuntime(
@@ -589,8 +592,8 @@ async def test_before_call_per_call_and_per_attempt_lifetimes(
         emit,
         "https://kad.test",
         before_call_policies=(policy,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(BEFORE_SOLVER, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(BEFORE_SOLVER, solver)
         ),
     )
     client = BeforeProtectedApi(_AsyncClientCore(runtime))
@@ -609,20 +612,27 @@ def test_persistence_modes_and_malformed_config_contract() -> None:
     assert until_rejected().mode is ProtectionPersistenceMode.UNTIL_REJECTED
 
     with pytest.raises(TypeError, match="malformed policy"):
-        ClientConfig(challenge_policies=(cast(Any, object()),))
+        ClientConfig(
+            protection=ProtectionBundle(
+                challenge_policies=(cast(Any, object()),),
+            ),
+        )
 
 
 def test_old_ambiguous_config_fields_and_executor_discovery_are_absent() -> None:
     config_parameters = inspect.signature(ClientConfig).parameters
-    for old_name in ("signals", "protections", "solvers", "protection_solvers"):
-        assert old_name not in config_parameters
-    for name in (
+    for old_name in (
+        "signals",
+        "protections",
+        "solvers",
+        "protection_solvers",
         "operation_protections",
         "before_call_policies",
         "challenge_policies",
-        "operation_protection_solvers",
-        "challenge_solvers",
+        "solver_bindings",
     ):
+        assert old_name not in config_parameters
+    for name in ("protection", "guards", "retry"):
         assert name in config_parameters
 
     source = inspect.getsource(sys.modules[ExecutionRuntime.__module__])
@@ -637,8 +647,13 @@ def test_malformed_policy_is_rejected_by_strict_typing(tmp_path: Path) -> None:
     source.write_text(
         """
 from eazy_sdk.clients import ClientConfig
+from eazy_sdk.protection.advanced import ProtectionBundle
 
-ClientConfig(challenge_policies=(object(),))
+ClientConfig(
+    protection=ProtectionBundle(
+        challenge_policies=(object(),),
+    ),
+)
 ClientConfig(challenge_polices=())
 """,
         encoding="utf-8",

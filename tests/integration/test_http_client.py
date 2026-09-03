@@ -6,7 +6,7 @@ from typing import Annotated, cast
 import httpx
 import pytest
 
-from eazy_sdk import AsyncApi, SyncApi, TransportFailure, api
+from eazy_sdk import AsyncApi, SyncApi, TransportError, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.request import ReplayableStreamBody
 from eazy_sdk.request.prepared import ReplayableBodyStream
@@ -90,7 +90,7 @@ def test_query_headers_and_manual_cookies_round_trip(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        response = client.get(
+        response = client.request("GET",
             "/echo",
             params={"tag": "a,b", "empty": "", "unicode": "привет"},
             headers={"X-Test": "value"},
@@ -111,8 +111,8 @@ def test_repeated_response_headers_and_streamed_origin_body_are_preserved(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        headers = client.get("/headers")
-        streamed = client.get("/stream")
+        headers = client.request("GET", "/headers")
+        streamed = client.request("GET", "/stream")
     response_headers = cast_headers(headers.headers)
     assert response_headers.getall("x-duplicate") == ("a", "b")
     assert response_headers["x-test"] == "value"
@@ -150,7 +150,7 @@ def test_multiple_set_cookie_lines_are_available_without_loss(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        response = client.get("/cookies/set")
+        response = client.request("GET", "/cookies/set")
     assert cast_headers(response.headers).getall("set-cookie") == (
         "first=one; Path=/",
         "second=two; Path=/",
@@ -160,7 +160,7 @@ def test_multiple_set_cookie_lines_are_available_without_loss(
 def test_invalid_body_combination_fails_before_network(http_server: LocalHttpServer) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client, pytest.raises(ValueError, match="mutually exclusive"):
-        client.post("/echo", json={"a": 1}, content=b"body")
+        client.request("POST", "/echo", json={"a": 1}, content=b"body")
     assert http_server.exchanges == ()
 
 
@@ -169,8 +169,8 @@ def test_disconnect_and_timeout_are_normalized_as_transport_failures(
     http_server: LocalHttpServer, path: str
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
-    with client_from_httpx(raw) as client, pytest.raises(TransportFailure) as captured:
-        client.get(path, options=CallOptions(timeout=0.05))
+    with client_from_httpx(raw) as client, pytest.raises(TransportError) as captured:
+        client.request("GET", path, options=CallOptions(timeout=0.05))
     assert captured.value.handler == "zapros"
     assert captured.value.phase == "emit"
     assert captured.value.__cause__ is not None

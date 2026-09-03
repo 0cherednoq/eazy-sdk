@@ -2,12 +2,12 @@
 title: HTML
 description: Typed offline HTML extraction через Annotated CSS/XPath schema.
 sources:
-  - eazy_sdk.parse_html
-  - eazy_sdk.CSS
-  - eazy_sdk.XPath
-  - eazy_sdk.Scope
+  - eazy_sdk_html.parse_html
+  - eazy_sdk_html.CSS
+  - eazy_sdk_html.XPath
+  - eazy_sdk_html.Scope
   - eazy_sdk.response.Html
-api_fingerprint: "sha256:716ac03a69471aaf5b41c6e23d9b90820bc4dc63b133b6b32a23fba4a7463776"
+api_fingerprint: "sha256:ffbee561c78cb7ad473a73ac8a19c003c002968a87cd8f75dd546ccdb7a8e509"
 ---
 
 `parse_html` извлекает typed model без HTTP и без Zapros. Один schema contract работает с
@@ -18,7 +18,7 @@ dataclass, Pydantic и msgspec; selector engine возвращает primitive t
 from dataclasses import dataclass
 from typing import Annotated
 
-from eazy_sdk import CSS, Scope, parse_html
+from eazy_sdk_html import CSS, Scope, parse_html
 
 @dataclass
 class Product:

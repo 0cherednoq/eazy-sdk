@@ -14,7 +14,7 @@ from time import monotonic
 
 import pytest
 
-from eazy_sdk._internal.kernel import Malformed, ParseAttempt, ParsedValue
+from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
 from eazy_sdk.websocket import (
     AsyncWsClient,
     ChannelKey,

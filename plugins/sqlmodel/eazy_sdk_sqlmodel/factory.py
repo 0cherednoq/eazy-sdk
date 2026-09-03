@@ -12,6 +12,7 @@ from sqlalchemy import Table, UniqueConstraint, event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlmodel import SQLModel
 
+from eazy_sdk.core.errors import ConfigurationError
 from eazy_sdk_sqlmodel import tables
 from eazy_sdk_sqlmodel.adapter import (
     SqlAccountRepository,
@@ -37,7 +38,7 @@ class SqlStorageModels:
 DEFAULT_MODELS = SqlStorageModels()
 
 
-class SqlModelConfigurationError(TypeError):
+class SqlModelConfigurationError(ConfigurationError, TypeError):
     pass
 
 

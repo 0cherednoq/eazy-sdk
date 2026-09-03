@@ -4,15 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+import threading
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, cast, get_type_hints
 from urllib.parse import urljoin, urlsplit
 
-from eazy_sdk._internal import (
+from eazy_sdk.auth.core import (
+    AuthProviders,
+    _has_refreshable_security,
+    _refresh_security,
+    resolve_security,
+)
+from eazy_sdk.auth.lifecycle import LifecycleGraph
+from eazy_sdk.compile import (
+    compile_endpoint,
+)
+from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
+from eazy_sdk.core import (
     Bind,
     BindingError,
     BoundArguments,
@@ -26,15 +39,6 @@ from eazy_sdk._internal import (
     WireRequirements,
     apply_patch_atomic,
     bind_plan,
-    compile_endpoint,
-)
-from eazy_sdk._internal.http_operation import _OperationCall, _OperationDeclaration
-from eazy_sdk.accounts.session import LifecycleGraph
-from eazy_sdk.auth.core import (
-    AuthProviders,
-    _has_refreshable_security,
-    _refresh_security,
-    resolve_security,
 )
 from eazy_sdk.crypto import (
     CryptoConfigurationError,
@@ -43,7 +47,7 @@ from eazy_sdk.crypto import (
     CryptoOutputValue,
     CryptoRegistry,
     CryptoStage,
-    CryptoStreamingUnsupported,
+    CryptoStreamingUnsupportedError,
     CryptoValues,
     FrozenValue,
     HttpCryptoContext,
@@ -67,7 +71,7 @@ from eazy_sdk.dependencies import (
     _lower_requirements,
     _resolve_requirements,
 )
-from eazy_sdk.handlers import HandlerProfile, TransportFailure, validate_profile
+from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportError, validate_profile
 from eazy_sdk.middleware import (
     AttemptMiddlewareRegistration,
     AttemptRequestContext,
@@ -85,16 +89,21 @@ from eazy_sdk.models import (
     ModelAdapterRegistry,
     default_model_adapters,
 )
-from eazy_sdk.preparation import PreparationIncomplete, PreparedCall, PrepareOptions
+from eazy_sdk.preparation import PreparationIncompleteError, PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import (
+    AmbiguousChallengeError,
+    AmbiguousSignal,
     BeforeCallPolicy,
     ChallengeApplicationError,
+    ChallengeMalformedError,
     ChallengePolicy,
     ChallengeSolveError,
     ChallengeSolver,
-    ChallengeSolverBindings,
+    InstallableProtection,
+    MalformedSignal,
     MissingSolverError,
     PrivateBindings,
+    ProtectedFetch,
     ProtectionConfigurationError,
     ProtectionFlow,
     ProtectionPersistence,
@@ -102,6 +111,7 @@ from eazy_sdk.protection.advanced import (
     ProtectionStateScope,
     SolveContext,
     SolverBindings,
+    TransportIdentity,
     _ensure_replay_allowed,
     _inspect_signals,
     _private_bindings_patch,
@@ -114,10 +124,13 @@ from eazy_sdk.request import (
     SigningKeyRequirement,
     WireProfile,
 )
-from eazy_sdk.request.logical import ExactBodyInput
+from eazy_sdk.request.logical import ExactBodyInput, NoBodyInput
 from eazy_sdk.request.prepared import (
     _NO_BODY_DOCUMENT_OVERRIDE,
     BufferedBody,
+    HeaderField,
+    HttpProtocol,
+    PreparedRequest,
     RequestPreparer,
 )
 from eazy_sdk.request.signatures import reserve_outputs, sign_prepared
@@ -141,16 +154,6 @@ from ._http_stages import (
     build_request_document,
     decide_response,
 )
-
-
-@dataclass(slots=True)
-class _ReactionBudget:
-    remaining: int
-
-    def consume(self) -> None:
-        if self.remaining <= 0:
-            raise PlanError("response reaction budget exhausted")
-        self.remaining -= 1
 
 type KeyProvider = Callable[[SigningKeyRequirement], SigningKey]
 type Observer = Callable[[str, object | None], None]
@@ -205,9 +208,169 @@ class _CompiledBeforeCallPolicy:
 class _ManagedProtectionState:
     solution: object
     generation: int
+    identity: str | None = None
+    """``TransportIdentity.fingerprint()`` of the session that acquired ``solution``."""
 
     def __repr__(self) -> str:
-        return f"_ManagedProtectionState(solution=<redacted>, generation={self.generation})"
+        return (
+            "_ManagedProtectionState(solution=<redacted>, "
+            f"generation={self.generation}, identity={self.identity!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeFetch:
+    """``ProtectedFetch`` over the runtime's own handler, proxy and cookie jar.
+
+    Requests are emitted directly through ``runtime.send``: no guard, reaction,
+    replay, middleware or rate limiter runs, so a solver cannot recurse into the
+    protection pipeline that invoked it.
+    """
+
+    runtime: ExecutionRuntime
+    options: EmitOptions
+    identity: TransportIdentity
+
+    async def __call__(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+    ) -> NormalizedResponse[object]:
+        prepared = _raw_prepared_request(
+            url,
+            method,
+            headers,
+            body,
+            user_agent=self.identity.user_agent,
+            protocol=(
+                self.runtime.profile.protocol
+                if self.runtime.profile is not None
+                else HttpProtocol.HTTP_1_1
+            ),
+        )
+        response = await _maybe_await(self.runtime.send(prepared, options=self.options))
+        if not isinstance(response, NormalizedResponse):
+            raise TypeError("transport returned a non-normalized response to a solver fetch")
+        return cast(NormalizedResponse[object], response)
+
+
+def _raw_prepared_request(
+    url: str,
+    method: str,
+    headers: Mapping[str, str] | None,
+    body: bytes | None,
+    *,
+    user_agent: str | None,
+    protocol: HttpProtocol,
+) -> PreparedRequest:
+    split = urlsplit(url)
+    if split.scheme not in {"http", "https"} or not split.netloc:
+        raise ValueError("solver fetch requires an absolute http(s) URL")
+    if not method or not method.isascii() or any(c.isspace() for c in method):
+        raise ValueError("solver fetch method must be an ASCII token")
+    target = (split.path or "/") + (f"?{split.query}" if split.query else "")
+    fields: list[HeaderField] = []
+    names: set[bytes] = set()
+    for name, value in (headers or {}).items():
+        if not name or any(c in name for c in "\r\n\x00: "):
+            raise ValueError(f"solver fetch header name is invalid: {name!r}")
+        if any(c in value for c in "\r\n\x00"):
+            raise ValueError(f"solver fetch header {name!r} has an invalid value")
+        fields.append(HeaderField(name.encode("ascii"), value.encode("utf-8")))
+        names.add(name.encode("ascii").lower())
+    if user_agent is not None and b"user-agent" not in names:
+        fields.append(HeaderField(b"User-Agent", user_agent.encode("utf-8")))
+    if b"host" not in names:
+        fields.append(HeaderField(b"Host", split.netloc.encode("ascii")))
+    content_type = next(
+        (field.value for field in fields if field.name.lower() == b"content-type"),
+        None,
+    )
+    if body is not None and b"content-length" not in names:
+        fields.append(HeaderField(b"Content-Length", str(len(body)).encode("ascii")))
+    media_type = content_type.decode("ascii") if content_type is not None else None
+    return PreparedRequest(
+        method=method.upper().encode("ascii"),
+        scheme=split.scheme.encode("ascii"),
+        authority=split.netloc.encode("ascii"),
+        target=target.encode("utf-8"),
+        headers=tuple(fields),
+        body=BufferedBody(body or b"", content_type),
+        protocol=protocol,
+        body_input=ExactBodyInput(body, media_type) if body is not None else NoBodyInput(),
+    )
+
+
+def _transport_identity(
+    runtime: ExecutionRuntime,
+    emit_options: EmitOptions,
+    headers: Mapping[str, str],
+) -> TransportIdentity:
+    user_agent = next(
+        (value for name, value in headers.items() if name.lower() == "user-agent"),
+        None,
+    )
+    return TransportIdentity(
+        user_agent=user_agent,
+        proxy=emit_options.proxy,
+        impersonation=runtime.handler_profile.impersonation,
+    )
+
+
+def _slot_headers(compiled: Any, values: OperationValues) -> Mapping[str, str]:
+    """Header values already bound for this attempt, before request preparation."""
+
+    output: dict[str, str] = {}
+    for name, slot in compiled.header_slots.items():
+        if not values.contains(slot):
+            continue
+        value = values.require(slot)
+        if isinstance(value, tuple):
+            output[name] = ", ".join(str(item) for item in value)
+        elif value is not None:
+            output[name] = str(value)
+    return MappingProxyType(output)
+
+
+def _prepared_headers(prepared: PreparedRequest) -> Mapping[str, str]:
+    return MappingProxyType(
+        {
+            field.name.decode("ascii"): field.value.decode("utf-8", errors="replace")
+            for field in prepared.headers
+        }
+    )
+
+
+def _solve_deadline(options: Any) -> datetime | None:
+    timeout = getattr(options, "timeout", None)
+    if timeout is None:
+        return None
+    return datetime.now(UTC) + timedelta(seconds=float(timeout))
+
+
+def _solve_context(
+    runtime: ExecutionRuntime,
+    options: Any,
+    operation: OperationIdentity,
+    response: ResponseContext[object] | None,
+    attempt: int,
+    headers: Mapping[str, str],
+) -> SolveContext:
+    emit_options = options.emit_options()
+    identity = _transport_identity(runtime, emit_options, headers)
+    fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity)
+    return SolveContext(
+        operation,
+        response,
+        attempt,
+        deadline=_solve_deadline(options),
+        fetch=fetch,
+        identity=identity,
+        request_headers=headers,
+    )
 
 
 type _ProtectionCacheKey = tuple[object, ...]
@@ -215,33 +378,50 @@ type _ProtectionCacheKey = tuple[object, ...]
 
 @dataclass(slots=True)
 class _ProtectionLockEntry:
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    lock: threading.Lock = field(default_factory=threading.Lock)
     users: int = 0
 
 
 @dataclass(slots=True)
 class _ProtectionLockRegistry:
+    """Single-flight registry that is safe across event loops and threads.
+
+    One runtime may be driven by several event loops (a sync client runs one loop per
+    call, possibly from several threads), so entries use a ``threading.Lock`` acquired
+    without blocking the loop instead of a loop-bound ``asyncio.Lock``.
+    """
+
     _entries: dict[_ProtectionCacheKey, _ProtectionLockEntry] = field(
         default_factory=dict
     )
+    _guard: threading.Lock = field(default_factory=threading.Lock)
 
     @asynccontextmanager
     async def hold(self, key: _ProtectionCacheKey) -> AsyncIterator[None]:
-        entry = self._entries.get(key)
-        if entry is None:
-            entry = _ProtectionLockEntry()
-            self._entries[key] = entry
-        entry.users += 1
+        with self._guard:
+            entry = self._entries.get(key)
+            if entry is None:
+                entry = _ProtectionLockEntry()
+                self._entries[key] = entry
+            entry.users += 1
         try:
-            async with entry.lock:
+            delay = 0.001
+            while not entry.lock.acquire(blocking=False):
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 0.05)
+            try:
                 yield
+            finally:
+                entry.lock.release()
         finally:
-            entry.users -= 1
-            if entry.users == 0 and self._entries.get(key) is entry:
-                self._entries.pop(key)
+            with self._guard:
+                entry.users -= 1
+                if entry.users == 0 and self._entries.get(key) is entry:
+                    self._entries.pop(key)
 
     def __len__(self) -> int:
-        return len(self._entries)
+        with self._guard:
+            return len(self._entries)
 
 
 @dataclass(slots=True)
@@ -254,8 +434,7 @@ class ExecutionRuntime:
     operation_protections: tuple[ProtectionFlow[Any], ...] = ()
     before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
     challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
-    operation_protection_solvers: SolverBindings = field(default_factory=SolverBindings)
-    challenge_solvers: ChallengeSolverBindings = field(default_factory=ChallengeSolverBindings)
+    solver_bindings: SolverBindings = field(default_factory=SolverBindings)
     protection_session_owner: object | None = None
     middleware: tuple[object, ...] = ()
     limiter: RateLimiter | None = None
@@ -286,6 +465,16 @@ class ExecutionRuntime:
 
         self._protection_state.clear()
         self._protection_locks._entries.clear()
+
+    def invalidate_protection(self, identities: Collection[str] | None = None) -> int:
+        """Drop cached solutions of the given policy identities (all when ``None``)."""
+
+        removed = 0
+        for key in tuple(self._protection_state):
+            if identities is None or key[0] in identities:
+                self._protection_state.pop(key, None)
+                removed += 1
+        return removed
 
 
 class _PreparedRequestCaptured(Exception):
@@ -363,7 +552,7 @@ class ExecutionCore:
 
         call_options = options.call_options
         if call_options is None:
-            from eazy_sdk.clients.base import CallOptions
+            from eazy_sdk.policies import CallOptions
 
             call_options = CallOptions()
         runtime = self.runtime
@@ -374,7 +563,7 @@ class ExecutionCore:
                 call_options,
             )
             if requirements:
-                raise PreparationIncomplete(requirements)
+                raise PreparationIncompleteError(requirements)
             runtime = replace(
                 runtime,
                 dependencies=DependencyRegistry(),
@@ -382,8 +571,7 @@ class ExecutionCore:
                 operation_protections=(),
                 before_call_policies=(),
                 challenge_policies=(),
-                operation_protection_solvers=SolverBindings(),
-                challenge_solvers=ChallengeSolverBindings(),
+                solver_bindings=SolverBindings(),
                 middleware=(),
                 limiter=None,
                 key_provider=None,
@@ -404,7 +592,7 @@ class ExecutionCore:
             await core.execute(call, options=call_options)
         except _PreparedRequestCaptured as captured:
             return PreparedCall._from_request(captured.request)
-        raise PreparationIncomplete(("pipeline did not reach request emission",))
+        raise PreparationIncompleteError(("pipeline did not reach request emission",))
 
     async def execute[T](
         self,
@@ -412,7 +600,7 @@ class ExecutionCore:
         *,
         options: object,
     ) -> ExecutionResult[T]:
-        from eazy_sdk.clients.base import CallOptions
+        from eazy_sdk.policies import CallOptions
 
         selected = cast(CallOptions, options)
         contract = call.declaration
@@ -472,18 +660,18 @@ class ExecutionCore:
             contract,
             compiled,
             self.runtime.operation_protections,
-            self.runtime.operation_protection_solvers,
+            self.runtime.solver_bindings,
             self.runtime.models,
         )
         for challenge_policy_item in challenge_policies:
-            if self.runtime.challenge_solvers.get(challenge_policy_item.solver) is None:
+            if self.runtime.solver_bindings.get(challenge_policy_item.solver) is None:
                 raise MissingSolverError(
                     f"missing solver: {challenge_policy_item.solver.name}"
                 )
         for before_policy_item in before_call_policies:
             if (
                 before_policy_item.solver is not None
-                and self.runtime.challenge_solvers.get(before_policy_item.solver) is None
+                and self.runtime.solver_bindings.get(before_policy_item.solver) is None
             ):
                 raise MissingSolverError(
                     f"missing solver: {before_policy_item.solver.name}"
@@ -562,6 +750,7 @@ class ExecutionCore:
         mandatory_results = (
             await self._acquire_mandatory_protections(
                 compiled,
+                values,
                 options,
                 mandatory,
             )
@@ -569,12 +758,11 @@ class ExecutionCore:
             else {}
         )
         dependencies = _DependencyCaches()
-        reaction_budget = _ReactionBudget(
-            sum(item.replay.max_replays for item in challenge_policies)
-        )
+        # Each policy replays only on its own budget; the hard limit is their sum.
+        replay_remaining = {item.identity: item.replay.max_replays for item in challenge_policies}
         call_states: dict[str, _ManagedProtectionState] = {}
         applied_shared: dict[str, tuple[_ProtectionCacheKey, _ManagedProtectionState]] = {}
-        hard_attempt_limit = options.max_attempts + reaction_budget.remaining
+        hard_attempt_limit = options.max_attempts + sum(replay_remaining.values())
         transport_remaining = options.transport_retries
         retry_number = 0
         auth_remaining = options.auth_retries
@@ -588,47 +776,6 @@ class ExecutionCore:
             dependencies.attempt.clear()
             attempt_values = values
             current_url = next_url or initial_url
-            for before_policy_item in before_call_policies:
-                state, shared = await self._before_call_state(
-                    before_policy_item,
-                    compiled,
-                    attempt_values,
-                    options,
-                    number,
-                    call_states,
-                )
-                attempt_values = _apply_managed_state(
-                    compiled,
-                    attempt_values,
-                    before_policy_item.apply,
-                    state,
-                    policy=before_policy_item.identity,
-                )
-                if shared is not None:
-                    applied_shared[before_policy_item.identity] = shared
-            for challenge_policy_item in challenge_policies:
-                local = call_states.get(challenge_policy_item.identity)
-                shared = _find_shared_state(
-                    self.runtime,
-                    challenge_policy_item,
-                )
-                selected_state = local or (shared[1] if shared is not None else None)
-                if selected_state is None:
-                    continue
-                attempt_values = _apply_managed_state(
-                    compiled,
-                    attempt_values,
-                    challenge_policy_item.apply,
-                    selected_state,
-                    policy=challenge_policy_item.identity,
-                )
-                if shared is not None and (local is None or local is shared[1]):
-                    applied_shared[challenge_policy_item.identity] = shared
-                if challenge_policy_item.persistence.mode in {
-                    ProtectionPersistenceMode.PER_MATCH,
-                    ProtectionPersistenceMode.PER_ATTEMPT,
-                }:
-                    call_states.pop(challenge_policy_item.identity, None)
             selected_crypto = _resolve_http_crypto(contract, self.runtime.crypto, current_url)
             compiled_crypto = (
                 initial_compiled_crypto
@@ -685,6 +832,61 @@ class ExecutionCore:
                 attempt_values,
                 ValuePatch(tuple(op for patch in patches for op in patch.operations)),
             )
+            # Managed protection state is applied only after every public write of
+            # this attempt is known, so the transport identity it is checked against
+            # (User-Agent, proxy, impersonation) is the one the request will carry.
+            attempt_identity = _transport_identity(
+                self.runtime,
+                options.emit_options(),
+                _slot_headers(compiled, attempt_values),
+            )
+            attempt_fingerprint = attempt_identity.fingerprint()
+            for before_policy_item in before_call_policies:
+                state, shared = await self._before_call_state(
+                    before_policy_item,
+                    compiled,
+                    attempt_values,
+                    options,
+                    number,
+                    call_states,
+                    attempt_fingerprint,
+                )
+                attempt_values = _apply_managed_state(
+                    compiled,
+                    attempt_values,
+                    before_policy_item.apply,
+                    state,
+                    policy=before_policy_item.identity,
+                )
+                if shared is not None:
+                    applied_shared[before_policy_item.identity] = shared
+            for challenge_policy_item in challenge_policies:
+                local = call_states.get(challenge_policy_item.identity)
+                if local is not None and not _identity_matches(local, attempt_fingerprint):
+                    call_states.pop(challenge_policy_item.identity, None)
+                    local = None
+                shared = _find_shared_state(
+                    self.runtime,
+                    challenge_policy_item,
+                    attempt_fingerprint,
+                )
+                selected_state = local or (shared[1] if shared is not None else None)
+                if selected_state is None:
+                    continue
+                attempt_values = _apply_managed_state(
+                    compiled,
+                    attempt_values,
+                    challenge_policy_item.apply,
+                    selected_state,
+                    policy=challenge_policy_item.identity,
+                )
+                if shared is not None and (local is None or local is shared[1]):
+                    applied_shared[challenge_policy_item.identity] = shared
+                if challenge_policy_item.persistence.mode in {
+                    ProtectionPersistenceMode.PER_MATCH,
+                    ProtectionPersistenceMode.PER_ATTEMPT,
+                }:
+                    call_states.pop(challenge_policy_item.identity, None)
             if self.runtime.limiter is not None:
                 decision = await _maybe_await(
                     self.runtime.limiter.reserve(
@@ -834,7 +1036,7 @@ class ExecutionCore:
                     await _maybe_await(self.runtime.send(prepared, options=options.emit_options())),
                 )
                 self._observe("emit", number)
-            except TransportFailure as error:
+            except TransportError as error:
                 proposed = None
                 for registration in attempts:
                     hook = getattr(registration.implementation, "on_transport_error", None)
@@ -923,6 +1125,16 @@ class ExecutionCore:
                 cast(ResponseContext[object], response_context),
                 scope,
             )
+            if isinstance(signal, MalformedSignal):
+                raise ChallengeMalformedError(
+                    _policy_identity(challenge_policies, signal.signal),
+                    number,
+                ) from signal.cause
+            if isinstance(signal, AmbiguousSignal):
+                raise AmbiguousChallengeError(
+                    tuple(_policy_identity(challenge_policies, item) for item in signal.signals),
+                    number,
+                )
             outcome = (
                 compiled.contract.responses.inspect(response_context)
                 if isinstance(compiled.contract.responses, Responses)
@@ -979,17 +1191,20 @@ class ExecutionCore:
                     prepared.body,
                     matched_policy.replay,
                     origin_may_have_executed=True,
+                    remaining=replay_remaining[matched_policy.identity],
                 )
-                reaction_budget.consume()
+                replay_remaining[matched_policy.identity] -= 1
                 state, shared = await self._challenge_state(
                     matched_policy,
                     signal_match.value,
                     cast(ResponseContext[object], response_context),
                     compiled,
                     attempt_values,
+                    options,
                     number,
                     call_states,
                     applied_shared.get(matched_policy.identity),
+                    _prepared_headers(prepared),
                 )
                 call_states[matched_policy.identity] = state
                 if shared is not None:
@@ -1013,9 +1228,9 @@ class ExecutionCore:
             assert isinstance(response_decision, RejectedResponse)
             response_decision.outcome.unwrap()
             raise AssertionError("terminal response outcome unexpectedly returned")
-        from eazy_sdk.clients.base import AttemptLimitExceeded
+        from eazy_sdk.clients.base import AttemptLimitError
 
-        raise AttemptLimitExceeded("hard attempt budget exhausted")
+        raise AttemptLimitError("hard attempt budget exhausted")
 
     async def _before_call_state(
         self,
@@ -1025,20 +1240,24 @@ class ExecutionCore:
         options: Any,
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
+        fingerprint: str,
     ) -> tuple[
         _ManagedProtectionState,
         tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
     ]:
         mode = policy.persistence.mode
         if mode is ProtectionPersistenceMode.PER_CALL and policy.identity in call_states:
-            return call_states[policy.identity], None
-        shared = _find_shared_state(self.runtime, policy)
+            local = call_states[policy.identity]
+            if _identity_matches(local, fingerprint):
+                return local, None
+            call_states.pop(policy.identity, None)
+        shared = _find_shared_state(self.runtime, policy, fingerprint)
         if shared is not None:
             return shared[1], shared
 
         solver: ChallengeSolver[Any, Any] | None = None
         if policy.solver is not None:
-            solver = self.runtime.challenge_solvers.get(policy.solver)
+            solver = self.runtime.solver_bindings.get(policy.solver)
             assert solver is not None
         key = _protection_cache_key(
             self.runtime,
@@ -1056,7 +1275,14 @@ class ExecutionCore:
                 try:
                     solution = await solver.solve(
                         policy.challenge,
-                        SolveContext(compiled.plan.operation, None, attempt),
+                        _solve_context(
+                            self.runtime,
+                            options,
+                            compiled.plan.operation,
+                            None,
+                            attempt,
+                            _slot_headers(compiled, values),
+                        ),
                     )
                 except Exception as exc:
                     raise ChallengeSolveError(policy.identity, attempt) from exc
@@ -1070,12 +1296,13 @@ class ExecutionCore:
                 compiled,
                 values,
                 acquire,
+                fingerprint,
             )
             if committed_key is not None:
                 return state, (committed_key, state)
         else:
             solution = await acquire()
-            state = _new_managed_state(self.runtime, solution)
+            state = _new_managed_state(self.runtime, solution, fingerprint)
             _apply_managed_state(
                 compiled,
                 values,
@@ -1094,14 +1321,16 @@ class ExecutionCore:
         response: ResponseContext[object],
         compiled: Any,
         values: OperationValues,
+        options: Any,
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
         rejected: tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
+        request_headers: Mapping[str, str],
     ) -> tuple[
         _ManagedProtectionState,
         tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
     ]:
-        solver = self.runtime.challenge_solvers.get(policy.solver)
+        solver = self.runtime.solver_bindings.get(policy.solver)
         assert solver is not None
         key = _protection_cache_key(
             self.runtime,
@@ -1109,13 +1338,19 @@ class ExecutionCore:
             solver,
             challenge,
         )
+        context = _solve_context(
+            self.runtime,
+            options,
+            compiled.plan.operation,
+            response,
+            attempt,
+            request_headers,
+        )
+        fingerprint = context.identity.fingerprint()
 
         async def solve() -> object:
             try:
-                return await solver.solve(
-                    challenge,
-                    SolveContext(compiled.plan.operation, response, attempt),
-                )
+                return await solver.solve(challenge, context)
             except Exception as exc:
                 raise ChallengeSolveError(policy.identity, attempt) from exc
 
@@ -1127,6 +1362,7 @@ class ExecutionCore:
                 compiled,
                 values,
                 solve,
+                fingerprint,
                 rejected=rejected,
             )
             return state, (
@@ -1134,7 +1370,7 @@ class ExecutionCore:
             )
         call_states.pop(policy.identity, None)
         solution = await solve()
-        state = _new_managed_state(self.runtime, solution)
+        state = _new_managed_state(self.runtime, solution, fingerprint)
         _apply_managed_state(
             compiled,
             values,
@@ -1152,6 +1388,7 @@ class ExecutionCore:
         compiled: Any,
         values: OperationValues,
         acquire: Callable[[], Awaitable[object]],
+        fingerprint: str,
         *,
         rejected: tuple[_ProtectionCacheKey, _ManagedProtectionState] | None = None,
     ) -> tuple[_ManagedProtectionState, _ProtectionCacheKey | None]:
@@ -1161,11 +1398,13 @@ class ExecutionCore:
                 if self.runtime._protection_state.get(rejected_key) is rejected_state:
                     self.runtime._protection_state.pop(rejected_key, None)
             cached = self.runtime._protection_state.get(key)
-            if cached is not None and _managed_state_valid(cached, persistence.mode):
+            if cached is not None and _managed_state_valid(
+                cached, persistence.mode, fingerprint
+            ):
                 return cached, key
             self.runtime._protection_state.pop(key, None)
             solution = await acquire()
-            state = _new_managed_state(self.runtime, solution)
+            state = _new_managed_state(self.runtime, solution, fingerprint)
             # Validate the entire batch before publishing any reusable state.
             _apply_managed_state(
                 compiled,
@@ -1182,6 +1421,7 @@ class ExecutionCore:
     async def _acquire_mandatory_protections(
         self,
         compiled: Any,
+        values: OperationValues,
         options: Any,
         preparation: _MandatoryPreparation,
     ) -> dict[int, object]:
@@ -1190,12 +1430,19 @@ class ExecutionCore:
             acquired = await self.execute(acquire.call({}), options=options)
             current: object = acquired.value
             if flow.solve:
-                solver = self.runtime.operation_protection_solvers.get(flow.requirement)
+                solver = self.runtime.solver_bindings.get(flow.requirement)
                 assert solver is not None
                 try:
                     current = await solver.solve(
                         current,
-                        SolveContext(compiled.plan.operation, None, 0),
+                        _solve_context(
+                            self.runtime,
+                            options,
+                            compiled.plan.operation,
+                            None,
+                            0,
+                            _slot_headers(compiled, values),
+                        ),
                     )
                 except Exception as exc:
                     raise ChallengeSolveError(flow.requirement.name, 0) from exc
@@ -1212,6 +1459,28 @@ class ExecutionCore:
     def _observe(self, phase: str, value: object | None = None) -> None:
         if self.runtime.observer is not None:
             self.runtime.observer(phase, value)
+
+
+def _protection_identities(
+    targets: tuple[InstallableProtection | str, ...],
+) -> frozenset[str] | None:
+    """Policy identities addressed by guards/names; ``None`` means every policy."""
+
+    if not targets:
+        return None
+    identities: set[str] = set()
+    for target in targets:
+        if isinstance(target, str):
+            if not target:
+                raise ValueError("protection identity must not be empty")
+            identities.add(target)
+            continue
+        if not isinstance(target, InstallableProtection):
+            raise TypeError("invalidate_protection accepts guards or policy identities")
+        bundle = target.to_bundle()
+        identities.update(policy.identity for policy in bundle.challenge_policies)
+        identities.update(policy.identity for policy in bundle.before_call_policies)
+    return frozenset(identities)
 
 
 def _protection_fingerprint_components(
@@ -1234,17 +1503,20 @@ def _protection_fingerprint_components(
     return tuple(components)
 
 
+def _policy_identity(
+    policies: tuple[_CompiledChallengePolicy, ...],
+    signal: object,
+) -> str:
+    for policy in policies:
+        if policy.signal is signal:
+            return policy.identity
+    return getattr(signal, "name", "<unknown>")
+
+
 def _compile_challenge_policy(
     policy: ChallengePolicy[Any, Any],
 ) -> _CompiledChallengePolicy:
-    if not isinstance(policy, ChallengePolicy):
-        raise TypeError("challenge policy does not implement the typed policy contract")
-    if not isinstance(policy.apply, PrivateBindings):
-        raise TypeError("challenge policy apply must be PrivateBindings")
-    if not isinstance(policy.persistence, ProtectionPersistence):
-        raise TypeError("challenge policy persistence must be ProtectionPersistence")
-    if policy.signal.scope != policy.scope:
-        raise TypeError("challenge policy and signal scopes must match")
+    # ``ChallengePolicy`` validates its own fields at construction.
     return _CompiledChallengePolicy(
         identity=policy.identity,
         revision=policy.revision,
@@ -1260,12 +1532,7 @@ def _compile_challenge_policy(
 def _compile_before_call_policy(
     policy: BeforeCallPolicy[Any, Any],
 ) -> _CompiledBeforeCallPolicy:
-    if not isinstance(policy, BeforeCallPolicy):
-        raise TypeError("before-call policy does not implement the typed policy contract")
-    if not isinstance(policy.apply, PrivateBindings):
-        raise TypeError("before-call policy apply must be PrivateBindings")
-    if not isinstance(policy.persistence, ProtectionPersistence):
-        raise TypeError("before-call policy persistence must be ProtectionPersistence")
+    # ``BeforeCallPolicy`` validates its own fields at construction.
     acquire = (
         _operation_reference(policy.acquire, role="before-call acquire")
         if policy.acquire is not None
@@ -1300,9 +1567,16 @@ def _apply_managed_state(
 def _new_managed_state(
     runtime: ExecutionRuntime,
     solution: object,
+    identity: str | None,
 ) -> _ManagedProtectionState:
     runtime._protection_generation += 1
-    return _ManagedProtectionState(solution, runtime._protection_generation)
+    return _ManagedProtectionState(solution, runtime._protection_generation, identity)
+
+
+def _identity_matches(state: _ManagedProtectionState, fingerprint: str | None) -> bool:
+    """A solution acquired under one transport identity never applies to another."""
+
+    return state.identity is None or fingerprint is None or state.identity == fingerprint
 
 
 def _is_shared(mode: ProtectionPersistenceMode) -> bool:
@@ -1324,8 +1598,11 @@ def _solution_is_shareable(solution: object, mode: ProtectionPersistenceMode) ->
 def _managed_state_valid(
     state: _ManagedProtectionState,
     mode: ProtectionPersistenceMode,
+    fingerprint: str | None,
 ) -> bool:
-    return _solution_is_shareable(state.solution, mode)
+    return _identity_matches(state, fingerprint) and _solution_is_shareable(
+        state.solution, mode
+    )
 
 
 def _protection_cache_key(
@@ -1390,11 +1667,12 @@ def _hashable_identity(value: object) -> object:
 def _find_shared_state(
     runtime: ExecutionRuntime,
     policy: _CompiledChallengePolicy | _CompiledBeforeCallPolicy,
+    fingerprint: str | None,
 ) -> tuple[_ProtectionCacheKey, _ManagedProtectionState] | None:
     if not _is_shared(policy.persistence.mode):
         return None
     solver = (
-        runtime.challenge_solvers.get(policy.solver)
+        runtime.solver_bindings.get(policy.solver)
         if policy.solver is not None
         else None
     )
@@ -1403,9 +1681,11 @@ def _find_shared_state(
     for key, state in tuple(runtime._protection_state.items()):
         if key[:-1] != prefix:
             continue
-        if _managed_state_valid(state, policy.persistence.mode):
+        if _managed_state_valid(state, policy.persistence.mode, fingerprint):
             candidates.append((key, state))
         else:
+            # Expired, or acquired under another transport identity: a clearance
+            # bound to one proxy/User-Agent must never be replayed through another.
             runtime._protection_state.pop(key, None)
     return max(candidates, key=lambda item: item[1].generation) if candidates else None
 
@@ -1558,6 +1838,8 @@ def _resolve_http_crypto(
             return None
         profile = resolved.profile
         wire = resolved.wire
+    if not isinstance(profile, PayloadCrypto):
+        raise CryptoConfigurationError("HTTP operation requires a PayloadCrypto profile")
     if wire is None:
         selected_wire = HttpEncrypted()
     elif isinstance(wire, HttpEncrypted):
@@ -1610,7 +1892,7 @@ def _compile_http_crypto(
                 + ", ".join(sorted(conflicts))
             )
         if root_body is not None and isinstance(root_body.placement, ReplayableStreamBody):
-            raise CryptoStreamingUnsupported(
+            raise CryptoStreamingUnsupportedError(
                 "whole-payload crypto does not support ReplayableStreamBody"
             )
     metadata_headers = {item.name.casefold() for item in wire.metadata}

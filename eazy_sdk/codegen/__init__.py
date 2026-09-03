@@ -14,7 +14,12 @@ from eazy_sdk.auth import (
     all_of,
     any_of,
 )
-from eazy_sdk.auth.session_runtime import _generated_session_auth, _generated_session_scheme
+from eazy_sdk.auth.session_runtime import (
+    _generated_session_auth as session_auth,
+)
+from eazy_sdk.auth.session_runtime import (
+    _generated_session_scheme as session_scheme,
+)
 from eazy_sdk.clients import (
     AsyncClient,
     CallOptions,
@@ -33,7 +38,8 @@ from eazy_sdk.dependencies import (
 )
 from eazy_sdk.protection.advanced import (
     FromProtection,
-    ProtectionRequirement,
+    ProtectionBundle,
+    SolverRequirement,
     protection_flow,
 )
 from eazy_sdk.request import (
@@ -111,7 +117,7 @@ __all__ = [
     "Parsed",
     "Part",
     "Path",
-    "ProtectionRequirement",
+    "ProtectionBundle",
     "Query",
     "QueryString",
     "ReplayableStreamBody",
@@ -121,17 +127,18 @@ __all__ = [
     "RetryPolicy",
     "SecurityAlternative",
     "SecurityPolicy",
+    "SolverRequirement",
     "StatusRange",
     "Success",
     "SyncApi",
     "Text",
     "Unset",
     "WireOptions",
-    "_generated_session_auth",
-    "_generated_session_scheme",
     "all_of",
     "any_of",
     "field",
     "protection_flow",
+    "session_auth",
+    "session_scheme",
     "value",
 ]

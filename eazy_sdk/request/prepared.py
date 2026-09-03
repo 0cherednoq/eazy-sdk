@@ -15,10 +15,10 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, cast
 from urllib.parse import quote, unquote_to_bytes, urljoin, urlsplit
 
-from eazy_sdk._internal.errors import BindingError, PlanError
-from eazy_sdk._internal.http import RequestLocation
-from eazy_sdk._internal.kernel import OperationValues, ValueSlot
 from eazy_sdk.codecs import BodyCodec, EncodeContext, ScalarCodec, ScalarEncodeContext
+from eazy_sdk.core.errors import BindingError, PlanError
+from eazy_sdk.core.http import RequestLocation
+from eazy_sdk.core.kernel import OperationValues, ValueSlot
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.request.descriptors import (
     BytesBody,
@@ -56,7 +56,7 @@ from eazy_sdk.request.params import (
 )
 
 if TYPE_CHECKING:
-    from eazy_sdk._internal.http_compiler import CompiledContract
+    from eazy_sdk.compile.http_compiler import CompiledContract
 
 
 _NO_BODY_DOCUMENT_OVERRIDE = object()
@@ -604,7 +604,7 @@ def _cookies(
     *,
     operation_id: str,
 ) -> tuple[PreparedCookie, ...]:
-    from eazy_sdk._internal.http_compiler import ManagedCookieSetDescriptor
+    from eazy_sdk.core.http import ManagedCookieSetDescriptor
 
     output: list[PreparedCookie] = []
     seen: set[bytes] = set()

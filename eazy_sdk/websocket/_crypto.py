@@ -9,7 +9,7 @@ from eazy_sdk.crypto import (
     CryptoConfigurationError,
     CryptoOutputValue,
     CryptoValues,
-    EncryptedFrameKindMismatch,
+    EncryptedFrameKindMismatchError,
     WebSocketCryptoContext,
     WebSocketEncrypted,
 )
@@ -87,7 +87,7 @@ async def protect_ws_frame(
     try:
         text = encrypted.decode("utf-8")
     except UnicodeDecodeError:
-        raise EncryptedFrameKindMismatch(
+        raise EncryptedFrameKindMismatchError(
             "text-safe encrypted frame output is not valid UTF-8"
         ) from None
     return EncodedFrame(text, FrameKind.TEXT)
@@ -105,7 +105,7 @@ async def unprotect_ws_frame(
         return frame
     expected = FrameKind.BINARY if wire.frame_kind == "binary" else FrameKind.TEXT
     if frame.kind is not expected:
-        raise EncryptedFrameKindMismatch(
+        raise EncryptedFrameKindMismatchError(
             f"expected encrypted {wire.frame_kind} frame, got {frame.kind.value}"
         )
     encrypted = frame.data.encode("utf-8") if isinstance(frame.data, str) else frame.data

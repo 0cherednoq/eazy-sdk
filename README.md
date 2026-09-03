@@ -24,13 +24,9 @@ eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
 ```python
 from typing import Annotated
 
-import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, SyncApi, api
-from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import Path
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import Client, Json, Path, SyncApi, api
 
 
 class User(BaseModel):
@@ -38,23 +34,23 @@ class User(BaseModel):
     name: str
 
 
-USER_RESPONSES = Responses(success=(Success(200, Json(User)),))
-
-
 class UsersApi(SyncApi):
-    @api.get("/users/{user_id}", operation_id="getUser", responses=USER_RESPONSES)
+    @api.get("/users/{user_id}", operation_id="getUser", response=Json())
     def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
         raise NotImplementedError
 
 
-client = Client(
-    base_url="https://api.example",
-    handler=HttpxHandler(httpx.Client(), owns_client=True),
-)
-users = UsersApi(client)
-user = users.get_user(user_id=42)
-envelope = users.get_user.with_response(user_id=42)
+with Client.httpx(base_url="https://api.example") as client:
+    users = UsersApi(client)
+    user = users.get_user(user_id=42)
+    envelope = users.get_user.with_response(user_id=42)
 ```
+
+`response=Json()` infers the model from the return annotation; `Bytes()`, `Text()`, and `Html()`
+work the same way, and `responses=Responses(...)` declares several success/error cases.
+`Client(base_url=...)` uses Zapros' standard network handler; `Client.httpx()`,
+`Client.requests()`, and `Client.curl_cffi()` build the first-party handlers, and `handler=`
+accepts any Zapros handler.
 
 `api` is the narrow HTTP-decorator namespace. It provides `get`, `post`, `put`, `patch`, `delete`,
 `head`, `options`, `trace`, and `request`; import `SyncApi`, `AsyncApi`, and runtime types

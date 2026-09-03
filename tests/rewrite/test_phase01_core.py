@@ -4,16 +4,19 @@ from dataclasses import dataclass
 
 import pytest
 
-from eazy_sdk._internal import (
+from eazy_sdk.compile import (
     HTTP_COMPILER_KIND,
+    CompiledContract,
+    InputField,
+    compile_endpoint,
+)
+from eazy_sdk.core import (
     Append,
     Bind,
     BindingError,
     BoundArguments,
-    CompiledContract,
     CompilerRegistry,
     GraphError,
-    InputField,
     OperationShape,
     OperationValues,
     PatchError,
@@ -32,10 +35,9 @@ from eazy_sdk._internal import (
     ValueSlot,
     WriterConflictError,
     apply_patch_atomic,
-    compile_endpoint,
     compile_plan,
 )
-from eazy_sdk._internal.kernel import OperationIdentity
+from eazy_sdk.core.kernel import OperationIdentity
 from eazy_sdk.request.params import Path, Query
 
 

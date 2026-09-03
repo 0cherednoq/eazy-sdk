@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from eazy_sdk._internal.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
 
 from ._artifacts import (
     ChannelKey,

@@ -54,6 +54,21 @@ def redact_json(value: object, *, keys: frozenset[str] = REDACT_JSON_KEYS) -> ob
     return value
 
 
+def redact_url_credentials(url: str | None) -> str | None:
+    """Mask the ``user:password@`` part of a URL such as a proxy address."""
+    if url is None:
+        return None
+    scheme, separator, rest = url.partition("://")
+    if not separator:
+        rest, scheme = url, ""
+    authority, slash, path = rest.partition("/")
+    _, at, hostport = authority.rpartition("@")
+    if not at:
+        return url
+    redacted = f"{REDACTED}@{hostport}{slash}{path}"
+    return f"{scheme}://{redacted}" if separator else redacted
+
+
 def preview(text: str | None, limit: int) -> str | None:
     """Truncate ``text`` to ``limit`` characters, appending an ellipsis."""
     if text is None:

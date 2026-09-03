@@ -8,18 +8,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
-from eazy_sdk._internal.errors import GraphError, PlanError
-from eazy_sdk._internal.kernel import ValueValidator
-from eazy_sdk.accounts.session import (
+from eazy_sdk.auth.lifecycle import LifecycleCycleError
+from eazy_sdk.auth.lifecycle import LifecycleGraph as ResolutionGraph
+from eazy_sdk.auth.session import (
     ExpiresAt,
     MemorySessionStore,
     RefreshToken,
     SessionAcquirer,
+    SessionConfigurationError,
     SessionCredentialsRequiredError,
     SessionKey,
     SessionLifecycle,
     SessionLifecycleConfig,
-    SessionLifecycleCycleError,
     SessionLifecycleError,
     SessionRecord,
     SessionRefresher,
@@ -29,9 +29,8 @@ from eazy_sdk.accounts.session import (
     SessionValidator,
     StoredSession,
 )
-from eazy_sdk.accounts.session import (
-    LifecycleGraph as ResolutionGraph,
-)
+from eazy_sdk.core.errors import GraphError, PlanError
+from eazy_sdk.core.kernel import ValueValidator
 from eazy_sdk.models import default_model_adapters
 from eazy_sdk.response import ResponseEnvelope
 
@@ -199,10 +198,12 @@ class SessionProvider[TCredentials, TSession, TSdk]:
             return await result
         except SessionCredentialsRequiredError as exc:
             raise AuthCredentialsRequiredError(str(exc)) from exc
-        except SessionLifecycleCycleError as exc:
+        except LifecycleCycleError as exc:
             raise ResolutionCycleError(
                 str(exc).replace("lifecycle cycle", "resolution cycle")
             ) from exc
+        except SessionConfigurationError:
+            raise
         except (SessionValidationError, SessionRevisionError, SessionLifecycleError) as exc:
             raise PlanError(str(exc)) from exc
 
@@ -333,9 +334,6 @@ class _SessionModel:
             ),
         )
 
-
-class SessionConfigurationError(PlanError):
-    pass
 
 
 def session_auth[TCredentials, TSession](

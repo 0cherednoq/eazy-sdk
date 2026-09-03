@@ -5,6 +5,7 @@ import os
 from typing import Any, cast
 
 import pytest
+from eazy_sdk_accounts.storage.exceptions import DuplicateAccountError
 from eazy_sdk_sqlmodel import (
     DEFAULT_PROVIDER,
     SqlResourceConflictError,
@@ -22,8 +23,6 @@ from eazy_sdk_sqlmodel.tables import (
 from sqlalchemy import Table, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlmodel import SQLModel, select
-
-from eazy_sdk.storage.exceptions import DuplicateAccountError
 
 POSTGRES_DSN = os.environ.get("EAZY_SDK_POSTGRES_DSN")
 pytestmark = pytest.mark.skipif(

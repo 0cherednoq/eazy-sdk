@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import re
-from collections.abc import Callable, Hashable, Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Hashable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Protocol, cast, runtime_checkable
+from types import MappingProxyType, UnionType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    runtime_checkable,
+)
 
-from eazy_sdk._internal.errors import PlanError
-from eazy_sdk._internal.http_compiler import CompiledContract
-from eazy_sdk._internal.http_plan import RequestScope, ScopeContext
-from eazy_sdk._internal.kernel import OperationIdentity, OperationValues, Set, ValuePatch
+from eazy_sdk.core.errors import ConfigurationError, EazySdkError, PlanError
+from eazy_sdk.core.http_plan import RequestScope, ScopeContext
+from eazy_sdk.core.kernel import OperationIdentity, OperationValues, Set, ValuePatch
+from eazy_sdk.redaction import redact_url_credentials
 from eazy_sdk.request.prepared import BufferedBody, ReplayableBodyStream
-from eazy_sdk.response import ResponseContext
+from eazy_sdk.response import NormalizedResponse, ResponseContext
 from eazy_sdk.response.cases import (
     Malformed,
     NoMatch,
@@ -22,8 +36,11 @@ from eazy_sdk.response.cases import (
     ResponseParser,
 )
 
+if TYPE_CHECKING:
+    from eazy_sdk.compile.http_compiler import CompiledContract
 
-class ProtectionConfigurationError(PlanError):
+
+class ProtectionConfigurationError(PlanError, ConfigurationError):
     """Protection declaration cannot be compiled safely before transport I/O."""
 
 
@@ -56,8 +73,96 @@ class ChallengeApplicationError(PlanError):
         return f"challenge solution application failed for {self.policy}"
 
 
-class MalformedChallengeError(ValueError):
-    """A simple detector recognized a challenge whose payload is malformed."""
+class MalformedChallengeError(EazySdkError, ValueError):
+    """Raised by a detector: the response is a challenge but its payload is malformed."""
+
+
+class ChallengeMalformedError(PlanError):
+    """A policy recognized a challenge whose payload is malformed; the call cannot proceed."""
+
+    def __init__(self, policy: str, attempt: int) -> None:
+        self.policy = policy
+        self.attempt = attempt
+        super().__init__(policy, attempt)
+
+    def __str__(self) -> str:
+        return f"malformed challenge for {self.policy} on attempt {self.attempt}"
+
+
+class AmbiguousChallengeError(ProtectionConfigurationError):
+    """Two or more definitive policies matched one response with equal priority."""
+
+    def __init__(self, policies: tuple[str, ...], attempt: int) -> None:
+        self.policies = policies
+        self.attempt = attempt
+        super().__init__(
+            "ambiguous challenge on attempt "
+            f"{attempt}: policies {', '.join(policies)} matched with equal priority"
+        )
+
+
+class ProtectedFetch(Protocol):
+    """Send one raw request through the guarded client's own transport session.
+
+    The executor implements this port over the same handler, proxy and cookie jar
+    that emitted the challenged request. Requests sent through it bypass guards,
+    reactions and replay, so a solver can download challenge assets or POST a
+    validation form without recursing into the protection pipeline.
+    """
+
+    async def __call__(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+    ) -> NormalizedResponse[object]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TransportIdentity:
+    """Network identity the runtime actually used for the triggering request."""
+
+    user_agent: str | None = None
+    proxy: str | None = None
+    impersonation: str | None = None
+
+    def __repr__(self) -> str:
+        return (
+            "TransportIdentity("
+            f"user_agent={self.user_agent!r}, "
+            f"proxy={redact_url_credentials(self.proxy)!r}, "
+            f"impersonation={self.impersonation!r})"
+        )
+
+    def fingerprint(self) -> str:
+        """Stable, secret-free digest used to bind managed state to this identity."""
+
+        digest = hashlib.sha256()
+        for component in (self.user_agent, self.proxy, self.impersonation):
+            digest.update(b"\x00" if component is None else b"\x01" + component.encode("utf-8"))
+            digest.update(b"\x1f")
+        return digest.hexdigest()
+
+
+class _UnavailableFetch:
+    async def __call__(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+    ) -> NormalizedResponse[object]:
+        raise ProtectionConfigurationError(
+            "solve context was created without a transport; "
+            "SolveContext.fetch is available only inside a running client"
+        )
+
+
+_UNAVAILABLE_FETCH: ProtectedFetch = _UnavailableFetch()
+_NO_HEADERS: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,28 +171,33 @@ class SolveContext:
     response: ResponseContext[object] | None
     attempt: int
     deadline: datetime | None = None
+    fetch: ProtectedFetch = _UNAVAILABLE_FETCH
+    identity: TransportIdentity = field(default_factory=TransportIdentity)
+    request_headers: Mapping[str, str] = _NO_HEADERS
 
 
 class ChallengeSolver[TChallenge, TSolution](Protocol):
+    """Solve one typed challenge; used by response guards, before-call and mandatory flows."""
+
     async def solve(self, challenge: TChallenge, context: SolveContext) -> TSolution: ...
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class ProtectionRequirement[TResult]:
-    """Typed identity of a mandatory operation protection result."""
+class SolverRequirement[TChallenge, TSolution]:
+    """Typed identity of a solver a policy or mandatory flow requires."""
 
     name: str
 
     def __post_init__(self) -> None:
         if not self.name:
-            raise ValueError("protection requirement name must not be empty")
+            raise ValueError("solver requirement name must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
 class FromProtection:
     """Populate one exact wire-model field from a mandatory protection result."""
 
-    requirement: ProtectionRequirement[Any]
+    requirement: SolverRequirement[Any, Any]
     field: str
 
     def __post_init__(self) -> None:
@@ -95,93 +205,31 @@ class FromProtection:
             raise ValueError("protection result field must not be empty")
 
 
-class ProtectionSolver[TChallenge, TResult](Protocol):
-    async def solve(self, challenge: TChallenge, context: SolveContext) -> TResult: ...
-
-
 @dataclass(frozen=True, slots=True)
-class SolverBinding[TChallenge, TResult]:
-    requirement: ProtectionRequirement[TResult]
-    solver: ProtectionSolver[TChallenge, TResult]
-
-
-def bind_solver[TChallenge, TResult](
-    requirement: ProtectionRequirement[TResult],
-    solver: ProtectionSolver[TChallenge, TResult],
-) -> SolverBinding[TChallenge, TResult]:
-    return SolverBinding(requirement, solver)
-
-
-@dataclass(frozen=True, slots=True)
-class SolverBindings:
-    bindings: tuple[SolverBinding[Any, Any], ...] = ()
-
-    def __init__(self, *bindings: SolverBinding[Any, Any]) -> None:
-        identities = [id(binding.requirement) for binding in bindings]
-        if len(identities) != len(set(identities)):
-            raise ValueError("a protection solver requirement can be bound only once")
-        object.__setattr__(self, "bindings", bindings)
-
-    def get[TResult](
-        self,
-        requirement: ProtectionRequirement[TResult],
-    ) -> ProtectionSolver[Any, TResult] | None:
-        for binding in self.bindings:
-            if binding.requirement is requirement:
-                return cast(ProtectionSolver[Any, TResult], binding.solver)
-        return None
-
-
-@dataclass(frozen=True, slots=True)
-class ProtectionFlow[TResult]:
-    """Bounded acquire -> optional solve -> optional verify flow."""
-
-    requirement: ProtectionRequirement[TResult]
-    acquire: object
-    solve: bool = False
-    verify: object | None = None
-
-
-def protection_flow[TResult](
-    requirement: ProtectionRequirement[TResult],
-    *,
-    acquire: object,
-    solve: bool = False,
-    verify: object | None = None,
-) -> ProtectionFlow[TResult]:
-    return ProtectionFlow(requirement, acquire, solve, verify)
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class SolverRequirement[TChallenge, TSolution]:
-    name: str
-
-
-@dataclass(frozen=True, slots=True)
-class ChallengeSolverBinding[TChallenge, TSolution]:
-    """Bind one conditional/before-call solver requirement to its implementation."""
+class SolverBinding[TChallenge, TSolution]:
+    """Bind one solver requirement to its implementation."""
 
     requirement: SolverRequirement[TChallenge, TSolution]
     solver: ChallengeSolver[TChallenge, TSolution]
 
 
-def bind_challenge_solver[TChallenge, TSolution](
+def bind_solver[TChallenge, TSolution](
     requirement: SolverRequirement[TChallenge, TSolution],
     solver: ChallengeSolver[TChallenge, TSolution],
-) -> ChallengeSolverBinding[TChallenge, TSolution]:
-    return ChallengeSolverBinding(requirement, solver)
+) -> SolverBinding[TChallenge, TSolution]:
+    return SolverBinding(requirement, solver)
 
 
 @dataclass(frozen=True, slots=True)
-class ChallengeSolverBindings:
-    """Immutable solver bindings used by typed protection policies."""
+class SolverBindings:
+    """Immutable registry of solver bindings keyed by requirement identity."""
 
-    bindings: tuple[ChallengeSolverBinding[Any, Any], ...] = ()
+    bindings: tuple[SolverBinding[Any, Any], ...] = ()
 
-    def __init__(self, *bindings: ChallengeSolverBinding[Any, Any]) -> None:
+    def __init__(self, *bindings: SolverBinding[Any, Any]) -> None:
         identities = [id(binding.requirement) for binding in bindings]
         if len(identities) != len(set(identities)):
-            raise ValueError("a challenge solver requirement can be bound only once")
+            raise ValueError("a solver requirement can be bound only once")
         object.__setattr__(self, "bindings", bindings)
 
     def get[TChallenge, TSolution](
@@ -192,6 +240,40 @@ class ChallengeSolverBindings:
             if binding.requirement is requirement:
                 return cast(ChallengeSolver[TChallenge, TSolution], binding.solver)
         return None
+
+    def __iter__(self) -> Iterator[SolverBinding[Any, Any]]:
+        return iter(self.bindings)
+
+    def __len__(self) -> int:
+        return len(self.bindings)
+
+
+class OperationReference(Protocol):
+    """A decorated API method (or its declaration) usable as acquire/verify step."""
+
+    @property
+    def declaration(self) -> object: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionFlow[TResult]:
+    """Bounded acquire -> optional solve -> optional verify flow."""
+
+    requirement: SolverRequirement[Any, TResult]
+    acquire: OperationReference
+    solve: bool = False
+    verify: OperationReference | None = None
+
+
+def protection_flow[TResult](
+    requirement: SolverRequirement[Any, TResult],
+    *,
+    acquire: OperationReference,
+    solve: bool = False,
+    verify: OperationReference | None = None,
+) -> ProtectionFlow[TResult]:
+    return ProtectionFlow(requirement, acquire, solve, verify)
+
 
 class SignalInterception(Enum):
     DEFINITIVE = "definitive"
@@ -416,37 +498,10 @@ def private_cookie_set(
     return PrivateCookieSetBinding(field, name_field, value_field)
 
 
-@runtime_checkable
-class ChallengePolicy[TChallenge, TSolution](Protocol):
-    @property
-    def identity(self) -> str: ...
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChallengePolicy[TChallenge, TSolution]:
+    """Conditional policy: a response signal, a solver and an atomic application."""
 
-    @property
-    def revision(self) -> int: ...
-
-    @property
-    def scope(self) -> RequestScope: ...
-
-    @property
-    def signal(self) -> ResponseSignal[TChallenge]: ...
-
-    @property
-    def solver(self) -> SolverRequirement[TChallenge, TSolution]: ...
-
-    @property
-    def apply(self) -> PrivateBindings[TSolution]: ...
-
-    @property
-    def persistence(self) -> ProtectionPersistence: ...
-
-    @property
-    def replay(self) -> ReplayPolicy: ...
-
-    @property
-    def challenge_identity(self) -> Callable[[TChallenge], Hashable] | None: ...
-
-@dataclass(frozen=True, slots=True)
-class ChallengePolicySpec[TChallenge, TSolution]:
     identity: str
     revision: int
     scope: RequestScope
@@ -462,6 +517,16 @@ class ChallengePolicySpec[TChallenge, TSolution]:
             raise ValueError("challenge policy identity must not be empty")
         if self.revision < 1:
             raise ValueError("challenge policy revision must be positive")
+        if not isinstance(self.signal, ResponseSignal):
+            raise TypeError("challenge policy signal must be ResponseSignal")
+        if not isinstance(self.solver, SolverRequirement):
+            raise TypeError("challenge policy solver must be SolverRequirement")
+        if not isinstance(self.apply, PrivateBindings):
+            raise TypeError("challenge policy apply must be PrivateBindings")
+        if not isinstance(self.persistence, ProtectionPersistence):
+            raise TypeError("challenge policy persistence must be ProtectionPersistence")
+        if not isinstance(self.replay, ReplayPolicy):
+            raise TypeError("challenge policy replay must be ReplayPolicy")
         if self.signal.scope != self.scope:
             raise ValueError("challenge policy and signal scopes must match")
 
@@ -477,8 +542,8 @@ def challenge_policy[TChallenge, TSolution](
     identity: str | None = None,
     revision: int = 1,
     challenge_identity: Callable[[TChallenge], Hashable] | None = None,
-) -> ChallengePolicySpec[TChallenge, TSolution]:
-    return ChallengePolicySpec(
+) -> ChallengePolicy[TChallenge, TSolution]:
+    return ChallengePolicy(
         identity=identity or solver.name,
         revision=revision,
         scope=scope,
@@ -491,38 +556,14 @@ def challenge_policy[TChallenge, TSolution](
     )
 
 
-@runtime_checkable
-class BeforeCallPolicy[TChallenge, TSolution](Protocol):
-    @property
-    def identity(self) -> str: ...
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BeforeCallPolicy[TChallenge, TSolution]:
+    """Proactive policy: acquire via an operation or solve a fixed challenge before a call."""
 
-    @property
-    def revision(self) -> int: ...
-
-    @property
-    def scope(self) -> RequestScope: ...
-
-    @property
-    def acquire(self) -> object | None: ...
-
-    @property
-    def challenge(self) -> TChallenge | None: ...
-
-    @property
-    def solver(self) -> SolverRequirement[TChallenge, TSolution] | None: ...
-
-    @property
-    def apply(self) -> PrivateBindings[TSolution]: ...
-
-    @property
-    def persistence(self) -> ProtectionPersistence: ...
-
-@dataclass(frozen=True, slots=True)
-class BeforeCallPolicySpec[TChallenge, TSolution]:
     identity: str
     revision: int
     scope: RequestScope
-    acquire: object | None
+    acquire: OperationReference | None
     challenge: TChallenge | None
     solver: SolverRequirement[TChallenge, TSolution] | None
     apply: PrivateBindings[TSolution]
@@ -533,6 +574,12 @@ class BeforeCallPolicySpec[TChallenge, TSolution]:
             raise ValueError("before-call policy identity must not be empty")
         if self.revision < 1:
             raise ValueError("before-call policy revision must be positive")
+        if not isinstance(self.apply, PrivateBindings):
+            raise TypeError("before-call policy apply must be PrivateBindings")
+        if not isinstance(self.persistence, ProtectionPersistence):
+            raise TypeError("before-call policy persistence must be ProtectionPersistence")
+        if self.solver is not None and not isinstance(self.solver, SolverRequirement):
+            raise TypeError("before-call policy solver must be SolverRequirement")
         has_acquire = self.acquire is not None
         has_solver = self.challenge is not None and self.solver is not None
         if has_acquire == has_solver:
@@ -547,12 +594,12 @@ def before_call_policy[TChallenge, TSolution](
     scope: RequestScope,
     apply: PrivateBindings[TSolution],
     persistence: ProtectionPersistence,
-    acquire: object | None = None,
+    acquire: OperationReference | None = None,
     challenge: TChallenge | None = None,
     solver: SolverRequirement[TChallenge, TSolution] | None = None,
     revision: int = 1,
-) -> BeforeCallPolicySpec[TChallenge, TSolution]:
-    return BeforeCallPolicySpec(
+) -> BeforeCallPolicy[TChallenge, TSolution]:
+    return BeforeCallPolicy(
         identity=identity,
         revision=revision,
         scope=scope,
@@ -566,21 +613,68 @@ def before_call_policy[TChallenge, TSolution](
 
 @dataclass(frozen=True, slots=True)
 class ProtectionBundle:
+    """Complete protection configuration: flows, policies and their solver bindings.
+
+    Installable guards lower into one bundle; ``ClientConfig(protection=...)`` holds the merged
+    bundle of a client. ``solver_bindings`` accepts a tuple of ``SolverBinding`` or a
+    ``SolverBindings`` registry and is normalized to a tuple.
+    """
+
     operation_protections: tuple[ProtectionFlow[Any], ...] = ()
     before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
     challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
-    operation_solver_bindings: tuple[SolverBinding[Any, Any], ...] = ()
-    challenge_solver_bindings: tuple[ChallengeSolverBinding[Any, Any], ...] = ()
+    solver_bindings: tuple[SolverBinding[Any, Any], ...] | SolverBindings = ()
 
     def __post_init__(self) -> None:
-        if not any(
-            (
-                self.operation_protections,
-                self.before_call_policies,
-                self.challenge_policies,
-            )
+        bindings = self.solver_bindings
+        if isinstance(bindings, SolverBindings):
+            object.__setattr__(self, "solver_bindings", bindings.bindings)
+        else:
+            object.__setattr__(self, "solver_bindings", tuple(bindings))
+        for name, expected in (
+            ("operation_protections", ProtectionFlow),
+            ("before_call_policies", BeforeCallPolicy),
+            ("challenge_policies", ChallengePolicy),
+            ("solver_bindings", SolverBinding),
         ):
-            raise ValueError("protection bundle must contain at least one policy or flow")
+            values = getattr(self, name)
+            if not isinstance(values, tuple):
+                object.__setattr__(self, name, tuple(values))
+                values = getattr(self, name)
+            if any(not isinstance(item, expected) for item in values):
+                raise TypeError(
+                    f"{name} contains a malformed policy; expected {expected.__name__} values"
+                )
+        # A registry validates that one requirement is bound only once.
+        SolverBindings(*self.solver_bindings)
+        identities = [policy.identity for policy in self.before_call_policies]
+        identities.extend(policy.identity for policy in self.challenge_policies)
+        duplicates = sorted({item for item in identities if identities.count(item) > 1})
+        if duplicates:
+            raise ValueError("duplicate protection policy identity: " + ", ".join(duplicates))
+        requirements = [id(flow.requirement) for flow in self.operation_protections]
+        if len(requirements) != len(set(requirements)):
+            raise ValueError("duplicate operation protection requirement")
+
+    def __bool__(self) -> bool:
+        return bool(
+            self.operation_protections or self.before_call_policies or self.challenge_policies
+        )
+
+    def merge(self, *others: ProtectionBundle) -> ProtectionBundle:
+        """Concatenate bundles; duplicate identities or requirements are rejected."""
+
+        bundles = (self, *others)
+        return ProtectionBundle(
+            operation_protections=tuple(f for b in bundles for f in b.operation_protections),
+            before_call_policies=tuple(p for b in bundles for p in b.before_call_policies),
+            challenge_policies=tuple(p for b in bundles for p in b.challenge_policies),
+            solver_bindings=tuple(s for b in bundles for s in b.solver_bindings),
+        )
+
+    @property
+    def solvers(self) -> SolverBindings:
+        return SolverBindings(*self.solver_bindings)
 
 
 @runtime_checkable
@@ -620,7 +714,7 @@ def _private_bindings_patch[TSolution](
 ) -> ValuePatch:
     """Validate every managed destination, then return one all-or-nothing patch."""
 
-    from eazy_sdk._internal.http_compiler import ManagedCookieSetDescriptor
+    from eazy_sdk.core.http import ManagedCookieSetDescriptor
 
     operations: list[Set[object]] = []
     fixed_cookie_names = {
@@ -675,9 +769,12 @@ def _ensure_replay_allowed(
     policy: ReplayPolicy,
     *,
     origin_may_have_executed: bool,
+    remaining: int | None = None,
 ) -> None:
     if policy.max_replays <= 0:
         raise ReplayDeniedError("reaction replay is disabled")
+    if remaining is not None and remaining <= 0:
+        raise ReplayDeniedError("reaction replay budget of this policy is exhausted")
     if policy.body is BodyReplayPolicy.DENY:
         raise ReplayDeniedError("body replay policy denies replay")
     if not isinstance(body, BufferedBody | ReplayableBodyStream):
@@ -715,31 +812,26 @@ def rejected_before_origin(*, max_replays: int = 1) -> ReplayPolicy:
     return ReplayPolicy(max_replays, ReplaySafety.REJECTED_BEFORE_ORIGIN)
 
 
-@dataclass(frozen=True, slots=True)
-class SolutionCookieSet:
-    field: str = "cookies"
-    name_field: str = "name"
-    value_field: str = "value"
-
-    def __post_init__(self) -> None:
-        if not self.field or not self.name_field or not self.value_field:
-            raise ValueError("solution cookie-set fields must not be empty")
-
-
 def solution_cookie_set(
     *,
     field: str = "cookies",
     name_field: str = "name",
     value_field: str = "value",
-) -> SolutionCookieSet:
-    return SolutionCookieSet(field, name_field, value_field)
+) -> PrivateCookieSetBinding:
+    """Declare a dynamic, iterable cookie set selected from a solver result."""
+
+    return PrivateCookieSetBinding(field, name_field, value_field)
 
 
 @dataclass(frozen=True, slots=True)
 class SolutionFields[TSolution]:
     """Declarative, compiler-reserved destinations for one complete solution batch."""
 
-    _bindings: PrivateBindings[TSolution]
+    bindings: PrivateBindings[TSolution]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.bindings, PrivateBindings):
+            raise ProtectionConfigurationError("solution fields require PrivateBindings")
 
 
 def solution_fields[TSolution](
@@ -748,7 +840,7 @@ def solution_fields[TSolution](
     query: Mapping[str, str | None] | None = None,
     cookies: Mapping[str, str | None] | None = None,
     body: Mapping[str, str | None] | None = None,
-    cookie_set: SolutionCookieSet | None = None,
+    cookie_set: PrivateCookieSetBinding | None = None,
 ) -> SolutionFields[TSolution]:
     """Map public destination names to fields selected from a solver result."""
 
@@ -764,13 +856,11 @@ def solution_fields[TSolution](
                 factory(name, field=field) for name, field in destinations.items()
             )
     if cookie_set is not None:
-        targets.append(
-            private_cookie_set(
-                field=cookie_set.field,
-                name_field=cookie_set.name_field,
-                value_field=cookie_set.value_field,
+        if not isinstance(cookie_set, PrivateCookieSetBinding):
+            raise ProtectionConfigurationError(
+                "cookie_set must be created by solution_cookie_set()"
             )
-        )
+        targets.append(cookie_set)
     if not targets:
         raise ProtectionConfigurationError(
             "solution_fields requires at least one declared destination"
@@ -794,8 +884,7 @@ class _BoundSimpleDetectorParser[TChallenge]:
     callback: Callable[[ResponseContext[object]], TChallenge | None]
 
     def try_parse[T](self, model: type[T]) -> ParsedValue[T] | NoMatch | Malformed:
-        if model is not object:
-            return NoMatch()
+        # The callback is bound to one typed detector; ``model`` is informational only.
         try:
             value = self.callback(self.response)
         except MalformedChallengeError as exc:
@@ -812,56 +901,156 @@ class _BoundSimpleDetectorParser[TChallenge]:
 
 @dataclass(frozen=True, slots=True)
 class _ChallengeGuard[TChallenge, TSolution]:
-    policy: ChallengePolicySpec[TChallenge, TSolution]
-    binding: ChallengeSolverBinding[TChallenge, TSolution]
+    policy: ChallengePolicy[TChallenge, TSolution]
+    binding: SolverBinding[TChallenge, TSolution]
 
     def to_bundle(self) -> ProtectionBundle:
         return ProtectionBundle(
             challenge_policies=(self.policy,),
-            challenge_solver_bindings=(self.binding,),
+            solver_bindings=(self.binding,),
         )
+
+
+type GuardCache = Literal["none", "call", "session"]
+"""Cache policy of a simple guard.
+
+``"none"``: every matching challenge is solved again and the solution is used for one
+replay only. ``"call"``: the solution is reused for the remaining attempts of one logical
+call. ``"session"``: the solution is shared by every call made through the same handler
+session until the origin rejects it (or ``expires_at`` on the solution passes).
+"""
+
+type SolverLike[TChallenge, TSolution] = (
+    ChallengeSolver[TChallenge, TSolution]
+    | Callable[[TChallenge, SolveContext], TSolution | Awaitable[TSolution]]
+)
+
+
+def _cache_persistence(cache: GuardCache) -> ProtectionPersistence:
+    if cache == "none":
+        return per_match()
+    if cache == "call":
+        return per_call()
+    if cache == "session":
+        return until_rejected(scope=session_identity())
+    raise ProtectionConfigurationError(
+        f"challenge guard cache must be 'none', 'call' or 'session', not {cache!r}"
+    )
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class _CallableSolver[TChallenge, TSolution]:
+    """Adapt a plain function or a sync/async ``solve()`` method to the solver protocol."""
+
+    target: Callable[[TChallenge, SolveContext], TSolution | Awaitable[TSolution]]
+
+    async def solve(self, challenge: TChallenge, context: SolveContext) -> TSolution:
+        result = self.target(challenge, context)
+        if inspect.isawaitable(result):
+            return cast(TSolution, await result)
+        return result
+
+
+def _adapt_solver[TChallenge, TSolution](
+    solver: SolverLike[TChallenge, TSolution],
+) -> ChallengeSolver[TChallenge, TSolution]:
+    solve = getattr(solver, "solve", None)
+    if callable(solve):
+        return _CallableSolver(solve)
+    if callable(solver):
+        return _CallableSolver(cast(Any, solver))
+    raise ProtectionConfigurationError(
+        "challenge guard solver must define solve() or be a callable"
+    )
+
+
+def _detector_model[TChallenge](
+    detect: Callable[[ResponseContext[object]], TChallenge | None],
+) -> type[TChallenge]:
+    """Best-effort challenge model from the detector's return annotation."""
+
+    try:
+        hints = get_type_hints(detect)
+    except Exception:
+        return cast(type[TChallenge], object)
+    annotation = hints.get("return")
+    candidates = (
+        get_args(annotation)
+        if get_origin(annotation) in {Union, UnionType}
+        else (annotation,)
+    )
+    for candidate in candidates:
+        if isinstance(candidate, type) and candidate is not type(None):
+            return cast(type[TChallenge], candidate)
+    return cast(type[TChallenge], object)
+
+
+def _guard_name(detect: object) -> str:
+    owner = getattr(detect, "__self__", None)
+    if owner is not None and not inspect.isclass(owner) and not inspect.ismodule(owner):
+        return type(owner).__name__
+    name = getattr(detect, "__name__", None)
+    if isinstance(name, str) and name and name != "<lambda>":
+        return name
+    raise ProtectionConfigurationError(
+        "challenge guard name cannot be inferred from the detector; pass name="
+    )
 
 
 def challenge_guard[TChallenge, TSolution](
     *,
-    name: str,
-    scope: RequestScope,
     detect: Callable[[ResponseContext[object]], TChallenge | None],
-    solver: ChallengeSolver[TChallenge, TSolution],
+    solver: SolverLike[TChallenge, TSolution],
     apply: SolutionFields[TSolution],
+    name: str | None = None,
+    scope: RequestScope | None = None,
+    cache: GuardCache = "none",
     replay: ReplayPolicy | None = None,
     revision: int = 1,
 ) -> InstallableProtection:
-    """Lower one typed detector/solver/application guard into the shared executor."""
+    """Lower one typed detector/solver/application guard into the shared executor.
 
-    if not name:
-        raise ProtectionConfigurationError("challenge guard name must not be empty")
+    ``scope`` defaults to every request of the client. ``name`` defaults to the detector's
+    function or owner class name. ``solver`` may be an object with ``solve()`` (sync or async)
+    or a plain function ``(challenge, context) -> solution``. ``cache`` selects how long a
+    solution is reused; see :data:`GuardCache`. Only cached modes share one in-flight solve
+    between concurrent calls; with ``cache="none"`` concurrent challenges are solved
+    independently.
+    """
+
     if not callable(detect):
         raise ProtectionConfigurationError("challenge guard detector must be callable")
-    if not callable(getattr(solver, "solve", None)):
-        raise ProtectionConfigurationError("challenge guard solver must define solve()")
+    if name is None:
+        name = _guard_name(detect)
+    if not name:
+        raise ProtectionConfigurationError("challenge guard name must not be empty")
     if not isinstance(apply, SolutionFields):
         raise ProtectionConfigurationError(
             "challenge guard application must be created by solution_fields()"
         )
+    selected_scope = scope if scope is not None else RequestScope()
+    if not isinstance(selected_scope, RequestScope):
+        raise ProtectionConfigurationError("challenge guard scope must be a RequestScope")
+    adapted = _adapt_solver(solver)
+    persistence = _cache_persistence(cache)
     requirement = SolverRequirement[TChallenge, TSolution](name)
     signal = ResponseSignal(
         f"{name}.response",
-        scope,
-        cast(type[TChallenge], object),
+        selected_scope,
+        _detector_model(detect),
         _SimpleDetectorParser(name, detect),
     )
     policy = challenge_policy(
         identity=name,
         revision=revision,
-        scope=scope,
+        scope=selected_scope,
         signal=signal,
         solver=requirement,
-        apply=apply._bindings,
-        persistence=per_match(),
+        apply=apply.bindings,
+        persistence=persistence,
         replay=replay or safe_method(max_replays=1),
     )
-    return _ChallengeGuard(policy, bind_challenge_solver(requirement, solver))
+    return _ChallengeGuard(policy, bind_solver(requirement, adapted))
 
 
 def _select_solution(solution: object, field_name: str | None) -> object:
@@ -882,26 +1071,25 @@ _HTTP_FIELD_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 __all__ = [
+    "AmbiguousChallengeError",
     "AmbiguousSignal",
     "BeforeCallPolicy",
-    "BeforeCallPolicySpec",
     "BodyReplayPolicy",
+    "ChallengeMalformedError",
     "ChallengePolicy",
-    "ChallengePolicySpec",
-    "ChallengeSolverBinding",
-    "ChallengeSolverBindings",
     "FromProtection",
+    "GuardCache",
     "MalformedSignal",
+    "OperationReference",
     "PrivateBinding",
     "PrivateBindingTarget",
     "PrivateBindings",
     "PrivateCookieSetBinding",
+    "ProtectedFetch",
     "ProtectionBundle",
     "ProtectionFlow",
     "ProtectionPersistence",
     "ProtectionPersistenceMode",
-    "ProtectionRequirement",
-    "ProtectionSolver",
     "ProtectionStateKey",
     "ProtectionStateScope",
     "ReplaySafety",
@@ -912,9 +1100,10 @@ __all__ = [
     "SolutionLocation",
     "SolverBinding",
     "SolverBindings",
+    "SolverLike",
     "SolverRequirement",
+    "TransportIdentity",
     "before_call_policy",
-    "bind_challenge_solver",
     "bind_solver",
     "challenge_policy",
     "client_identity",

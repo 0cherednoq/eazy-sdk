@@ -14,7 +14,7 @@ def test_duplicate_existing_url_query_is_rejected_before_network(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client, pytest.raises(ValueError, match="duplicate raw query"):
-        client.get(
+        client.request("GET",
             "/echo?existing=%7E&duplicate=first&duplicate=second",
             params={"added": "a b"},
         )

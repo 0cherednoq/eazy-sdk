@@ -142,7 +142,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             "from pydantic import ConfigDict, Field",
             "from zapros import AsyncBaseHandler, BaseHandler",
             "",
-            "from eazy_sdk import AsyncSdk, HandlerProfile, SyncSdk, api, api_group",
+            "from eazy_sdk import AsyncApi, HandlerProfile, SyncApi, api, api_group",
             "from eazy_sdk.codegen import (",
             "    DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,",
             "    Client, ClientConfig,",
@@ -153,12 +153,12 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     if any(operation.protections or operation.body_projection for operation in ir.operations):
         lines.append("    BodyProjection,")
     if ir.session_auth is not None:
-        lines.append("    AuthContext, _generated_session_auth, _generated_session_scheme,")
+        lines.append("    AuthContext, session_auth, session_scheme,")
     lines.extend(
         [
             "    Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,",
             "    WireOptions, all_of, any_of,",
-            "    FromProtection, ProtectionRequirement, protection_flow,",
+            "    FromProtection, ProtectionBundle, SolverRequirement, protection_flow,",
             ")",
         ]
     )
@@ -192,7 +192,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
         session = ir.session_auth
         lines.extend(
             [
-                f"{_constant(session.scheme)} = _generated_session_scheme(",
+                f"{_constant(session.scheme)} = session_scheme(",
                 f"    {session.session_model},",
                 f"    name={session.scheme!r},",
                 f"    bearer_field={session.bearer_field!r},",
@@ -208,7 +208,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     for flow in ir.protection_flows:
         lines.extend(
             [
-                f"{_protection_constant(flow.name)} = ProtectionRequirement["
+                f"{_protection_constant(flow.name)} = SolverRequirement[Any, "
                 f"{_type(flow.result_type, model_bindings)}]({flow.name!r})",
                 "",
             ]
@@ -384,7 +384,7 @@ def _api_facade(
     session_auth: SessionAuthIR | None,
     has_protections: bool,
 ) -> list[str]:
-    sdk_base = "AsyncSdk" if asynchronous else "SyncSdk"
+    sdk_base = "AsyncApi" if asynchronous else "SyncApi"
     lines = [
         "",
         "",
@@ -551,7 +551,7 @@ def _session_service(
             "        raise ValueError(",
             "            'config.auth cannot be combined with credentials or session'",
             "        )",
-            "    auth = _generated_session_auth(",
+            "    auth = session_auth(",
             f"        {session.session_model},",
             f"        bearer_field={session.bearer_field!r},",
             f"        refresh_field={session.refresh_token_field!r},",
@@ -595,7 +595,9 @@ def _protection_config(
         f"    generated = {_tuple_expression(flows)}",
         "    return replace(",
         "        base,",
-        "        operation_protections=(*generated, *base.operation_protections),",
+        "        protection=ProtectionBundle(operation_protections=generated).merge(",
+        "            base.bundle",
+        "        ),",
         "    )",
     ]
 

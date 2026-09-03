@@ -7,7 +7,7 @@ from enum import Enum
 from hashlib import sha256
 from secrets import token_bytes
 
-from eazy_sdk._internal.kernel import OperationIdentity
+from eazy_sdk.core.kernel import OperationIdentity
 from eazy_sdk.crypto import (
     FrozenArray as FrozenArray,
 )

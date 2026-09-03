@@ -7,7 +7,11 @@ import pytest
 
 import eazy_sdk.request as request_api
 from eazy_sdk import ApiDefaults, SyncApi, api
-from eazy_sdk._internal import PlanError, PlanNodeKind, RequestLocation
+from eazy_sdk.core import (
+    PlanError,
+    PlanNodeKind,
+    RequestLocation,
+)
 from eazy_sdk.request import BodyProjection, JsonBody, JsonField, Path, Query
 from eazy_sdk.response import Responses
 

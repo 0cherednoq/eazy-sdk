@@ -26,7 +26,7 @@ from eazy_sdk.protection import (
 )
 from eazy_sdk.ext import ParsedValue, RequestScope
 from eazy_sdk.protection.advanced import (
-    ChallengePolicySpec,
+    ChallengePolicy,
     PrivateBindings,
     ResponseSignal,
     SolverRequirement,
@@ -109,7 +109,7 @@ advanced_policy = challenge_policy(
     persistence=per_match(),
     replay=safe_method(),
 )
-assert_type(advanced_policy, ChallengePolicySpec[Challenge, Clearance])
+assert_type(advanced_policy, ChallengePolicy[Challenge, Clearance])
 '''
 
 

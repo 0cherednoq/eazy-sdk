@@ -7,7 +7,9 @@ from decimal import Decimal
 from typing import Annotated, TypedDict, Unpack
 from urllib.parse import urljoin
 
-from eazy_sdk import CSS, Client, ClientConfig, Scope, SyncApi, api
+from eazy_sdk_html import CSS, Scope
+
+from eazy_sdk import Client, ClientConfig, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import Path
 from eazy_sdk.response import Html, Responses, Success

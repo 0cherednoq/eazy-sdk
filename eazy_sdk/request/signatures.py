@@ -12,10 +12,10 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Literal, Protocol, cast
 
-from eazy_sdk._internal.errors import GraphError, PlanError, WriterConflictError
-from eazy_sdk._internal.http import RequestLocation
-from eazy_sdk._internal.http_plan import RequestScope, ScopeContext
-from eazy_sdk._internal.kernel import PythonTypeValidator, ValueSlot
+from eazy_sdk.core.errors import GraphError, PlanError, WriterConflictError
+from eazy_sdk.core.http import RequestLocation
+from eazy_sdk.core.http_plan import RequestScope, ScopeContext
+from eazy_sdk.core.kernel import PythonTypeValidator, ValueSlot
 from eazy_sdk.request.prepared import (
     BufferedBody,
     HeaderField,

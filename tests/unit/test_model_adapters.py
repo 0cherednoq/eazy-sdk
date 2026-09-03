@@ -9,14 +9,16 @@ import msgspec
 import pytest
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-from eazy_sdk._internal import (
+from eazy_sdk.compile import (
     CompiledContract,
     InputField,
-    OperationValues,
-    RequestLocation,
     compile_endpoint,
 )
-from eazy_sdk._internal.http_plan import ExecutionPlan
+from eazy_sdk.core import (
+    OperationValues,
+    RequestLocation,
+)
+from eazy_sdk.core.http_plan import ExecutionPlan
 from eazy_sdk.models import (
     AmbiguousModelAdapterError,
     DataclassModelAdapter,

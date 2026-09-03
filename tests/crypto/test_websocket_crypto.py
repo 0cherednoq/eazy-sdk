@@ -14,7 +14,7 @@ from eazy_sdk.crypto import (
     CryptoContext,
     CryptoDirection,
     CryptoStage,
-    EncryptedFrameKindMismatch,
+    EncryptedFrameKindMismatchError,
     FrozenValue,
     WebSocketCryptoContext,
     decrypt_encoded,
@@ -411,7 +411,7 @@ async def test_inbound_encrypted_frame_kind_mismatch_fails_closed() -> None:
         1,
     )
 
-    with pytest.raises(EncryptedFrameKindMismatch, match="expected encrypted binary"):
+    with pytest.raises(EncryptedFrameKindMismatchError, match="expected encrypted binary"):
         await unprotect_ws_frame(
             InboundFrame(FrameKind.TEXT, "encrypted"),
             compiled,

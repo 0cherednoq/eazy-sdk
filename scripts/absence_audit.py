@@ -31,8 +31,8 @@ REMOVED_MODULES = (
     "eazy_sdk/auth/middleware.py",
     "eazy_sdk/auth/retry.py",
     "eazy_sdk/auth/state.py",
-    "eazy_sdk/storage/auth_bridge.py",
-    "eazy_sdk/storage/authstore.py",
+    "eazy_sdk_accounts/storage/auth_bridge.py",
+    "eazy_sdk_accounts/storage/authstore.py",
     "eazy_sdk/protection.py",
 )
 
@@ -102,7 +102,7 @@ PHASE17_PUBLIC_TEXT = (
 
 PHASE21_REMOVED_BODY_PATHS = (
     "eazy_sdk/api.py",
-    "eazy_sdk/_internal/http_operation.py",
+    "eazy_sdk/compile/http_operation.py",
     "eazy_sdk/clients/executor.py",
     "plugins/openapi/eazy_sdk_openapi/generator.py",
 )
@@ -157,7 +157,7 @@ HIDDEN_PUBLIC_SYMBOLS = {
     "eazy_sdk.request": {"PreparedRequest", "RequestPreparer", "SignaturePlan"},
     "eazy_sdk.dependencies": {"DependencyCaches", "RequestRequirement", "ResultBinding"},
     "eazy_sdk.protection": {
-        "ChallengeSolverBindings",
+        "SolverBindings",
         "PrivateBindings",
         "ProtectionBundle",
         "ResponseSignal",
@@ -287,8 +287,8 @@ def audit() -> list[str]:
                     and isinstance(node, ast.ImportFrom)
                     and node.module is not None
                     and (
-                        node.module == "eazy_sdk._internal"
-                        or node.module.startswith("eazy_sdk._internal.")
+                        node.module == "eazy_sdk.compile"
+                        or node.module.startswith("eazy_sdk.compile.")
                     )
                 ):
                     failures.append(
@@ -365,7 +365,7 @@ def audit() -> list[str]:
             "expected one HTTP ExecutionCore path, found "
             f"{[path.as_posix() for path in execution_core_definitions]!r}"
         )
-    expected_compiler = [Path("eazy_sdk/_internal/http_compiler.py")]
+    expected_compiler = [Path("eazy_sdk/compile/http_compiler.py")]
     if compiler_entry_definitions != expected_compiler:
         failures.append(
             "expected one compile_endpoint path, found "
@@ -455,7 +455,7 @@ def audit() -> list[str]:
 
 
 def _is_account_core(path: Path) -> bool:
-    return "accounts" in path.parts and path.name != "http.py"
+    return "accounts" in path.parts and "tests" not in path.parts and path.name != "http.py"
 
 
 def _is_generated_path(path: Path) -> bool:

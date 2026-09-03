@@ -3,7 +3,7 @@ title: Шифрование payload
 description: Подключите application-owned шифрование полей или всего payload к HTTP и WebSocket.
 sources:
   - eazy_sdk.crypto
-api_fingerprint: "sha256:04e4e84dac90c9abcab448356936a09761dd7e06cee5a027ad9e0fb8c2247c82"
+api_fingerprint: "sha256:ac6e7e586ec155766f7b83ebe7f266b033ad67a4d1051e04178559c7d4d7be85"
 ---
 
 Eazy SDK управляет стадиями и wire-представлением, но не предоставляет cipher, keyring или KMS
@@ -198,10 +198,10 @@ logical call.
 
 - `CryptoConfigurationError` — несовместимая модель, path, scope или wire ownership.
 - `PayloadEncryptionError` / `PayloadDecryptionError` — безопасная оболочка ошибки алгоритма.
-- `EncryptedMediaTypeMismatch` / `EncryptedFrameKindMismatch` — неожиданный wire формат.
-- `CryptoLimitExceeded` — превышен pre/post byte limit.
-- `CryptoStreamingUnsupported` — whole transform применён к streaming body.
-- `CryptoRuntimeMismatch` — async algorithm передан sync HTTP client.
+- `EncryptedMediaTypeMismatchError` / `EncryptedFrameKindMismatchError` — неожиданный wire формат.
+- `CryptoLimitError` — превышен pre/post byte limit.
+- `CryptoStreamingUnsupportedError` — whole transform применён к streaming body.
+- `CryptoRuntimeMismatchError` — async algorithm передан sync HTTP client.
 
 Eazy SDK не включает сообщение исходной algorithm exception в публичную ошибку и не сохраняет её
 как `__cause__`. Не помещайте plaintext, key или nonce в `name` алгоритма: это публичный стабильный

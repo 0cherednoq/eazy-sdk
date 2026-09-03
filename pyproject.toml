@@ -26,9 +26,10 @@ httpx = ["httpx>=0.27"]
 requests = ["requests>=2.31"]
 curl-cffi = ["curl_cffi>=0.7"]
 websocket = ["zapros[websocket]==0.16.0"]
-html = ["parsel>=1.11"]
+html = ["eazy-sdk-html>=0.2.0a3,<0.3"]
+accounts = ["eazy-sdk-accounts>=0.2.0a3,<0.3"]
 sqlmodel = ["eazy-sdk-sqlmodel>=0.2.0a3,<0.3"]
-all = ["pydantic>=2", "msgspec>=0.21.1", "parsel>=1.11", "httpx>=0.27", "requests>=2.31", "curl_cffi>=0.7", "zapros[websocket]==0.16.0", "eazy-sdk-sqlmodel>=0.2.0a3,<0.3"]
+all = ["pydantic>=2", "msgspec>=0.21.1", "httpx>=0.27", "requests>=2.31", "curl_cffi>=0.7", "zapros[websocket]==0.16.0", "eazy-sdk-sqlmodel>=0.2.0a3,<0.3", "eazy-sdk-html>=0.2.0a3,<0.3", "eazy-sdk-accounts>=0.2.0a3,<0.3"]
 msgspec = [
     "msgspec>=0.21.1",
 ]
@@ -58,6 +59,8 @@ dev = [
   "eazy-sdk-openapi[yaml]",
   "eazy-sdk-asyncapi[yaml]",
   "eazy-sdk-presets",
+  "eazy-sdk-accounts",
+  "eazy-sdk-html",
   "eazy-sdk-xml",
   "ipykernel>=7.2.0",
   "zapros[pyreqwest,websocket]==0.16.0",
@@ -90,7 +93,9 @@ build-backend = "hatchling.build"
 
 [tool.uv.workspace]
 members = [
+  "plugins/accounts",
   "plugins/asyncapi",
+  "plugins/html",
   "plugins/openapi",
   "plugins/presets",
   "plugins/sqlmodel",
@@ -103,6 +108,8 @@ eazy-sdk-sqlmodel = { workspace = true }
 eazy-sdk-openapi = { workspace = true }
 eazy-sdk-asyncapi = { workspace = true }
 eazy-sdk-presets = { workspace = true }
+eazy-sdk-accounts = { workspace = true }
+eazy-sdk-html = { workspace = true }
 eazy-sdk-xml = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
@@ -117,6 +124,8 @@ asyncio_mode = "auto"
 # package named "tests" and their conftests collide; importlib mode gives them unique module names.
 testpaths = [
   "tests",
+  "plugins/accounts/tests",
+  "plugins/html/tests",
   "plugins/asyncapi/tests",
   "plugins/openapi/tests",
   "plugins/presets/tests",

@@ -2,9 +2,9 @@
 title: Verification
 description: Подтвердите созданный аккаунт кодом или другим proof.
 sources:
-  - eazy_sdk.accounts.VerificationAccepted
-  - eazy_sdk.accounts.PendingRegistration
-api_fingerprint: "sha256:7e90be3f1d03610c0aa86ffb3335d1f6f31e3c08b3d319a15291de70d150d9de"
+  - eazy_sdk_accounts.VerificationAccepted
+  - eazy_sdk_accounts.PendingRegistration
+api_fingerprint: "sha256:525115712de80ae123afe81e12def92dd70cc3ae5cf9c69b18858f905c1137f0"
 ---
 
 Verification продолжает `PendingRegistration`, полученный после создания аккаунта.
@@ -46,7 +46,7 @@ Verification продолжает `PendingRegistration`, полученный п
 ```python
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk.accounts import PendingRegistration, VerificationAccepted
+from eazy_sdk_accounts import PendingRegistration, VerificationAccepted
 
 class VerificationCode(BaseModel):
     code: SecretStr

@@ -20,9 +20,9 @@ from eazy_sdk.crypto import (
     CryptoContext,
     CryptoRegistry,
     CryptoRule,
-    CryptoRuntimeMismatch,
-    CryptoStreamingUnsupported,
-    EncryptedMediaTypeMismatch,
+    CryptoRuntimeMismatchError,
+    CryptoStreamingUnsupportedError,
+    EncryptedMediaTypeMismatchError,
     FrozenValue,
     PayloadDecryptionError,
     decrypt_encoded,
@@ -410,7 +410,7 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
         ),
         config=ClientConfig(),
     )
-    with pytest.raises(CryptoRuntimeMismatch):
+    with pytest.raises(CryptoRuntimeMismatchError):
         InvalidApi(client).create(
             request=CreatePayment(card=Card(number="1", cvv="2"), amount=1)
         )
@@ -579,7 +579,7 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
 @pytest.mark.parametrize(
     ("content_type", "content", "error_type"),
     [
-        ("application/json", b'{"payment_id":"clear"}', EncryptedMediaTypeMismatch),
+        ("application/json", b'{"payment_id":"clear"}', EncryptedMediaTypeMismatchError),
         (
             WIRE.content_type,
             b"ciphertext=customer-secret key=do-not-expose",
@@ -758,7 +758,7 @@ async def test_whole_payload_crypto_rejects_stream_without_buffering_or_network(
         config=ClientConfig(),
     )
     try:
-        with pytest.raises(CryptoStreamingUnsupported):
+        with pytest.raises(CryptoStreamingUnsupportedError):
             await StreamApi(client).upload(
                 body=ReplayableBodyStream(
                     lambda: BytesIO(b"secret-stream"), known_length=13

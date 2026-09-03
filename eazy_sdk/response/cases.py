@@ -11,23 +11,24 @@ from functools import cached_property, reduce
 from http.cookies import SimpleCookie
 from typing import Protocol, cast
 
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.errors import EazySdkError
+from eazy_sdk.core.kernel import (
     AmbiguousCases,
     MalformedCase,
     NoCaseMatch,
     SelectedCase,
     arbitrate_cases,
 )
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.kernel import (
     Malformed as Malformed,
 )
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.kernel import (
     NoMatch as NoMatch,
 )
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.kernel import (
     ParseAttempt as ParseAttempt,
 )
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.kernel import (
     ParsedValue as ParsedValue,
 )
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
@@ -201,7 +202,13 @@ class _BoundHtmlExtractor:
 
     def extract(self, model: type[object]) -> ParseAttempt[object]:
         try:
-            from eazy_sdk.extraction import HtmlDocument
+            try:
+                from eazy_sdk_html import HtmlDocument
+            except ImportError as exc:  # pragma: no cover - depends on extras
+                raise ImportError(
+                    "HTML extraction requires the eazy-sdk-html plugin: "
+                    'pip install "eazy-sdk[html]"'
+                ) from exc
 
             document = self.response.cached(
                 self.identity, lambda: HtmlDocument(self.response.bytes)
@@ -291,7 +298,7 @@ DEFAULT = DefaultStatus()
 type StatusSelector = int | StatusRange | DefaultStatus
 
 
-class ApiError[T](Exception):
+class ApiError[T](EazySdkError):
     def __init__(self, error: T, context: ResponseContext[object]) -> None:
         self.error = error
         self.context = context
@@ -370,15 +377,15 @@ class AmbiguousResponseOutcome:
         raise AmbiguousResponseError(self)
 
 
-class UnexpectedResponseError(Exception):
+class UnexpectedResponseError(EazySdkError):
     pass
 
 
-class MalformedResponseError(Exception):
+class MalformedResponseError(EazySdkError):
     pass
 
 
-class AmbiguousResponseError(Exception):
+class AmbiguousResponseError(EazySdkError):
     pass
 
 

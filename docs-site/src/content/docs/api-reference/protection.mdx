@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.protection.advanced
   - eazy_sdk_presets.cloudflare
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:a1662c9dddc06fdb3e380e46ab43080a1556cd0a8e111082ec44101a5269967a"
+api_fingerprint: "sha256:99cee437e700e7b5202bc91c069c73296163b487fe19cbc8a160356ddc98c3b3"
 ---
 
 `eazy_sdk.protection` is the application-facing response-guard API. It contains solver and context
@@ -18,30 +18,70 @@ stage-specific errors. Compiler, registry, and persistence contracts are not exp
 | Symbol | Contract |
 |---|---|
 | `ChallengeSolver[TChallenge, TSolution]` | Async `solve(challenge, context) -> solution` protocol |
-| `SolveContext` | Operation identity, immutable response context, attempt number, and optional deadline |
-| `InstallableProtection` | Structural object consumed by `ClientConfig.with_protection()` |
-| `challenge_guard()` | Lowers one detector, solver, solution mapping, and replay policy into the shared executor |
+| `SolveContext` | Operation identity, immutable response context, attempt number, `deadline`, `fetch`, `identity`, and `request_headers` |
+| `ProtectedFetch` | Async `(url, *, method, headers, body) -> NormalizedResponse` port over the client's own transport session |
+| `TransportIdentity` | Frozen `user_agent`/`proxy`/`impersonation` evidence with a redacted `repr` and a `fingerprint()` digest |
+| `InstallableProtection` | Structural object accepted by `ClientConfig(guards=[...])` and `with_protection()` |
+| `Guard[TChallenge]` | One-class guard: `detect()`, sync/async `solve()`, `self.solution(...)`, class-level `scope`/`cache`/`replay`/`headers`/`query`/`body` |
+| `GuardSolution` | Solution batch built by `Guard.solution()` (cookies, declared headers/query/body, `expires_at`) |
+| `challenge_guard()` | Lowers one detector, solver (object or function), solution mapping, cache and replay policy |
+| `GuardCache` | `"none"`, `"call"` or `"session"`, lowered to per-match, per-call, or session-scoped until-rejected persistence |
+| `host()`, `operation()` | Scope helpers; `RequestScope()` (every request) is the default |
 
 ```python target
-guard = challenge_guard(
-    name="vendor.challenge",
-    scope=host("api.example.test"),
-    detect=detect_challenge,
-    solver=VendorSolver(),
-    apply=solution_fields(cookies={"clearance": "token"}),
-    replay=safe_method(max_replays=1),
-)
+class VendorGuard(Guard[VendorChallenge]):
+    scope = host("api.example.test")
 
-config = ClientConfig().with_protection(guard)
+    def detect(self, response: ResponseContext[object]) -> VendorChallenge | None:
+        return detect_challenge(response)
+
+    async def solve(self, challenge: VendorChallenge, context: SolveContext) -> GuardSolution:
+        return self.solution(cookies={"clearance": await vendor.solve(challenge)})
+
+
+config = ClientConfig(guards=[VendorGuard()])
 ```
 
-`challenge_guard()` requires a non-empty name, a callable detector, an async-compatible solver,
-and a mapping created by `solution_fields()`. It returns an immutable installable descriptor and
-performs no response inspection or network I/O during configuration.
+The functional form is `challenge_guard(detect=..., solver=..., apply=solution_fields(...),
+name=..., scope=..., cache=..., replay=...)`. `name` defaults to the detector's function or
+owner-class name, `scope` to every request, `cache` to `"none"`. The solver may be an object
+with sync or async `solve()` or a plain `(challenge, context) -> solution` function. Both forms
+return an immutable installable descriptor and perform no response inspection or network I/O
+during configuration; `guards=` and `with_protection()` lower them identically.
+
+`client.invalidate_protection(*targets)` drops cached solutions of the given guards or policy
+names (all when called without arguments) and returns the number of dropped states.
 
 The detector receives `ResponseContext[object]` and returns `TChallenge | None`. `None` means no
 match. Raise `MalformedChallengeError` when the response is recognized but malformed. Any other
 detector exception becomes `ChallengeDetectionError` with the original exception as `__cause__`.
+
+## Solve context
+
+`SolveContext` gives a solver the transport facts and the transport itself, without exposing the
+handler, the cookie jar, or the client:
+
+| Field | Contract |
+|---|---|
+| `operation` | Identity of the operation being protected |
+| `response` | Immutable context of the challenge response, `None` for before-call and mandatory flows |
+| `attempt` | Attempt number of the triggering request, `0` for mandatory flows |
+| `deadline` | UTC instant derived from the call timeout, `None` when the call has no timeout |
+| `fetch` | `ProtectedFetch` bound to the same handler, proxy, and cookie jar as the triggering request |
+| `identity` | `TransportIdentity` the triggering request was sent with |
+| `request_headers` | Headers that actually went out with the triggering request |
+
+`fetch` emits directly through the handler: no guard, reaction, replay, middleware, or rate limiter
+runs, so a solver cannot recurse into the protection pipeline that invoked it. The URL must be
+absolute; `identity.user_agent` and `Host` are added unless the caller sets them. Transport errors
+and solver exceptions surface as `ChallengeSolveError` with the original exception as `__cause__`.
+
+Managed solutions are stored together with `identity.fingerprint()`. Before a solution is applied
+to a later attempt or call, the runtime compares that digest with the identity of the request
+being prepared. A mismatch (different User-Agent, proxy, or impersonation label) invalidates the
+stored solution instead of replaying it through the wrong identity; the next matching challenge
+is solved again under the new identity. A `SolveContext` constructed outside a running client
+has an empty identity and a `fetch` that raises `ProtectionConfigurationError`.
 
 ## Solution destinations
 
@@ -76,7 +116,9 @@ signing stages.
 ## Managed state and session affinity
 
 Reusable solution state lives only in one `ExecutionRuntime`, which is owned by one SDK client and
-handler session. Session-scoped state keys use the actual handler object supplied at the client
+handler session. Cached modes (`cache="session"`, `cache="call"`, and the advanced until-expiry/
+until-rejected persistence) serialize concurrent solves of the same challenge behind one lock;
+`cache="none"` (per-match) has no single-flight and solves each concurrent challenge independently. Session-scoped state keys use the actual handler object supplied at the client
 boundary. Closing the client clears all managed solutions and single-flight entries.
 
 Proxy, User-Agent, address-family, and impersonation configuration belongs to handler/session
@@ -95,23 +137,36 @@ compiled destination validity, body replayability, semantic replay proof, finite
 |---|---|---|
 | Configuration | `ProtectionConfigurationError` | Guard or lowering is malformed, a solver is missing, or destinations conflict |
 | Detection | `ChallengeDetectionError` | A detector raises an unexpected exception |
+| Detection | `ChallengeMalformedError` | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
+| Detection | `AmbiguousChallengeError` | Two or more definitive policies matched one response with equal priority; a `ProtectionConfigurationError` listing `policies` |
 | Solve | `ChallengeSolveError` | A solver fails |
 | Application | `ChallengeApplicationError` | A solution field or destination value is invalid |
-| Replay | `ReplayDeniedError` | Replayability, semantic proof, or budget is insufficient |
+| Replay | `ReplayDeniedError` | Replayability, semantic proof, or the policy's own replay budget is insufficient |
 
 Stage errors expose policy/attempt metadata and preserve `__cause__`. Their messages do not include
 response bodies, solution values, cookies, credentials, proxy configuration, or solver secrets.
+Replay budgets are counted per policy: one policy cannot replay on another policy's budget.
+
+Solvers are awaited by the runtime in both clients. In the synchronous `Client` an `async def
+solve()` runs on the per-call event loop; `Guard.solve()` and function solvers may also be plain
+synchronous callables. Single-flight locks are loop-agnostic, so one sync client shared by several
+threads still solves each session challenge once.
 
 ## Advanced lowering SPI
 
 `eazy_sdk.protection.advanced` is the only import path for framework and generated-policy
 contracts. Its exact `__all__` contains:
 
-- conditional and proactive policy protocols/specs;
+- `ChallengePolicy` and `BeforeCallPolicy`: frozen, self-validating dataclasses (keyword-only);
+  presets subclass them, the executor performs no second validation;
 - `ResponseSignal` and typed signal outcomes;
-- `SolverRequirement`, solver bindings, and immutable binding registries;
+- one `ChallengeSolver` protocol, one `SolverRequirement[TChallenge, TSolution]`, one
+  `SolverBinding`/`bind_solver()` and one `SolverBindings` registry shared by response guards,
+  before-call policies, and mandatory operation flows;
+- `OperationReference` (a decorated API method or its declaration) typing `acquire`/`verify`;
 - `PrivateBindings` plus header, query, cookie, dynamic-cookie, and body targets;
-- `ProtectionPersistence` modes and client/session state scopes;
+- `ProtectionPersistence` modes and client/session state scopes (the simple layer exposes only
+  `cache="none" | "call" | "session"`; `per_attempt` and `until_expiry` are advanced-only);
 - mandatory operation protection flows and `FromProtection`;
 - the internal installable lowering value `ProtectionBundle`.
 

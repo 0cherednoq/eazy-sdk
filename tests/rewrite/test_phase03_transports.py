@@ -7,10 +7,10 @@ import pytest
 import requests
 from zapros import URL, Headers, Request
 
-from eazy_sdk._internal.http_plan import WireRequirement, WireRequirements
+from eazy_sdk.core.http_plan import WireRequirement, WireRequirements
 from eazy_sdk.handlers import (
     CapabilityLevel,
-    CapabilityMismatch,
+    CapabilityMismatchError,
     HandlerProfile,
     validate_profile,
 )
@@ -110,7 +110,7 @@ def test_handler_profile_rejects_unmet_wire_requirement() -> None:
         CapabilityLevel.CAPTURE_VERIFIED.name,
     )
 
-    with pytest.raises(CapabilityMismatch, match="preencoded_body"):
+    with pytest.raises(CapabilityMismatchError, match="preencoded_body"):
         validate_profile(WireRequirements((requirement,)), profile)
 
 

@@ -27,12 +27,12 @@ from eazy_sdk.handlers import (
     RedirectControl,
 )
 from eazy_sdk.protection.advanced import (
-    ChallengeSolverBindings,
     MalformedSignal,
     MissingSolverError,
     SignalMatch,
+    SolverBindings,
     _inspect_signals,
-    bind_challenge_solver,
+    bind_solver,
 )
 from eazy_sdk.request import (
     Header,
@@ -50,6 +50,11 @@ from eazy_sdk.response import (
 )
 
 FIXTURES = Path(__file__).with_name("fixtures")
+
+def _required[T](value: T | None) -> T:
+    assert value is not None
+    return value
+
 
 
 class SyncRecaptchaApi(SyncApi):
@@ -168,8 +173,8 @@ def test_binding_is_immutable_and_solver_binding_is_separate_by_identity() -> No
     changed = original.extend_detection(lambda context: True)
     assert changed is not original
     assert changed.customized == frozenset({"detection"})
-    bindings = ChallengeSolverBindings(
-        bind_challenge_solver(
+    bindings = SolverBindings(
+        bind_solver(
             original.solver,
             implementation,
         )
@@ -351,8 +356,8 @@ async def test_v3_before_call_solves_and_applies_before_first_send(client_type: 
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(_required(preset.solver), solver)
         ),
     )
     client = client_type(runtime)
@@ -401,8 +406,8 @@ async def test_preclearance_until_expiry_is_session_scoped_singleflight() -> Non
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(_required(preset.solver), solver)
         ),
     )
     client = _AsyncClientCore(runtime)
@@ -465,8 +470,8 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
         emit,
         "https://api.test",
         challenge_policies=(preset,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(_required(preset.solver), solver)
         ),
     )
     result = GuardedApi(_SyncClientCore(runtime)).guarded(options=CallOptions(max_attempts=2))
@@ -479,9 +484,9 @@ def test_with_protection_is_immutable_and_rejects_duplicate_policy_identity() ->
 
     configured = original.with_protection(preset)
 
-    assert original.challenge_policies == ()
-    assert configured.challenge_policies == (preset,)
-    assert configured.challenge_solvers.bindings == ()
+    assert original.protection is None
+    assert configured.bundle.challenge_policies == (preset,)
+    assert configured.bundle.solver_bindings == ()
     with pytest.raises(ValueError, match="duplicate protection policy identity"):
         configured.with_protection(
             cloudflare.challenge_pages(scope=host("other.test"))
@@ -554,8 +559,8 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(preset.solver, Solver())
+        solver_bindings=SolverBindings(
+            bind_solver(_required(preset.solver), Solver())
         ),
     )
     with pytest.raises(PlanError, match="private binding conflicts"):

@@ -9,9 +9,9 @@ from dataclasses import field as dataclass_field
 from enum import Enum
 from typing import Any, Protocol, cast
 
-from eazy_sdk._internal.errors import GraphError, PlanError
-from eazy_sdk._internal.http_plan import RequestScope
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.errors import GraphError, PlanError
+from eazy_sdk.core.http_plan import RequestScope
+from eazy_sdk.core.kernel import (
     Append,
     PatchConflict,
     PythonTypeValidator,

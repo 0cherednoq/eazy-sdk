@@ -8,8 +8,10 @@ from weakref import WeakSet
 
 from zapros import (
     AsyncBaseHandler,
+    AsyncStdNetworkHandler,
     BaseHandler,
     Response,
+    StdNetworkHandler,
 )
 from zapros import (
     AsyncClient as RawAsyncClient,
@@ -51,15 +53,25 @@ def _remember_closed_handler(handler: object) -> None:
 
 
 class Client(_SyncClientCore[Response]):
+    """Synchronous client over one Zapros handler.
+
+    ``Client(base_url=...)`` uses Zapros' standard network handler. ``Client.httpx()``,
+    ``Client.requests()`` and ``Client.curl_cffi()`` build the first-party handler for you;
+    pass ``handler=`` to bring your own.
+    """
+
     def __init__(
         self,
         *,
         base_url: str = "",
-        handler: BaseHandler,
+        handler: BaseHandler | None = None,
         config: ClientConfig | None = None,
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
     ) -> None:
+        if handler is None:
+            handler = StdNetworkHandler()
+            owns_handler = True
         if not isinstance(handler, BaseHandler):
             raise TypeError("Client requires a synchronous Zapros BaseHandler")
         _reject_closed_handler(handler)
@@ -109,6 +121,75 @@ class Client(_SyncClientCore[Response]):
             raise RuntimeError("Eazy SDK Client is closed")
         return super()._run(call, options)
 
+    @classmethod
+    def httpx(
+        cls,
+        *,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        client: Any | None = None,
+        profile: HandlerProfile | None = None,
+        **httpx_options: Any,
+    ) -> Client:
+        """Client over an ``httpx.Client`` (created from ``httpx_options`` when not given)."""
+
+        httpx = _require("httpx", "httpx")
+        from eazy_sdk.handlers.httpx import HttpxHandler
+
+        owned = client is None
+        raw = client if client is not None else httpx.Client(**httpx_options)
+        return cls(
+            base_url=base_url,
+            handler=HttpxHandler(raw, owns_client=owned),
+            config=config,
+            profile=profile,
+        )
+
+    @classmethod
+    def requests(
+        cls,
+        *,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        session: Any | None = None,
+        profile: HandlerProfile | None = None,
+    ) -> Client:
+        """Client over a ``requests.Session`` (created when not given)."""
+
+        _require("requests", "requests")
+        from eazy_sdk.handlers.requests import RequestsHandler
+
+        return cls(
+            base_url=base_url,
+            handler=RequestsHandler(session, owns_session=session is None),
+            config=config,
+            profile=profile,
+        )
+
+    @classmethod
+    def curl_cffi(
+        cls,
+        *,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        session: Any | None = None,
+        impersonate: Any | None = None,
+        profile: HandlerProfile | None = None,
+    ) -> Client:
+        """Client over a ``curl_cffi`` session with optional browser impersonation."""
+
+        _require("curl_cffi", "curl-cffi")
+        from eazy_sdk.handlers.curl_cffi import CurlCffiZaprosHandler
+
+        return cls(
+            base_url=base_url,
+            handler=CurlCffiZaprosHandler(
+                session, impersonate=impersonate, owns_session=session is None
+            ),
+            config=config,
+            profile=profile,
+        )
+
     def _async_view(self) -> _AsyncClientCore[Response]:
         """Share this client's runtime with generated async auth services."""
         return _AsyncClientCore(
@@ -119,15 +200,24 @@ class Client(_SyncClientCore[Response]):
 
 
 class AsyncClient(_AsyncClientCore[Response]):
+    """Asynchronous client over one Zapros async handler.
+
+    ``AsyncClient(base_url=...)`` uses Zapros' standard async network handler;
+    ``AsyncClient.httpx()`` and ``AsyncClient.curl_cffi()`` build first-party handlers.
+    """
+
     def __init__(
         self,
         *,
         base_url: str = "",
-        handler: AsyncBaseHandler,
+        handler: AsyncBaseHandler | None = None,
         config: ClientConfig | None = None,
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
     ) -> None:
+        if handler is None:
+            handler = AsyncStdNetworkHandler()
+            owns_handler = True
         if not isinstance(handler, AsyncBaseHandler):
             raise TypeError("AsyncClient requires an asynchronous Zapros AsyncBaseHandler")
         _reject_closed_handler(handler)
@@ -176,5 +266,64 @@ class AsyncClient(_AsyncClientCore[Response]):
         if self._closed:
             raise RuntimeError("Eazy SDK AsyncClient is closed")
         return await super()._run(call, options)
+
+    @classmethod
+    def httpx(
+        cls,
+        *,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        client: Any | None = None,
+        profile: HandlerProfile | None = None,
+        **httpx_options: Any,
+    ) -> AsyncClient:
+        """Client over an ``httpx.AsyncClient`` (created from ``httpx_options`` when not given)."""
+
+        httpx = _require("httpx", "httpx")
+        from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+        owned = client is None
+        raw = client if client is not None else httpx.AsyncClient(**httpx_options)
+        return cls(
+            base_url=base_url,
+            handler=AsyncHttpxHandler(raw, owns_client=owned),
+            config=config,
+            profile=profile,
+        )
+
+    @classmethod
+    def curl_cffi(
+        cls,
+        *,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        session: Any | None = None,
+        impersonate: Any | None = None,
+        profile: HandlerProfile | None = None,
+    ) -> AsyncClient:
+        """Client over a ``curl_cffi.AsyncSession`` with optional browser impersonation."""
+
+        _require("curl_cffi", "curl-cffi")
+        from eazy_sdk.handlers.curl_cffi import AsyncCurlCffiZaprosHandler
+
+        return cls(
+            base_url=base_url,
+            handler=AsyncCurlCffiZaprosHandler(
+                session, impersonate=impersonate, owns_session=session is None
+            ),
+            config=config,
+            profile=profile,
+        )
+
+
+def _require(module: str, extra: str) -> Any:
+    import importlib
+
+    try:
+        return importlib.import_module(module)
+    except ImportError as exc:
+        raise ImportError(
+            f"{module} is not installed; install it with `pip install \"eazy-sdk[{extra}]\"`"
+        ) from exc
 
 __all__ = ["AsyncClient", "Client"]

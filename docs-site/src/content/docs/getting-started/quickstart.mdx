@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.Client
   - eazy_sdk.request
   - eazy_sdk.response
-api_fingerprint: "sha256:7c21cf32b7d4b4c34a76719e6b5384448370c47a6e9593351c1110050ce4c126"
+api_fingerprint: "sha256:cf947cba48e0144041021190afb53c9373fe2d56121dc0392c750ee476a8c871"
 ---
 
 За пять минут соберём метод SDK интернет-магазина: запросим товар по ID и получим проверенный
@@ -26,10 +26,7 @@ from typing import Annotated
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, SyncApi, api
-from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import Path
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import Client, Json, Path, SyncApi, api
 
 class Product(BaseModel):
     id: int
@@ -37,10 +34,7 @@ class Product(BaseModel):
     price: int
 
 class StoreApi(SyncApi):
-    @api.get(
-        "/v1/products/{product_id}",
-        responses=Responses[Product](success=(Success(200, Json(Product)),)),
-    )
+    @api.get("/v1/products/{product_id}", response=Json())
     def product(self, *, product_id: Annotated[int, Path()]) -> Product:
         raise NotImplementedError
 
@@ -51,19 +45,17 @@ def store(request: httpx.Request) -> httpx.Response:
         json={"id": 42, "title": "Mechanical keyboard", "price": 12900},
     )
 
-transport = httpx.MockTransport(store)
-raw_client = httpx.Client(transport=transport, headers={}, cookies={})
-
-with Client(
+with Client.httpx(
     base_url="https://api.store.example",
-    handler=HttpxHandler(raw_client, owns_client=True),
+    transport=httpx.MockTransport(store),
 ) as client:
     product = StoreApi(client).product(product_id=42)
     print(product.title, product.price)
 ```
 
-`MockTransport` изображает сервер, поэтому пример работает без сети. В SDK замените его обычным
-`httpx.Client()`.
+`MockTransport` изображает сервер, поэтому пример работает без сети. В SDK уберите `transport=`:
+`Client.httpx()` сам создаст `httpx.Client`, а `Client(base_url=...)` без аргументов использует
+стандартный сетевой handler Zapros.
 
 ## Запустите
 
@@ -75,7 +67,8 @@ uv run python quickstart.py
 Mechanical keyboard 12900
 ```
 
-`Path()` подставил `42` в URL. `Json(Product)` разобрал JSON и проверил поля через Pydantic. Тело
+`Path()` подставил `42` в URL. `Json()` разобрал JSON и проверил поля через Pydantic по
+аннотации `-> Product`. Тело
 метода не выполнялось: декоратор использовал его сигнатуру как контракт запроса.
 
 Указывайте return-аннотацию у каждой hand-written декларации. Такое объявление проходит

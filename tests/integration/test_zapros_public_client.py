@@ -5,9 +5,10 @@ import hmac
 from dataclasses import dataclass
 from typing import Annotated
 
+from eazy_sdk_html import CSS
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import CSS, Client, ClientConfig, RetryPolicy, SyncApi, api
+from eazy_sdk import Client, ClientConfig, RetryPolicy, SyncApi, api
 from eazy_sdk.request import (
     JsonBody,
     SigningKey,

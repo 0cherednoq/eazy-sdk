@@ -5,19 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 import pytest
-from eazy_sdk_sqlmodel import (
-    SqlRegistrationStore,
-    SqlRegistrationTransactionError,
-    SqlResourceConflictError,
-    SqlSessionStore,
-    build_sqlmodel_storage,
-)
-from eazy_sdk_sqlmodel.tables import Account, AccountEvent, AccountLink, Session, Verification
-from pydantic import BaseModel, ConfigDict, SecretStr
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
-
-from eazy_sdk.accounts import (
+from eazy_sdk_accounts import (
     AccountCreated,
     AccountDraft,
     AccountIdentifier,
@@ -33,7 +21,19 @@ from eazy_sdk.accounts import (
     VerificationChallenge,
     account_registration,
 )
-from eazy_sdk.accounts.session import SessionKey
+from eazy_sdk_sqlmodel import (
+    SqlRegistrationStore,
+    SqlRegistrationTransactionError,
+    SqlResourceConflictError,
+    SqlSessionStore,
+    build_sqlmodel_storage,
+)
+from eazy_sdk_sqlmodel.tables import Account, AccountEvent, AccountLink, Session, Verification
+from pydantic import BaseModel, ConfigDict, SecretStr
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from eazy_sdk.auth.session import SessionKey
 
 
 class SignupCredentials(BaseModel):
@@ -565,7 +565,7 @@ async def test_deadline_after_reservation_compensates_before_remote_io(
         deadline=deadline,
         clock=lambda: next(values),
     )
-    from eazy_sdk.accounts import RegistrationDeadlineError
+    from eazy_sdk_accounts import RegistrationDeadlineError
 
     with pytest.raises(RegistrationDeadlineError):
         await flow.create(draft(), using=(resource,))

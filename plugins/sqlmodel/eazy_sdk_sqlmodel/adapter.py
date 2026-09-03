@@ -7,13 +7,13 @@ from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
+from eazy_sdk_accounts.storage.exceptions import DuplicateAccountError
 from sqlalchemy import update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel, select
 
-from eazy_sdk.storage.exceptions import DuplicateAccountError
 from eazy_sdk_sqlmodel.models import (
     normalize_identifier,
     normalize_provider,

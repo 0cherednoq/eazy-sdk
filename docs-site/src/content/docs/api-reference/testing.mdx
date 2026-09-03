@@ -4,7 +4,7 @@ description: Offline request inspection and Zapros-native recording handlers.
 sources:
   - eazy_sdk.preparation
   - eazy_sdk.testing
-api_fingerprint: "sha256:7242d86edc91e779746c60cc7a2215c46209503807121af3b10d0ecd99aa7ba3"
+api_fingerprint: "sha256:b114bef1c5d6d35e5eb9bba73c688f0e74316cc5d2b55cebca5c4c0a9356b222"
 ---
 
 ## Проверить запрос без сети
@@ -27,7 +27,7 @@ assert prepared.encoded_body == b'{"name":"Ada"}'
 
 Pure mode (`resolve_managed=False`) не вызывает dependency/auth/protection/key providers,
 middleware или rate limiter. Если операция без них не готова, вызывается
-`PreparationIncomplete` со списком requirements.
+`PreparationIncompleteError` со списком requirements.
 
 Full mode (`resolve_managed=True`) разрешает managed values через test providers. Protection cache
 для preparation изолирован от рабочего client. Network send не выполняется в обоих режимах.
@@ -53,6 +53,6 @@ handler.assert_count(1)
 handler.assert_request(method="GET", url="https://api.test/users/7")
 ```
 
-`AsyncRecordingHandler` предоставляет тот же API для `AsyncSdk`. Оба класса наследуют Zapros
+`AsyncRecordingHandler` предоставляет тот же API для `AsyncApi`. Оба класса наследуют Zapros
 `BaseHandler`/`AsyncBaseHandler` и записывают request, полученный transport boundary; собственного
 preparation algorithm у них нет.

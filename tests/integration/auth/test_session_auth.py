@@ -10,17 +10,17 @@ from curl_cffi import requests as curl_requests
 from pytest_httpserver import HTTPServer, RequestMatcher
 
 from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
-from eazy_sdk.accounts.session import (
-    MemorySessionStore,
-    SessionKey,
-    SessionRevision,
-    StoredSession,
-)
 from eazy_sdk.auth import (
     Auth,
     AuthScheme,
 )
 from eazy_sdk.auth.core import AttributeSessionSelector, AuthLocation, AuthPlacement, AuthProviders
+from eazy_sdk.auth.session import (
+    MemorySessionStore,
+    SessionKey,
+    SessionRevision,
+    StoredSession,
+)
 from eazy_sdk.auth.session_runtime import (
     AuthFlowContext,
     SessionAuth,
@@ -146,7 +146,7 @@ class ScopedAuthSdk:
         return f"{self._origin}{path}" if self._origin else path
 
     async def login_bearer(self, credentials: LoginCredentials) -> BearerSession:
-        response = await self._client.post(
+        response = await self._client.request("POST",
             self._url("/session/login"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -162,7 +162,7 @@ class ScopedAuthSdk:
         return BearerSession(access_token, refresh_token)
 
     async def login_cookie(self, credentials: LoginCredentials) -> CookieSession:
-        response = await self._client.post(
+        response = await self._client.request("POST",
             self._url("/session/login"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -175,7 +175,7 @@ class ScopedAuthSdk:
         return CookieSession(session_ids[0])
 
     async def login_bearer_from_headers(self, credentials: LoginCredentials) -> BearerSession:
-        response = await self._client.post(
+        response = await self._client.request("POST",
             self._url("/session/login-header"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -189,7 +189,7 @@ class ScopedAuthSdk:
         return BearerSession(access_token, refresh_token)
 
     async def refresh_bearer(self, session: BearerSession) -> BearerSession:
-        response = await self._client.post(
+        response = await self._client.request("POST",
             self._url("/session/refresh"),
             json={"refresh_token": session.refresh_token},
         )

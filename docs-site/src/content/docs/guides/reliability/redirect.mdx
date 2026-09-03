@@ -21,7 +21,7 @@ result = await api.payments.create(
 Пример: `POST /payments` с JSON `{"amount":"49.90"}` получает status `303`, header
 `Location: /payments/pay_42`; следующий attempt отправляет `GET /payments/pay_42` без body. `307`
 и `308` сохраняют method/body и требуют replay proof. Исчерпание лимита даёт
-`RedirectLimitExceeded`.
+`RedirectLimitError`.
 
 | Status | Следующий method | Body |
 |---|---|---|

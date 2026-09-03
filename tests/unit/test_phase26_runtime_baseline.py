@@ -4,12 +4,12 @@ import asyncio
 from typing import Any, cast
 
 from eazy_sdk import ApiDefaults, AsyncApi, SyncApi, api
-from eazy_sdk._internal.http_compiler import compile_endpoint
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
-from eazy_sdk.handlers import EmitOptions, TransportFailure
+from eazy_sdk.compile.http_compiler import compile_endpoint
+from eazy_sdk.handlers import EmitOptions, TransportError
 from eazy_sdk.request.prepared import PreparedRequest
 from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success
 from tests.rewrite.test_phase08_execution import CAPABILITIES
@@ -69,7 +69,7 @@ def test_http_transition_trace_and_fingerprint_are_frozen_before_stage_extractio
     ) -> NormalizedResponse[object]:
         sync_requests.append(request)
         if len(sync_requests) == 1:
-            raise TransportFailure("baseline", "emit", 1, OSError("retry"))
+            raise TransportError("baseline", "emit", 1, OSError("retry"))
         return _response()
 
     async def async_send(
@@ -77,7 +77,7 @@ def test_http_transition_trace_and_fingerprint_are_frozen_before_stage_extractio
     ) -> NormalizedResponse[object]:
         async_requests.append(request)
         if len(async_requests) == 1:
-            raise TransportFailure("baseline", "emit", 1, OSError("retry"))
+            raise TransportError("baseline", "emit", 1, OSError("retry"))
         return _response()
 
     options = CallOptions(max_attempts=2, transport_retries=1)

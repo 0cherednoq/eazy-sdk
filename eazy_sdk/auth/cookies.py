@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from http.cookies import SimpleCookie
 
-from eazy_sdk._internal.errors import PlanError
+from eazy_sdk.core.errors import PlanError
 
 
 @dataclass(frozen=True, slots=True)

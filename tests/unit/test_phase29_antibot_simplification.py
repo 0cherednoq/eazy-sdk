@@ -259,12 +259,12 @@ def test_simple_detector_preserves_match_no_match_malformed_and_unexpected_error
         apply=solution_fields(cookies={"first": "first"}),
     )
     policy = guard.to_bundle().challenge_policies[0]
-    scope = __import__("eazy_sdk._internal", fromlist=["ScopeContext"]).ScopeContext(
+    scope = __import__("eazy_sdk.core", fromlist=["ScopeContext"]).ScopeContext(
         "https",
         "phase29.test",
         "/protected",
         "GET",
-        __import__("eazy_sdk._internal", fromlist=["OperationIdentity"]).OperationIdentity(
+        __import__("eazy_sdk.core", fromlist=["OperationIdentity"]).OperationIdentity(
             "phase29.protected"
         ),
     )

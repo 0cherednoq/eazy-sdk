@@ -9,9 +9,7 @@ from pathlib import Path
 from typing import Annotated, Any, cast
 
 import pytest
-from pydantic import BaseModel, SecretStr
-
-from eazy_sdk.accounts import (
+from eazy_sdk_accounts import (
     AccountCreated,
     AccountDraft,
     AccountIdentifier,
@@ -33,14 +31,16 @@ from eazy_sdk.accounts import (
     session_lifecycle,
     sync_account_registration,
 )
-from eazy_sdk.accounts.session import (
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_auth, session_cookie
+from eazy_sdk.auth.session import (
     MemorySessionStore,
     SessionKey,
     SessionLifecycleConfig,
     SessionRevision,
     StoredSession,
 )
-from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_auth, session_cookie
 
 
 class SignupCredentials(BaseModel):
@@ -273,7 +273,7 @@ def test_documented_http_session_api_fingerprint_is_frozen_before_extraction() -
 
 
 def test_accounts_public_surface_hides_lifecycle_context_and_revision_plumbing() -> None:
-    import eazy_sdk.accounts as accounts_api
+    import eazy_sdk_accounts as accounts_api
 
     assert set(accounts_api.__all__) == {
         "AccountCreated",

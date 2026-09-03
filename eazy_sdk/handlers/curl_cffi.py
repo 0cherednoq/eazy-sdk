@@ -8,6 +8,7 @@ Redirects, cookies, retries, and curl-generated default headers are disabled.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import replace
 from importlib.metadata import version
 from typing import Any, cast
 
@@ -69,6 +70,8 @@ class CurlCffiZaprosHandler(BaseHandler):
         self._owned = session is None if owns_session is None else owns_session
         self._session = session or curl_requests.Session()
         self._impersonate = impersonate
+        if impersonate is not None:
+            self.profile = replace(CURL_CFFI_HANDLER_PROFILE, impersonation=str(impersonate))
 
     def handle(self, request: Request) -> Response:
         body, materialized_stream = _read_sync_body(request.body)
@@ -107,6 +110,8 @@ class AsyncCurlCffiZaprosHandler(AsyncBaseHandler):
         self._owned = session is None if owns_session is None else owns_session
         self._session = session or curl_requests.AsyncSession()
         self._impersonate = impersonate
+        if impersonate is not None:
+            self.profile = replace(CURL_CFFI_HANDLER_PROFILE, impersonation=str(impersonate))
 
     async def ahandle(self, request: Request) -> Response:
         body, materialized_stream = await _read_async_body(request.body)

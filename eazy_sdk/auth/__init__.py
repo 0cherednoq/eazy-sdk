@@ -1,7 +1,5 @@
 """Public auth schemes, providers and typed session lifecycle."""
 
-from eazy_sdk.accounts import ExpiresAt, RefreshToken
-
 from .core import (
     ApiKeyScheme,
     Auth,
@@ -14,13 +12,13 @@ from .core import (
     all_of,
     any_of,
 )
+from .session import ExpiresAt, RefreshToken, SessionConfigurationError
 from .session_runtime import (
     AuthContext,
     AuthCredentialsRequiredError,
     AuthService,
     Bearer,
     ResolutionCycleError,
-    SessionConfigurationError,
     SessionScheme,
     session_auth,
     session_cookie,

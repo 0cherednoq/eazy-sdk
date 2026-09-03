@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from typing import Protocol
 
-from eazy_sdk._internal.kernel import Malformed, ParseAttempt, ParsedValue
+from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
 
 from ._artifacts import (
     EncodedFrame,

@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
-from eazy_sdk.clients.base import CallOptions
+from eazy_sdk.core.errors import EazySdkError
+from eazy_sdk.policies import CallOptions
 from eazy_sdk.request.prepared import BufferedBody, PreparedRequest
 
 _REDACTED = "<redacted>"
@@ -19,7 +20,7 @@ class PrepareOptions:
     call_options: CallOptions | None = None
 
 
-class PreparationIncomplete(Exception):
+class PreparationIncompleteError(EazySdkError):
     """Pure preparation needs one or more managed values."""
 
     def __init__(self, requirements: tuple[str, ...]) -> None:
@@ -133,7 +134,7 @@ def _semantic_body(body: object) -> object | None:
 
 
 __all__ = [
-    "PreparationIncomplete",
+    "PreparationIncompleteError",
     "PrepareOptions",
     "PreparedCall",
     "PreparedValue",

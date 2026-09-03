@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Protocol
 
-from eazy_sdk._internal.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
 
 from ._artifacts import EncodedFrame, FrameKind, FrozenValue, InboundFrame, freeze_value, thaw_value
 from .errors import FrameTooLargeError

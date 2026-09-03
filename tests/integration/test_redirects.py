@@ -14,7 +14,7 @@ pytestmark = pytest.mark.integration
 def test_get_redirects_are_managed_by_eazy_sdk(http_server: LocalHttpServer, status: int) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={}, follow_redirects=True)
     with client_from_httpx(raw) as client:
-        response = client.get(
+        response = client.request("GET",
             f"/redirect/{status}",
             options=CallOptions(max_attempts=2, max_redirects=1),
         )
@@ -32,7 +32,7 @@ def test_strict_redirects_preserve_post_method_and_body(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        response = client.post(
+        response = client.request("POST",
             f"/redirect/{status}",
             content=b"payload",
             options=CallOptions(max_attempts=2, max_redirects=1),
@@ -50,7 +50,7 @@ def test_post_redirects_switch_to_get_and_drop_the_body(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        response = client.post(
+        response = client.request("POST",
             f"/redirect/{status}",
             content=b"payload",
             options=CallOptions(max_attempts=2, max_redirects=1),

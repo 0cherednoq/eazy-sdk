@@ -55,13 +55,13 @@ def test_removed_protection_api_is_absent_from_module_and_exact_exports() -> Non
     assert all(not hasattr(protection, name) for name in REMOVED_PROTECTION_API)
     assert protection.__all__ == sorted(protection.__all__)
     fingerprint = hashlib.sha256("\n".join(protection.__all__).encode()).hexdigest()
-    assert fingerprint == "bd83b2c7f991d97bd044ba52534f911565ebae31cdbbc82d281f9c4ec624e810"
+    assert fingerprint == "2a1499d46443aa533cd47e53232b9ba9753fbff805c0512562dbf41945a1b877"
 
 
 def test_advanced_authoring_surface_has_one_exact_allowlist() -> None:
     assert advanced.__all__ == sorted(advanced.__all__)
     fingerprint = hashlib.sha256("\n".join(advanced.__all__).encode()).hexdigest()
-    assert fingerprint == "e9432af539baf6657b9fd6398c075863431ab2db63d07fb02fab8af296f04b1b"
+    assert fingerprint == "3ac9e56f27a1179a070abd9b30450bf2735b48068b78d94eaefa9b0e0860e837"
     assert "_inspect_signals" not in advanced.__all__
     assert "_private_bindings_patch" not in advanced.__all__
     assert "_ensure_replay_allowed" not in advanced.__all__

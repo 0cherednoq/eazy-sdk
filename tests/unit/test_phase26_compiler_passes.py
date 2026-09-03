@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Unpack, cast
 
 from eazy_sdk import SyncApi, api
-from eazy_sdk._internal.http_compiler import compile_endpoint
+from eazy_sdk.compile.http_compiler import compile_endpoint
 from tests.unit.test_phase21_body_projection import PROJECTION, RESPONSES, PublicBody
 from tests.unit.test_phase26_runtime_baseline import _contract
 

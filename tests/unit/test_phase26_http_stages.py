@@ -5,7 +5,6 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk._internal import ValuePatch
 from eazy_sdk.clients._http_stages import (
     AuthRefreshTransition,
     ReactionTransition,
@@ -16,7 +15,10 @@ from eazy_sdk.clients._http_stages import (
     TerminalResponse,
     decide_response,
 )
-from eazy_sdk.clients.base import RedirectLimitExceeded, UnsafeReplayError
+from eazy_sdk.clients.base import RedirectLimitError, UnsafeReplayError
+from eazy_sdk.core import (
+    ValuePatch,
+)
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
 from eazy_sdk.protection.advanced import SignalMatch
 from eazy_sdk.response import Headers, Json, NormalizedResponse, Success
@@ -111,7 +113,7 @@ def test_response_stage_rejects_unsafe_replay_and_exhausted_redirect() -> None:
         decide_response(_stage(response=_response(503), idempotent=False))
     with pytest.raises(UnsafeReplayError, match="auth refresh"):
         decide_response(_stage(response=_response(401), idempotent=False))
-    with pytest.raises(RedirectLimitExceeded, match="redirect budget"):
+    with pytest.raises(RedirectLimitError, match="redirect budget"):
         decide_response(
             _stage(
                 response=_response(302, location="/next"),

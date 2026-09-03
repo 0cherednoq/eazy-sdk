@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Awaitable
 from typing import Any, cast
 
-from eazy_sdk._internal.errors import PlanError
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.dependencies import DependencyContext, DependencyRegistry, ProviderUnavailable
 
 from .core import CryptoInput, CryptoValues, FrozenValue, freeze_value

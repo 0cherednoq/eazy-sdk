@@ -921,11 +921,12 @@ def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() ->
         assert not hasattr(codegen_api, verb)
     assert set(clients_api.__all__) == {
         "AsyncClient",
-        "AttemptLimitExceeded",
+        "AttemptLimitError",
+        "EventLoopConflictError",
         "CallOptions",
         "Client",
         "ClientConfig",
-        "RedirectLimitExceeded",
+        "RedirectLimitError",
         "RetryPolicy",
         "UnsafeReplayError",
     }

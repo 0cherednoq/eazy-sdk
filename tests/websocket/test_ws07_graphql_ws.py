@@ -6,7 +6,7 @@ import json
 import pytest
 from zapros.websocket import CloseMessage, TextMessage
 
-from eazy_sdk._internal.kernel import ParsedValue
+from eazy_sdk.core.kernel import ParsedValue
 from eazy_sdk.websocket import (
     AsyncWsClient,
     CloseDisposition,

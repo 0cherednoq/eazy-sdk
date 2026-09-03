@@ -22,7 +22,7 @@ def test_sync_context_manager_closes_after_success_and_close_is_idempotent() -> 
         cookies={},
     )
     with client_from_httpx(raw) as client:
-        assert client.get("/ok").body == b"ok"
+        assert client.request("GET", "/ok").body == b"ok"
         assert not raw.is_closed
     assert raw.is_closed
     client.close()
@@ -47,7 +47,7 @@ def test_sync_request_after_close_is_rejected_before_transport() -> None:
     client = client_from_httpx(raw)
     client.close()
     with pytest.raises(RuntimeError, match="Client is closed"):
-        client.get("/closed")
+        client.request("GET", "/closed")
 
 
 @pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_async_context_manager_closes_after_exception_and_aclose_is_idempo
     )
     with pytest.raises(RuntimeError, match="user failure"):
         async with client_from_httpx(raw) as client:
-            assert (await client.get("/ok")).body == b"ok"
+            assert (await client.request("GET", "/ok")).body == b"ok"
             raise RuntimeError("user failure")
     assert raw.is_closed
     await client.aclose()
@@ -90,11 +90,11 @@ async def test_async_cancellation_stops_the_attempt_and_client_remains_usable() 
         cookies={},
     )
     async with client_from_httpx(raw) as client:
-        task = asyncio.create_task(client.get("/wait"))
+        task = asyncio.create_task(client.request("GET", "/wait"))
         await started.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-        assert (await client.get("/ok")).body == b"ok"
+        assert (await client.request("GET", "/ok")).body == b"ok"
     assert calls == ["/wait", "/ok"]
     assert raw.is_closed

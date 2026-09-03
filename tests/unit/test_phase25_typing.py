@@ -14,7 +14,7 @@ POSITIVE = r'''# pyright: strict, reportUnknownVariableType=false
 from dataclasses import dataclass
 from typing import Annotated, TypedDict, Unpack, assert_type
 
-from eazy_sdk import AsyncApi, AsyncSdk, PrepareOptions, PreparedCall, api, api_group
+from eazy_sdk import AsyncApi, PrepareOptions, PreparedCall, api, api_group
 from eazy_sdk.ext import ParseAttempt, ParsedValue, ResponseParser
 from eazy_sdk.request import Path
 from eazy_sdk.response import Json, ResponseContext, callable_parser
@@ -41,7 +41,7 @@ class UnpackedApi(AsyncApi):
         raise NotImplementedError
 
 
-class Root(AsyncSdk):
+class Root(AsyncApi):
     users = api_group(ExplicitApi)
 
 

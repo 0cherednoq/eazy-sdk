@@ -9,9 +9,10 @@ from pathlib import Path
 
 import httpx
 import pytest
+from eazy_sdk_html import parse_html
 from pydantic import SecretStr
 
-from eazy_sdk import Client, ClientConfig, parse_html
+from eazy_sdk import Client, ClientConfig
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from examples.adaptix_nested_wire_body import (
     AdaptixWireDefaults,

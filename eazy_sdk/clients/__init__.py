@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .base import (
-    AttemptLimitExceeded,
+    AttemptLimitError,
     CallOptions,
-    RedirectLimitExceeded,
+    EventLoopConflictError,
+    RedirectLimitError,
     RetryPolicy,
     UnsafeReplayError,
 )
@@ -29,11 +30,12 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "AsyncClient",
-    "AttemptLimitExceeded",
+    "AttemptLimitError",
     "CallOptions",
     "Client",
     "ClientConfig",
-    "RedirectLimitExceeded",
+    "EventLoopConflictError",
+    "RedirectLimitError",
     "RetryPolicy",
     "UnsafeReplayError",
 ]

@@ -2,10 +2,10 @@
 title: Registration
 description: Создайте аккаунт и сохраните его через registration store.
 sources:
-  - eazy_sdk.accounts.account_registration
-  - eazy_sdk.accounts.AccountDraft
-  - eazy_sdk.accounts.AccountIdentifier
-api_fingerprint: "sha256:97262efead6ce74b399601fa61c86b32600a48890401021bca21bcdc765f2cfb"
+  - eazy_sdk_accounts.account_registration
+  - eazy_sdk_accounts.AccountDraft
+  - eazy_sdk_accounts.AccountIdentifier
+api_fingerprint: "sha256:36ed2d0c63defa51968e7d947729d4edb2f78cc08688c8e873effa1219e311bd"
 ---
 
 Credentials содержат данные для будущего login. Profile содержит данные аккаунта. Details нужны
@@ -59,7 +59,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk.accounts import (
+from eazy_sdk_accounts import (
     AccountCreated,
     AccountDraft,
     AccountIdentifier,

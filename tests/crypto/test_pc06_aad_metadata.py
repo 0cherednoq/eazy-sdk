@@ -52,12 +52,12 @@ from eazy_sdk.request import (
 from eazy_sdk.response import Json, Responses
 from eazy_sdk.websocket import InboundMessageKind, ProtocolMessage
 from eazy_sdk.websocket._artifacts import MessageReservedOutput
+from eazy_sdk.websocket._client_state import _validate_websocket_crypto
 from eazy_sdk.websocket._crypto import (
     apply_ws_crypto_metadata,
     protect_ws_document,
     unprotect_ws_message,
 )
-from eazy_sdk.websocket.runtime import _validate_websocket_crypto
 from tests._support.zapros_clients import client_from_httpx
 
 TENANT_DEPENDENCY = cast(

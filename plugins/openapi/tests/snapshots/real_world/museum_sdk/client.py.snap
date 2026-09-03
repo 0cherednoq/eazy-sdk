@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal, Required, TypedDict, Unpack, cast
 from pydantic import ConfigDict, Field
 from zapros import AsyncBaseHandler, BaseHandler
 
-from eazy_sdk import AsyncSdk, HandlerProfile, SyncSdk, api, api_group
+from eazy_sdk import AsyncApi, HandlerProfile, SyncApi, api, api_group
 from eazy_sdk.codegen import (
     DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,
     Client, ClientConfig,
@@ -15,7 +15,7 @@ from eazy_sdk.codegen import (
     MultipartBody, Part, Path, Query, QueryString, SyncApi,
     Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,
     WireOptions, all_of, any_of,
-    FromProtection, ProtectionRequirement, protection_flow,
+    FromProtection, ProtectionBundle, SolverRequirement, protection_flow,
 )
 from .auth import *
 
@@ -333,7 +333,7 @@ class AsyncTickets(AsyncApi):
         raise NotImplementedError
 
 
-class AsyncAPI(AsyncSdk):
+class AsyncAPI(AsyncApi):
     operations = api_group(AsyncOperations)
     events = api_group(AsyncEvents)
     tickets = api_group(AsyncTickets)
@@ -566,7 +566,7 @@ class SyncTickets(SyncApi):
         raise NotImplementedError
 
 
-class SyncAPI(SyncSdk):
+class SyncAPI(SyncApi):
     operations = api_group(SyncOperations)
     events = api_group(SyncEvents)
     tickets = api_group(SyncTickets)

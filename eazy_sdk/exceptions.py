@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.redaction import preview, redact_headers, redact_json
 
 
@@ -22,7 +23,7 @@ class ErrorContext:
     pydantic_errors: object | None = None
 
 
-class EazySDKError(Exception):
+class EazySdkContextError(EazySdkError):
     def __init__(self, message: str, *, context: ErrorContext | None = None) -> None:
         super().__init__(message)
         self.message = message
@@ -73,32 +74,18 @@ class EazySDKError(Exception):
         return data
 
 
-class ParameterSerializationError(EazySDKError):
+class ParameterSerializationError(EazySdkContextError):
     pass
 
 
-class HeaderValidationError(EazySDKError):
-    pass
-
-
-class ExtractionError(EazySDKError):
-    pass
-
-
-class MissingExtractedValueError(ExtractionError):
-    pass
-
-
-class ExtractionValidationError(ExtractionError):
+class HeaderValidationError(EazySdkContextError):
     pass
 
 
 __all__ = [
-    "EazySDKError",
+    "EazySdkContextError",
+    "EazySdkError",
     "ErrorContext",
-    "ExtractionError",
-    "ExtractionValidationError",
     "HeaderValidationError",
-    "MissingExtractedValueError",
     "ParameterSerializationError",
 ]

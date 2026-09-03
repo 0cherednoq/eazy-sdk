@@ -20,7 +20,7 @@ from zapros import (
     Client as ZaprosClient,
 )
 
-from eazy_sdk.handlers.profile import EmitOptions, TransportFailure
+from eazy_sdk.handlers.profile import EmitOptions, TransportError
 from eazy_sdk.request.logical import (
     ExactBodyInput,
     FormInput,
@@ -72,7 +72,7 @@ class ZaprosSyncEmitter:
                 **_body_kwargs(request),
             )
         except Exception as exc:
-            raise TransportFailure("zapros", "emit", None, exc) from exc
+            raise TransportError("zapros", "emit", None, exc) from exc
         return _normalize(response)
 
 
@@ -93,7 +93,7 @@ class ZaprosAsyncEmitter:
                 **_body_kwargs(request),
             )
         except Exception as exc:
-            raise TransportFailure("zapros", "emit", None, exc) from exc
+            raise TransportError("zapros", "emit", None, exc) from exc
         return _normalize(response)
 
 

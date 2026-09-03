@@ -6,18 +6,20 @@ import base64
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from eazy_sdk._internal.errors import PlanError
-from eazy_sdk._internal.http_compiler import CompiledContract
-from eazy_sdk._internal.http_plan import RequestScope
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.auth.session import LifecycleGraph, SessionKey, SessionRevision
+from eazy_sdk.core.errors import PlanError
+from eazy_sdk.core.http_plan import RequestScope
+from eazy_sdk.core.kernel import (
     Set,
     ValuePatch,
     ValueSlot,
     ValueValidator,
 )
-from eazy_sdk.accounts.session import LifecycleGraph, SessionKey, SessionRevision
+
+if TYPE_CHECKING:
+    from eazy_sdk.compile.http_compiler import CompiledContract
 
 
 class AuthLocation(Enum):

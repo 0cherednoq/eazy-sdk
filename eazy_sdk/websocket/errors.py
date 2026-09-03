@@ -1,7 +1,9 @@
+from eazy_sdk.core.errors import ConfigurationError, EazySdkError
+
 """WebSocket frame, codec and protocol errors."""
 
 
-class WebSocketError(Exception):
+class WebSocketError(EazySdkError):
     pass
 
 
@@ -17,7 +19,7 @@ class FrameTypeError(WebSocketError):
     pass
 
 
-class ProtocolConfigurationError(WebSocketError):
+class ProtocolConfigurationError(WebSocketError, ConfigurationError):
     pass
 
 

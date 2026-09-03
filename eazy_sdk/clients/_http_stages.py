@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from typing import cast
 from urllib.parse import urljoin
 
-from eazy_sdk._internal import (
+from eazy_sdk.clients.base import RedirectLimitError, UnsafeReplayError
+from eazy_sdk.compile.http_compiler import CompiledContract
+from eazy_sdk.core import (
     OperationBindingError,
     OperationValues,
     ValuePatch,
     WriterConflictError,
 )
-from eazy_sdk._internal.http_compiler import CompiledContract
-from eazy_sdk.clients.base import RedirectLimitExceeded, UnsafeReplayError
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, ModelDumpMode
 from eazy_sdk.protection.advanced import SignalMatch, SignalOutcome
@@ -179,7 +179,7 @@ def _require_idempotent(idempotent: bool, source: str) -> None:
 
 def _require_redirect_budget(remaining: int) -> None:
     if remaining <= 0:
-        raise RedirectLimitExceeded("redirect budget exhausted")
+        raise RedirectLimitError("redirect budget exhausted")
 
 
 def _project_body[T](

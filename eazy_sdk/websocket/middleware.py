@@ -107,19 +107,19 @@ class SubscriptionMiddleware(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ConnectionMiddlewareApplication:
-    middleware: ConnectionMiddleware = dataclass_field(repr=False)
+    implementation: ConnectionMiddleware = dataclass_field(repr=False)
     scope: WsScope = WsScope()
 
 
 @dataclass(frozen=True, slots=True)
 class MessageMiddlewareApplication:
-    middleware: MessageMiddleware = dataclass_field(repr=False)
+    implementation: MessageMiddleware = dataclass_field(repr=False)
     scope: WsScope = WsScope()
 
 
 @dataclass(frozen=True, slots=True)
 class SubscriptionMiddlewareApplication:
-    middleware: SubscriptionMiddleware = dataclass_field(repr=False)
+    implementation: SubscriptionMiddleware = dataclass_field(repr=False)
     scope: WsScope = WsScope()
 
 
@@ -138,7 +138,7 @@ async def evaluate_middleware(
     for application in applications:
         if not application.scope.matches(context):
             continue
-        result = application.middleware(context)
+        result = application.implementation(context)
         if inspect.isawaitable(result):
             result = await result
         if isinstance(result, WsReject):

@@ -7,10 +7,12 @@ import re
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from typing import (
+    TYPE_CHECKING,
     Any,
     Concatenate,
     ParamSpec,
     Protocol,
+    Self,
     TypedDict,
     TypeVar,
     Unpack,
@@ -20,18 +22,24 @@ from typing import (
     overload,
 )
 
-from eazy_sdk._internal.http_operation import _OperationDeclaration
-from eazy_sdk._internal.http_plan import RequestScope
-from eazy_sdk._internal.input import inspect_method_input
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
-from eazy_sdk.clients.base import CallOptions
+from eazy_sdk.compile.http_operation import _OperationDeclaration
+from eazy_sdk.compile.input import inspect_method_input
+from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.crypto import CryptoWire, PayloadCrypto
+from eazy_sdk.handlers import HandlerProfile
+from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
-from eazy_sdk.protection.advanced import ProtectionRequirement
+from eazy_sdk.protection.advanced import SolverRequirement
 from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
 from eazy_sdk.response.cases import ResponseRepresentation
+
+if TYPE_CHECKING:
+    from zapros import AsyncBaseHandler, BaseHandler
+
+    from eazy_sdk.clients import ClientConfig
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -58,6 +66,10 @@ class ApiDefaults:
 
 
 class _AsyncClient(Protocol):
+    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk: ...
+
+    async def aclose(self) -> None: ...
+
     async def _execute_operation[TResult](
         self,
         declaration: _OperationDeclaration[TResult],
@@ -77,6 +89,10 @@ class _AsyncClient(Protocol):
 
 
 class _SyncClient(Protocol):
+    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk: ...
+
+    def close(self) -> None: ...
+
     def _execute_operation[TResult](
         self,
         declaration: _OperationDeclaration[TResult],
@@ -102,6 +118,12 @@ class _BoundAsyncOperation[**P, T]:
         self.__name__ = descriptor.__name__
         self.__doc__ = descriptor.__doc__
         self.__signature__ = _bound_signature(descriptor.signature)
+
+    @property
+    def declaration(self) -> _OperationDeclaration[T]:
+        """Underlying declaration, so a bound method can serve as acquire/verify reference."""
+
+        return self._descriptor.declaration
 
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
@@ -148,6 +170,12 @@ class _BoundSyncOperation[**P, T]:
         self.__name__ = descriptor.__name__
         self.__doc__ = descriptor.__doc__
         self.__signature__ = _bound_signature(descriptor.signature)
+
+    @property
+    def declaration(self) -> _OperationDeclaration[T]:
+        """Underlying declaration, so a bound method can serve as acquire/verify reference."""
+
+        return self._descriptor.declaration
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
@@ -313,25 +341,173 @@ class _SyncOperationDescriptor(_OperationDescriptorBase[TApi, P, T]):
 
 
 class AsyncApi:
+    """Asynchronous API class: operations, nested ``api_group()`` members, optional ownership.
+
+    Construct it over an existing client (``UsersApi(client)``) or let it own one via
+    ``from_handler()``/``from_client(..., owns_client=True)``; an owning root closes the client
+    in ``aclose()`` and ``async with``.
+    """
+
     defaults = ApiDefaults()
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _validate_api_class(cls, asynchronous=True)
+        _validate_groups(cls, asynchronous=True)
 
-    def __init__(self, client: _AsyncClient) -> None:
+    def __init__(self, client: _AsyncClient, *, owns_client: bool = False) -> None:
         self._client = client
+        self._owns_client = owns_client
+        self._closed = False
+
+    @classmethod
+    def from_client(cls, client: _AsyncClient, *, owns_client: bool = False) -> Self:
+        """Bind this API class as the client's scoped SDK root."""
+
+        root = client.bind_sdk(lambda scoped: cls(scoped, owns_client=False))
+        root._owns_client = owns_client
+        return root
+
+    @classmethod
+    def from_handler(
+        cls,
+        *,
+        handler: AsyncBaseHandler,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
+    ) -> Self:
+        from eazy_sdk.clients import AsyncClient
+
+        client = AsyncClient(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+            owns_handler=owns_handler,
+            profile=profile,
+        )
+        return cls.from_client(client, owns_client=True)
+
+    async def aclose(self) -> None:
+        if not self._closed:
+            self._closed = True
+            if self._owns_client:
+                await self._client.aclose()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
 
 
 class SyncApi:
+    """Synchronous API class: operations, nested ``api_group()`` members, optional ownership.
+
+    Construct it over an existing client (``UsersApi(client)``) or let it own one via
+    ``from_handler()``/``from_client(..., owns_client=True)``; an owning root closes the client
+    in ``close()`` and ``with``.
+    """
+
     defaults = ApiDefaults()
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _validate_api_class(cls, asynchronous=False)
+        _validate_groups(cls, asynchronous=False)
 
-    def __init__(self, client: _SyncClient) -> None:
+    def __init__(self, client: _SyncClient, *, owns_client: bool = False) -> None:
         self._client = client
+        self._owns_client = owns_client
+        self._closed = False
+
+    @classmethod
+    def from_client(cls, client: _SyncClient, *, owns_client: bool = False) -> Self:
+        """Bind this API class as the client's scoped SDK root."""
+
+        root = client.bind_sdk(lambda scoped: cls(scoped, owns_client=False))
+        root._owns_client = owns_client
+        return root
+
+    @classmethod
+    def from_handler(
+        cls,
+        *,
+        handler: BaseHandler,
+        base_url: str = "",
+        config: ClientConfig | None = None,
+        owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
+    ) -> Self:
+        from eazy_sdk.clients import Client
+
+        client = Client(
+            base_url=base_url,
+            handler=handler,
+            config=config,
+            owns_handler=owns_handler,
+            profile=profile,
+        )
+        return cls.from_client(client, owns_client=True)
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            if self._owns_client:
+                self._client.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+
+class _ApiGroup[TGroup: SyncApi | AsyncApi]:
+    def __init__(self, api_type: type[TGroup]) -> None:
+        self.api_type = api_type
+        self.name = ""
+
+    def __set_name__(self, owner: type[object], name: str) -> None:
+        self.name = name
+
+    @overload
+    def __get__(self, instance: None, owner: type[object]) -> _ApiGroup[TGroup]: ...
+
+    @overload
+    def __get__(
+        self, instance: SyncApi | AsyncApi, owner: type[object] | None = None
+    ) -> TGroup: ...
+
+    def __get__(
+        self,
+        instance: SyncApi | AsyncApi | None,
+        owner: type[object] | None = None,
+    ) -> _ApiGroup[TGroup] | TGroup:
+        if instance is None:
+            return self
+        cached = instance.__dict__.get(self.name)
+        if cached is None:
+            cached = self.api_type(cast(Any, instance._client))
+            instance.__dict__[self.name] = cached
+        return cast(TGroup, cached)
+
+
+def api_group[TGroupApi: SyncApi | AsyncApi](
+    api_type: type[TGroupApi],
+) -> _ApiGroup[TGroupApi]:
+    """Declare a lazily bound nested API group on an API class."""
+
+    return _ApiGroup(api_type)
+
+
+def _validate_groups(root: type[object], *, asynchronous: bool) -> None:
+    expected = AsyncApi if asynchronous else SyncApi
+    for name, value in root.__dict__.items():
+        if isinstance(value, _ApiGroup) and not issubclass(value.api_type, expected):
+            kind = "async" if asynchronous else "sync"
+            raise TypeError(f"{kind} API group {name!r} uses the wrong API kind")
 
 
 class _OperationDecorator[T]:
@@ -348,7 +524,7 @@ class _OperationDecorator[T]:
         signing: object,
         crypto: object,
         crypto_wire: object,
-        protections: tuple[ProtectionRequirement[Any], ...],
+        protections: tuple[SolverRequirement[Any, Any], ...],
         body: BodyProjection[Any, Any] | None,
         wire: WireOptions | None,
         tags: tuple[str, ...],
@@ -523,7 +699,7 @@ class _OperationOptions(TypedDict, total=False):
     signing: object
     crypto: PayloadCrypto | None | _Inherit
     crypto_wire: CryptoWire | None | _Inherit
-    protections: tuple[ProtectionRequirement[Any], ...]
+    protections: tuple[SolverRequirement[Any, Any], ...]
     body: BodyProjection[Any, Any] | None
     wire: WireOptions | None
     tags: tuple[str, ...]
@@ -555,7 +731,7 @@ class _Verb:
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
         crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
-        protections: tuple[ProtectionRequirement[Any], ...] = (),
+        protections: tuple[SolverRequirement[Any, Any], ...] = (),
         body: BodyProjection[Any, Any] | None = None,
         wire: WireOptions | None = None,
         tags: tuple[str, ...] = (),
@@ -579,7 +755,7 @@ class _Verb:
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
         crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
-        protections: tuple[ProtectionRequirement[Any], ...] = (),
+        protections: tuple[SolverRequirement[Any, Any], ...] = (),
         body: BodyProjection[Any, Any] | None = None,
         wire: WireOptions | None = None,
         tags: tuple[str, ...] = (),
@@ -602,7 +778,7 @@ class _Verb:
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
         crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
-        protections: tuple[ProtectionRequirement[Any], ...] = (),
+        protections: tuple[SolverRequirement[Any, Any], ...] = (),
         body: BodyProjection[Any, Any] | None = None,
         wire: WireOptions | None = None,
         tags: tuple[str, ...] = (),
@@ -754,4 +930,5 @@ __all__ = [
     "AsyncApi",
     "SyncApi",
     "api",
+    "api_group",
 ]

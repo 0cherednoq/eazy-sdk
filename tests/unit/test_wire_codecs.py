@@ -3,14 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from eazy_sdk._internal import (
+from eazy_sdk.codecs import EncodeContext, ScalarEncodeContext
+from eazy_sdk.compile import (
     CompiledContract,
     InputField,
-    OperationValues,
-    RequestLocation,
     compile_endpoint,
 )
-from eazy_sdk.codecs import EncodeContext, ScalarEncodeContext
+from eazy_sdk.core import (
+    OperationValues,
+    RequestLocation,
+)
 from eazy_sdk.request import Query
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 

@@ -6,15 +6,18 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from eazy_sdk.ext import RequestScope
+from eazy_sdk.protection import host, operation
 from eazy_sdk.protection.advanced import (
+    BeforeCallPolicy,
+    ChallengePolicy,
     ChallengeSolver,
-    ChallengeSolverBinding,
     PrivateBindings,
     ProtectionBundle,
     ProtectionPersistence,
     ResponseSignal,
+    SolverBinding,
     SolverRequirement,
-    bind_challenge_solver,
+    bind_solver,
     client_identity,
     private_bindings,
     private_body,
@@ -41,25 +44,16 @@ class PresetId:
         return f"{self.vendor}.{self.name}"
 
 
-@dataclass(frozen=True, slots=True)
-class PresetChallengePolicy:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PresetChallengePolicy(ChallengePolicy[Any, Any]):
     id: PresetId
-    identity: str
-    revision: int
-    scope: RequestScope
-    signal: ResponseSignal[Any]
-    solver: SolverRequirement[Any, Any]
-    apply: PrivateBindings[Any]
-    persistence: ProtectionPersistence
-    replay: Any
-    challenge_identity: Any | None = None
-    solver_binding: ChallengeSolverBinding[Any, Any] | None = None
+    solver_binding: SolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
 
     def to_bundle(self) -> ProtectionBundle:
         return ProtectionBundle(
             challenge_policies=(self,),
-            challenge_solver_bindings=(
+            solver_bindings=(
                 (self.solver_binding,) if self.solver_binding is not None else ()
             ),
         )
@@ -93,24 +87,16 @@ class PresetChallengePolicy:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class PresetBeforeCallPolicy:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PresetBeforeCallPolicy(BeforeCallPolicy[Any, Any]):
     id: PresetId
-    identity: str
-    revision: int
-    scope: RequestScope
-    acquire: None
-    challenge: object
-    solver: SolverRequirement[Any, Any]
-    apply: PrivateBindings[Any]
-    persistence: ProtectionPersistence
-    solver_binding: ChallengeSolverBinding[Any, Any] | None = None
+    solver_binding: SolverBinding[Any, Any] | None = None
     customized: frozenset[str] = frozenset()
 
     def to_bundle(self) -> ProtectionBundle:
         return ProtectionBundle(
             before_call_policies=(self,),
-            challenge_solver_bindings=(
+            solver_bindings=(
                 (self.solver_binding,) if self.solver_binding is not None else ()
             ),
         )
@@ -152,7 +138,7 @@ class ProtectionTemplate[TChallenge, TSolution]:
             replay=replay,
             challenge_identity=challenge_identity,
             solver_binding=(
-                bind_challenge_solver(
+                bind_solver(
                     self.solver_requirement,
                     solver,
                 )
@@ -181,7 +167,7 @@ class ProtectionTemplate[TChallenge, TSolution]:
             apply=apply,
             persistence=persistence,
             solver_binding=(
-                bind_challenge_solver(
+                bind_solver(
                     self.solver_requirement,
                     solver,
                 )
@@ -189,17 +175,6 @@ class ProtectionTemplate[TChallenge, TSolution]:
                 else None
             ),
         )
-
-
-def host(name: str) -> RequestScope:
-    return RequestScope(hosts=frozenset({name}))
-
-
-def operation(value: object) -> RequestScope:
-    operation_id = getattr(value, "operation_id", value)
-    if not isinstance(operation_id, str) or not operation_id:
-        raise TypeError("operation scope requires an operation id or decorated API method")
-    return RequestScope(operation_ids=frozenset({operation_id}))
 
 
 def form_field(name: str, *, value_field: str | None = "token") -> PrivateBindings[Any]:

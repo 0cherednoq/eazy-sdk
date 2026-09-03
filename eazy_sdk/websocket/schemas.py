@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.core.kernel import (
     AmbiguousCases,
     CaseArbitration,
     Malformed,

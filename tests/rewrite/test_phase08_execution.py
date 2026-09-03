@@ -24,7 +24,7 @@ from eazy_sdk.handlers import (
     EmitOptions,
     HandlerProfile,
     RedirectControl,
-    TransportFailure,
+    TransportError,
 )
 from eazy_sdk.middleware import (
     AttemptRequestContext,
@@ -38,12 +38,12 @@ from eazy_sdk.middleware import (
 )
 from eazy_sdk.protection.advanced import (
     BeforeCallPolicy,
-    ChallengeSolverBindings,
     ResponseSignal,
     SolveContext,
+    SolverBindings,
     SolverRequirement,
     before_call_policy,
-    bind_challenge_solver,
+    bind_solver,
     challenge_policy,
     per_call,
     per_match,
@@ -231,7 +231,7 @@ def test_generic_request_passes_through_the_same_executor() -> None:
         return response(b"raw", headers=(("content-type", "text/plain"),))
 
     client = _SyncClientCore(ExecutionRuntime(CAPABILITIES, emit))
-    result = client.get("https://api.test/raw", params={"x": "a b"})
+    result = client.request("GET", "https://api.test/raw", params={"x": "a b"})
     assert result.body == b"raw"
     assert seen[0].target == b"/raw?x=a%20b"
 
@@ -291,7 +291,7 @@ def test_transport_retry_restarts_attempt_and_reserves_limiter() -> None:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise TransportFailure("fake", "emit", 1, OSError("gone"))
+            raise TransportError("fake", "emit", 1, OSError("gone"))
         return response()
 
     client = _SyncClientCore(
@@ -329,7 +329,9 @@ def test_redirect_restarts_preparation_and_recomputes_scope() -> None:
             )
         return response()
 
-    from eazy_sdk._internal import RequestScope
+    from eazy_sdk.core import (
+        RequestScope,
+    )
 
     def key_provider(_requirement: SigningKeyRequirement) -> SigningKey:
         nonlocal key_calls
@@ -368,7 +370,9 @@ def test_redirect_restarts_preparation_and_recomputes_scope() -> None:
 
 
 def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
-    from eazy_sdk._internal import RequestScope
+    from eazy_sdk.core import (
+        RequestScope,
+    )
 
     @dataclass(frozen=True)
     class Challenge:
@@ -444,8 +448,8 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         emit,
         "https://api.test",
         challenge_policies=(policy,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(requirement, Solver())
+        solver_bindings=SolverBindings(
+            bind_solver(requirement, Solver())
         ),
         key_provider=key_provider,
     )
@@ -493,7 +497,9 @@ def test_middleware_action_reenters_start_attempt() -> None:
 
 
 def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> None:
-    from eazy_sdk._internal import RequestScope
+    from eazy_sdk.core import (
+        RequestScope,
+    )
 
     class AcquireApi(SyncApi):
         @api.get(
@@ -618,7 +624,7 @@ def test_high_level_dependency_is_lowered_and_cached_per_call() -> None:
             item.name == b"X-Device" and item.value == b"device-1" for item in request.headers
         )
         if emits == 1:
-            raise TransportFailure("fake", "emit", 1, OSError("retry"))
+            raise TransportError("fake", "emit", 1, OSError("retry"))
         return response()
 
     client = _SyncClientCore(ExecutionRuntime(CAPABILITIES, emit, "https://api.test"))

@@ -5,8 +5,12 @@ small: it contains only protocols, immutable contexts/results, and factories nee
 custom codecs, response parsers/extractors, request scopes, and procedural signing hooks.
 """
 
-from eazy_sdk._internal import OperationIdentity, RequestScope, ScopeContext
 from eazy_sdk.codecs import BodyCodec, EncodeContext, ScalarCodec, ScalarEncodeContext
+from eazy_sdk.core import (
+    OperationIdentity,
+    RequestScope,
+    ScopeContext,
+)
 from eazy_sdk.request.signatures import (
     CustomCanonicalizer,
     CustomRequestSigner,

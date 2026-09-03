@@ -6,13 +6,13 @@ from dataclasses import dataclass
 import pytest
 
 from eazy_sdk import PlanError
-from eazy_sdk.accounts.session import (
+from eazy_sdk.auth import AuthCredentialsRequiredError, BearerScheme
+from eazy_sdk.auth.session import (
     MemorySessionStore,
     SessionKey,
     SessionRevision,
     StoredSession,
 )
-from eazy_sdk.auth import AuthCredentialsRequiredError, BearerScheme
 from eazy_sdk.auth.session_runtime import (
     SessionAuth,
     SessionProvider,

@@ -27,10 +27,12 @@ from typing import (
     is_typeddict,
 )
 
+from eazy_sdk.core.errors import EazySdkError
+
 type ModelDumpMode = Literal["json", "python"]
 
 
-class ModelAdapterError(TypeError):
+class ModelAdapterError(EazySdkError, TypeError):
     """Base error for model adapter selection and conversion."""
 
 

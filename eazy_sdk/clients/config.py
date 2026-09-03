@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -12,14 +13,9 @@ from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.middleware import MiddlewareRegistration
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.protection.advanced import (
-    BeforeCallPolicy,
-    ChallengePolicy,
-    ChallengeSolverBindings,
     InstallableProtection,
     ProtectionBundle,
     ProtectionConfigurationError,
-    ProtectionFlow,
-    SolverBindings,
 )
 from eazy_sdk.ratelimit_runtime import RateLimiter
 from eazy_sdk.request import WireProfile
@@ -30,17 +26,16 @@ from .executor import ExecutionRuntime, KeyProvider, Observer
 
 @dataclass(frozen=True, slots=True)
 class ClientConfig:
-    """Transport-independent client runtime policy."""
+    """Transport-independent client runtime policy.
+
+    Protection is one group: pass installable guards through ``guards=`` (lowered at
+    construction) or a complete ``ProtectionBundle`` through ``protection=``; ``retry=`` groups
+    the retry policy. ``with_protection()`` returns a copy with more guards installed.
+    """
 
     auth: Auth | None = None
     dependencies: DependencyRegistry | None = None
-    operation_protections: tuple[ProtectionFlow[Any], ...] = ()
-    before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
-    challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
-    operation_protection_solvers: SolverBindings = field(default_factory=SolverBindings)
-    challenge_solvers: ChallengeSolverBindings = field(
-        default_factory=ChallengeSolverBindings
-    )
+    protection: ProtectionBundle | None = None
     middleware: tuple[MiddlewareRegistration, ...] = ()
     rate_limiter: RateLimiter | None = None
     key_provider: KeyProvider | None = None
@@ -52,23 +47,26 @@ class ClientConfig:
     max_redirects: int = 0
     timeout: float | None = None
     crypto: CryptoRegistry | None = None
+    guards: Sequence[InstallableProtection] = ()
+    """Installable guards lowered at construction; equivalent to ``with_protection(*guards)``."""
 
     def __post_init__(self) -> None:
         if self.auth_retries < 0 or self.max_redirects < 0:
             raise ValueError("client retry budgets cannot be negative")
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("timeout must be positive")
-        if any(not isinstance(item, ProtectionFlow) for item in self.operation_protections):
-            raise TypeError("operation_protections accepts only ProtectionFlow values")
-        if any(not isinstance(item, BeforeCallPolicy) for item in self.before_call_policies):
-            raise TypeError("before_call_policies contains a malformed policy")
-        if any(not isinstance(item, ChallengePolicy) for item in self.challenge_policies):
-            raise TypeError("challenge_policies contains a malformed policy")
-        _validate_bundle_identities(
-            self.operation_protections,
-            self.before_call_policies,
-            self.challenge_policies,
-        )
+        if self.protection is not None and not isinstance(self.protection, ProtectionBundle):
+            raise TypeError("protection must be a ProtectionBundle")
+        if self.guards:
+            guards = tuple(self.guards)
+            object.__setattr__(self, "guards", ())
+            object.__setattr__(self, "protection", self.with_protection(*guards).protection)
+
+    @property
+    def bundle(self) -> ProtectionBundle:
+        """The installed protection, empty when nothing is configured."""
+
+        return self.protection if self.protection is not None else ProtectionBundle()
 
     def call_options(self) -> CallOptions:
         retry_replays = self.retry.retries
@@ -85,6 +83,8 @@ class ClientConfig:
         self,
         *protections: InstallableProtection,
     ) -> ClientConfig:
+        """Return a copy with ``protections`` lowered and merged into ``protection``."""
+
         bundles: list[ProtectionBundle] = []
         for item in protections:
             if not isinstance(item, InstallableProtection):
@@ -96,52 +96,13 @@ class ClientConfig:
                 raise ProtectionConfigurationError(
                     "installable protection returned a malformed lowering bundle"
                 )
+            if not bundle:
+                raise ProtectionConfigurationError(
+                    "installable protection lowered to an empty bundle"
+                )
             bundles.append(bundle)
-        operation_protections = self.operation_protections + tuple(
-            flow for bundle in bundles for flow in bundle.operation_protections
-        )
-        before_call_policies = self.before_call_policies + tuple(
-            policy for bundle in bundles for policy in bundle.before_call_policies
-        )
-        challenge_policies = self.challenge_policies + tuple(
-            policy for bundle in bundles for policy in bundle.challenge_policies
-        )
-        _validate_bundle_identities(
-            operation_protections,
-            before_call_policies,
-            challenge_policies,
-        )
-        operation_solvers = SolverBindings(
-            *self.operation_protection_solvers.bindings,
-            *(binding for bundle in bundles for binding in bundle.operation_solver_bindings),
-        )
-        challenge_solvers = ChallengeSolverBindings(
-            *self.challenge_solvers.bindings,
-            *(binding for bundle in bundles for binding in bundle.challenge_solver_bindings),
-        )
-        return replace(
-            self,
-            operation_protections=operation_protections,
-            before_call_policies=before_call_policies,
-            challenge_policies=challenge_policies,
-            operation_protection_solvers=operation_solvers,
-            challenge_solvers=challenge_solvers,
-        )
-
-
-def _validate_bundle_identities(
-    flows: tuple[ProtectionFlow[Any], ...],
-    before: tuple[BeforeCallPolicy[Any, Any], ...],
-    challenge: tuple[ChallengePolicy[Any, Any], ...],
-) -> None:
-    requirements = [id(flow.requirement) for flow in flows]
-    if len(requirements) != len(set(requirements)):
-        raise ValueError("duplicate operation protection requirement")
-    identities = [policy.identity for policy in before]
-    identities.extend(policy.identity for policy in challenge)
-    duplicates = sorted({identity for identity in identities if identities.count(identity) > 1})
-    if duplicates:
-        raise ValueError("duplicate protection policy identity: " + ", ".join(duplicates))
+        merged = self.bundle.merge(*bundles)
+        return replace(self, protection=merged if merged else None)
 
 
 def _runtime_from_boundary(
@@ -161,11 +122,10 @@ def _runtime_from_boundary(
         base_url=base_url,
         dependencies=config.dependencies or DependencyRegistry(),
         auth=(config.auth._runtime_providers() if config.auth is not None else AuthProviders()),
-        operation_protections=config.operation_protections,
-        before_call_policies=config.before_call_policies,
-        challenge_policies=config.challenge_policies,
-        operation_protection_solvers=config.operation_protection_solvers,
-        challenge_solvers=config.challenge_solvers,
+        operation_protections=config.bundle.operation_protections,
+        before_call_policies=config.bundle.before_call_policies,
+        challenge_policies=config.bundle.challenge_policies,
+        solver_bindings=config.bundle.solvers,
         protection_session_owner=protection_session_owner,
         middleware=config.middleware,
         limiter=config.rate_limiter,

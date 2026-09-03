@@ -11,7 +11,7 @@ from eazy_sdk.crypto import (
     CryptoConfigurationError,
     CryptoContext,
     CryptoDirection,
-    CryptoLimitExceeded,
+    CryptoLimitError,
     CryptoRegistry,
     CryptoRule,
     CryptoStage,
@@ -127,14 +127,14 @@ async def test_encoded_limits_are_checked_before_and_after_algorithm() -> None:
         CryptoStage.ENCODED,
         1,
     )
-    with pytest.raises(CryptoLimitExceeded, match="input"):
+    with pytest.raises(CryptoLimitError, match="input"):
         await encrypt_bytes(
             b"1234",
             encrypt_encoded(using=ExpandingCipher(), max_input_bytes=3),
             context=context,
         )
     assert calls == 0
-    with pytest.raises(CryptoLimitExceeded, match="output"):
+    with pytest.raises(CryptoLimitError, match="output"):
         await encrypt_bytes(
             b"1234",
             encrypt_encoded(using=ExpandingCipher(), max_output_bytes=8),

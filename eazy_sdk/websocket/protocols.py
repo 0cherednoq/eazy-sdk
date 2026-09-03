@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, cast
 
-from eazy_sdk._internal.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
 
 from ._artifacts import (
     ChannelKey,

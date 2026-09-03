@@ -13,7 +13,7 @@ api_fingerprint: "sha256:012dbcc053bce0d35124b6e8fcc2d99267c63c8053981242c1d4290
 :::{warning} Alpha-контракт
 Проект находится в alpha. Все имена из `eazy_sdk.ext.__all__` публичны в пределах конкретной
 версии, но могут измениться в следующем alpha-релизе без compatibility alias. Всё, чего нет в
-`__all__`, а также `eazy_sdk._internal`, executor stages и prepared/compiler records — private.
+`__all__`, а также `eazy_sdk.compile`, executor stages и prepared/compiler records — private.
 :::
 
 ## Выберите семейство
@@ -193,6 +193,17 @@ VENDOR_SIGNATURE = custom_signature(
 Передайте `VENDOR_SIGNATURE` в `signing=(VENDOR_SIGNATURE,)` у API decorator. Runtime проверяет
 undeclared/missing outputs до отправки. `SigningInput` не даёт мутировать prepared request;
 `SignatureResult` не может добавлять новый target, который не был зарезервирован compiler-ом.
+
+## Матрица стабильности
+
+| Слой | Namespace | Статус | Что это значит |
+|---|---|---|---|
+| Публичный API | `eazy_sdk`, `eazy_sdk.request`, `eazy_sdk.response`, `eazy_sdk.protection`, `eazy_sdk.auth`, `eazy_sdk.clients`, `eazy_sdk.policies`, `eazy_sdk.middleware`, `eazy_sdk.websocket`, `eazy_sdk.crypto` | Stable-in-alpha | Ломающие изменения только между alpha-релизами и всегда с записью в CHANGELOG |
+| Extension SPI | `eazy_sdk.ext` | Stable-in-alpha | Ровно 23 имени из таблицы ниже; расширения пишутся только против них |
+| Advanced protection SPI | `eazy_sdk.protection.advanced` | Provisional | Exact allowlist; lowering-контракты для presets и генераторов, могут меняться при смене executor |
+| Ядро | `eazy_sdk.core` | Provisional | Kernel/plan/errors без зависимостей; используется `ext` и плагинами, но не является authoring-API |
+| Компилятор | `eazy_sdk.compile` | Private | Не импортируйте из приложений и плагинов; `absence_audit` запрещает это плагинам |
+| Внутренности клиентов | `eazy_sdk.clients._core`, `executor`, `_http_stages`, `websocket._client_*` | Private | Могут меняться в любом релизе |
 
 ## Полный экспорт namespace
 

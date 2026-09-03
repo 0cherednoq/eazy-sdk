@@ -5,21 +5,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
+from eazy_sdk_accounts.storage.session_bridge import RepositorySessionStore
 
-from eazy_sdk._internal import (
-    CompiledContract,
-    GraphError,
-    InputField,
-    OperationShape,
-    OperationValues,
-    PythonTypeValidator,
-    RequestLocation,
-    SlotCardinality,
-    ValueSlot,
-    apply_patch_atomic,
-    compile_endpoint,
-)
-from eazy_sdk.accounts.session import LifecycleGraph, MemorySessionStore, SessionKey
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthScheme,
@@ -37,7 +24,23 @@ from eazy_sdk.auth.core import (
     StaticAuthProvider,
     resolve_security,
 )
+from eazy_sdk.auth.session import LifecycleGraph, MemorySessionStore, SessionKey
 from eazy_sdk.auth.session_runtime import SessionAuth, SessionProvider
+from eazy_sdk.compile import (
+    CompiledContract,
+    InputField,
+    compile_endpoint,
+)
+from eazy_sdk.core import (
+    GraphError,
+    OperationShape,
+    OperationValues,
+    PythonTypeValidator,
+    RequestLocation,
+    SlotCardinality,
+    ValueSlot,
+    apply_patch_atomic,
+)
 from eazy_sdk.dependencies import (
     DependencyCachePolicy,
     DependencyRegistry,
@@ -65,7 +68,6 @@ from eazy_sdk.dependencies import (
     _ResultBinding as ResultBinding,
 )
 from eazy_sdk.request import Path
-from eazy_sdk.storage.session_bridge import RepositorySessionStore
 
 
 def request_slot[T](
@@ -350,7 +352,7 @@ class Repository:
 
 @pytest.mark.asyncio
 async def test_generic_storage_bridge_round_trip_and_revision_safe_invalidation() -> None:
-    from eazy_sdk.accounts.session import SessionRevision
+    from eazy_sdk.auth.session import SessionRevision
 
     repository = Repository()
     store = RepositorySessionStore(repository, Codec())

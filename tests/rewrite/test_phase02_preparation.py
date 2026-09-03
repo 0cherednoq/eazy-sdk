@@ -11,14 +11,16 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk._internal import (
+from eazy_sdk.compile import (
     CompiledContract,
     InputField,
-    OperationValues,
-    RequestLocation,
     compile_endpoint,
 )
-from eazy_sdk._internal.errors import BindingError, PlanError
+from eazy_sdk.core import (
+    OperationValues,
+    RequestLocation,
+)
+from eazy_sdk.core.errors import BindingError, PlanError
 from eazy_sdk.models import (
     ModelAdapterRegistry,
     ModelDumpMode,

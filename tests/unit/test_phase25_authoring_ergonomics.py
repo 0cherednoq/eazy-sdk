@@ -11,23 +11,21 @@ import pytest
 from eazy_sdk import (
     ApiDefaults,
     AsyncApi,
-    AsyncSdk,
     Client,
-    PreparationIncomplete,
+    PreparationIncompleteError,
     PreparedCall,
     PrepareOptions,
     SyncApi,
-    SyncSdk,
     api,
     api_group,
 )
-from eazy_sdk._internal.http_plan import RequestScope
-from eazy_sdk._internal.kernel import ParsedValue
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
+from eazy_sdk.core.http_plan import RequestScope
+from eazy_sdk.core.kernel import ParsedValue
 from eazy_sdk.handlers import (
     AutomaticHeaderPolicy,
     CapabilityLevel,
@@ -35,11 +33,11 @@ from eazy_sdk.handlers import (
     RedirectControl,
 )
 from eazy_sdk.protection.advanced import (
-    ChallengeSolverBindings,
     SolveContext,
+    SolverBindings,
     SolverRequirement,
     before_call_policy,
-    bind_challenge_solver,
+    bind_solver,
     private_bindings,
     private_header,
     until_rejected,
@@ -149,11 +147,11 @@ class AsyncRootUsersApi(AsyncApi):
         raise NotImplementedError
 
 
-class StoreSdk(SyncSdk):
+class StoreSdk(SyncApi):
     users = api_group(RootUsersApi)
 
 
-class AsyncStoreSdk(AsyncSdk):
+class AsyncStoreSdk(AsyncApi):
     users = api_group(AsyncRootUsersApi)
 
 
@@ -353,7 +351,7 @@ def test_pure_prepare_reports_managed_requirements_and_full_mode_redacts_them() 
     )
     operation: Any = SecuredApi(_SyncClientCore(runtime)).secured
 
-    with pytest.raises(PreparationIncomplete) as captured:
+    with pytest.raises(PreparationIncompleteError) as captured:
         operation.prepare()
     assert captured.value.requirements == ("authentication",)
 
@@ -395,8 +393,8 @@ def test_full_prepare_does_not_commit_managed_protection_state() -> None:
         lambda *args, **kwargs: None,
         "https://api.test",
         before_call_policies=(policy,),
-        challenge_solvers=ChallengeSolverBindings(
-            bind_challenge_solver(requirement, solver)
+        solver_bindings=SolverBindings(
+            bind_solver(requirement, solver)
         ),
     )
     prepared = asyncio.run(
@@ -467,7 +465,7 @@ def test_root_from_borrowed_client_leaves_client_ownership_with_caller() -> None
 def test_root_rejects_a_group_with_the_wrong_execution_kind() -> None:
     with pytest.raises(TypeError, match="wrong API kind"):
 
-        class InvalidRoot(SyncSdk):
+        class InvalidRoot(SyncApi):
             users = api_group(AsyncRootUsersApi)
 
 

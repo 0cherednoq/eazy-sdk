@@ -4,14 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
-from eazy_sdk._internal import BoundArguments, OperationIdentity, RequestScope, ValuePatch
+from eazy_sdk.core import (
+    BoundArguments,
+    OperationIdentity,
+    RequestScope,
+    ValuePatch,
+)
+from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.request.prepared import PreparedRequest
 from eazy_sdk.response import NormalizedResponse, ResponseContext
 
 
-class MiddlewareProtocolError(Exception):
+class MiddlewareProtocolError(EazySdkError):
     pass
 
 
@@ -129,6 +135,24 @@ class AttemptMiddlewareRegistration:
 
 
 type MiddlewareRegistration = CallMiddlewareRegistration | AttemptMiddlewareRegistration
+
+
+@runtime_checkable
+class ScopedMiddleware[TScope, TImplementation](Protocol):
+    """One generic registration contract: an implementation bound to a scope.
+
+    HTTP registrations (``CallMiddlewareRegistration``, ``AttemptMiddlewareRegistration``,
+    scoped by ``RequestScope``) and WebSocket applications (``ConnectionMiddlewareApplication``,
+    ``MessageMiddlewareApplication``, ``SubscriptionMiddlewareApplication``, scoped by
+    ``WsScope``) satisfy it structurally; runtimes select applicable entries by ``scope``
+    and invoke ``implementation``.
+    """
+
+    @property
+    def scope(self) -> TScope: ...
+
+    @property
+    def implementation(self) -> TImplementation: ...
 
 
 def call_middleware(

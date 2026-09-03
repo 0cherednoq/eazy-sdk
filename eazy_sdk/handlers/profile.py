@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from eazy_sdk._internal.http_plan import WireRequirements
+from eazy_sdk.core.errors import EazySdkError
+from eazy_sdk.core.http_plan import WireRequirements
 from eazy_sdk.request.prepared import HttpProtocol
 
 
@@ -49,6 +50,8 @@ class HandlerProfile:
     redirects: RedirectControl = RedirectControl.UNCONTROLLED
     replayable_streams: CapabilityLevel = CapabilityLevel.BEST_EFFORT
     evidence: CaptureEvidence | None = None
+    impersonation: str | None = None
+    """Browser/TLS impersonation label declared by the handler, if any."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +62,7 @@ class EmitOptions:
     stream_response: bool = False
 
 
-class TransportFailure(Exception):
+class TransportError(EazySdkError):
     def __init__(self, handler: str, phase: str, attempt: int | None, cause: Exception) -> None:
         self.handler = handler
         self.phase = phase
@@ -72,7 +75,7 @@ class TransportFailure(Exception):
         return f"transport failure in {self.handler} during {self.phase}{suffix}"
 
 
-class CapabilityMismatch(Exception):
+class CapabilityMismatchError(EazySdkError):
     def __init__(self, dimensions: tuple[str, ...]) -> None:
         self.dimensions = dimensions
         super().__init__(dimensions)
@@ -103,7 +106,7 @@ def validate_profile(requirements: WireRequirements, profile: HandlerProfile) ->
                 f"{requirement.dimension}: requires {required.name}, has {available.name}"
             )
     if failures:
-        raise CapabilityMismatch(tuple(failures))
+        raise CapabilityMismatchError(tuple(failures))
 
 
 CONSERVATIVE_HANDLER_PROFILE = HandlerProfile(
@@ -115,11 +118,11 @@ __all__ = [
     "CONSERVATIVE_HANDLER_PROFILE",
     "AutomaticHeaderPolicy",
     "CapabilityLevel",
-    "CapabilityMismatch",
+    "CapabilityMismatchError",
     "CaptureEvidence",
     "EmitOptions",
     "HandlerProfile",
     "RedirectControl",
-    "TransportFailure",
+    "TransportError",
     "validate_profile",
 ]

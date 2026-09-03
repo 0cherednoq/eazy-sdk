@@ -8,16 +8,18 @@ from dataclasses import dataclass
 import pytest
 from zapros import Client as ZaprosClient
 
-from eazy_sdk._internal import (
+from eazy_sdk.compile import (
     CompiledContract,
-    GraphError,
     InputField,
+    compile_endpoint,
+)
+from eazy_sdk.core import (
+    GraphError,
     OperationIdentity,
     OperationValues,
     RequestLocation,
     RequestScope,
     ScopeContext,
-    compile_endpoint,
 )
 from eazy_sdk.handlers import EmitOptions, ZaprosSyncEmitter
 from eazy_sdk.handlers.httpx import HttpxHandler

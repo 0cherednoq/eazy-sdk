@@ -12,8 +12,6 @@ import httpx
 import pytest
 
 from eazy_sdk import ApiDefaults, AsyncApi, AsyncClient, ClientConfig, api
-from eazy_sdk._internal import PlanError, WriterConflictError
-from eazy_sdk.accounts.session import SessionKey, SessionRevision
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import (
     AuthExecution,
@@ -21,8 +19,13 @@ from eazy_sdk.auth.core import (
     AuthProviders,
     ResolvedAuth,
 )
+from eazy_sdk.auth.session import SessionKey, SessionRevision
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
+from eazy_sdk.core import (
+    PlanError,
+    WriterConflictError,
+)
 from eazy_sdk.crypto import (
     CryptoConfigurationError,
     CryptoContext,
@@ -34,7 +37,7 @@ from eazy_sdk.crypto import (
     payload_crypto,
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.protection.advanced import FromProtection, ProtectionRequirement
+from eazy_sdk.protection.advanced import FromProtection, SolverRequirement
 from eazy_sdk.request import (
     BodyProjection,
     JsonBody,
@@ -72,7 +75,7 @@ def payment_to_wire(source: PaymentSource) -> PaymentWire:
 
 NO_CONTENT: Responses[None] = Responses(success=(Success(204, Empty()),))
 SIGNING_KEY = SigningKeyRequirement("phase21-signing")
-SIGNATURE_PROTECTION = ProtectionRequirement[dict[str, str]]("signature-source")
+SIGNATURE_PROTECTION = SolverRequirement[Any, dict[str, str]]("signature-source")
 
 
 @dataclass

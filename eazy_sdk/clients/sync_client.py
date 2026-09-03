@@ -2,35 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable, Mapping
-from dataclasses import replace
+from collections.abc import Mapping
 from typing import Any, cast
-from urllib.parse import unquote_plus, urlsplit
 
-from eazy_sdk._internal.http import RequestLocation
-from eazy_sdk._internal.http_operation import _OperationCall, _OperationDeclaration
-from eazy_sdk._internal.http_plan import RequestScope
-from eazy_sdk._internal.input import InputField, MethodInputSchema
-from eazy_sdk.accounts.session import LifecycleGraph
+from eazy_sdk.auth.lifecycle import LifecycleGraph
+from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
-from eazy_sdk.request import (
-    BytesBody,
-    Cookie,
-    Header,
-    JsonBody,
-    Query,
-    RequestBody,
-)
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
 
+from ._core import _UNSET, _ClientCore, _raw_call, _SyncRunner
 from .base import CallOptions
-from .executor import ExecutionCore, ExecutionRuntime, envelope
-
-_UNSET = object()
+from .executor import ExecutionRuntime, envelope
 
 
-class _SyncClientCore[TRaw = object]:
+class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
     def __init__(
         self,
         runtime: ExecutionRuntime,
@@ -39,24 +24,16 @@ class _SyncClientCore[TRaw = object]:
         default_options: CallOptions | None = None,
         resolution_graph: LifecycleGraph | None = None,
         bind_sdk: bool = True,
+        runner: _SyncRunner | None = None,
     ) -> None:
-        self._runtime = runtime
-        self._resolution_graph = resolution_graph
-        self._core = ExecutionCore(runtime, resolution_graph=resolution_graph)
-        self._default_options = default_options or CallOptions()
-        self._can_bind_sdk = bind_sdk
-        self.raw = raw
-
-    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk:
-        """Create an SDK root and register its scoped lifecycle factory."""
-
-        if not callable(sdk_factory):
-            raise TypeError("SDK binding requires a callable root factory")
-        if self._can_bind_sdk:
-            self._runtime.auth.bind_sdk_factory(
-                lambda graph: sdk_factory(self._scoped(graph))
-            )
-        return sdk_factory(self)
+        super().__init__(
+            runtime,
+            raw=raw,
+            default_options=default_options,
+            resolution_graph=resolution_graph,
+            bind_sdk=bind_sdk,
+        )
+        self._runner = runner or _SyncRunner()
 
     def _scoped(self, graph: LifecycleGraph) -> _SyncClientCore[TRaw]:
         return _SyncClientCore(
@@ -65,6 +42,7 @@ class _SyncClientCore[TRaw = object]:
             default_options=self._default_options,
             resolution_graph=graph,
             bind_sdk=False,
+            runner=self._runner,
         )
 
     def _execute_operation[T](
@@ -103,41 +81,17 @@ class _SyncClientCore[TRaw = object]:
         *,
         options: PrepareOptions,
     ) -> PreparedCall:
-        effective = (
-            options
-            if options.call_options is not None
-            else replace(options, call_options=self._default_options)
+        return self._runner.run(
+            self._core.prepare(declaration.call(values), options=self._prepare_options(options))
         )
-        return asyncio.run(self._core.prepare(declaration.call(values), options=effective))
-
-    def get(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("GET", url, **kwargs)
-
-    def delete(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("DELETE", url, **kwargs)
-
-    def head(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("HEAD", url, **kwargs)
-
-    def options(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("OPTIONS", url, **kwargs)
-
-    def patch(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("PATCH", url, **kwargs)
-
-    def post(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("POST", url, **kwargs)
-
-    def put(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("PUT", url, **kwargs)
-
-    def trace(self, url: str, **kwargs: Any) -> NormalizedResponse[TRaw]:
-        return self.request("TRACE", url, **kwargs)
 
     def close(self) -> None:
-        close = getattr(self.raw, "close", None)
-        if close is not None:
-            close()
+        try:
+            close = getattr(self.raw, "close", None)
+            if close is not None:
+                close()
+        finally:
+            self._runner.close()
 
     def __enter__(self) -> _SyncClientCore[TRaw]:
         return self
@@ -150,86 +104,9 @@ class _SyncClientCore[TRaw = object]:
         call: _OperationCall[T],
         options: CallOptions | None,
     ) -> Any:
-        return asyncio.run(self._core.execute(call, options=options or self._default_options))
-
-
-def _raw_call(
-    method: str,
-    url: str,
-    params: Mapping[str, object] | None,
-    headers: Mapping[str, object] | None,
-    cookies: Mapping[str, object] | None,
-    json: object,
-    content: object,
-) -> _OperationCall[NormalizedResponse[object]]:
-    if json is not _UNSET and content is not _UNSET:
-        raise ValueError("json and content are mutually exclusive")
-    _validate_raw_query(url, params)
-    body_descriptor: RequestBody | None = (
-        JsonBody() if json is not _UNSET else BytesBody() if content is not _UNSET else None
-    )
-    fields: list[InputField] = []
-    values: dict[str, object] = {}
-    for prefix, source, descriptor in (
-        ("query", params, Query),
-        ("header", headers, Header),
-        ("cookie", cookies, Cookie),
-    ):
-        for index, (name, value) in enumerate((source or {}).items()):
-            key = f"_{prefix}_{index}"
-            placement = descriptor(name)
-            location = {
-                "query": RequestLocation.QUERY,
-                "header": RequestLocation.HEADER,
-                "cookie": RequestLocation.COOKIE,
-            }[prefix]
-            fields.append(InputField(key, name, object, False, location, placement))
-            values[key] = value
-    if body_descriptor is not None:
-        fields.append(
-            InputField(
-                "_body",
-                "_body",
-                object,
-                False,
-                RequestLocation.BODY,
-                body_descriptor,
-            )
+        return self._runner.run(
+            self._core.execute(call, options=options or self._default_options)
         )
-        values["_body"] = json if json is not _UNSET else content
-    declaration: _OperationDeclaration[NormalizedResponse[object]] = _OperationDeclaration(
-        operation_id=f"raw:{method.upper()}:{url}",
-        method=method,
-        path=url,
-        input_fields=tuple(fields),
-        input_schema=MethodInputSchema(tuple(fields)),
-        result_type=NormalizedResponse[object],
-        responses=object(),
-        scope=RequestScope(
-            methods=frozenset({method.upper()}),
-            operation_ids=frozenset({f"raw:{method.upper()}:{url}"}),
-        ),
-        raw_response=True,
-    )
-    return declaration.call(values)
-
-
-def _validate_raw_query(url: str, params: Mapping[str, object] | None) -> None:
-    names = [
-        unquote_plus(field.partition("=")[0]) for field in urlsplit(url).query.split("&") if field
-    ]
-    if params is not None:
-        multi_items = getattr(params, "multi_items", None)
-        supplied = tuple(multi_items()) if callable(multi_items) else tuple(params.items())
-        names.extend(str(name) for name, _ in supplied)
-        for name, value in params.items():
-            if isinstance(value, Mapping | list | tuple | set | frozenset):
-                raise ValueError(
-                    f"raw query parameter {name!r} requires an explicit single-value codec"
-                )
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ValueError(f"duplicate raw query names are unsupported: {duplicates}")
 
 
 __all__: list[str] = []

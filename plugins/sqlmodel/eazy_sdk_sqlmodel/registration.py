@@ -7,15 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import UUID
 
-from pydantic import BaseModel
-from sqlalchemy import update
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.session import SessionTransactionOrigin
-from sqlmodel import SQLModel, select
-
-from eazy_sdk.accounts import (
+from eazy_sdk_accounts import (
     AccountCreated,
     AccountDraft,
     AccountResource,
@@ -29,6 +21,14 @@ from eazy_sdk.accounts import (
     VerificationAccepted,
     VerificationChallenge,
 )
+from pydantic import BaseModel
+from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.session import SessionTransactionOrigin
+from sqlmodel import SQLModel, select
+
 from eazy_sdk_sqlmodel.adapter import SqlLinkRepository, SqlResourceConflictError
 from eazy_sdk_sqlmodel.codecs import PlainPydanticCodec, SqlValueCodec
 from eazy_sdk_sqlmodel.factory import DEFAULT_MODELS, SqlStorageModels

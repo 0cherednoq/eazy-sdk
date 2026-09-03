@@ -11,11 +11,11 @@ from eazy_sdk.models import ModelAdapterRegistry
 from .core import (
     CryptoConfigurationError,
     CryptoContext,
-    CryptoLimitExceeded,
+    CryptoLimitError,
     CryptoOutput,
     CryptoOutputValue,
     CryptoResult,
-    CryptoRuntimeMismatch,
+    CryptoRuntimeMismatchError,
     DecryptEncoded,
     DecryptField,
     EncryptEncoded,
@@ -68,7 +68,7 @@ def validate_crypto_runtime(profile: PayloadCrypto, *, allow_async: bool) -> Non
         method = getattr(algorithm, method_name, None)
         if inspect.iscoroutinefunction(method):
             name = _algorithm_name(algorithm)
-            raise CryptoRuntimeMismatch(
+            raise CryptoRuntimeMismatchError(
                 f"sync HTTP runtime cannot use async crypto algorithm {name!r}"
             )
 
@@ -386,7 +386,7 @@ def _require_frozen(value: object) -> FrozenValue:
 
 def _check_limit(value: bytes, limit: int | None, stage: str) -> None:
     if limit is not None and len(value) > limit:
-        raise CryptoLimitExceeded(f"{stage} exceeds configured limit {limit}")
+        raise CryptoLimitError(f"{stage} exceeds configured limit {limit}")
 
 
 def _path_name(path: JsonPath) -> str:

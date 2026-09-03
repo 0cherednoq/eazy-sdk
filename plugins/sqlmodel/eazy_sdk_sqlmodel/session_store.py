@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.session import SessionTransactionOrigin
 from sqlmodel import select
 
-from eazy_sdk.accounts.session import (
+from eazy_sdk.auth.session import (
     SessionKey,
     SessionRevision,
     SessionRevisionError,

@@ -6,10 +6,12 @@ from typing import Annotated, Any, cast
 
 import pytest
 
-from eazy_sdk._internal import OperationValues
-from eazy_sdk._internal.errors import PlanError
-from eazy_sdk._internal.http_operation import _OperationDeclaration
-from eazy_sdk._internal.input import inspect_method_input
+from eazy_sdk.compile.http_operation import _OperationDeclaration
+from eazy_sdk.compile.input import inspect_method_input
+from eazy_sdk.core import (
+    OperationValues,
+)
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.request import (
     Cookie,
     Header,

@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from eazy_sdk._internal import OperationIdentity
+from eazy_sdk.core import (
+    OperationIdentity,
+)
 
 
 @dataclass(frozen=True, slots=True)

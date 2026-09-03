@@ -13,7 +13,7 @@ from zapros.websocket import (
     TextMessage,
 )
 
-from eazy_sdk._internal.kernel import Malformed, NoMatch, ParsedValue
+from eazy_sdk.core.kernel import Malformed, NoMatch, ParsedValue
 from eazy_sdk.websocket import (
     ChannelKey,
     CloseDisposition,

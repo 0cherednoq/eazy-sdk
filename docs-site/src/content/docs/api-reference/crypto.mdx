@@ -3,7 +3,7 @@ title: Payload crypto
 description: Контракты шифрования полей и encoded payload для HTTP и WebSocket.
 sources:
   - eazy_sdk.crypto
-api_fingerprint: "sha256:04e4e84dac90c9abcab448356936a09761dd7e06cee5a027ad9e0fb8c2247c82"
+api_fingerprint: "sha256:ac6e7e586ec155766f7b83ebe7f266b033ad67a4d1051e04178559c7d4d7be85"
 ---
 
 `eazy_sdk.crypto` подключает application-owned алгоритмы к подготовке HTTP body и WebSocket
@@ -187,11 +187,11 @@ frames ping, pong и close профиль не обрабатывает.
 | `CryptoConfigurationError` | Неверная модель, selector, scope или wire ownership |
 | `PayloadEncryptionError` | Ошибка application encryptor |
 | `PayloadDecryptionError` | Ошибка application decryptor |
-| `CryptoLimitExceeded` | Превышен input/output byte limit |
-| `EncryptedMediaTypeMismatch` | HTTP response имеет неожиданный media type |
-| `EncryptedFrameKindMismatch` | WebSocket message имеет неожиданный frame kind |
-| `CryptoStreamingUnsupported` | Whole transform применён к streaming body |
-| `CryptoRuntimeMismatch` | Async algorithm передан sync runtime |
+| `CryptoLimitError` | Превышен input/output byte limit |
+| `EncryptedMediaTypeMismatchError` | HTTP response имеет неожиданный media type |
+| `EncryptedFrameKindMismatchError` | WebSocket message имеет неожиданный frame kind |
+| `CryptoStreamingUnsupportedError` | Whole transform применён к streaming body |
+| `CryptoRuntimeMismatchError` | Async algorithm передан sync runtime |
 
 Сообщение исходного исключения алгоритма не попадает в публичную crypto error и не сохраняется как
 `__cause__`. Полный пример находится в {doc}`руководстве по payload crypto </guides/payload-crypto>`.

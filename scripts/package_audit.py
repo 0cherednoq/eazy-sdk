@@ -11,10 +11,15 @@ from pathlib import Path
 
 PACKAGES = {
     "eazy_sdk": ("eazy_sdk/py.typed", "pyproject.toml"),
+    "eazy_sdk_accounts": (
+        "eazy_sdk_accounts/py.typed",
+        "plugins/accounts/pyproject.toml",
+    ),
     "eazy_sdk_asyncapi": (
         "eazy_sdk_asyncapi/py.typed",
         "plugins/asyncapi/pyproject.toml",
     ),
+    "eazy_sdk_html": ("eazy_sdk_html/py.typed", "plugins/html/pyproject.toml"),
     "eazy_sdk_openapi": ("eazy_sdk_openapi/py.typed", "plugins/openapi/pyproject.toml"),
     "eazy_sdk_presets": ("eazy_sdk_presets/py.typed", "plugins/presets/pyproject.toml"),
     "eazy_sdk_sqlmodel": (
@@ -93,7 +98,7 @@ FORBIDDEN_PHASE20_SOURCE = (
 
 FORBIDDEN_PHASE21_PATHS = {
     "eazy_sdk/api.py",
-    "eazy_sdk/_internal/http_operation.py",
+    "eazy_sdk/compile/http_operation.py",
     "eazy_sdk/clients/executor.py",
     "eazy_sdk_openapi/generator.py",
 }

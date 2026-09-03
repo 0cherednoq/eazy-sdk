@@ -13,7 +13,9 @@ from adaptix.conversion import get_converter
 from pydantic import BaseModel
 
 from eazy_sdk import ApiDefaults, SyncApi, api
-from eazy_sdk._internal import PlanError
+from eazy_sdk.core import (
+    PlanError,
+)
 from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request import JsonBody
 from eazy_sdk.response import Responses

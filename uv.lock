@@ -10,7 +10,9 @@ resolution-markers = [
 [manifest]
 members = [
     "eazy-sdk",
+    "eazy-sdk-accounts",
     "eazy-sdk-asyncapi",
+    "eazy-sdk-html",
     "eazy-sdk-openapi",
     "eazy-sdk-presets",
     "eazy-sdk-sqlmodel",
@@ -681,12 +683,16 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+accounts = [
+    { name = "eazy-sdk-accounts" },
+]
 all = [
     { name = "curl-cffi" },
+    { name = "eazy-sdk-accounts" },
+    { name = "eazy-sdk-html" },
     { name = "eazy-sdk-sqlmodel" },
     { name = "httpx" },
     { name = "msgspec" },
-    { name = "parsel" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "zapros", extra = ["websocket"] },
@@ -695,7 +701,7 @@ curl-cffi = [
     { name = "curl-cffi" },
 ]
 html = [
-    { name = "parsel" },
+    { name = "eazy-sdk-html" },
 ]
 httpx = [
     { name = "httpx" },
@@ -729,7 +735,9 @@ dev = [
     { name = "basedpyright" },
     { name = "coverage" },
     { name = "curl-cffi" },
+    { name = "eazy-sdk-accounts" },
     { name = "eazy-sdk-asyncapi", extra = ["yaml"] },
+    { name = "eazy-sdk-html" },
     { name = "eazy-sdk-openapi", extra = ["yaml"] },
     { name = "eazy-sdk-presets" },
     { name = "eazy-sdk-sqlmodel" },
@@ -766,14 +774,16 @@ docs = [
 requires-dist = [
     { name = "curl-cffi", marker = "extra == 'all'", specifier = ">=0.7" },
     { name = "curl-cffi", marker = "extra == 'curl-cffi'", specifier = ">=0.7" },
+    { name = "eazy-sdk-accounts", marker = "extra == 'accounts'", editable = "plugins/accounts" },
+    { name = "eazy-sdk-accounts", marker = "extra == 'all'", editable = "plugins/accounts" },
+    { name = "eazy-sdk-html", marker = "extra == 'all'", editable = "plugins/html" },
+    { name = "eazy-sdk-html", marker = "extra == 'html'", editable = "plugins/html" },
     { name = "eazy-sdk-sqlmodel", marker = "extra == 'all'", editable = "plugins/sqlmodel" },
     { name = "eazy-sdk-sqlmodel", marker = "extra == 'sqlmodel'", editable = "plugins/sqlmodel" },
     { name = "httpx", marker = "extra == 'all'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.27" },
     { name = "msgspec", marker = "extra == 'all'", specifier = ">=0.21.1" },
     { name = "msgspec", marker = "extra == 'msgspec'", specifier = ">=0.21.1" },
-    { name = "parsel", marker = "extra == 'all'", specifier = ">=1.11" },
-    { name = "parsel", marker = "extra == 'html'", specifier = ">=1.11" },
     { name = "pydantic", marker = "extra == 'all'", specifier = ">=2" },
     { name = "pydantic", marker = "extra == 'pydantic'", specifier = ">=2" },
     { name = "requests", marker = "extra == 'all'", specifier = ">=2.31" },
@@ -782,7 +792,7 @@ requires-dist = [
     { name = "zapros", extras = ["websocket"], marker = "extra == 'all'", specifier = "==0.16.0" },
     { name = "zapros", extras = ["websocket"], marker = "extra == 'websocket'", specifier = "==0.16.0" },
 ]
-provides-extras = ["pydantic", "httpx", "requests", "curl-cffi", "websocket", "html", "sqlmodel", "all", "msgspec"]
+provides-extras = ["pydantic", "httpx", "requests", "curl-cffi", "websocket", "html", "accounts", "sqlmodel", "all", "msgspec"]
 
 [package.metadata.requires-dev]
 auth-conformance = [
@@ -797,7 +807,9 @@ dev = [
     { name = "basedpyright", specifier = ">=1.31" },
     { name = "coverage", specifier = ">=7.6" },
     { name = "curl-cffi", specifier = ">=0.7" },
+    { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
     { name = "eazy-sdk-asyncapi", extras = ["yaml"], editable = "plugins/asyncapi" },
+    { name = "eazy-sdk-html", editable = "plugins/html" },
     { name = "eazy-sdk-openapi", extras = ["yaml"], editable = "plugins/openapi" },
     { name = "eazy-sdk-presets", editable = "plugins/presets" },
     { name = "eazy-sdk-sqlmodel", editable = "plugins/sqlmodel" },
@@ -831,6 +843,17 @@ docs = [
 ]
 
 [[package]]
+name = "eazy-sdk-accounts"
+version = "0.2.0a3"
+source = { editable = "plugins/accounts" }
+dependencies = [
+    { name = "eazy-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "eazy-sdk", editable = "." }]
+
+[[package]]
 name = "eazy-sdk-asyncapi"
 version = "0.2.0a3"
 source = { editable = "plugins/asyncapi" }
@@ -849,6 +872,26 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
 ]
 provides-extras = ["yaml"]
+
+[[package]]
+name = "eazy-sdk-html"
+version = "0.2.0a3"
+source = { editable = "plugins/html" }
+dependencies = [
+    { name = "eazy-sdk" },
+]
+
+[package.optional-dependencies]
+parsel = [
+    { name = "parsel" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "eazy-sdk", editable = "." },
+    { name = "parsel", marker = "extra == 'parsel'", specifier = ">=1.11" },
+]
+provides-extras = ["parsel"]
 
 [[package]]
 name = "eazy-sdk-openapi"
@@ -905,6 +948,7 @@ source = { editable = "plugins/sqlmodel" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "eazy-sdk" },
+    { name = "eazy-sdk-accounts" },
     { name = "sqlmodel" },
 ]
 
@@ -912,6 +956,7 @@ dependencies = [
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "eazy-sdk", editable = "." },
+    { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
 ]
 

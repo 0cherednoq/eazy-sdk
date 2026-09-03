@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from eazy_sdk_accounts.storage.exceptions import DuplicateAccountError
 from eazy_sdk_sqlmodel import (
     DEFAULT_PROVIDER,
     PlainPydanticCodec,
@@ -36,12 +37,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlmodel import SQLModel, select
 
 from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
-from eazy_sdk.accounts.session import SessionKey, SessionRevision, SessionRevisionError
 from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken, session_auth
+from eazy_sdk.auth.session import SessionKey, SessionRevision, SessionRevisionError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import JsonBody
 from eazy_sdk.response import Json, NormalizedResponse, Responses
-from eazy_sdk.storage.exceptions import DuplicateAccountError
 
 
 def client_from_httpx(raw: httpx.AsyncClient, *, config: ClientConfig) -> AsyncClient:

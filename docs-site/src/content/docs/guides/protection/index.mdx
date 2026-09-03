@@ -19,7 +19,8 @@ immutable `with_protection()` call:
 
 ```python target
 from eazy_sdk import ClientConfig
-from eazy_sdk_presets import cloudflare, host
+from eazy_sdk.protection import host
+from eazy_sdk_presets import cloudflare
 
 
 guard = cloudflare.challenge_pages(
@@ -27,7 +28,7 @@ guard = cloudflare.challenge_pages(
     solver=CloudflareSolver(browser_pool),
 )
 
-config = ClientConfig().with_protection(guard)
+config = ClientConfig(guards=[guard])
 ```
 
 The solver implements `Challenge -> Solution`. Whether it uses a browser, JavaScript, WASM, or a
@@ -35,22 +36,23 @@ remote API is private to the solver. The runtime does not require implementation
 
 ## Define a custom response guard
 
-Use `challenge_guard()` for a custom protocol. The detector receives an immutable
-`ResponseContext` and returns either one typed challenge or `None`.
+Subclass `Guard` for a custom protocol. `detect()` receives an immutable `ResponseContext` and
+returns either one typed challenge or `None`; `solve()` (sync or async) returns
+`self.solution(...)`. Install the instance with `ClientConfig(guards=[...])`:
 
 ```python target
 from dataclasses import dataclass
 
 from eazy_sdk import ClientConfig
 from eazy_sdk.protection import (
+    Guard,
+    GuardSolution,
     MalformedChallengeError,
     SolveContext,
-    challenge_guard,
+    host,
     rejected_before_origin,
-    solution_fields,
 )
 from eazy_sdk.response import ResponseContext
-from eazy_sdk_presets import host
 
 
 @dataclass(frozen=True)
@@ -58,57 +60,92 @@ class KadChallenge:
     revision: int
 
 
-@dataclass(frozen=True)
-class KadClearance:
-    pr_fp: str
-    wasm: str
+class KadGuard(Guard[KadChallenge]):
+    scope = host("kad.arbitr.ru")
+    cache = "session"
+    replay = rejected_before_origin(max_replays=1)
+
+    def detect(self, response: ResponseContext[object]) -> KadChallenge | None:
+        if response.response.status_code != 403:
+            return None
+        document = response.json
+        if document.error is not None or not isinstance(document.value, dict):
+            raise MalformedChallengeError("invalid KAD challenge document")
+        revision = document.value.get("revision")
+        if not isinstance(revision, int):
+            raise MalformedChallengeError("challenge revision is missing")
+        return KadChallenge(revision)
+
+    async def solve(self, challenge: KadChallenge, context: SolveContext) -> GuardSolution:
+        # Both requests reuse the handler, proxy, and cookie jar of the challenged call,
+        # so the clearance is issued to the identity that will replay the request.
+        module = await context.fetch("https://kad.arbitr.ru/challenge.wasm")
+        proof = compute_proof(module.body, challenge.revision)
+        validated = await context.fetch(
+            "https://kad.arbitr.ru/validate",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body=proof,
+        )
+        document = validated.json()
+        return self.solution(
+            cookies={"pr_fp": document["pr_fp"], "wasm": document["wasm"]},
+            expires_in=3600,
+        )
 
 
-def detect_kad(context: ResponseContext[object]) -> KadChallenge | None:
-    if context.response.status_code != 403:
-        return None
-    document = context.json
-    if document.error is not None or not isinstance(document.value, dict):
-        raise MalformedChallengeError("invalid KAD challenge document")
-    revision = document.value.get("revision")
-    if not isinstance(revision, int):
-        raise MalformedChallengeError("challenge revision is missing")
-    return KadChallenge(revision)
-
-
-class KadSolver:
-    async def solve(
-        self,
-        challenge: KadChallenge,
-        context: SolveContext,
-    ) -> KadClearance:
-        return await solve_with_shared_session(challenge)
-
-
-guard = challenge_guard(
-    name="kad.wasm",
-    scope=host("kad.arbitr.ru"),
-    detect=detect_kad,
-    solver=KadSolver(),
-    apply=solution_fields(
-        cookies={"pr_fp": "pr_fp", "wasm": "wasm"},
-    ),
-    replay=rejected_before_origin(max_replays=1),
-)
-
-config = ClientConfig().with_protection(guard)
+config = ClientConfig(guards=[KadGuard()])
 ```
 
-`solution_fields()` reserves every destination during compilation. At runtime the complete batch
-is validated before one atomic patch. The detector and solver never receive a mutable or prepared
-request. Every replay reruns dependencies, auth, projection, crypto, encoding, preparation, and
-signing.
+Class attributes configure the guard:
 
-## Own transport affinity in the composition root
+| Attribute | Default | Meaning |
+|---|---|---|
+| `scope` | every request of the client | `host(...)`, `operation(...)`, or any `RequestScope` |
+| `cache` | `"session"` | `"none"`: solve every match; `"call"`: reuse within one call; `"session"`: share across calls through the same handler session until rejected or `expires_at` |
+| `replay` | `safe_method(max_replays=1)` | Replay proof and budget |
+| `headers`, `query`, `body` | `()` | Destination names `self.solution(headers=...)` may set; cookies need no declaration |
+| `name` | class name | Policy identity, also accepted by `client.invalidate_protection()` |
 
-Managed clearance belongs to one SDK client and its handler session. Keep proxy, User-Agent, and
-browser impersonation fixed for that lifecycle. Rotate them by acquiring a new lease and creating
-a new handler and client:
+Cookies are applied as a managed dynamic set. `self.solution(expires_in=...)` bounds the session
+cache; without it the solution lives until the origin rejects it. Concurrent calls that hit the
+same challenge with `cache="session"` or `cache="call"` share one in-flight solve; with
+`cache="none"` each call solves independently.
+
+Drop a cached solution explicitly, for example after the origin changed its protocol:
+
+```python target
+client.invalidate_protection(kad_guard)   # by guard
+client.invalidate_protection("KadGuard")  # by policy name
+client.invalidate_protection()            # everything cached in this session
+```
+
+`challenge_guard()` is the functional equivalent for a detector function plus a solver function
+or object; `solution_fields()` declares its destinations. `ClientConfig.with_protection(...)`
+remains equivalent to `guards=`.
+
+Every replay reruns dependencies, auth, projection, crypto, encoding, preparation, and signing.
+The detector and solver never receive a mutable or prepared request.
+
+## Solve through the same session
+
+A clearance is usually bound to the network identity that earned it: the same IP, User-Agent, and
+TLS fingerprint. `SolveContext` therefore carries two ports instead of the raw handler:
+
+- `context.fetch(url, *, method, headers, body)` sends a request through the handler, proxy, and
+  cookie jar of the challenged call and returns a `NormalizedResponse`. It bypasses guards,
+  reactions, replay, middleware, and rate limiting, so a solver can download challenge assets or
+  POST a validation form without recursing into the pipeline that invoked it.
+- `context.identity` is the `TransportIdentity` of the triggering request: `user_agent`, `proxy`
+  (credentials redacted in `repr`), and the handler's `impersonation` label. `context.request_headers`
+  holds the headers that actually went out; `context.deadline` is derived from the call timeout.
+
+Managed solutions remember `identity.fingerprint()`. When the client later prepares a request
+under a different User-Agent, proxy, or impersonation label, the stored clearance is invalidated
+instead of being replayed through the wrong identity, and the next challenge is solved again.
+
+Managed clearance still belongs to one SDK client and its handler session. Rotate proxies by
+acquiring a new lease and creating a new handler and client:
 
 ```python target
 async with proxy_pool.acquire() as lease:
@@ -116,18 +153,20 @@ async with proxy_pool.acquire() as lease:
         return await run_operation(sdk)
 ```
 
-A new client starts with empty protection state. Eazy SDK does not infer or verify that an arbitrary
-solver shares the handler's network path. If the protocol requires one browser or HTTP session,
-construct the solver and handler from the same session or lease in `create_sdk()`.
+A new client starts with empty protection state. Solvers that hold their own browser or HTTP
+session outside `context.fetch` remain responsible for sharing that session with the handler.
 
 ## Handle stage-specific errors
 
 - `ProtectionConfigurationError` reports malformed guards, missing solvers, or destination
   conflicts before transport I/O.
 - `ChallengeDetectionError` wraps an unexpected detector exception.
+- `ChallengeMalformedError` reports a recognized but unusable challenge (`MalformedChallengeError`
+  from the detector is its `__cause__`); `AmbiguousChallengeError` reports two guards claiming one
+  response.
 - `ChallengeSolveError` wraps a solver failure.
 - `ChallengeApplicationError` reports an invalid solution batch before replay.
-- `ReplayDeniedError` reports an exhausted budget or an unproven replay.
+- `ReplayDeniedError` reports an exhausted per-guard budget or an unproven replay.
 
 Stage errors retain the original exception as `__cause__`. Their own message contains policy and
 attempt metadata, not response bodies, cookies, credentials, or solver secrets.

@@ -5,8 +5,10 @@ from typing import Annotated, Any, NotRequired, TypedDict, cast
 import pytest
 
 from eazy_sdk import ApiDefaults, OperationBindingError, SyncApi, api
-from eazy_sdk._internal import (
+from eazy_sdk.compile import (
     CompiledContract,
+)
+from eazy_sdk.core import (
     OperationValues,
     Set,
     ValuePatch,

@@ -9,8 +9,15 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk._internal import InputField, PlanError, RequestLocation, compile_endpoint
-from eazy_sdk._internal.kernel import (
+from eazy_sdk.compile import (
+    InputField,
+    compile_endpoint,
+)
+from eazy_sdk.core import (
+    PlanError,
+    RequestLocation,
+)
+from eazy_sdk.core.kernel import (
     AmbiguousCases,
     CompilerKind,
     CompilerRegistry,
@@ -42,7 +49,7 @@ def _imports(path: Path) -> set[str]:
 
 
 def test_common_kernel_has_no_http_or_websocket_runtime_imports() -> None:
-    imported = _imports(ROOT / "eazy_sdk" / "_internal" / "kernel.py")
+    imported = _imports(ROOT / "eazy_sdk" / "core" / "kernel.py")
     forbidden = {
         "zapros",
         "wsproto",
@@ -51,10 +58,9 @@ def test_common_kernel_has_no_http_or_websocket_runtime_imports() -> None:
         "eazy_sdk.request",
         "eazy_sdk.response",
         "eazy_sdk.websocket",
-        "eazy_sdk._internal.http",
-        "eazy_sdk._internal.http_compiler",
-        "eazy_sdk._internal.http_operation",
-        "eazy_sdk._internal.http_plan",
+        "eazy_sdk.core.http",
+        "eazy_sdk.compile",
+        "eazy_sdk.core.http_plan",
     }
 
     assert not any(
@@ -126,7 +132,7 @@ def test_strict_mypy_rejects_mixed_declaration_registries(tmp_path: Path) -> Non
     fixture = tmp_path / "registry_mixing.py"
     fixture.write_text(
         """\
-from eazy_sdk._internal.kernel import CompilerKind, CompilerRegistry
+from eazy_sdk.core.kernel import CompilerKind, CompilerRegistry
 
 class HttpDeclaration: ...
 class WsDeclaration: ...
@@ -158,7 +164,7 @@ compile_http(ws_registry)
 
 
 def test_http_declaration_module_is_explicit_and_not_universal() -> None:
-    internal = ROOT / "eazy_sdk" / "_internal"
+    internal = ROOT / "eazy_sdk" / "compile"
 
     assert (internal / "http_operation.py").is_file()
     assert not (internal / "operation.py").exists()

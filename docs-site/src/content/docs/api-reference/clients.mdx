@@ -6,8 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-  - eazy_sdk.sdk
-api_fingerprint: "sha256:b0e8654e131379b8bc6892ade42ce43aecc9e4794dc407e34741ab6388e9cc73"
+api_fingerprint: "sha256:e110fde012e3dd260a9afc85f82f34396e29f4d6ef113b57de4c8cff9aff9c0c"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -34,12 +33,12 @@ middleware, retry, redirect, rate limit и protection остаются в общ
 
 ## Root SDK convenience
 
-`SyncSdk`, `AsyncSdk` и `api_group()` создают typed root без forwarding wrappers:
+`SyncApi`, `AsyncApi` и `api_group()` создают typed root без forwarding wrappers:
 
 ```python
-from eazy_sdk import AsyncSdk, api_group
+from eazy_sdk import AsyncApi, api_group
 
-class StoreSdk(AsyncSdk):
+class StoreSdk(AsyncApi):
     users = api_group(UsersApi)
     orders = api_group(OrdersApi)
 
@@ -67,14 +66,24 @@ Root и API groups не сериализуют пользовательские 
 сами обеспечивают заявленный single-flight. Не запускайте новые calls одновременно с
 `close()`/`aclose()`; закрытие выполняется после завершения использующих root задач.
 
+## Синхронный клиент и event loop
+
+`Client` не вызывает `asyncio.run()` на каждый запрос: у каждого потока есть свой переиспользуемый
+`asyncio.Runner`, который создаётся лениво и закрывается в `close()`. После каждого вызова текущий
+loop потока сбрасывается, как это делает `asyncio.run()`. Вызов `Client` из потока, в котором уже
+работает event loop (Jupyter, обработчик `asyncio`-сервера), поднимает `EventLoopConflictError`:
+используйте там `AsyncClient`. Несколько потоков могут делить один `Client`; single-flight
+protection-локи не привязаны к loop.
+
 ## Client configuration
 
-`ClientConfig` включает dependencies, auth, middleware, retry, rate limiter, signing key provider,
-crypto и typed protection policies. First-party preset или custom `challenge_guard()`
-устанавливайте через immutable `config.with_protection(guard)`; low-level protection lifecycle
-разделён на
-`operation_protections`, `before_call_policies`, `challenge_policies`,
-`operation_protection_solvers` и `challenge_solvers`.
+`ClientConfig` включает dependencies, auth, middleware, `retry=`, rate limiter, signing key provider,
+crypto и одну группу `protection=` (`ProtectionBundle`). First-party preset, `Guard` или custom `challenge_guard()`
+устанавливайте через `ClientConfig(guards=[...])` либо эквивалентный immutable
+`config.with_protection(guard)`; `client.invalidate_protection(*guards_or_names)` сбрасывает
+закэшированные решения без доступа к runtime. `ProtectionBundle` объединяет
+`operation_protections`, `before_call_policies`, `challenge_policies` и `solver_bindings`;
+`config.bundle` возвращает установленную (или пустую) группу.
 
 Managed protection state принадлежит одному client/handler session и очищается при закрытии
 client. Proxy, User-Agent и impersonation задаются при construction handler-а. Для rotation
@@ -100,9 +109,9 @@ collection требует явного scalar codec.
 
 | Поверхность | Статус | Правило расширения |
 |---|---|---|
-| `SyncSdk`, `AsyncSdk`, `api_group`, `Client`, `AsyncClient` | Public | Используйте напрямую; ownership всегда задаётся конструктором |
+| `SyncApi`, `AsyncApi`, `api_group`, `Client`, `AsyncClient` | Public | Используйте напрямую; ownership всегда задаётся конструктором |
 | `api.*`, request markers, `Responses`, `ResponseParser` | Public authoring/SPI | Реализуйте документированные protocol-ы, не наследуйтесь от internal compiler types |
 | Zapros `BaseHandler` / `AsyncBaseHandler` | Transport SPI | Единственная граница собственной сетевой интеграции |
 | `eazy_sdk.testing` | Public test support | Наблюдает фактический Zapros request, не заменяет preparation |
 | `eazy_sdk.ext` | Alpha implementation SPI | Используйте только имена из `__all__`; полный контракт и removed internals перечислены в {doc}`Extension SPI </api-reference/extensions>` |
-| `eazy_sdk._internal.*`, executor stages и compiled records | Private | Не импортируйте и не сохраняйте их между версиями |
+| `eazy_sdk.compile.*`, executor stages и compiled records | Private | Не импортируйте и не сохраняйте их между версиями |

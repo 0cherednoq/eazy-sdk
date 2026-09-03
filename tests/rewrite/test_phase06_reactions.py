@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from eazy_sdk._internal import OperationIdentity, RequestScope, ScopeContext
+from eazy_sdk.core import (
+    OperationIdentity,
+    RequestScope,
+    ScopeContext,
+)
 from eazy_sdk.ext import Malformed, NoMatch, ParsedValue
 from eazy_sdk.protection.advanced import ResponseSignal, SignalMatch, _inspect_signals
 from eazy_sdk.response import NormalizedResponse, ResponseContext, callable_parser

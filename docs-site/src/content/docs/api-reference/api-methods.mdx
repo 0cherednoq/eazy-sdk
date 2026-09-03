@@ -4,7 +4,7 @@ description: Декларативные sync/async HTTP-операции, сиг
 sources:
   - eazy_sdk.api
   - eazy_sdk.preparation
-api_fingerprint: "sha256:b3d559cd4e9436c54be3a58972c5d1d8234e4149c93d62c4f0a1caec8084a397"
+api_fingerprint: "sha256:42258940758fc1288c313011bf5fcd755295f07648a834daf3cbe1c41a212a54"
 ---
 
 Наследуйте `AsyncApi` или `SyncApi`. Сигнатура метода становится публичной сигнатурой SDK,
@@ -171,7 +171,7 @@ prepared = await users.get_user.prepare(
 
 `prepare` выполняет обычные bind/default/project/encode/sign стадии и останавливается на общей
 границе перед handler send. Pure mode не вызывает providers и возвращает
-`PreparationIncomplete`, если нужны managed values. Full mode (`resolve_managed=True`) использует
+`PreparationIncompleteError`, если нужны managed values. Full mode (`resolve_managed=True`) использует
 test providers, но сеть всё равно не вызывается. `PreparedCall` редактирует secret headers,
 cookies, query и private body.
 

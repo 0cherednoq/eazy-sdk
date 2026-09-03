@@ -27,9 +27,9 @@ from .core import (
     CryptoConfigurationError,
     CryptoOutput,
     CryptoOutputValue,
-    CryptoStreamingUnsupported,
+    CryptoStreamingUnsupportedError,
     CryptoValues,
-    EncryptedMediaTypeMismatch,
+    EncryptedMediaTypeMismatchError,
     FrozenValue,
     HttpCryptoContext,
     HttpEncrypted,
@@ -70,7 +70,9 @@ async def protect_http_request(
         view = replace(request.view, headers=headers) if request.view is not None else None
         return replace(request, headers=headers, view=view)
     if isinstance(request.body, ReplayableBodyStream):
-        raise CryptoStreamingUnsupported("whole-payload crypto does not support streaming bodies")
+        raise CryptoStreamingUnsupportedError(
+            "whole-payload crypto does not support streaming bodies"
+        )
     if not isinstance(request.body, BufferedBody):
         raise CryptoConfigurationError("HTTP encoded crypto requires a buffered body")
     content = await encrypt_bytes(
@@ -121,7 +123,7 @@ async def unprotect_http_response[TRaw](
     if inbound.encoded is not None:
         expected = _base_media_type(wire.content_type)
         if actual != expected:
-            raise EncryptedMediaTypeMismatch(
+            raise EncryptedMediaTypeMismatchError(
                 f"expected encrypted Content-Type {expected!r}, got {actual!r}"
             )
         content = await decrypt_bytes(content, inbound.encoded, context=context)
@@ -130,13 +132,13 @@ async def unprotect_http_response[TRaw](
     if compiled.inbound_fields:
         clear_type = effective_content_type or actual
         if not _is_json_media_type(clear_type):
-            raise EncryptedMediaTypeMismatch(
+            raise EncryptedMediaTypeMismatchError(
                 f"field decryption requires a JSON media type, got {clear_type!r}"
             )
         try:
             document: FrozenValue = freeze_value(json.loads(content))
         except Exception:
-            raise EncryptedMediaTypeMismatch(
+            raise EncryptedMediaTypeMismatchError(
                 "decrypted payload is not a valid JSON document"
             ) from None
         decrypted = await decrypt_document(document, compiled.inbound_fields, context=context)

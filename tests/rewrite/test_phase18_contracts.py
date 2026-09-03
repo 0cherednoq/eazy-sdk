@@ -9,9 +9,16 @@ import pytest
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
 from eazy_sdk import AsyncClient, Client, Inject, SyncApi, api
-from eazy_sdk._internal import CompiledContract, InputField, RequestLocation, compile_endpoint
-from eazy_sdk._internal.errors import PlanError
-from eazy_sdk.clients.sync_client import _UNSET, _raw_call
+from eazy_sdk.clients._core import _UNSET, _raw_call
+from eazy_sdk.compile import (
+    CompiledContract,
+    InputField,
+    compile_endpoint,
+)
+from eazy_sdk.core import (
+    RequestLocation,
+)
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.request import Header, Query
 from eazy_sdk.response import Bytes, Responses, Success
 
@@ -141,7 +148,7 @@ def test_public_client_uses_zapros_high_level_json_without_mutating_input() -> N
     payload = {"z": 1, "a": {"nested": [1, 2]}}
 
     with Client(base_url="https://example.test", handler=handler) as client:
-        response = client.post("/items", json=payload)
+        response = client.request("POST", "/items", json=payload)
 
     assert response.status_code == 200
     assert handler.requests[0].body == b'{"z":1,"a":{"nested":[1,2]}}'
