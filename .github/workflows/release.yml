@@ -27,11 +27,18 @@ jobs:
       - name: Extras smoke
         run: uv run --no-project --python 3.13 python scripts/extras_smoke.py dist/release
       - name: Release notes from the annotated tag
-        run: git tag -l --format='%(contents:body)' "${GITHUB_REF_NAME}" > release-notes.md
+        # actions/checkout leaves the tag peeled to its commit; re-fetch the tag object.
+        run: |
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          test "$(git cat-file -t "${GITHUB_REF_NAME}")" = "tag" || { echo "${GITHUB_REF_NAME} is not an annotated tag"; exit 1; }
+          git tag -l --format='%(contents:body)' "${GITHUB_REF_NAME}" > release-notes.md
+          test -s release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
           name: Eazy SDK ${{ github.ref_name }}
           body_path: release-notes.md
           prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
-          files: dist/release/*
+          files: |
+            dist/release/*.whl
+            dist/release/*.tar.gz
           fail_on_unmatched_files: true
