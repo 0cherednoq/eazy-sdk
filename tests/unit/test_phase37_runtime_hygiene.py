@@ -59,9 +59,9 @@ def test_sync_runner_never_installs_a_current_loop_in_a_fresh_thread() -> None:
         runner = _SyncRunner()
         try:
             seen["result"] = runner.run(probe())
-            policy = asyncio.get_event_loop_policy()
             try:
-                seen["current"] = policy.get_event_loop()
+                # Raises in a non-main thread unless a loop was installed there.
+                seen["current"] = asyncio.get_event_loop()
             except RuntimeError:
                 seen["current"] = None
         finally:
