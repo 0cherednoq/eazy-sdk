@@ -6,6 +6,9 @@ and protection primitives.
 
 > **Status:** `0.2.0a4` is an alpha release with the post-review remediation: guard layer, transport ports, core/compile layering, accounts/html plugins and an exception hierarchy overhaul. Python 3.13 or
 > newer is required. Release artifacts are hosted on GitHub; PyPI publication is deferred.
+>
+> Alphas rename without deprecated aliases. The docs page `more/migration` lists every
+> `old name -> new name` for 0.2.0a3 -> 0.2.0a4 -> 0.2.0a5.
 
 ```bash
 pip install \

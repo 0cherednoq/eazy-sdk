@@ -211,5 +211,8 @@ def test_internal_and_codegen_do_not_advertise_private_surface() -> None:
 
     assert not hasattr(compile_layer, "__all__") and not hasattr(core, "__all__")
     assert all(not name.startswith("_") for name in codegen.__all__)
-    assert {"session_auth", "session_scheme", "ProtectionBundle"} <= set(codegen.__all__)
+    assert {"generated_session_auth", "generated_session_scheme", "ProtectionBundle"} <= set(
+        codegen.__all__
+    )
+    assert "session_auth" not in codegen.__all__
     assert len(eazy_sdk.__all__) <= 70

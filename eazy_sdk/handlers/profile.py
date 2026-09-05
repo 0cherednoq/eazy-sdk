@@ -7,6 +7,7 @@ from enum import Enum
 
 from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.core.http_plan import WireRequirements
+from eazy_sdk.redaction import redact_url_credentials
 from eazy_sdk.request.prepared import HttpProtocol
 
 
@@ -52,14 +53,30 @@ class HandlerProfile:
     evidence: CaptureEvidence | None = None
     impersonation: str | None = None
     """Browser/TLS impersonation label declared by the handler, if any."""
+    proxy: str | None = None
+    """Proxy URL the handler's session sends through, as declared by the handler.
+
+    Eazy SDK never inspects a transport session: a handler built by ``Client.httpx(proxy=...)``
+    and friends declares the proxy it configured, a handler over a caller-supplied session
+    declares the ``proxy=`` label it was given, and ``None`` means the transport identity has
+    no proxy component.
+    """
+
+    def __repr__(self) -> str:
+        rendered = []
+        for name in self.__dataclass_fields__:
+            value = getattr(self, name)
+            if name == "proxy":
+                value = redact_url_credentials(value)
+            rendered.append(f"{name}={value!r}")
+        return f"HandlerProfile({', '.join(rendered)})"
 
 
 @dataclass(frozen=True, slots=True)
 class EmitOptions:
+    """Per-call transport options a handler receives alongside the prepared request."""
+
     timeout: float | None = None
-    proxy: str | None = None
-    verify_tls: bool | None = None
-    stream_response: bool = False
 
 
 class TransportError(EazySdkError):

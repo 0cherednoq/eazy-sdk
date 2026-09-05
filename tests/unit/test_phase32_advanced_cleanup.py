@@ -28,7 +28,7 @@ from eazy_sdk.protection import (
 from eazy_sdk.protection.advanced import (
     AmbiguousChallengeError,
     BeforeCallPolicy,
-    ChallengeMalformedError,
+    ChallengeParseError,
     ChallengePolicy,
     PrivateBindings,
     PrivateCookieSetBinding,
@@ -240,7 +240,7 @@ async def test_malformed_challenge_is_a_dedicated_error_with_policy_and_cause() 
         ]
     )
     async with AsyncClient(base_url=BASE_URL, handler=handler, config=config) as client:
-        with pytest.raises(ChallengeMalformedError) as error:
+        with pytest.raises(ChallengeParseError) as error:
             await ProtectedApi(client).protected()
     assert error.value.policy == "phase32.malformed"
     assert error.value.attempt == 1

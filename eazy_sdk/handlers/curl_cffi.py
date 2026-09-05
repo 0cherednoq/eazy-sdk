@@ -66,12 +66,12 @@ class CurlCffiZaprosHandler(BaseHandler):
         *,
         impersonate: BrowserTypeLiteral | None = None,
         owns_session: bool | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
-        self._session = session or curl_requests.Session()
+        self._session = session or curl_requests.Session(proxy=proxy)
         self._impersonate = impersonate
-        if impersonate is not None:
-            self.profile = replace(CURL_CFFI_HANDLER_PROFILE, impersonation=str(impersonate))
+        self.profile = _profile_with(impersonate, proxy)
 
     def handle(self, request: Request) -> Response:
         body, materialized_stream = _read_sync_body(request.body)
@@ -106,12 +106,12 @@ class AsyncCurlCffiZaprosHandler(AsyncBaseHandler):
         *,
         impersonate: BrowserTypeLiteral | None = None,
         owns_session: bool | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
-        self._session = session or curl_requests.AsyncSession()
+        self._session = session or curl_requests.AsyncSession(proxy=proxy)
         self._impersonate = impersonate
-        if impersonate is not None:
-            self.profile = replace(CURL_CFFI_HANDLER_PROFILE, impersonation=str(impersonate))
+        self.profile = _profile_with(impersonate, proxy)
 
     async def ahandle(self, request: Request) -> Response:
         body, materialized_stream = await _read_async_body(request.body)
@@ -133,6 +133,16 @@ class AsyncCurlCffiZaprosHandler(AsyncBaseHandler):
     async def aclose(self) -> None:
         if self._owned:
             await self._session.close()
+
+
+def _profile_with(impersonate: BrowserTypeLiteral | None, proxy: str | None) -> HandlerProfile:
+    """Declare impersonation and proxy as transport identity (see ``HandlerProfile``)."""
+
+    return replace(
+        CURL_CFFI_HANDLER_PROFILE,
+        impersonation=None if impersonate is None else str(impersonate),
+        proxy=proxy,
+    )
 
 
 def _header_pairs(headers: Headers) -> list[tuple[str, str]]:

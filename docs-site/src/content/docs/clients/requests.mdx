@@ -3,7 +3,7 @@ title: Requests
 description: Синхронный transport на базе requests.Session.
 sources:
   - eazy_sdk.Client
-api_fingerprint: "sha256:217ade57fd476e2072a117ee8d18cc682590a25cda52a29cedbf5dfca86fc4e6"
+api_fingerprint: "sha256:83842cb959bf17a36fda7e814b17db71ef3b71d367e0aa40350b1c7c2e57a200"
 ---
 
 ```bash
@@ -29,7 +29,9 @@ client.close()
 
 Requests поддерживает только синхронный client. `base_url` передаётся wrapper-у, потому что
 `requests.Session` не имеет собственного base URL. Очистка default headers нужна только если API
-требует точный набор или порядок headers.
+требует точный набор или порядок headers. Короткая форма
+`Client.requests(base_url=..., proxy="http://proxy:8080")` создаёт очищенную сессию сама и
+объявляет proxy в `HandlerProfile.proxy`.
 
 API-класс не зависит от transport и не меняется при переходе с HTTPX на Requests. Redirects и
 retries оставьте выключенными на уровне adapter-а, чтобы budgets контролировал Eazy SDK.

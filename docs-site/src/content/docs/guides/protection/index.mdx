@@ -135,14 +135,23 @@ TLS fingerprint. `SolveContext` therefore carries two ports instead of the raw h
 - `context.fetch(url, *, method, headers, body)` sends a request through the handler, proxy, and
   cookie jar of the challenged call and returns a `NormalizedResponse`. It bypasses guards,
   reactions, replay, middleware, and rate limiting, so a solver can download challenge assets or
-  POST a validation form without recursing into the pipeline that invoked it.
-- `context.identity` is the `TransportIdentity` of the triggering request: `user_agent`, `proxy`
-  (credentials redacted in `repr`), and the handler's `impersonation` label. `context.request_headers`
-  holds the headers that actually went out; `context.deadline` is derived from the call timeout.
+  POST a validation form without recursing into the pipeline that invoked it. Redirects are not
+  followed (a `3xx` comes back as is), each fetch gets the full call timeout rather than the
+  remaining `deadline`, and every `Set-Cookie` it receives lands in the session's jar.
+- `context.identity` is the `TransportIdentity` of the attempt: the public `user_agent`, the
+  `proxy` the handler declares (`Client.httpx(proxy=...)` and friends fill `HandlerProfile.proxy`;
+  credentials are redacted in `repr`), and the handler's `impersonation` label.
+  `context.request_headers` holds the headers that actually went out; `context.deadline` is the
+  solve budget (the call timeout counted from the creation of the context) and
+  `context.remaining()` the time left in it.
 
 Managed solutions remember `identity.fingerprint()`. When the client later prepares a request
 under a different User-Agent, proxy, or impersonation label, the stored clearance is invalidated
 instead of being replayed through the wrong identity, and the next challenge is solved again.
+The identity is computed from the public values of the attempt before any managed solution is
+applied, so a guard may own `User-Agent` (declare it in `headers`) without changing the identity
+its own solution is bound to. A proxy the handler does not declare is not part of the identity:
+pass `proxy=` to the client factory, or set `HandlerProfile.proxy` on a custom handler.
 
 Managed clearance still belongs to one SDK client and its handler session. Rotate proxies by
 acquiring a new lease and creating a new handler and client:
@@ -161,7 +170,7 @@ session outside `context.fetch` remain responsible for sharing that session with
 - `ProtectionConfigurationError` reports malformed guards, missing solvers, or destination
   conflicts before transport I/O.
 - `ChallengeDetectionError` wraps an unexpected detector exception.
-- `ChallengeMalformedError` reports a recognized but unusable challenge (`MalformedChallengeError`
+- `ChallengeParseError` reports a recognized but unusable challenge (`MalformedChallengeError`
   from the detector is its `__cause__`); `AmbiguousChallengeError` reports two guards claiming one
   response.
 - `ChallengeSolveError` wraps a solver failure.

@@ -16,7 +16,14 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a4,<0.3", "eazy-sdk-accounts>=0.2.0a4,<0.3", "sqlmodel>=0.0.22", "aiosqlite>=0.20"]
+dependencies = [
+  "eazy-sdk>=0.2.0a4,<0.3",
+  "eazy-sdk-accounts>=0.2.0a4,<0.3",
+  "sqlmodel>=0.0.22",
+  "sqlalchemy>=2",
+  "pydantic>=2",
+  "aiosqlite>=0.20",
+]
 
 [project.scripts]
 eazy-sdk-sqlmodel-migrate = "eazy_sdk_sqlmodel.cli:main"

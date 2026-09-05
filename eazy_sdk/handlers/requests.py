@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import replace
 from importlib.metadata import version
 
 import requests
@@ -54,12 +55,20 @@ class RequestsHandler(BaseHandler):
         session: requests.Session | None = None,
         *,
         owns_session: bool | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._owned = session is None if owns_session is None else owns_session
         self.session = session or requests.Session()
         if session is None:
             self.session.headers.clear()
             self.session.cookies.clear()
+            if proxy is not None:
+                self.session.proxies = {"http": proxy, "https": proxy}
+        self.profile = (
+            REQUESTS_HANDLER_PROFILE
+            if proxy is None
+            else replace(REQUESTS_HANDLER_PROFILE, proxy=proxy)
+        )
 
     def handle(self, request: Request) -> Response:
         body = _content(request.body)

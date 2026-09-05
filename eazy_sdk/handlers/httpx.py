@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import replace
 from importlib.metadata import version
 from typing import Any
 
@@ -49,9 +50,11 @@ class HttpxHandler(BaseHandler):
         client: httpx.Client | None = None,
         *,
         owns_client: bool | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._owned = client is None if owns_client is None else owns_client
-        self.client = client or httpx.Client(headers={}, cookies={})
+        self.client = client or httpx.Client(headers={}, cookies={}, proxy=proxy)
+        self.profile = _profile_with(proxy)
 
     def handle(self, request: Request) -> Response:
         native = httpx.Request(
@@ -77,9 +80,11 @@ class AsyncHttpxHandler(AsyncBaseHandler):
         client: httpx.AsyncClient | None = None,
         *,
         owns_client: bool | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._owned = client is None if owns_client is None else owns_client
-        self.client = client or httpx.AsyncClient(headers={}, cookies={})
+        self.client = client or httpx.AsyncClient(headers={}, cookies={}, proxy=proxy)
+        self.profile = _profile_with(proxy)
 
     async def ahandle(self, request: Request) -> Response:
         native = httpx.Request(
@@ -95,6 +100,12 @@ class AsyncHttpxHandler(AsyncBaseHandler):
     async def aclose(self) -> None:
         if self._owned:
             await self.client.aclose()
+
+
+def _profile_with(proxy: str | None) -> HandlerProfile:
+    """Declare the proxy this handler's session sends through (``HandlerProfile.proxy``)."""
+
+    return HTTPX_HANDLER_PROFILE if proxy is None else replace(HTTPX_HANDLER_PROFILE, proxy=proxy)
 
 
 def _header_pairs(request: Request) -> list[tuple[str, str]]:

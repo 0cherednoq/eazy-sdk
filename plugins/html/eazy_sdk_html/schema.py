@@ -6,6 +6,8 @@ import types
 from dataclasses import dataclass
 from typing import Annotated, Any, Union, cast, get_args, get_origin
 
+from parsel import Selector
+
 from eazy_sdk.models import (
     ModelAdapterRegistry,
     ModelField,
@@ -96,10 +98,6 @@ def parse_html[T](
 
 class HtmlDocument:
     def __init__(self, html: bytes | str) -> None:
-        try:
-            from parsel import Selector
-        except ImportError as exc:
-            raise RuntimeError("HTML extraction requires eazy-sdk[html]") from exc
         text = html.decode("utf-8", errors="replace") if isinstance(html, bytes) else html
         self._root = _ParselNode(Selector(text=text, type="html"))
 

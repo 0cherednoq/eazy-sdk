@@ -107,21 +107,18 @@ class _SyncRunner:
                 "the synchronous Client cannot run inside an active event loop; "
                 "use AsyncClient from asynchronous code"
             )
-        runner = getattr(self._local, "runner", None)
-        if runner is None or self._closed:
+        with self._lock:
             if self._closed:
                 coroutine.close()
                 raise RuntimeError("Eazy SDK Client is closed")
-            runner = asyncio.Runner()
-            self._local.runner = runner
-            with self._lock:
+            runner = getattr(self._local, "runner", None)
+            if runner is None:
+                # An explicit loop factory keeps ``Runner`` from installing its loop as the
+                # thread's current event loop, so a loop the caller set stays untouched.
+                runner = asyncio.Runner(loop_factory=asyncio.new_event_loop)
+                self._local.runner = runner
                 self._runners.append(runner)
-        try:
-            return runner.run(coroutine)
-        finally:
-            # Mirror ``asyncio.run()``: the reusable loop must not stay the thread's current
-            # loop between calls, otherwise later ``asyncio`` users would pick it up.
-            asyncio.set_event_loop(None)
+        return runner.run(coroutine)
 
     def close(self) -> None:
         self._closed = True

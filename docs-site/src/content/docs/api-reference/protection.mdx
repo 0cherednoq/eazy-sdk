@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.protection.advanced
   - eazy_sdk_presets.cloudflare
   - eazy_sdk_presets.recaptcha
-api_fingerprint: "sha256:99cee437e700e7b5202bc91c069c73296163b487fe19cbc8a160356ddc98c3b3"
+api_fingerprint: "sha256:7f76e89bf3c7dbc5eb08f7e4ffda98e146813d77b8871503ef482a4d2b655d84"
 ---
 
 `eazy_sdk.protection` is the application-facing response-guard API. It contains solver and context
@@ -66,15 +66,24 @@ handler, the cookie jar, or the client:
 | `operation` | Identity of the operation being protected |
 | `response` | Immutable context of the challenge response, `None` for before-call and mandatory flows |
 | `attempt` | Attempt number of the triggering request, `0` for mandatory flows |
-| `deadline` | UTC instant derived from the call timeout, `None` when the call has no timeout |
+| `deadline` | Solve budget: call timeout counted from the creation of the context, `None` without a timeout; `remaining()` returns the time left (never negative) |
 | `fetch` | `ProtectedFetch` bound to the same handler, proxy, and cookie jar as the triggering request |
-| `identity` | `TransportIdentity` the triggering request was sent with |
+| `identity` | `TransportIdentity` of the attempt: public `User-Agent`, declared proxy, impersonation label |
 | `request_headers` | Headers that actually went out with the triggering request |
 
 `fetch` emits directly through the handler: no guard, reaction, replay, middleware, or rate limiter
-runs, so a solver cannot recurse into the protection pipeline that invoked it. The URL must be
-absolute; `identity.user_agent` and `Host` are added unless the caller sets them. Transport errors
-and solver exceptions surface as `ChallengeSolveError` with the original exception as `__cause__`.
+runs, so a solver cannot recurse into the protection pipeline that invoked it. Its contract:
+
+- Redirects are not followed. The executor's redirect loop is bypassed and the first-party handlers
+  never follow redirects, so a `3xx` response is returned as is.
+- Every fetch gets the full `timeout` of the guarded call, not the remainder of `deadline`. A solver
+  that needs a budget checks `context.remaining()`.
+- The request carries the session's cookies, and every `Set-Cookie` it receives is stored in that
+  same jar: a fetch mutates the session the guarded call uses.
+- The URL must be absolute; `identity.user_agent` and `Host` are added unless the caller sets them.
+
+Transport errors and solver exceptions surface as `ChallengeSolveError` with the original
+exception as `__cause__`.
 
 Managed solutions are stored together with `identity.fingerprint()`. Before a solution is applied
 to a later attempt or call, the runtime compares that digest with the identity of the request
@@ -82,6 +91,13 @@ being prepared. A mismatch (different User-Agent, proxy, or impersonation label)
 stored solution instead of replaying it through the wrong identity; the next matching challenge
 is solved again under the new identity. A `SolveContext` constructed outside a running client
 has an empty identity and a `fetch` that raises `ProtectionConfigurationError`.
+
+The identity has exactly one source per attempt. `user_agent` is the public `User-Agent` bound
+for the attempt (caller value, auth, dependencies) *before* any managed solution is applied;
+`proxy` and `impersonation` are what the handler declares in `HandlerProfile`. Headers written by
+a guard or by `solution_fields(headers=...)` never enter the identity, so a solution that rewrites
+`User-Agent` is checked against the same digest at solve time and at apply time.
+`context.request_headers` still reports the headers that actually went out.
 
 ## Solution destinations
 
@@ -116,15 +132,21 @@ signing stages.
 ## Managed state and session affinity
 
 Reusable solution state lives only in one `ExecutionRuntime`, which is owned by one SDK client and
-handler session. Cached modes (`cache="session"`, `cache="call"`, and the advanced until-expiry/
+handler session. Session-shared modes (`cache="session"` and the advanced until-expiry/
 until-rejected persistence) serialize concurrent solves of the same challenge behind one lock;
-`cache="none"` (per-match) has no single-flight and solves each concurrent challenge independently. Session-scoped state keys use the actual handler object supplied at the client
+`cache="call"` and `cache="none"` keep state inside one call, so concurrent calls solve
+independently. Session-scoped state keys use the actual handler object supplied at the client
 boundary. Closing the client clears all managed solutions and single-flight entries.
 
 Proxy, User-Agent, address-family, and impersonation configuration belongs to handler/session
-construction. Eazy SDK has no per-attempt transport identity provider. Create a new handler and
-client when rotating transport configuration. A new client does not reuse the previous client's
-protection state.
+construction. `Client.httpx(proxy=...)`, `Client.requests(proxy=...)`,
+`Client.curl_cffi(proxy=..., impersonate=...)` and their async counterparts configure the session
+they create and declare the result in `HandlerProfile.proxy`/`HandlerProfile.impersonation`; with a
+caller-supplied session, `proxy=` is only the declaration of what that session already uses. A
+custom handler declares the same facts through its `profile`. Eazy SDK never inspects a transport
+session and has no per-attempt transport identity provider: an undeclared proxy is absent from the
+identity. Create a new handler and client when rotating transport configuration. A new client does
+not reuse the previous client's protection state.
 
 Solver technology is not part of preflight. Browser, JavaScript, WASM, and remote API solvers all
 implement the same typed protocol. Preflight retains facts the runtime can prove: solver presence,
@@ -137,7 +159,7 @@ compiled destination validity, body replayability, semantic replay proof, finite
 |---|---|---|
 | Configuration | `ProtectionConfigurationError` | Guard or lowering is malformed, a solver is missing, or destinations conflict |
 | Detection | `ChallengeDetectionError` | A detector raises an unexpected exception |
-| Detection | `ChallengeMalformedError` | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
+| Detection | `ChallengeParseError` | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
 | Detection | `AmbiguousChallengeError` | Two or more definitive policies matched one response with equal priority; a `ProtectionConfigurationError` listing `policies` |
 | Solve | `ChallengeSolveError` | A solver fails |
 | Application | `ChallengeApplicationError` | A solution field or destination value is invalid |

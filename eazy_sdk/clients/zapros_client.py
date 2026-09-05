@@ -129,18 +129,24 @@ class Client(_SyncClientCore[Response]):
         config: ClientConfig | None = None,
         client: Any | None = None,
         profile: HandlerProfile | None = None,
+        proxy: str | None = None,
         **httpx_options: Any,
     ) -> Client:
-        """Client over an ``httpx.Client`` (created from ``httpx_options`` when not given)."""
+        """Client over an ``httpx.Client`` (created from ``httpx_options`` when not given).
+
+        ``proxy`` configures the created client and becomes part of the transport identity;
+        with a caller-supplied ``client`` it is only the declaration of the proxy that client
+        already uses (see ``HandlerProfile.proxy``).
+        """
 
         httpx = _require("httpx", "httpx")
         from eazy_sdk.handlers.httpx import HttpxHandler
 
         owned = client is None
-        raw = client if client is not None else httpx.Client(**httpx_options)
+        raw = client if client is not None else httpx.Client(proxy=proxy, **httpx_options)
         return cls(
             base_url=base_url,
-            handler=HttpxHandler(raw, owns_client=owned),
+            handler=HttpxHandler(raw, owns_client=owned, proxy=proxy),
             config=config,
             profile=profile,
         )
@@ -153,15 +159,21 @@ class Client(_SyncClientCore[Response]):
         config: ClientConfig | None = None,
         session: Any | None = None,
         profile: HandlerProfile | None = None,
+        proxy: str | None = None,
     ) -> Client:
-        """Client over a ``requests.Session`` (created when not given)."""
+        """Client over a ``requests.Session`` (created when not given).
+
+        ``proxy`` configures the created session and becomes part of the transport identity;
+        with a caller-supplied ``session`` it is only the declaration of the proxy that session
+        already uses (see ``HandlerProfile.proxy``).
+        """
 
         _require("requests", "requests")
         from eazy_sdk.handlers.requests import RequestsHandler
 
         return cls(
             base_url=base_url,
-            handler=RequestsHandler(session, owns_session=session is None),
+            handler=RequestsHandler(session, owns_session=session is None, proxy=proxy),
             config=config,
             profile=profile,
         )
@@ -175,8 +187,14 @@ class Client(_SyncClientCore[Response]):
         session: Any | None = None,
         impersonate: Any | None = None,
         profile: HandlerProfile | None = None,
+        proxy: str | None = None,
     ) -> Client:
-        """Client over a ``curl_cffi`` session with optional browser impersonation."""
+        """Client over a ``curl_cffi`` session with optional browser impersonation.
+
+        ``proxy`` configures the created session and becomes part of the transport identity;
+        with a caller-supplied ``session`` it is only the declaration of the proxy that session
+        already uses (see ``HandlerProfile.proxy``).
+        """
 
         _require("curl_cffi", "curl-cffi")
         from eazy_sdk.handlers.curl_cffi import CurlCffiZaprosHandler
@@ -184,7 +202,10 @@ class Client(_SyncClientCore[Response]):
         return cls(
             base_url=base_url,
             handler=CurlCffiZaprosHandler(
-                session, impersonate=impersonate, owns_session=session is None
+                session,
+                impersonate=impersonate,
+                owns_session=session is None,
+                proxy=proxy,
             ),
             config=config,
             profile=profile,
@@ -275,18 +296,24 @@ class AsyncClient(_AsyncClientCore[Response]):
         config: ClientConfig | None = None,
         client: Any | None = None,
         profile: HandlerProfile | None = None,
+        proxy: str | None = None,
         **httpx_options: Any,
     ) -> AsyncClient:
-        """Client over an ``httpx.AsyncClient`` (created from ``httpx_options`` when not given)."""
+        """Client over an ``httpx.AsyncClient`` (created from ``httpx_options`` when not given).
+
+        ``proxy`` configures the created client and becomes part of the transport identity;
+        with a caller-supplied ``client`` it is only the declaration of the proxy that client
+        already uses (see ``HandlerProfile.proxy``).
+        """
 
         httpx = _require("httpx", "httpx")
         from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
         owned = client is None
-        raw = client if client is not None else httpx.AsyncClient(**httpx_options)
+        raw = client if client is not None else httpx.AsyncClient(proxy=proxy, **httpx_options)
         return cls(
             base_url=base_url,
-            handler=AsyncHttpxHandler(raw, owns_client=owned),
+            handler=AsyncHttpxHandler(raw, owns_client=owned, proxy=proxy),
             config=config,
             profile=profile,
         )
@@ -300,8 +327,14 @@ class AsyncClient(_AsyncClientCore[Response]):
         session: Any | None = None,
         impersonate: Any | None = None,
         profile: HandlerProfile | None = None,
+        proxy: str | None = None,
     ) -> AsyncClient:
-        """Client over a ``curl_cffi.AsyncSession`` with optional browser impersonation."""
+        """Client over a ``curl_cffi.AsyncSession`` with optional browser impersonation.
+
+        ``proxy`` configures the created session and becomes part of the transport identity;
+        with a caller-supplied ``session`` it is only the declaration of the proxy that session
+        already uses (see ``HandlerProfile.proxy``).
+        """
 
         _require("curl_cffi", "curl-cffi")
         from eazy_sdk.handlers.curl_cffi import AsyncCurlCffiZaprosHandler
@@ -309,7 +342,10 @@ class AsyncClient(_AsyncClientCore[Response]):
         return cls(
             base_url=base_url,
             handler=AsyncCurlCffiZaprosHandler(
-                session, impersonate=impersonate, owns_session=session is None
+                session,
+                impersonate=impersonate,
+                owns_session=session is None,
+                proxy=proxy,
             ),
             config=config,
             profile=profile,

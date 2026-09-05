@@ -14,12 +14,7 @@ from eazy_sdk.auth import (
     all_of,
     any_of,
 )
-from eazy_sdk.auth.session_runtime import (
-    _generated_session_auth as session_auth,
-)
-from eazy_sdk.auth.session_runtime import (
-    _generated_session_scheme as session_scheme,
-)
+from eazy_sdk.auth.session_runtime import generated_session_auth, generated_session_scheme
 from eazy_sdk.clients import (
     AsyncClient,
     CallOptions,
@@ -137,8 +132,8 @@ __all__ = [
     "all_of",
     "any_of",
     "field",
+    "generated_session_auth",
+    "generated_session_scheme",
     "protection_flow",
-    "session_auth",
-    "session_scheme",
     "value",
 ]

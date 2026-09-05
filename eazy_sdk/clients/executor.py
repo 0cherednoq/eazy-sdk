@@ -95,7 +95,7 @@ from eazy_sdk.protection.advanced import (
     AmbiguousSignal,
     BeforeCallPolicy,
     ChallengeApplicationError,
-    ChallengeMalformedError,
+    ChallengeParseError,
     ChallengePolicy,
     ChallengeSolveError,
     ChallengeSolver,
@@ -306,16 +306,22 @@ def _raw_prepared_request(
 
 def _transport_identity(
     runtime: ExecutionRuntime,
-    emit_options: EmitOptions,
     headers: Mapping[str, str],
 ) -> TransportIdentity:
+    """Identity of one attempt: public header values plus what the handler declares.
+
+    ``headers`` are the values bound for the attempt *before* managed protection state is
+    applied, so a guard that writes ``User-Agent`` cannot change the identity its own
+    solution is checked against. Proxy and impersonation come from ``HandlerProfile``.
+    """
+
     user_agent = next(
         (value for name, value in headers.items() if name.lower() == "user-agent"),
         None,
     )
     return TransportIdentity(
         user_agent=user_agent,
-        proxy=emit_options.proxy,
+        proxy=runtime.handler_profile.proxy,
         impersonation=runtime.handler_profile.impersonation,
     )
 
@@ -357,10 +363,10 @@ def _solve_context(
     operation: OperationIdentity,
     response: ResponseContext[object] | None,
     attempt: int,
+    identity: TransportIdentity,
     headers: Mapping[str, str],
 ) -> SolveContext:
     emit_options = options.emit_options()
-    identity = _transport_identity(runtime, emit_options, headers)
     fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity)
     return SolveContext(
         operation,
@@ -375,6 +381,8 @@ def _solve_context(
 
 type _ProtectionCacheKey = tuple[object, ...]
 
+_MAX_POLL_DELAY = 0.01
+
 
 @dataclass(slots=True)
 class _ProtectionLockEntry:
@@ -387,8 +395,10 @@ class _ProtectionLockRegistry:
     """Single-flight registry that is safe across event loops and threads.
 
     One runtime may be driven by several event loops (a sync client runs one loop per
-    call, possibly from several threads), so entries use a ``threading.Lock`` acquired
-    without blocking the loop instead of a loop-bound ``asyncio.Lock``.
+    thread), so entries use a ``threading.Lock`` instead of a loop-bound ``asyncio.Lock``.
+    The lock is acquired without blocking the loop: waiters poll with an exponential
+    backoff capped at ``_MAX_POLL_DELAY``, which bounds the extra latency a queued solve
+    pays after the in-flight one finishes.
     """
 
     _entries: dict[_ProtectionCacheKey, _ProtectionLockEntry] = field(
@@ -408,7 +418,7 @@ class _ProtectionLockRegistry:
             delay = 0.001
             while not entry.lock.acquire(blocking=False):
                 await asyncio.sleep(delay)
-                delay = min(delay * 2, 0.05)
+                delay = min(delay * 2, _MAX_POLL_DELAY)
             try:
                 yield
             finally:
@@ -837,7 +847,6 @@ class ExecutionCore:
             # (User-Agent, proxy, impersonation) is the one the request will carry.
             attempt_identity = _transport_identity(
                 self.runtime,
-                options.emit_options(),
                 _slot_headers(compiled, attempt_values),
             )
             attempt_fingerprint = attempt_identity.fingerprint()
@@ -849,7 +858,7 @@ class ExecutionCore:
                     options,
                     number,
                     call_states,
-                    attempt_fingerprint,
+                    attempt_identity,
                 )
                 attempt_values = _apply_managed_state(
                     compiled,
@@ -1126,7 +1135,7 @@ class ExecutionCore:
                 scope,
             )
             if isinstance(signal, MalformedSignal):
-                raise ChallengeMalformedError(
+                raise ChallengeParseError(
                     _policy_identity(challenge_policies, signal.signal),
                     number,
                 ) from signal.cause
@@ -1204,6 +1213,7 @@ class ExecutionCore:
                     number,
                     call_states,
                     applied_shared.get(matched_policy.identity),
+                    attempt_identity,
                     _prepared_headers(prepared),
                 )
                 call_states[matched_policy.identity] = state
@@ -1240,11 +1250,12 @@ class ExecutionCore:
         options: Any,
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
-        fingerprint: str,
+        identity: TransportIdentity,
     ) -> tuple[
         _ManagedProtectionState,
         tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
     ]:
+        fingerprint = identity.fingerprint()
         mode = policy.persistence.mode
         if mode is ProtectionPersistenceMode.PER_CALL and policy.identity in call_states:
             local = call_states[policy.identity]
@@ -1281,6 +1292,7 @@ class ExecutionCore:
                             compiled.plan.operation,
                             None,
                             attempt,
+                            identity,
                             _slot_headers(compiled, values),
                         ),
                     )
@@ -1325,6 +1337,7 @@ class ExecutionCore:
         attempt: int,
         call_states: dict[str, _ManagedProtectionState],
         rejected: tuple[_ProtectionCacheKey, _ManagedProtectionState] | None,
+        identity: TransportIdentity,
         request_headers: Mapping[str, str],
     ) -> tuple[
         _ManagedProtectionState,
@@ -1344,9 +1357,10 @@ class ExecutionCore:
             compiled.plan.operation,
             response,
             attempt,
+            identity,
             request_headers,
         )
-        fingerprint = context.identity.fingerprint()
+        fingerprint = identity.fingerprint()
 
         async def solve() -> object:
             try:
@@ -1433,6 +1447,7 @@ class ExecutionCore:
                 solver = self.runtime.solver_bindings.get(flow.requirement)
                 assert solver is not None
                 try:
+                    headers = _slot_headers(compiled, values)
                     current = await solver.solve(
                         current,
                         _solve_context(
@@ -1441,7 +1456,8 @@ class ExecutionCore:
                             compiled.plan.operation,
                             None,
                             0,
-                            _slot_headers(compiled, values),
+                            _transport_identity(self.runtime, headers),
+                            headers,
                         ),
                     )
                 except Exception as exc:

@@ -7,7 +7,7 @@ import inspect
 import re
 from collections.abc import Awaitable, Callable, Hashable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from types import MappingProxyType, UnionType
 from typing import (
@@ -77,8 +77,12 @@ class MalformedChallengeError(EazySdkError, ValueError):
     """Raised by a detector: the response is a challenge but its payload is malformed."""
 
 
-class ChallengeMalformedError(PlanError):
-    """A policy recognized a challenge whose payload is malformed; the call cannot proceed."""
+class ChallengeParseError(PlanError):
+    """The runtime could not parse a recognized challenge; the call cannot proceed.
+
+    Raised when a detector reports :class:`MalformedChallengeError`: the response *is* a
+    challenge, but its payload is unusable, so neither solving nor replay is attempted.
+    """
 
     def __init__(self, policy: str, attempt: int) -> None:
         self.policy = policy
@@ -105,9 +109,19 @@ class ProtectedFetch(Protocol):
     """Send one raw request through the guarded client's own transport session.
 
     The executor implements this port over the same handler, proxy and cookie jar
-    that emitted the challenged request. Requests sent through it bypass guards,
-    reactions and replay, so a solver can download challenge assets or POST a
-    validation form without recursing into the protection pipeline.
+    that emitted the challenged request. Contract:
+
+    * **No redirects.** The request goes straight to the handler; the executor's
+      redirect loop is bypassed and the first-party handlers never follow redirects,
+      so a ``3xx`` response is returned as is.
+    * **Full timeout per fetch.** Every call gets the whole ``timeout`` of the guarded
+      call, not the remainder of ``SolveContext.deadline``; a solver that wants a
+      budget checks ``context.remaining()`` itself.
+    * **Shared cookie jar, both ways.** The request carries the session's cookies and
+      any ``Set-Cookie`` it receives is stored in that same jar.
+    * **No pipeline.** Guards, reactions, replay, middleware and rate limiting do not
+      run, so a solver can download challenge assets or POST a validation form
+      without recursing into the protection pipeline that invoked it.
     """
 
     async def __call__(
@@ -167,6 +181,16 @@ _NO_HEADERS: Mapping[str, str] = MappingProxyType({})
 
 @dataclass(frozen=True, slots=True)
 class SolveContext:
+    """What one solver invocation may know and use.
+
+    ``deadline`` is the solve budget: the call ``timeout`` counted from the moment this
+    context was created, ``None`` when the call has no timeout. It is *not* the remainder
+    of the call and it does not shorten ``fetch``; use :meth:`remaining` to pace work.
+    ``identity`` is the transport identity of the attempt (public ``User-Agent`` plus the
+    proxy/impersonation the handler declares) and ``request_headers`` are the headers that
+    actually went out with the triggering request.
+    """
+
     operation: OperationIdentity
     response: ResponseContext[object] | None
     attempt: int
@@ -174,6 +198,13 @@ class SolveContext:
     fetch: ProtectedFetch = _UNAVAILABLE_FETCH
     identity: TransportIdentity = field(default_factory=TransportIdentity)
     request_headers: Mapping[str, str] = _NO_HEADERS
+
+    def remaining(self) -> timedelta | None:
+        """Time left in the solve budget; ``None`` without a deadline, never negative."""
+
+        if self.deadline is None:
+            return None
+        return max(self.deadline - datetime.now(UTC), timedelta(0))
 
 
 class ChallengeSolver[TChallenge, TSolution](Protocol):
@@ -917,7 +948,9 @@ type GuardCache = Literal["none", "call", "session"]
 ``"none"``: every matching challenge is solved again and the solution is used for one
 replay only. ``"call"``: the solution is reused for the remaining attempts of one logical
 call. ``"session"``: the solution is shared by every call made through the same handler
-session until the origin rejects it (or ``expires_at`` on the solution passes).
+session until the origin rejects it (or ``expires_at`` on the solution passes), and
+concurrent calls that hit the same challenge wait for one shared solve. ``"none"`` and
+``"call"`` never share state between calls, so they never single-flight either.
 """
 
 type SolverLike[TChallenge, TSolution] = (
@@ -1013,9 +1046,9 @@ def challenge_guard[TChallenge, TSolution](
     ``scope`` defaults to every request of the client. ``name`` defaults to the detector's
     function or owner class name. ``solver`` may be an object with ``solve()`` (sync or async)
     or a plain function ``(challenge, context) -> solution``. ``cache`` selects how long a
-    solution is reused; see :data:`GuardCache`. Only cached modes share one in-flight solve
-    between concurrent calls; with ``cache="none"`` concurrent challenges are solved
-    independently.
+    solution is reused; see :data:`GuardCache`. Only ``cache="session"`` shares one in-flight
+    solve between concurrent calls; with ``cache="call"`` and ``cache="none"`` concurrent
+    challenges are solved independently, because their state never leaves the call.
     """
 
     if not callable(detect):
@@ -1075,7 +1108,7 @@ __all__ = [
     "AmbiguousSignal",
     "BeforeCallPolicy",
     "BodyReplayPolicy",
-    "ChallengeMalformedError",
+    "ChallengeParseError",
     "ChallengePolicy",
     "FromProtection",
     "GuardCache",

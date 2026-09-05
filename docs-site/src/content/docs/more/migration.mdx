@@ -1,0 +1,63 @@
+---
+title: Миграция между альфами
+description: Таблицы «было → стало» для 0.2.0a3 → 0.2.0a4 и 0.2.0a4 → 0.2.0a5.
+freshness: false
+---
+
+Eazy SDK в альфе переименовывает без deprecated-алиасов: старое имя исчезает, `ImportError`
+или `AttributeError` показывает, что именно нужно поменять. Эта страница — единственная
+подсказка. Каждая строка таблицы проверяется тестом: «стало» импортируется, «было» отсутствует.
+
+## 0.2.0a4 → 0.2.0a5
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.protection.advanced.ChallengeMalformedError` | `eazy_sdk.protection.advanced.ChallengeParseError` | Рантайм-ошибка «челлендж распознан, но не разобран». Детекторная `MalformedChallengeError` не изменилась. |
+| `eazy_sdk.handlers.EmitOptions.proxy` | `eazy_sdk.handlers.HandlerProfile.proxy` | Proxy объявляет handler (`Client.httpx(proxy=...)` и др.), а не per-call опции. Поля `verify_tls`/`stream_response` удалены: их никто не читал. |
+| `eazy_sdk.codegen.session_auth` | `eazy_sdk.codegen.generated_session_auth` | Codegen-хелпер получил своё имя; `eazy_sdk.auth.session_auth` — другая, authoring-функция. |
+| `eazy_sdk.codegen.session_scheme` | `eazy_sdk.codegen.generated_session_scheme` | То же для схемы. Сгенерированные модули нужно перегенерировать. |
+| extra `eazy-sdk-html[parsel]` | зависимость `eazy-sdk-html` | `parsel` стал обязательной зависимостью плагина; `pip install "eazy-sdk[html]"` достаточно. |
+
+Новые параметры без брейков: `proxy=` у `Client.httpx/requests/curl_cffi` и
+`AsyncClient.httpx/curl_cffi`, `SolveContext.remaining()`.
+
+## 0.2.0a3 → 0.2.0a4
+
+### Фасад и клиенты
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.SyncSdk` | `eazy_sdk.SyncApi` | Корневой фасад слит с API-классом: `api_group`, `from_client`, `from_handler`. |
+| `eazy_sdk.AsyncSdk` | `eazy_sdk.AsyncApi` | То же для async. |
+| `eazy_sdk.Client.get` | `eazy_sdk.Client.request` | Сырые verb-методы (`get/post/...`) удалены; остался `request(method, url, ...)`. |
+| `eazy_sdk.AsyncClient.post` | `eazy_sdk.AsyncClient.request` | То же для async. |
+| `eazy_sdk.ClientConfig.challenge_policies` | `eazy_sdk.ClientConfig.guards` | Guard'ы и presets ставятся через `guards=[...]`. |
+| `eazy_sdk.ClientConfig.challenge_solvers` | `eazy_sdk.ClientConfig.protection` | Advanced-политики и solver-биндинги — одна группа `ProtectionBundle`. |
+| `eazy_sdk.clients.AttemptLimitExceeded` | `eazy_sdk.clients.AttemptLimitError` | Единый суффикс `*Error`. |
+| `eazy_sdk.clients.RedirectLimitExceeded` | `eazy_sdk.clients.RedirectLimitError` | |
+| `eazy_sdk.handlers.TransportFailure` | `eazy_sdk.handlers.TransportError` | |
+| `eazy_sdk.exceptions.EazySDKError` | `eazy_sdk.exceptions.EazySdkContextError` | База всех исключений — `eazy_sdk.core.errors.EazySdkError`. |
+
+### Protection
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.protection.advanced.ChallengeSolverBindings` | `eazy_sdk.protection.advanced.SolverBindings` | Один реестр биндингов. |
+| `eazy_sdk.protection.advanced.ProtectionSolver` | `eazy_sdk.protection.advanced.ChallengeSolver` | Один протокол солвера. |
+| `eazy_sdk.protection.advanced.SolutionCookieSet` | `eazy_sdk.protection.advanced.PrivateCookieSetBinding` | Фабрика `solution_cookie_set()` осталась. |
+
+Простой путь теперь — класс `Guard` из `eazy_sdk.protection` и `ClientConfig(guards=[...])`.
+
+### Вынесенные пакеты
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.extraction.CSS` | `eazy_sdk_html.CSS` | Плагин `eazy-sdk-html` (`pip install "eazy-sdk[html]"`). |
+| `eazy_sdk.extraction.XPath` | `eazy_sdk_html.XPath` | |
+| `eazy_sdk.extraction.Scope` | `eazy_sdk_html.Scope` | |
+| `eazy_sdk.accounts.storage.MemoryStorage` | `eazy_sdk_accounts.storage.MemoryStorage` | Плагин `eazy-sdk-accounts` (`pip install "eazy-sdk[accounts]"`). |
+| `eazy_sdk.accounts.registration` | `eazy_sdk_accounts.registration` | |
+| `eazy_sdk._internal` | `eazy_sdk.core` | Ядро (`kernel`, `errors`, `http`, `http_plan`, `ports`) и компилятор `eazy_sdk.compile`. |
+
+Storage-хуки переименованы из middleware в observers: `StorageObserver`, `LoggingObserver`,
+`EventRecordingObserver`, параметр `observers=`.

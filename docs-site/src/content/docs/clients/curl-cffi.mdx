@@ -3,7 +3,7 @@ title: curl_cffi
 description: Sync и async transport с browser impersonation.
 sources:
   - eazy_sdk.AsyncClient
-api_fingerprint: "sha256:664b19f3ac73c107c76476a368ea1f675212c1ad2012b0a83dc97f8f7cf83b4b"
+api_fingerprint: "sha256:68a03452d93976f0c9359fa8323129c187c10c5409646d537f580b9c411158d3"
 ---
 
 ```bash
@@ -27,6 +27,9 @@ await client.aclose()
 ```
 
 Sync-вариант использует `requests.Session` и `SyncUsersApi`. Impersonation, TLS fingerprint и proxy
-принадлежат transport/session configuration; typed API остаётся тем же.
+принадлежат transport/session configuration; typed API остаётся тем же. Короткая форма
+`AsyncClient.curl_cffi(base_url=..., impersonate="chrome", proxy="http://proxy:8080")` создаёт
+сессию сама и объявляет `impersonate`/`proxy` в `HandlerProfile`, чтобы managed clearance была
+привязана к этой identity.
 
 Если operation требует exact wire capability, adapter проверит её до dependency resolver и сети.

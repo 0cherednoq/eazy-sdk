@@ -411,7 +411,7 @@ def session_scheme[TSession](
     )
 
 
-def _generated_session_auth[TCredentials, TSession](
+def generated_session_auth[TCredentials, TSession](
     session_model: type[TSession],
     *,
     bearer_field: str,
@@ -424,7 +424,11 @@ def _generated_session_auth[TCredentials, TSession](
     scheme: AuthScheme[TSession],
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> Auth:
-    """Generated-source lowering; consumer code uses its SDK factory."""
+    """Session auth as emitted by generated SDK modules.
+
+    Field names arrive as strings from the OpenAPI extension instead of the ``Annotated``
+    markers :func:`session_auth` reads from the model; consumer code uses its SDK factory.
+    """
 
     schema = _SessionModel.from_fields(
         cast(type[object], session_model),
@@ -446,7 +450,7 @@ def _generated_session_auth[TCredentials, TSession](
     )
 
 
-def _generated_session_scheme[TSession](
+def generated_session_scheme[TSession](
     session_model: type[TSession],
     *,
     name: str,

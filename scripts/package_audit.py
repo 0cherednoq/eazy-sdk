@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import re
+import sys
 import tarfile
 import tomllib
 import zipfile
+from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path
 
@@ -30,6 +34,33 @@ PACKAGES = {
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+# Top-level import names provided by each mandatory distribution a wheel may declare.
+# Every unconditional import of a packaged module must resolve to the standard library,
+# to the wheel's own package or to one of its mandatory (non-extra) dependencies.
+RE_EXTRA_MARKER = re.compile(r"extra\s*==\s*['\"]([^'\"]+)['\"]")
+RE_DISTRIBUTION_NAME = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+DISTRIBUTION_IMPORTS = {
+    "zapros": ("zapros",),
+    "httpx": ("httpx",),
+    "requests": ("requests",),
+    "curl-cffi": ("curl_cffi",),
+    "pydantic": ("pydantic",),
+    "datamodel-code-generator": ("datamodel_code_generator",),
+    "parsel": ("parsel",),
+    "sqlmodel": ("sqlmodel",),
+    "aiosqlite": ("aiosqlite",),
+    "sqlalchemy": ("sqlalchemy",),
+    "pyyaml": ("yaml",),
+    "eazy-sdk": ("eazy_sdk",),
+    "eazy-sdk-accounts": ("eazy_sdk_accounts",),
+    "eazy-sdk-html": ("eazy_sdk_html",),
+    "eazy-sdk-presets": ("eazy_sdk_presets",),
+    "eazy-sdk-sqlmodel": ("eazy_sdk_sqlmodel",),
+    "eazy-sdk-openapi": ("eazy_sdk_openapi",),
+    "eazy-sdk-asyncapi": ("eazy_sdk_asyncapi",),
+    "eazy-sdk-xml": ("eazy_sdk_xml",),
+}
 
 FORBIDDEN_CORE = (
     "eazy_sdk/adapters/",
@@ -128,6 +159,103 @@ def _sdist_for(directory: Path, package: str) -> Path:
     return matches[0]
 
 
+def _unconditional_imports(source: str) -> set[str]:
+    """Top-level names imported at module import time (outside try/TYPE_CHECKING)."""
+
+    names: set[str] = set()
+
+    def visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Import):
+                names.update(alias.name.split(".")[0] for alias in child.names)
+            elif isinstance(child, ast.ImportFrom):
+                if child.level == 0 and child.module is not None:
+                    names.add(child.module.split(".")[0])
+            elif isinstance(child, ast.Try):
+                for handler in child.handlers:
+                    visit(handler)
+                for statement in child.orelse + child.finalbody:
+                    visit(statement)
+            elif isinstance(child, ast.If):
+                test = ast.unparse(child.test)
+                if "TYPE_CHECKING" in test:
+                    for statement in child.orelse:
+                        visit(statement)
+                else:
+                    visit(child)
+            elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+                continue
+            elif isinstance(child, ast.ClassDef | ast.With | ast.For | ast.While | ast.Match):
+                visit(child)
+
+    visit(ast.parse(source))
+    return names
+
+
+# Modules that are imported only behind an install hint (``Client.httpx`` and friends);
+# their unconditional imports must be covered by the named extra instead.
+OPTIONAL_MODULES = {
+    "eazy_sdk/handlers/httpx.py": "httpx",
+    "eazy_sdk/handlers/requests.py": "requests",
+    "eazy_sdk/handlers/curl_cffi.py": "curl-cffi",
+}
+
+
+def _distributions(metadata: Message, extra: str | None) -> set[str]:
+    """Distribution names required unconditionally, or by ``extra`` when given."""
+
+    found: set[str] = set()
+    for value in metadata.get_all("Requires-Dist", []) or []:
+        marker = RE_EXTRA_MARKER.search(value)
+        if (marker.group(1) if marker is not None else None) != extra:
+            continue
+        match = RE_DISTRIBUTION_NAME.match(value)
+        if match is not None:
+            found.add(match.group(1).casefold().replace("_", "-"))
+    return found
+
+
+def _import_failures(
+    wheel_name: str,
+    package: str,
+    names: list[str],
+    metadata: Message,
+    archive: zipfile.ZipFile,
+) -> list[str]:
+    failures: list[str] = []
+
+    def provided_by(distributions: set[str]) -> set[str]:
+        provided: set[str] = set()
+        for distribution in sorted(distributions):
+            imports = DISTRIBUTION_IMPORTS.get(distribution)
+            if imports is None:
+                failures.append(
+                    f"{wheel_name}: dependency {distribution!r} has no entry in "
+                    "DISTRIBUTION_IMPORTS"
+                )
+                continue
+            provided.update(imports)
+        return provided
+
+    mandatory = set(sys.stdlib_module_names) | {package}
+    mandatory |= provided_by(_distributions(metadata, None))
+    for name in names:
+        if not name.endswith(".py"):
+            continue
+        allowed = set(mandatory)
+        extra = OPTIONAL_MODULES.get(name)
+        if extra is not None:
+            allowed |= provided_by(_distributions(metadata, extra))
+        for imported in sorted(_unconditional_imports(archive.read(name).decode("utf-8"))):
+            if imported not in allowed:
+                failures.append(
+                    f"{wheel_name}: {name} imports {imported!r} unconditionally, but no "
+                    f"{'mandatory' if extra is None else repr(extra) + ' extra'} dependency "
+                    "provides it"
+                )
+    return failures
+
+
 def audit(directory: Path) -> None:
     failures: list[str] = []
     for package, (marker, pyproject_path) in PACKAGES.items():
@@ -162,6 +290,7 @@ def audit(directory: Path) -> None:
             if not any(name.endswith(".dist-info/licenses/LICENSE") for name in names):
                 failures.append(f"{wheel.name}: missing packaged LICENSE text")
             classifiers = metadata.get_all("Classifier", [])
+            failures.extend(_import_failures(wheel.name, package, names, metadata, archive))
             if (
                 "a" in expected_version
                 and "Development Status :: 3 - Alpha" not in classifiers
@@ -272,7 +401,8 @@ def audit(directory: Path) -> None:
         raise RuntimeError("\n".join(failures))
     print(
         "OK: wheels/sdists have matching release metadata, licenses, typing markers, "
-        "the Zapros boundary, the phase-29 protection package, and no legacy paths"
+        "the Zapros boundary, the phase-29 protection package, no legacy paths, and every "
+        "unconditional import is covered by a mandatory dependency"
     )
 
 

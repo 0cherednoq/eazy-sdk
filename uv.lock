@@ -879,19 +879,14 @@ version = "0.2.0a4"
 source = { editable = "plugins/html" }
 dependencies = [
     { name = "eazy-sdk" },
-]
-
-[package.optional-dependencies]
-parsel = [
     { name = "parsel" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "eazy-sdk", editable = "." },
-    { name = "parsel", marker = "extra == 'parsel'", specifier = ">=1.11" },
+    { name = "parsel", specifier = ">=1.11" },
 ]
-provides-extras = ["parsel"]
 
 [[package]]
 name = "eazy-sdk-openapi"
@@ -949,6 +944,8 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "eazy-sdk" },
     { name = "eazy-sdk-accounts" },
+    { name = "pydantic" },
+    { name = "sqlalchemy" },
     { name = "sqlmodel" },
 ]
 
@@ -957,6 +954,8 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "eazy-sdk", editable = "." },
     { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "sqlalchemy", specifier = ">=2" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
 ]
 

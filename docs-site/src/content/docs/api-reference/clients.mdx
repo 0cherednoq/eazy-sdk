@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:e110fde012e3dd260a9afc85f82f34396e29f4d6ef113b57de4c8cff9aff9c0c"
+api_fingerprint: "sha256:1575f0a632a1a83f28d3650cd4a11eb2456196408563a816c1c36c335ce5036b"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -86,8 +86,13 @@ crypto и одну группу `protection=` (`ProtectionBundle`). First-party 
 `config.bundle` возвращает установленную (или пустую) группу.
 
 Managed protection state принадлежит одному client/handler session и очищается при закрытии
-client. Proxy, User-Agent и impersonation задаются при construction handler-а. Для rotation
-создайте новый handler и client; per-attempt transport identity provider отсутствует.
+client. Proxy, User-Agent и impersonation задаются при construction handler-а: фабрики
+`Client.httpx(proxy=...)`, `Client.requests(proxy=...)`, `Client.curl_cffi(proxy=..., impersonate=...)`
+и их async-варианты настраивают создаваемую сессию и объявляют результат в
+`HandlerProfile.proxy`/`HandlerProfile.impersonation` (для чужой сессии `proxy=` — только
+декларация того, что она уже использует). Именно объявленный proxy входит в transport identity
+managed clearance. Для rotation создайте новый handler и client; per-attempt transport identity
+provider отсутствует.
 
 ## Ad-hoc HTTP
 

@@ -16,10 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a4,<0.3"]
-
-[project.optional-dependencies]
-parsel = ["parsel>=1.11"]
+dependencies = ["eazy-sdk>=0.2.0a4,<0.3", "parsel>=1.11"]
 
 [build-system]
 requires = ["hatchling"]

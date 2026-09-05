@@ -153,7 +153,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     if any(operation.protections or operation.body_projection for operation in ir.operations):
         lines.append("    BodyProjection,")
     if ir.session_auth is not None:
-        lines.append("    AuthContext, session_auth, session_scheme,")
+        lines.append("    AuthContext, generated_session_auth, generated_session_scheme,")
     lines.extend(
         [
             "    Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,",
@@ -192,7 +192,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
         session = ir.session_auth
         lines.extend(
             [
-                f"{_constant(session.scheme)} = session_scheme(",
+                f"{_constant(session.scheme)} = generated_session_scheme(",
                 f"    {session.session_model},",
                 f"    name={session.scheme!r},",
                 f"    bearer_field={session.bearer_field!r},",
@@ -551,7 +551,7 @@ def _session_service(
             "        raise ValueError(",
             "            'config.auth cannot be combined with credentials or session'",
             "        )",
-            "    auth = session_auth(",
+            "    auth = generated_session_auth(",
             f"        {session.session_model},",
             f"        bearer_field={session.bearer_field!r},",
             f"        refresh_field={session.refresh_token_field!r},",
