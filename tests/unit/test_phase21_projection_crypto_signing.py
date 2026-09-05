@@ -11,7 +11,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 import httpx
 import pytest
 
-from eazy_sdk import ApiDefaults, AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import (
     AuthExecution,
@@ -498,7 +498,7 @@ async def test_nested_body_reserved_output_uses_the_projected_target_path() -> N
         await SignedApi(client).send(payload="visible")
 
     descriptor = cast(Any, SignedApi.send)
-    compiled = descriptor.resolve(ApiDefaults()).compile()
+    compiled = descriptor.resolve().compile()
     assert compiled.body_signature_paths == (("signatures", "value"),)
 
 
@@ -531,7 +531,7 @@ def test_private_and_signature_writer_collision_fails_during_compile() -> None:
 
     descriptor = cast(Any, CollisionApi.send)
     with pytest.raises(PlanError, match="private wire and body signature writers overlap"):
-        descriptor.resolve(ApiDefaults()).compile()
+        descriptor.resolve().compile()
 
 
 def test_body_signature_output_must_select_a_declared_target_field() -> None:
@@ -554,7 +554,7 @@ def test_body_signature_output_must_select_a_declared_target_field() -> None:
 
     descriptor = cast(Any, InvalidTargetApi.send)
     with pytest.raises(PlanError, match="target field is not declared"):
-        descriptor.resolve(ApiDefaults()).compile()
+        descriptor.resolve().compile()
 
 
 async def test_body_signature_output_and_encoded_crypto_fail_before_key_or_network() -> None:

@@ -11,7 +11,9 @@ api_fingerprint: "sha256:7f76e89bf3c7dbc5eb08f7e4ffda98e146813d77b8871503ef482a4
 
 `eazy_sdk.protection` is the application-facing response-guard API. It contains solver and context
 protocols, the `challenge_guard()` builder, declarative solution destinations, replay helpers, and
-stage-specific errors. Compiler, registry, and persistence contracts are not exported here.
+stage-specific errors. Compiler, registry, and persistence contracts are not exported here, and
+neither are `ChallengeParseError` and `AmbiguousChallengeError`: those two come only from
+`eazy_sdk.protection.advanced`.
 
 ## Installable guards
 
@@ -159,8 +161,8 @@ compiled destination validity, body replayability, semantic replay proof, finite
 |---|---|---|
 | Configuration | `ProtectionConfigurationError` | Guard or lowering is malformed, a solver is missing, or destinations conflict |
 | Detection | `ChallengeDetectionError` | A detector raises an unexpected exception |
-| Detection | `ChallengeParseError` | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
-| Detection | `AmbiguousChallengeError` | Two or more definitive policies matched one response with equal priority; a `ProtectionConfigurationError` listing `policies` |
+| Detection | `ChallengeParseError` (`eazy_sdk.protection.advanced`) | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
+| Detection | `AmbiguousChallengeError` (`eazy_sdk.protection.advanced`) | Two or more definitive policies matched one response with equal priority; a `ProtectionConfigurationError` listing `policies` |
 | Solve | `ChallengeSolveError` | A solver fails |
 | Application | `ChallengeApplicationError` | A solution field or destination value is invalid |
 | Replay | `ReplayDeniedError` | Replayability, semantic proof, or the policy's own replay budget is insufficient |
@@ -170,26 +172,39 @@ response bodies, solution values, cookies, credentials, proxy configuration, or 
 Replay budgets are counted per policy: one policy cannot replay on another policy's budget.
 
 Solvers are awaited by the runtime in both clients. In the synchronous `Client` an `async def
-solve()` runs on the per-call event loop; `Guard.solve()` and function solvers may also be plain
-synchronous callables. Single-flight locks are loop-agnostic, so one sync client shared by several
-threads still solves each session challenge once.
+solve()` runs on the client's per-thread event loop: one reusable `asyncio.Runner` is created
+lazily for each calling thread and shared by every call made from it (a call from a thread that
+already runs a loop raises `EventLoopConflictError`). `Guard.solve()` and function solvers may
+also be plain synchronous callables. Single-flight locks are loop-agnostic, so one sync client
+shared by several threads still solves each session challenge once.
 
 ## Advanced lowering SPI
 
 `eazy_sdk.protection.advanced` is the only import path for framework and generated-policy
-contracts. Its exact `__all__` contains:
+contracts. Its exact `__all__` (49 names, sorted; a unit test pins its hash) is:
 
-- `ChallengePolicy` and `BeforeCallPolicy`: frozen, self-validating dataclasses (keyword-only);
-  presets subclass them, the executor performs no second validation;
-- `ResponseSignal` and typed signal outcomes;
-- one `ChallengeSolver` protocol, one `SolverRequirement[TChallenge, TSolution]`, one
-  `SolverBinding`/`bind_solver()` and one `SolverBindings` registry shared by response guards,
-  before-call policies, and mandatory operation flows;
-- `OperationReference` (a decorated API method or its declaration) typing `acquire`/`verify`;
-- `PrivateBindings` plus header, query, cookie, dynamic-cookie, and body targets;
-- `ProtectionPersistence` modes and client/session state scopes (the simple layer exposes only
-  `cache="none" | "call" | "session"`; `per_attempt` and `until_expiry` are advanced-only);
-- mandatory operation protection flows and `FromProtection`;
+- policies: `ChallengePolicy`, `BeforeCallPolicy` (frozen, self-validating keyword-only
+  dataclasses; presets subclass them, the executor performs no second validation) and their
+  builders `challenge_policy()`, `before_call_policy()`;
+- signals: `ResponseSignal`, `SignalInterception`, `SignalMatch`, `SignalOutcome`,
+  `AmbiguousSignal`, `MalformedSignal`;
+- solvers: `SolverRequirement[TChallenge, TSolution]`, `SolverBinding`, `bind_solver()`,
+  `SolverBindings`, `SolverLike`; the `ChallengeSolver` protocol itself is exported by
+  `eazy_sdk.protection`, not here;
+- solve context ports: `ProtectedFetch`, `TransportIdentity`;
+- operations: `OperationReference` (a decorated API method or its declaration) typing
+  `acquire`/`verify`;
+- private destinations: `PrivateBindings`, `PrivateBinding`, `PrivateBindingTarget`,
+  `PrivateCookieSetBinding`, `SolutionLocation`, `private_bindings()`, `private_header()`,
+  `private_query()`, `private_cookie()`, `private_cookie_set()`, `private_body()`;
+- persistence: `ProtectionPersistence`, `ProtectionPersistenceMode`, `ProtectionStateKey`,
+  `ProtectionStateScope`, `per_match()`, `per_attempt()`, `per_call()`, `until_expiry()`,
+  `until_rejected()`, `client_identity()`, `session_identity()`, and the `GuardCache` literal
+  (the simple layer exposes only `cache="none" | "call" | "session"`; `per_attempt` and
+  `until_expiry` are advanced-only);
+- replay: `ReplaySafety`, `BodyReplayPolicy`;
+- mandatory operation flows: `ProtectionFlow`, `protection_flow()`, `FromProtection`;
+- errors: `ChallengeParseError`, `AmbiguousChallengeError`;
 - the internal installable lowering value `ProtectionBundle`.
 
 Concrete cache entries, lock registries, compilation helpers, signal arbitration helpers, and

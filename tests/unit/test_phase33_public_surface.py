@@ -21,6 +21,7 @@ import eazy_sdk
 from eazy_sdk import (
     AsyncApi,
     AsyncClient,
+    AsyncRoot,
     Bytes,
     Client,
     ClientConfig,
@@ -30,6 +31,7 @@ from eazy_sdk import (
     Responses,
     Success,
     SyncApi,
+    SyncRoot,
     api,
     api_group,
 )
@@ -62,11 +64,11 @@ class AsyncProductsApi(AsyncApi):
         raise NotImplementedError
 
 
-class StoreSdk(SyncApi):
+class StoreSdk(SyncRoot):
     products = api_group(ProductsApi)
 
 
-class AsyncStoreSdk(AsyncApi):
+class AsyncStoreSdk(AsyncRoot):
     products = api_group(AsyncProductsApi)
 
 
@@ -99,8 +101,8 @@ def test_quickstart_needs_one_import_block_and_no_handler_assembly() -> None:
 async def test_async_factory_and_owning_root_close_exactly_once() -> None:
     transport = httpx.MockTransport(_respond)
     raw = httpx.AsyncClient(transport=transport)
-    async with AsyncStoreSdk.from_client(
-        AsyncClient.httpx(base_url="https://store.test", client=raw), owns_client=True
+    async with AsyncStoreSdk(
+        AsyncClient.httpx(base_url="https://store.test", client=raw)
     ) as store:
         assert await store.products.products(q="x") == [Product(id=1, title="one")]
     # The handler borrowed the caller's httpx client, so it stays open.
@@ -149,7 +151,7 @@ def test_requests_and_curl_cffi_factories_build_first_party_handlers() -> None:
 def test_api_group_kind_is_validated_and_bare_api_owns_nothing() -> None:
     with pytest.raises(TypeError, match="wrong API kind"):
 
-        class Invalid(SyncApi):
+        class Invalid(SyncRoot):
             products = api_group(AsyncProductsApi)
 
     class Handler(BaseHandler):
@@ -167,9 +169,10 @@ def test_api_group_kind_is_validated_and_bare_api_owns_nothing() -> None:
     with StoreSdk(client) as store:
         assert isinstance(store.products, ProductsApi)
     assert handler.closed == 0
-    with StoreSdk.from_client(client, owns_client=True):
-        pass
-    assert handler.closed == 1
+    client.close()
+    with StoreSdk.from_handler(handler=Handler(), base_url="https://store.test") as owning:
+        owned = owning._owned[0]
+    assert owned._closed
     assert isinstance(AsyncBaseHandler, type)
 
 

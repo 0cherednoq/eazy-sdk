@@ -33,6 +33,8 @@ class _OperationDeclaration[T]:
     input_schema: MethodInputSchema
     result_type: object
     responses: Responses[T] | object
+    base_url: str = ""
+    """Service address declared by the router; empty means the client's own ``base_url``."""
     security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None
     requires: tuple[object, ...] = ()
     inject: tuple[object, ...] = ()

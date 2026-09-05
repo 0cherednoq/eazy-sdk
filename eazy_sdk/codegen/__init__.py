@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from eazy_sdk.api import ApiDefaults, AsyncApi, SyncApi
+from eazy_sdk.api import AsyncApi, SyncApi
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthContext,
@@ -68,6 +68,7 @@ from eazy_sdk.response import (
     Success,
     Text,
 )
+from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
 
 
 class Unset:
@@ -79,14 +80,15 @@ UNSET = Unset()
 __all__ = [
     "DEFAULT",
     "UNSET",
-    "ApiDefaults",
     "ApiError",
     "ApiKeyScheme",
     "AsyncApi",
     "AsyncClient",
+    "AsyncRoot",
     "AuthContext",
     "BasicScheme",
     "BearerScheme",
+    "Binding",
     "BodyProjection",
     "Bytes",
     "BytesBody",
@@ -126,11 +128,13 @@ __all__ = [
     "StatusRange",
     "Success",
     "SyncApi",
+    "SyncRoot",
     "Text",
     "Unset",
     "WireOptions",
     "all_of",
     "any_of",
+    "bind",
     "field",
     "generated_session_auth",
     "generated_session_scheme",

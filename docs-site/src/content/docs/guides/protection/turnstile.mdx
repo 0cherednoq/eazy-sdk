@@ -11,6 +11,29 @@ Widget and preclearance guards use different lifecycle stages. Install both desc
 immutable config merge:
 
 ```python target
+from eazy_sdk import ClientConfig
+from eazy_sdk.protection import SolveContext, host, operation
+from eazy_sdk_presets import cloudflare, form_field
+
+
+class TurnstileTokenSolver:
+    async def solve(
+        self,
+        challenge: cloudflare.TurnstileChallenge,
+        context: SolveContext,
+    ) -> cloudflare.TurnstileToken:
+        raise NotImplementedError("obtain the widget token from your captcha service")
+
+
+class TurnstileClearanceSolver:
+    async def solve(
+        self,
+        challenge: cloudflare.TurnstileChallenge,
+        context: SolveContext,
+    ) -> cloudflare.CloudflareClearance:
+        raise NotImplementedError("obtain the clearance cookies for page_url")
+
+
 widget = cloudflare.turnstile_widget(
     scope=operation("login"),
     solver=TurnstileTokenSolver(),

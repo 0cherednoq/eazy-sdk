@@ -44,6 +44,6 @@ any_of(all_of(USER_AUTH, DEVICE_AUTH), BASIC)
 альтернативу и не смешивает credentials из разных alternatives.
 
 Для lifecycle session используйте `session_auth(...)` или `session_cookie(...)`. Hand-written SDK
-может объявить reusable `session_scheme(...)` для `ApiDefaults` и вызвать её `.configure(...)`;
+может объявить reusable `session_scheme(...)` в атрибуте `security` роутера и вызвать её `.configure(...)`;
 их API описан в
 {doc}`Session reference </api-reference/session>`.

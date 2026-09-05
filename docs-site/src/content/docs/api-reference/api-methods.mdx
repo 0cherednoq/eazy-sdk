@@ -4,7 +4,7 @@ description: Декларативные sync/async HTTP-операции, сиг
 sources:
   - eazy_sdk.api
   - eazy_sdk.preparation
-api_fingerprint: "sha256:42258940758fc1288c313011bf5fcd755295f07648a834daf3cbe1c41a212a54"
+api_fingerprint: "sha256:72c4a463486b9696906138b852ea0be1e36a9df8a1b9e63f1e03a234bb6cf358"
 ---
 
 Наследуйте `AsyncApi` или `SyncApi`. Сигнатура метода становится публичной сигнатурой SDK,
@@ -78,7 +78,7 @@ class GeneratedUsersApi(AsyncApi):
 from typing import Annotated
 
 from pydantic import BaseModel
-from eazy_sdk import ApiDefaults, AsyncApi, api
+from eazy_sdk import AsyncApi, api
 from eazy_sdk.request import Path
 from eazy_sdk.response import Error, Json
 
@@ -94,7 +94,7 @@ class UserNotFound(Exception):
 COMMON_ERRORS = ()
 
 class UsersApi(AsyncApi):
-    defaults = ApiDefaults(errors=COMMON_ERRORS)
+    errors = COMMON_ERRORS
 
     @api.get(
         "/users/{user_id}",
@@ -105,7 +105,7 @@ class UsersApi(AsyncApi):
         raise NotImplementedError
 ```
 
-Operation errors добавляются после `ApiDefaults.errors`. Передайте `inherit_errors=False`, чтобы
+Operation errors добавляются после `errors`, объявленных на классе роутера. Передайте `inherit_errors=False`, чтобы
 отключить inherited cases. `response=` и `responses=` взаимоисключающие. Используйте полный
 `Responses[T]` для нескольких success cases, fallback и сложной arbitration.
 
@@ -143,7 +143,7 @@ decorator.
 | `response` | Одна success representation | — |
 | `responses` | Полный `Responses` contract | — |
 | `errors` | Локальные typed error cases | `()` |
-| `inherit_errors` | Добавить `ApiDefaults.errors` | `True` |
+| `inherit_errors` | Добавить `errors` роутера | `True` |
 | `operation_id` | Стабильная identity операции | имя метода |
 | `security` | Auth scheme или policy | inherited |
 | `requires`, `inject` | Managed request dependencies | `()` |
@@ -156,7 +156,9 @@ decorator.
 | `idempotent` | Явное replay-доказательство | выводится из method |
 | `raw_response` | Вернуть normalized response | `False` |
 
-`ApiDefaults` содержит `security`, `signing`, `crypto`, `crypto_wire` и `errors`.
+Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `crypto_wire`, `errors` и `allow`
+обычными атрибутами класса; они наследуются по MRO, поэтому общий для нескольких роутеров
+сервис описывается обычным базовым классом (см. {doc}`Мультисервисный SDK </guides/multi-service>`).
 
 ## Подготовка без отправки
 

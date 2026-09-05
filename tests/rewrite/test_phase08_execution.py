@@ -7,7 +7,7 @@ from typing import Annotated, Any, cast
 
 import pytest
 
-from eazy_sdk import ApiDefaults, AsyncApi, SyncApi, api
+from eazy_sdk import AsyncApi, SyncApi, api
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import (
@@ -158,7 +158,7 @@ def response(
 
 
 def contract() -> Any:
-    return cast(Any, ItemsApi.items).resolve(ApiDefaults())
+    return cast(Any, ItemsApi.items).resolve()
 
 
 def execute_sync(
@@ -439,7 +439,7 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         output=header_output("X-Signature"),
     )
     declaration = dataclass_replace(
-        cast(Any, ItemsApi.items).resolve(ApiDefaults()),
+        cast(Any, ItemsApi.items).resolve(),
         responses=responses,
         signing=(signature,),
     )
@@ -612,7 +612,7 @@ def test_high_level_dependency_is_lowered_and_cached_per_call() -> None:
         apply=(field("identifier").to_header("X-Device"),),
     )
     endpoint = dataclass_replace(
-        cast(Any, DeviceItemsApi.items).resolve(ApiDefaults()),
+        cast(Any, DeviceItemsApi.items).resolve(),
         requires=(requirement,),
     )
     emits = 0

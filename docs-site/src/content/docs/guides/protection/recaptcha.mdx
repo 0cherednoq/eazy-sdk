@@ -11,6 +11,24 @@ v2/checkbox policies реагируют на response challenge. v3/action и En
 получают token до request.
 
 ```python target
+from eazy_sdk import ClientConfig
+from eazy_sdk.protection import SolveContext, operation
+from eazy_sdk_presets import form_field, recaptcha
+
+
+class RecaptchaV2Solver:
+    async def solve(
+        self,
+        challenge: recaptcha.RecaptchaChallenge,
+        context: SolveContext,
+    ) -> recaptcha.RecaptchaToken:
+        raise NotImplementedError("obtain the token from your captcha service")
+
+
+class RecaptchaV3Solver(RecaptchaV2Solver):
+    pass
+
+
 v2 = recaptcha.v2_checkbox(
     scope=operation("login"),
     solver=RecaptchaV2Solver(),

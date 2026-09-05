@@ -1,8 +1,8 @@
 {
   "api-reference/api-methods.mdx": {
-    "fingerprint": "sha256:42258940758fc1288c313011bf5fcd755295f07648a834daf3cbe1c41a212a54",
+    "fingerprint": "sha256:72c4a463486b9696906138b852ea0be1e36a9df8a1b9e63f1e03a234bb6cf358",
     "symbols": {
-      "eazy_sdk.api": "sha256:a46ffedaf1b24ab4d31dd1824b40f7d5ccb9b8fb62391d53bd79a9de77de94b2",
+      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
       "eazy_sdk.preparation": "sha256:80a154bd73dd05bbb384a0d958e758af09511dfec03521cdc4607e17fdf6ea81"
     }
   },
@@ -213,10 +213,10 @@
     }
   },
   "getting-started/quickstart.mdx": {
-    "fingerprint": "sha256:b5d852ecafc3fb63c78cd2a104a0fa98b40c7562f219863b4f9dd7806d1e8d47",
+    "fingerprint": "sha256:c66fc68d6e3b0d32cb77d4954564f5fdba70adbc90ffdd40164593e7fa53b26d",
     "symbols": {
       "eazy_sdk.Client": "sha256:99ccf2ea9f9c7e1adb0f45d6cee49cc474a1a336293ceccbbfbec1b7fab49124",
-      "eazy_sdk.api": "sha256:a46ffedaf1b24ab4d31dd1824b40f7d5ccb9b8fb62391d53bd79a9de77de94b2",
+      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
       "eazy_sdk.request": "sha256:76475eb24ef1d6c01fe9f934d0de921ec1102704ef57fbfdba94c263eea22120",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
@@ -232,6 +232,16 @@
     "symbols": {
       "eazy_sdk.clients.CallOptions": "sha256:fda10bef5760218a10458522467d5a2c9946a5cafbfec69356698274859e00db",
       "eazy_sdk.middleware": "sha256:32792d6ad4713a5a4d6a45c0521b9f40bced117a4bbf5f74def8f7dc956d1029"
+    }
+  },
+  "guides/multi-service.mdx": {
+    "fingerprint": "sha256:6a11a9561db9c8a12b9b03027ff29e331256550a7c6fe3ccd8e053ba9d927930",
+    "symbols": {
+      "eazy_sdk.AsyncRoot": "sha256:2f9609bb54292e86695ebcbf76d831635d767a2b770d7912a86f1db4c27d0401",
+      "eazy_sdk.Binding": "sha256:03b81dabab9bbcb290967093043bda35c06e1274737a39bc3e219219df47d614",
+      "eazy_sdk.SyncRoot": "sha256:313467bcab6f820245faee0d53d6419f6b4356964998559daf170eb93592582c",
+      "eazy_sdk.api_group": "sha256:f847d7200e1150d2bbab2e9f518a1793f1d8d8df9c60f1ee6fc346879b2b0c39",
+      "eazy_sdk.bind": "sha256:03caccad27326924f362fb6c4505cc6b6d29491efdc79386aafd160c5603cb41"
     }
   },
   "guides/openapi.mdx": {
@@ -338,9 +348,9 @@
     }
   },
   "guides/responses/errors.mdx": {
-    "fingerprint": "sha256:4817b831e26a911d1fe88c70c9ba0eb1462538e07cd6416aecba32886db06132",
+    "fingerprint": "sha256:acb0324358d8d6c6917452388c3062b8d7c720dfe10aa3add319307a0132d1da",
     "symbols": {
-      "eazy_sdk.api": "sha256:a46ffedaf1b24ab4d31dd1824b40f7d5ccb9b8fb62391d53bd79a9de77de94b2",
+      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
   },
@@ -355,9 +365,9 @@
     }
   },
   "guides/responses/success.mdx": {
-    "fingerprint": "sha256:4817b831e26a911d1fe88c70c9ba0eb1462538e07cd6416aecba32886db06132",
+    "fingerprint": "sha256:acb0324358d8d6c6917452388c3062b8d7c720dfe10aa3add319307a0132d1da",
     "symbols": {
-      "eazy_sdk.api": "sha256:a46ffedaf1b24ab4d31dd1824b40f7d5ccb9b8fb62391d53bd79a9de77de94b2",
+      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
   },
@@ -391,10 +401,10 @@
     }
   },
   "more/examples/store-sdk.mdx": {
-    "fingerprint": "sha256:450b4aff122fe4e98e46245c9b8874862149f6df45d748e8dee798ff6bc48371",
+    "fingerprint": "sha256:0523e5fa1ff809992f0a5844cbfc119d9a194c650ee074b73dd0a5c34b25c1d4",
     "symbols": {
       "eazy_sdk.Client": "sha256:99ccf2ea9f9c7e1adb0f45d6cee49cc474a1a336293ceccbbfbec1b7fab49124",
-      "eazy_sdk.api": "sha256:a46ffedaf1b24ab4d31dd1824b40f7d5ccb9b8fb62391d53bd79a9de77de94b2",
+      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
       "eazy_sdk.auth.BearerScheme": "sha256:8d94956efc1a0d40a7b0c866c6717d0156a188e56a48ae2823d76fbf3f6729ec",
       "eazy_sdk.crypto": "sha256:99ea5e60380ede6b447bc1fc451ff0f8014a27d74d63d2111673b3368e115603",
       "eazy_sdk.request.hmac_sha256": "sha256:8513032e1d4d557b9ec68448d1a06bd01c1811bda927a10f7b49d396b2eed46d",

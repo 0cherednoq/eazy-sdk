@@ -1,12 +1,32 @@
 ---
 title: Миграция между альфами
-description: Таблицы «было → стало» для 0.2.0a3 → 0.2.0a4 и 0.2.0a4 → 0.2.0a5.
+description: Таблицы «было → стало» для альфа-переходов и для 0.2.0a5 → 0.3.0.
 freshness: false
 ---
 
 Eazy SDK в альфе переименовывает без deprecated-алиасов: старое имя исчезает, `ImportError`
 или `AttributeError` показывает, что именно нужно поменять. Эта страница — единственная
 подсказка. Каждая строка таблицы проверяется тестом: «стало» импортируется, «было» отсутствует.
+
+## 0.2.0a5 → 0.3.0
+
+Корень SDK стал отдельным типом. `SyncApi`/`AsyncApi` — это роутер: операции и атрибуты сервиса
+(`base_url`, `errors`, `security`, `signing`, `crypto`, `crypto_wire`, `allow`). Композиция,
+владение клиентами и привязки живут в `SyncRoot`/`AsyncRoot`; `api_group(...)` объявляется только
+на корне. Подробности — {doc}`Мультисервисный SDK </guides/multi-service>`.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.SyncApi.from_handler` | `eazy_sdk.SyncRoot.from_handler` | Фабрика переехала на корень; она же создаёт и закрывает свой клиент. |
+| `eazy_sdk.AsyncApi.from_handler` | `eazy_sdk.AsyncRoot.from_handler` | То же для async. |
+| `eazy_sdk.SyncApi.from_client` | `eazy_sdk.SyncRoot` | Второго способа собрать корень нет: `ShopSdk(client)` — обычный конструктор. |
+| `eazy_sdk.AsyncApi.from_client` | `eazy_sdk.AsyncRoot` | То же для async. |
+| `eazy_sdk.SyncApi.close` | `eazy_sdk.SyncRoot.close` | Роутер ничем не владеет; закрывает ресурсы корень. |
+| `eazy_sdk.AsyncApi.aclose` | `eazy_sdk.AsyncRoot.aclose` | То же для async. |
+| `eazy_sdk.ApiDefaults` | `eazy_sdk.SyncApi` | Дефолты роутера стали обычными атрибутами класса и наследуются по MRO. |
+
+Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
+другому клиенту и/или адресу при сборке (`bindings=(...)`).
 
 ## 0.2.0a4 → 0.2.0a5
 

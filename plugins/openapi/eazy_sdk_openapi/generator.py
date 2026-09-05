@@ -142,10 +142,12 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             "from pydantic import ConfigDict, Field",
             "from zapros import AsyncBaseHandler, BaseHandler",
             "",
-            "from eazy_sdk import AsyncApi, HandlerProfile, SyncApi, api, api_group",
+            "from eazy_sdk import (",
+            "    AsyncApi, AsyncRoot, HandlerProfile, SyncApi, SyncRoot, api, api_group,",
+            ")",
             "from eazy_sdk.codegen import (",
-            "    DEFAULT, ApiError, AsyncApi, AsyncClient, Bytes, BytesBody, CallOptions,",
-            "    Client, ClientConfig,",
+            "    DEFAULT, ApiError, AsyncApi, AsyncClient, Binding, Bytes, BytesBody,",
+            "    CallOptions, Client, ClientConfig,",
             "    Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,",
             "    MultipartBody, Part, Path, Query, QueryString, SyncApi,",
         ]
@@ -384,7 +386,7 @@ def _api_facade(
     session_auth: SessionAuthIR | None,
     has_protections: bool,
 ) -> list[str]:
-    sdk_base = "AsyncApi" if asynchronous else "SyncApi"
+    sdk_base = "AsyncRoot" if asynchronous else "SyncRoot"
     lines = [
         "",
         "",
@@ -399,9 +401,9 @@ def _api_facade(
                 "",
                 (
                     f"    def __init__(self, client: {client_type}, *, "
-                    "owns_client: bool = False) -> None:"
+                    "bindings: tuple[Binding, ...] = ()) -> None:"
                 ),
-                "        super().__init__(client, owns_client=owns_client)",
+                "        super().__init__(client, bindings=bindings)",
                 "        auth_client = cast(AsyncClient, client._async_view())",
                 "        self._auth_api = auth_client.bind_sdk(AsyncAPI)",
             ]
@@ -418,6 +420,7 @@ def _api_facade(
                 "        config: ClientConfig | None = None,",
                 "        owns_handler: bool = True,",
                 "        profile: HandlerProfile | None = None,",
+                "        bindings: tuple[Binding, ...] = (),",
             ]
         )
     else:
@@ -432,6 +435,7 @@ def _api_facade(
                 "        config: ClientConfig | None = None,",
                 "        owns_handler: bool = True,",
                 "        profile: HandlerProfile | None = None,",
+                "        bindings: tuple[Binding, ...] = (),",
             ]
         )
     lines.extend(
@@ -453,6 +457,7 @@ def _api_facade(
             "            config=config,",
             "            owns_handler=owns_handler,",
             "            profile=profile,",
+            "            bindings=bindings,",
             "        )",
         ]
     )

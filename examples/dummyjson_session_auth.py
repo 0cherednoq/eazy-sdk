@@ -9,14 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Annotated, Self, TypedDict, Unpack
 
 import httpx
 from pydantic import BaseModel, Field, SecretStr
 from zapros import AsyncBaseHandler
 
-from eazy_sdk import ApiDefaults, AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import (
+    AsyncApi,
+    AsyncRoot,
+    Binding,
+    ClientConfig,
+    HandlerProfile,
+    api,
+    api_group,
+)
 from eazy_sdk.auth import (
     AuthContext,
     Bearer,
@@ -48,9 +56,7 @@ class RefreshRequest(TypedDict):
 
 class UserSession(BaseModel):
     access_token: Annotated[SecretStr, Bearer()] = Field(validation_alias="accessToken")
-    refresh_token: Annotated[SecretStr, RefreshToken()] = Field(
-        validation_alias="refreshToken"
-    )
+    refresh_token: Annotated[SecretStr, RefreshToken()] = Field(validation_alias="refreshToken")
 
 
 DUMMYJSON_SESSION = session_scheme(UserSession, name="dummyjson-session")
@@ -72,9 +78,7 @@ class SessionRejected(ApiError[AuthProblem]):
     pass
 
 
-SESSION_RESPONSES: Responses[UserSession] = Responses(
-    success=(Success(200, Json(UserSession)),)
-)
+SESSION_RESPONSES: Responses[UserSession] = Responses(success=(Success(200, Json(UserSession)),))
 ME_RESPONSES: Responses[CurrentUser] = Responses(
     success=(Success(200, Json(CurrentUser)),),
     errors=(Error(401, Json(AuthProblem), exception=SessionRejected),),
@@ -102,7 +106,7 @@ class DummyJsonAuthApi(AsyncApi):
 
 
 class DummyJsonUsersApi(AsyncApi):
-    defaults = ApiDefaults(security=DUMMYJSON_SESSION)
+    security = DUMMYJSON_SESSION
 
     @api.get("/auth/me", operation_id="getCurrentUser", responses=ME_RESPONSES)
     async def me(self) -> CurrentUser:
@@ -134,16 +138,11 @@ class DummyJsonLoginService:
         )
 
 
-class DummyJsonSdk:
-    """Public SDK facade. Consumers do not call login or refresh directly."""
+class DummyJsonSdk(AsyncRoot):
+    """Public SDK root. Consumers do not call login or refresh directly."""
 
-    def __init__(
-        self,
-        client: AsyncClient,
-    ) -> None:
-        self._client = client
-        self.auth = DummyJsonAuthApi(client)
-        self.users = DummyJsonUsersApi(client)
+    auth = api_group(DummyJsonAuthApi)
+    users = api_group(DummyJsonUsersApi)
 
     @classmethod
     def from_handler(
@@ -153,29 +152,25 @@ class DummyJsonSdk:
         credentials: LoginCredentials | None = None,
         session: UserSession | None = None,
         base_url: str = BASE_URL,
+        config: ClientConfig | None = None,
         owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
+        bindings: tuple[Binding, ...] = (),
     ) -> Self:
         auth = DUMMYJSON_SESSION.configure(
             credentials=credentials,
             session=session,
             service=DummyJsonLoginService(),
         )
-        client = AsyncClient(
-            base_url=base_url,
+        config = replace(config or ClientConfig(timeout=20), auth=auth)
+        return super().from_handler(
             handler=handler,
+            base_url=base_url,
+            config=config,
             owns_handler=owns_handler,
-            config=ClientConfig(auth=auth, timeout=20),
+            profile=profile,
+            bindings=bindings,
         )
-        return client.bind_sdk(cls)
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.aclose()
 
 
 @dataclass(slots=True)

@@ -90,14 +90,91 @@ auth = COOKIE.static("session-demo-42")
 :::::
 
 ```python
-from eazy_sdk.auth import session_cookie
+from typing import Annotated, TypedDict, Unpack
 
+from pydantic import BaseModel, SecretStr
+
+from eazy_sdk import AsyncApi, AsyncRoot, ClientConfig, api, api_group
+from eazy_sdk.auth import AuthContext, session_cookie
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+from eazy_sdk.request import JsonField
+from eazy_sdk.response import Empty, Json, Responses, Success
+
+class LoginCredentials(BaseModel):
+    username: str
+    password: SecretStr
+
+class LoginRequest(TypedDict):
+    username: Annotated[str, JsonField()]
+    password: Annotated[str, JsonField()]
+
+class Dashboard(BaseModel):
+    welcome: str
+
+class AsyncAuthApi(AsyncApi):
+    @api.post(
+        "/auth/login",
+        operation_id="login",
+        responses=Responses(success=(Success(204, Empty()),)),
+        security=None,
+    )
+    async def login(self, **request: Unpack[LoginRequest]) -> None:
+        raise NotImplementedError
+
+class CookieLoginService:
+    async def acquire(
+        self,
+        credentials: LoginCredentials,
+        context: AuthContext["DashboardSdk"],
+    ) -> None:
+        envelope = await context.sdk.auth.login.with_response(
+            username=credentials.username,
+            password=credentials.password.get_secret_value(),
+        )
+        return context.capture(envelope)
+
+credentials = LoginCredentials(
+    username="ada@example.test",
+    password=SecretStr("correct-horse"),
+)
 auth = session_cookie(
     "session_id",
     credentials=credentials,
     service=CookieLoginService(),
+    name="dashboard-session",
 )
+
+class AsyncDashboardApi(AsyncApi):
+    security = auth.scheme
+
+    @api.get(
+        "/dashboard",
+        operation_id="getDashboard",
+        responses=Responses(success=(Success(200, Json(Dashboard)),)),
+    )
+    async def get_dashboard(self) -> Dashboard:
+        raise NotImplementedError
+
+class DashboardSdk(AsyncRoot):
+    auth = api_group(AsyncAuthApi)
+    dashboard = api_group(AsyncDashboardApi)
+
+async with DashboardSdk.from_handler(
+    handler=AsyncHttpxHandler(),
+    base_url="https://api.example.test",
+    config=ClientConfig(auth=auth),
+) as sdk:
+    dashboard = await sdk.dashboard.get_dashboard()
 ```
 
-`CookieLoginService.acquire(...)` вызывает login endpoint. Eazy SDK берёт `session_id` из
-`Set-Cookie` успешного ответа.
+`CookieLoginService.acquire(...)` вызывает login endpoint через `.with_response(...)` и передаёт
+полученный envelope в `context.capture(...)`. Только так runtime увидит headers ответа: cookie
+service читает `context.responses`, а туда попадают лишь захваченные envelope. Service, который
+просто вызывает `context.sdk.auth.login(...)`, завершится `SessionConfigurationError`, потому что
+`Set-Cookie` до runtime не дойдёт. Из захваченного ответа Eazy SDK берёт `session_id`, а
+`Max-Age`/`Expires` cookie определяют, когда login повторится.
+
+`session_cookie(...)` создаёт собственную scheme; провайдер сопоставляется с ней по объекту,
+поэтому защищённая ручка ссылается на `auth.scheme`, а не на отдельный `CookieScheme(...)`.
+Первый вызов `sdk.dashboard.get_dashboard()` запускает login, ответ `204` с `Set-Cookie`
+захватывается, и запрос уходит с `Cookie: session_id=session-v1`.

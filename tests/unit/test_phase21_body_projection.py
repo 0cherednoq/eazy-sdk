@@ -6,7 +6,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 import pytest
 
 import eazy_sdk.request as request_api
-from eazy_sdk import ApiDefaults, SyncApi, api
+from eazy_sdk import SyncApi, api
 from eazy_sdk.core import (
     PlanError,
     PlanNodeKind,
@@ -74,7 +74,7 @@ PROJECTION = BodyProjection(PublicBody, WireBody, to_wire, JsonBody())
 
 def _compile(api_type: type[SyncApi], method: str = "operation") -> Any:
     descriptor = cast(Any, getattr(api_type, method))
-    return descriptor.resolve(ApiDefaults()).compile()
+    return descriptor.resolve().compile()
 
 
 def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:

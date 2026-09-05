@@ -8,7 +8,7 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import ApiDefaults, AsyncApi, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, ClientConfig, SyncApi, api
 from eazy_sdk.clients import CallOptions, RetryPolicy
 from eazy_sdk.core import (
     PlanError,
@@ -476,7 +476,7 @@ async def test_mandatory_protection_injects_nested_target_paths() -> None:
         return httpx.Response(200, json={"id": 2, "name": "Nested"})
 
     descriptor = cast(Any, AuthApi.login_nested)
-    compiled = descriptor.resolve(ApiDefaults()).compile()
+    compiled = descriptor.resolve().compile()
     assert tuple(writer.path for writer in compiled.private_wire_writers) == (
         ("security", "captchaChallenge"),
         ("security", "captchaToken"),
@@ -546,7 +546,7 @@ def test_overlapping_private_writer_paths_fail_during_compile() -> None:
 
     descriptor = cast(Any, InvalidWriterApi.overlap)
     with pytest.raises(PlanError, match="private wire writer paths overlap"):
-        descriptor.resolve(ApiDefaults()).compile()
+        descriptor.resolve().compile()
 
 
 async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:

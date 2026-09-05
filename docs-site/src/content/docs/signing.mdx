@@ -10,13 +10,14 @@ sources:
 api_fingerprint: "sha256:d5b2d146f4a67efeaaaf7f15220db08a5f21a39a7e3cb34b2376c46630fd3969"
 ---
 
-Создайте `RequestSignature` из typed компонентов и передайте его в `signing=` decorator или
-`ApiDefaults`. Key provider задаётся через `ClientConfig`; secret не входит в operation arguments.
+Создайте `RequestSignature` из typed компонентов и передайте его в `signing=` decorator или в
+атрибут `signing` роутера. Key provider задаётся через `ClientConfig`; secret не входит в
+operation arguments.
 
 ```python
 from typing import Annotated, TypedDict, Unpack
 
-from eazy_sdk import ApiDefaults, AsyncApi, ClientConfig, api
+from eazy_sdk import AsyncApi, ClientConfig, api
 from eazy_sdk.request import (
     JsonField,
     SigningKey,

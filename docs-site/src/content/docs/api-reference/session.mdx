@@ -35,8 +35,13 @@ session_cookie(
     store=None,
     identity=None,
     name="session-cookie",
+    clock=...,
 ) -> Auth
 ```
+
+`clock` — callable без аргументов, возвращающий timezone-aware `datetime`; по умолчанию
+`datetime.now(UTC)`. По нему вычисляется `expires_at` cookie из `Max-Age`/`Expires` и
+проверяется активность сохранённой session.
 
 ## Аннотации модели
 
@@ -49,10 +54,14 @@ ExpiresAt(leeway=...)
 ## Store
 
 ```python
+from eazy_sdk.auth.session import MemorySessionStore, SessionStore
+
 MemorySessionStore()
 ```
 
-Совместимый `SessionStore` получает новую session после login или refresh.
+`MemorySessionStore` и protocol `SessionStore` живут в `eazy_sdk.auth.session`; из
+`eazy_sdk.auth` они не экспортируются. Совместимый `SessionStore` получает новую session после
+login или refresh.
 
 `session_auth(...)` требует ровно один источник: `credentials=` для автоматического login или
 `session=` для готового значения. Session model должна иметь ровно один `Bearer()` field, не более

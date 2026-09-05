@@ -8,7 +8,7 @@ sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.crypto
   - eazy_sdk.websocket
-api_fingerprint: "sha256:450b4aff122fe4e98e46245c9b8874862149f6df45d748e8dee798ff6bc48371"
+api_fingerprint: "sha256:0523e5fa1ff809992f0a5844cbfc119d9a194c650ee074b73dd0a5c34b25c1d4"
 ---
 
 Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
@@ -82,7 +82,8 @@ class CatalogApi(AsyncApi):
         raise NotImplementedError
 ```
 
-Сигнатура метода становится пользовательским API вашего SDK:
+Сигнатура метода становится пользовательским API вашего SDK. Группу можно использовать поверх
+готового клиента; в шаге 3 она же станет `sdk.catalog` внутри root:
 
 ```python
 catalog = CatalogApi(client)
@@ -140,9 +141,35 @@ class OrdersApi(AsyncApi):
         raise NotImplementedError
 ```
 
+`OrdersApi` и `CatalogApi` — отдельные группы операций. Соберём их в один публичный root.
+
+## 3. Соберите root SDK
+
+Root SDK — `AsyncRoot`, где каждый роутер объявлен через `api_group(...)`. Базовый класс уже
+даёт конструктор `StoreSdk(client)`, фабрику `from_handler(...)`, `aclose()` и `async with`;
+ничего рукописного не нужно.
+
+```python
+import httpx
+
+from eazy_sdk import AsyncRoot, api_group
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
+class StoreSdk(AsyncRoot):
+    catalog = api_group(CatalogApi)
+    orders = api_group(OrdersApi)
+
+sdk = StoreSdk.from_handler(
+    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
+    base_url="https://api.store.example",
+)
+```
+
 Вызов остаётся обычным Python-кодом:
 
 ```python
+product = await sdk.catalog.product(product_id=42)
+
 try:
     order = await sdk.orders.create(
         body=CreateOrder(lines=[OrderLine(product_id=42, quantity=1)])
@@ -151,7 +178,12 @@ except OutOfStock as error:
     print(error.error.product_id, error.error.available)
 ```
 
-## 3. Закройте операции Bearer token
+`from_handler(...)` создаёт `AsyncClient` и делает root его владельцем:
+`async with StoreSdk.from_handler(...) as sdk:` закроет созданный клиент и handler. Если клиент
+уже есть, передайте его в конструктор — `StoreSdk(client)`; таким клиентом по-прежнему владеет
+вызывающий код.
+
+## 4. Закройте операции Bearer token
 
 Схема доступа живёт рядом с контрактами SDK. Сам token приложение передаёт при создании клиента.
 
@@ -180,21 +212,23 @@ class OrdersApi(AsyncApi):
 ```python
 import httpx
 
-from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk import ClientConfig
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
-client = AsyncClient(
-    base_url="https://api.store.example",
+async with StoreSdk.from_handler(
     handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
+    base_url="https://api.store.example",
     config=ClientConfig(auth=CUSTOMER.static(access_token)),
-)
-orders = OrdersApi(client)
+) as sdk:
+    order = await sdk.orders.create(
+        body=CreateOrder(lines=[OrderLine(product_id=42, quantity=1)])
+    )
 ```
 
 Eazy SDK добавит `Authorization: Bearer <token>` только операции с `security=CUSTOMER`. Для login,
 refresh и сохранения session используйте {doc}`session auth </more/examples/json-auth>`.
 
-## 4. Подпишите точные bytes оплаты
+## 5. Подпишите точные bytes оплаты
 
 Платёжный endpoint требует HMAC от method, path и SHA-256 тела. Secret получает key provider.
 Аргументы API-метода не содержат signing key.
@@ -228,7 +262,7 @@ def signing_key(requirement: SigningKeyRequirement) -> SigningKey:
 `signing=PAYMENTS_HMAC`. Eazy SDK сначала готовит окончательное тело, затем считает подпись. При
 retry тело и подпись создаются заново.
 
-## 5. Зашифруйте поля до сериализации
+## 6. Зашифруйте поля до сериализации
 
 Магазин принимает номер карты и CVV как зашифрованные JSON-значения. Пользователь SDK передаёт
 обычную typed-модель. Cipher получает значения до JSON codec.
@@ -299,7 +333,7 @@ wire key автоматически.
 `StoreFieldCipher`, алгоритм, ключи, nonce и KMS client поставляет приложение. Eazy SDK задаёт
 интерфейс и порядок стадий.
 
-## 6. Зашифруйте всё тело и задайте Content-Type
+## 7. Зашифруйте всё тело и задайте Content-Type
 
 Если сервер принимает encrypted envelope вместо JSON, добавьте bytes cipher и wire policy:
 
@@ -345,7 +379,8 @@ class PaymentsApi(AsyncApi):
         raise NotImplementedError
 ```
 
-Фактический порядок для этого метода:
+Добавьте группу в root: `payments = api_group(PaymentsApi)` в `StoreSdk`, после чего вызов выглядит как
+`await sdk.payments.create(body=CreatePayment(...))`. Фактический порядок для этого метода:
 
 ```text
 CreatePayment
@@ -361,7 +396,7 @@ Eazy SDK управляет финальными `Content-Type` и `Content-Leng
 на той же операции. Ответ проходит обратный путь: decrypt bytes, JSON parse, decrypt `receipt`,
 затем validation в `PaymentResult`.
 
-## 7. Примените тот же профиль к WebSocket
+## 8. Примените тот же профиль к WebSocket
 
 HTTP и WebSocket используют один `PayloadCrypto`. Меняется только wire policy: HTTP задаёт media
 type, WebSocket задаёт text или binary frame.
@@ -405,7 +440,7 @@ Whole-frame encryption отправляет binary frame. Для text frame ал
 UTF-8 envelope, а policy должна явно содержать `text_safe=True`. Ping, pong и close frames не
 проходят payload crypto.
 
-## 8. Разложите SDK по модулям
+## 9. Разложите SDK по модулям
 
 После прототипа разделите публичные контракты и application-owned secrets:
 
@@ -415,6 +450,7 @@ store_sdk/
 ├── catalog.py      # CatalogApi
 ├── orders.py       # OrdersApi и CUSTOMER scheme
 ├── payments.py     # PaymentsApi и PaymentsSocket
+├── sdk.py          # StoreSdk: api_group(...) для catalog, orders, payments
 └── security.py     # signing rules и crypto profile factories
 
 store_app/

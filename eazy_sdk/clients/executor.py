@@ -498,7 +498,7 @@ def _managed_preparation_requirements(
     runtime: ExecutionRuntime,
     options: Any,
 ) -> tuple[str, ...]:
-    scope = _scope_context(contract, runtime.base_url)
+    scope = _scope_context(contract, _service_base_url(contract, runtime))
     requirements: list[str] = []
     if contract.requires or contract.inject:
         requirements.append("dependencies")
@@ -615,9 +615,9 @@ class ExecutionCore:
         selected = cast(CallOptions, options)
         contract = call.declaration
         arguments = call.arguments
-        initial_url = _contract_url(self.runtime.base_url, contract.path)
+        initial_url = _contract_url(_service_base_url(contract, self.runtime), contract.path)
         initial_crypto = _resolve_http_crypto(contract, self.runtime.crypto, initial_url)
-        scope_context = _scope_context(contract, self.runtime.base_url)
+        scope_context = _scope_context(contract, _service_base_url(contract, self.runtime))
         before_call_policies = tuple(
             _compile_before_call_policy(policy)
             for policy in self.runtime.before_call_policies
@@ -694,7 +694,9 @@ class ExecutionCore:
             item
             for item in registrations
             if isinstance(item, CallMiddlewareRegistration)
-            and item.scope.matches(_scope_context(contract, self.runtime.base_url))
+            and item.scope.matches(
+                _scope_context(contract, _service_base_url(contract, self.runtime))
+            )
         )
 
         async def terminal(current: CallMiddlewareContext[T]) -> ExecutionResult[T]:
@@ -756,7 +758,9 @@ class ExecutionCore:
         initial_compiled_crypto: CompiledPayloadCrypto | None,
     ) -> ExecutionResult[T]:
         values = bound
-        initial_url = _contract_url(self.runtime.base_url, compiled.contract.path)
+        initial_url = _contract_url(
+            _service_base_url(compiled.contract, self.runtime), compiled.contract.path
+        )
         mandatory_results = (
             await self._acquire_mandatory_protections(
                 compiled,
@@ -823,7 +827,11 @@ class ExecutionCore:
                 cast(Any, compiled),
                 graph=self.resolution_graph,
             )
-            scope = _scope_context(compiled.contract, self.runtime.base_url, current_url)
+            scope = _scope_context(
+                compiled.contract,
+                _service_base_url(compiled.contract, self.runtime),
+                current_url,
+            )
             attempts = tuple(
                 item
                 for item in registrations
@@ -959,7 +967,7 @@ class ExecutionCore:
                 )
             try:
                 unsigned = RequestPreparer(
-                    self.runtime.base_url,
+                    _service_base_url(compiled.contract, self.runtime),
                     self.runtime.profile,
                     self.runtime.models,
                 ).prepare(
@@ -1801,6 +1809,12 @@ def _result_has_field(result_type: object, field_name: str, models: ModelAdapter
             pass
     annotations = getattr(result_type, "__annotations__", None)
     return isinstance(annotations, Mapping) and field_name in annotations
+
+
+def _service_base_url(contract: _OperationDeclaration[Any], runtime: ExecutionRuntime) -> str:
+    """The router's declared address, falling back to the client that carries the bytes."""
+
+    return contract.base_url or runtime.base_url
 
 
 def _contract_url(base_url: str, path: str) -> str:

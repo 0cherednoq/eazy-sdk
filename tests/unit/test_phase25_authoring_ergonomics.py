@@ -9,13 +9,14 @@ from typing import Annotated, Any, TypedDict, assert_type, cast
 import pytest
 
 from eazy_sdk import (
-    ApiDefaults,
     AsyncApi,
+    AsyncRoot,
     Client,
     PreparationIncompleteError,
     PreparedCall,
     PrepareOptions,
     SyncApi,
+    SyncRoot,
     api,
     api_group,
 )
@@ -78,7 +79,7 @@ def _regular_html(context: ResponseContext[object]) -> bool:
 
 
 class ShorthandApi(SyncApi):
-    defaults = ApiDefaults(errors=(COMMON_ERROR,))
+    errors = (COMMON_ERROR,)
 
     @api.get(
         "/users/{user_id}",
@@ -147,11 +148,11 @@ class AsyncRootUsersApi(AsyncApi):
         raise NotImplementedError
 
 
-class StoreSdk(SyncApi):
+class StoreSdk(SyncRoot):
     users = api_group(RootUsersApi)
 
 
-class AsyncStoreSdk(AsyncApi):
+class AsyncStoreSdk(AsyncRoot):
     users = api_group(AsyncRootUsersApi)
 
 
@@ -230,7 +231,7 @@ async def _static_authoring_proof(api_instance: AsyncPrepareApi, sdk: StoreSdk) 
 
 def test_singular_response_normalizes_and_inherits_default_errors() -> None:
     descriptor = inspect.getattr_static(ShorthandApi, "get_user")
-    declaration = descriptor.resolve(ShorthandApi.defaults)
+    declaration = descriptor.resolve(ShorthandApi._service_defaults)
 
     assert declaration.result_type is User
     assert len(declaration.responses.success) == 1
@@ -244,7 +245,7 @@ def test_singular_response_normalizes_and_inherits_default_errors() -> None:
 
 def test_singular_response_can_disable_error_inheritance() -> None:
     descriptor = inspect.getattr_static(ShorthandApi, "isolated")
-    declaration = descriptor.resolve(ShorthandApi.defaults)
+    declaration = descriptor.resolve(ShorthandApi._service_defaults)
     assert declaration.responses.errors == (LOCAL_ERROR,)
 
 
@@ -454,7 +455,7 @@ def test_root_from_borrowed_client_leaves_client_ownership_with_caller() -> None
         content=b'{"name":"Lin"}',
     )
     client = Client(base_url="https://api.test", handler=handler)
-    sdk = StoreSdk.from_client(client)
+    sdk = StoreSdk(client)
 
     sdk.close()
     assert handler.close_calls == 0
@@ -465,8 +466,15 @@ def test_root_from_borrowed_client_leaves_client_ownership_with_caller() -> None
 def test_root_rejects_a_group_with_the_wrong_execution_kind() -> None:
     with pytest.raises(TypeError, match="wrong API kind"):
 
-        class InvalidRoot(SyncApi):
+        class InvalidRoot(SyncRoot):
             users = api_group(AsyncRootUsersApi)
+
+
+def test_api_groups_belong_to_a_root_not_to_a_router() -> None:
+    with pytest.raises(TypeError, match="api groups belong to"):
+
+        class NestedRouter(SyncApi):
+            users = api_group(RootUsersApi)
 
 
 def test_standard_and_arbitrary_http_methods_share_one_decorator_path() -> None:

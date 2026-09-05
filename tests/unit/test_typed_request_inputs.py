@@ -8,7 +8,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 import pytest
 
 import eazy_sdk.request as request_api
-from eazy_sdk import ApiDefaults, SyncApi, api
+from eazy_sdk import SyncApi, api
 from eazy_sdk.core import (
     PlanError,
     RequestLocation,
@@ -83,7 +83,7 @@ class UnpackedBodyApi(SyncApi):
 
 
 def test_compiles_method_fields_in_declaration_order() -> None:
-    compiled = cast(Any, MuseumApi.museum).resolve(ApiDefaults()).compile()
+    compiled = cast(Any, MuseumApi.museum).resolve().compile()
     assert tuple(compiled.input_slots) == (
         "museum_id",
         "start_date",
@@ -106,7 +106,7 @@ def test_compiles_method_fields_in_declaration_order() -> None:
 @pytest.mark.parametrize("name", ["json_field", "form_field", "part_field"])
 def test_compiles_each_flat_body_field_marker(name: str) -> None:
     descriptor = getattr(FlatBodyApi, name)
-    compiled = descriptor.resolve(ApiDefaults()).compile()
+    compiled = descriptor.resolve().compile()
     assert compiled.input_fields[0].location is RequestLocation.BODY
     assert compiled.input_fields[0].wire_name == "value"
 
@@ -117,13 +117,13 @@ def test_compiles_root_body_from_method_annotation() -> None:
         def root(self, *, body: Annotated[list[str], JsonBody()]) -> object:
             raise NotImplementedError
 
-    compiled = cast(Any, Api.root).resolve(ApiDefaults()).compile()
+    compiled = cast(Any, Api.root).resolve().compile()
     assert compiled.body_slot is compiled.input_slots["body"]
     assert compiled.body_slot.validator(["modern", "history"]) == ["modern", "history"]
 
 
 def test_unpacks_typed_dict_fields_into_the_operation_shape() -> None:
-    compiled = cast(Any, UnpackedBodyApi.create_post).resolve(ApiDefaults()).compile()
+    compiled = cast(Any, UnpackedBodyApi.create_post).resolve().compile()
 
     assert tuple(compiled.input_slots) == ("owner_id", "user_id", "title", "body", "summary")
     assert tuple(
@@ -306,7 +306,7 @@ def test_parameterless_method_has_an_empty_shape() -> None:
         def health(self) -> object:
             raise NotImplementedError
 
-    compiled = cast(Any, HealthApi.health).resolve(ApiDefaults()).compile()
+    compiled = cast(Any, HealthApi.health).resolve().compile()
     assert compiled.input_fields == ()
     assert compiled.plan.shape.slots == ()
 

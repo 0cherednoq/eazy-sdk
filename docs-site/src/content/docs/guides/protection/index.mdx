@@ -14,14 +14,30 @@ uv add eazy-sdk-presets
 
 ## Install a first-party preset
 
-Create the handler and solver in your SDK composition root. Install the returned preset with one
-immutable `with_protection()` call:
+Create the handler and solver in your SDK composition root. Install the returned preset through
+`ClientConfig(guards=[...])`; the immutable `ClientConfig.with_protection(...)` call is equivalent.
+The solver below is a stub: the [Cloudflare page](/guides/protection/cloudflare) shows a complete
+one.
 
 ```python target
 from eazy_sdk import ClientConfig
-from eazy_sdk.protection import host
+from eazy_sdk.protection import SolveContext, host
 from eazy_sdk_presets import cloudflare
 
+
+class CloudflareSolver:
+    def __init__(self, browser_pool: object) -> None:
+        self.browser_pool = browser_pool
+
+    async def solve(
+        self,
+        challenge: cloudflare.CloudflareChallenge,
+        context: SolveContext,
+    ) -> cloudflare.CloudflareClearance:
+        raise NotImplementedError("solve the challenge with your browser pool")
+
+
+browser_pool = object()  # your own browser or lease pool
 
 guard = cloudflare.challenge_pages(
     scope=host("api.example.test"),
@@ -58,6 +74,11 @@ from eazy_sdk.response import ResponseContext
 @dataclass(frozen=True)
 class KadChallenge:
     revision: int
+
+
+def compute_proof(module: bytes, revision: int) -> bytes:
+    # Application-specific: run the origin's proof-of-work module.
+    raise NotImplementedError
 
 
 class KadGuard(Guard[KadChallenge]):
@@ -106,11 +127,12 @@ Class attributes configure the guard:
 | `replay` | `safe_method(max_replays=1)` | Replay proof and budget |
 | `headers`, `query`, `body` | `()` | Destination names `self.solution(headers=...)` may set; cookies need no declaration |
 | `name` | class name | Policy identity, also accepted by `client.invalidate_protection()` |
+| `revision` | `1` | Positive integer that is part of the managed-state key next to `name`; bump it so that solutions cached under the previous revision are no longer applied |
 
 Cookies are applied as a managed dynamic set. `self.solution(expires_in=...)` bounds the session
-cache; without it the solution lives until the origin rejects it. Concurrent calls that hit the
-same challenge with `cache="session"` or `cache="call"` share one in-flight solve; with
-`cache="none"` each call solves independently.
+cache; without it the solution lives until the origin rejects it. Only `cache="session"` shares
+one in-flight solve between concurrent calls that hit the same challenge; with `cache="call"`
+and `cache="none"` the state never leaves the call, so concurrent calls solve independently.
 
 Drop a cached solution explicitly, for example after the origin changed its protocol:
 
@@ -154,9 +176,12 @@ its own solution is bound to. A proxy the handler does not declare is not part o
 pass `proxy=` to the client factory, or set `HandlerProfile.proxy` on a custom handler.
 
 Managed clearance still belongs to one SDK client and its handler session. Rotate proxies by
-acquiring a new lease and creating a new handler and client:
+acquiring a new lease and creating a new handler and client. The fragment below is application
+code: `proxy_pool` is your lease pool, `create_sdk(proxy=...)` your factory that builds the
+handler (for example `AsyncClient.httpx(proxy=lease.url)`) and the SDK around it:
 
 ```python target
+# Fragment: proxy_pool, create_sdk and run_operation are defined by the application.
 async with proxy_pool.acquire() as lease:
     async with create_sdk(proxy=lease.url) as sdk:
         return await run_operation(sdk)
@@ -172,7 +197,8 @@ session outside `context.fetch` remain responsible for sharing that session with
 - `ChallengeDetectionError` wraps an unexpected detector exception.
 - `ChallengeParseError` reports a recognized but unusable challenge (`MalformedChallengeError`
   from the detector is its `__cause__`); `AmbiguousChallengeError` reports two guards claiming one
-  response.
+  response. Both are exported only from `eazy_sdk.protection.advanced`, not from
+  `eazy_sdk.protection`; import them from there to catch them by type.
 - `ChallengeSolveError` wraps a solver failure.
 - `ChallengeApplicationError` reports an invalid solution batch before replay.
 - `ReplayDeniedError` reports an exhausted per-guard budget or an unproven replay.

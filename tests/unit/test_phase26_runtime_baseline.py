@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, cast
 
-from eazy_sdk import ApiDefaults, AsyncApi, SyncApi, api
+from eazy_sdk import AsyncApi, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
@@ -32,7 +32,7 @@ class AsyncTraceApi(AsyncApi):
 
 
 def _contract() -> Any:
-    return cast(Any, TraceApi.trace).resolve(ApiDefaults())
+    return cast(Any, TraceApi.trace).resolve()
 
 
 def _response() -> NormalizedResponse[object]:

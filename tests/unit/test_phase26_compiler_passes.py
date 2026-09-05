@@ -31,7 +31,7 @@ def test_projection_flows_through_the_same_compiler_pass_sequence() -> None:
         def operation(self, **request: Unpack[PublicBody]) -> object:
             raise NotImplementedError
 
-    compiled: Any = cast(Any, ProjectionApi.operation).resolve(ProjectionApi.defaults).compile()
+    compiled: Any = cast(Any, ProjectionApi.operation).resolve().compile()
 
     input_pass, writer_pass, graph_pass, response_pass, fingerprint_pass = (
         compiled.pass_diagnostics

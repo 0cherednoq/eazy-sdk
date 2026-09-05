@@ -13,7 +13,7 @@ Login в Eazy SDK является обычной декорированной �
 
 :::{note} Кому нужны шаги этой страницы
 Авторы hand-written SDK выполняют шаги 1–3. Пользователи generated SDK могут сразу перейти к
-  шагу 4 и передать `credentials=` в готовую root factory.
+  шагу 5 и передать `credentials=` в готовую root factory.
 :::
 
 :::::{grid} 1 1 2 2
@@ -102,7 +102,7 @@ refresh, а `ExpiresAt()` определяет, когда session следуе�
 ## 2. Объявите login-метод
 
 ```python
-from eazy_sdk import ApiDefaults, AsyncApi, api
+from eazy_sdk import AsyncApi, api
 from eazy_sdk.response import Json, Responses, Success
 
 LOGIN_RESPONSES = Responses(
@@ -123,7 +123,7 @@ class AsyncAuthApi(AsyncApi):
         raise NotImplementedError
 
 class AsyncAccountApi(AsyncApi):
-    defaults = ApiDefaults(security=USER_SESSION)
+    security = USER_SESSION
 
     @api.get(
         "/account",
@@ -140,13 +140,13 @@ descriptor связывает аргументы и передаёт вызов 
 ## 3. Вызовите login из auth service
 
 ```python
+from dataclasses import replace
 from typing import Self
 
 from zapros import AsyncBaseHandler
 
-from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk import AsyncRoot, Binding, ClientConfig, HandlerProfile, api_group
 from eazy_sdk.auth import AuthContext
-from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
 class LoginService:
     async def acquire(
@@ -160,52 +160,56 @@ class LoginService:
             remember_me=True,
         )
 
-class AuthSdk:
-    def __init__(self, client: AsyncClient) -> None:
-        self._client = client
-        self.auth = AsyncAuthApi(client)
-        self.account = AsyncAccountApi(client)
+class AuthSdk(AsyncRoot):
+    auth = api_group(AsyncAuthApi)
+    account = api_group(AsyncAccountApi)
 
     @classmethod
     def from_handler(
         cls,
         *,
         handler: AsyncBaseHandler,
-        credentials: LoginCredentials,
+        credentials: LoginCredentials | None = None,
+        session: UserSession | None = None,
         base_url: str = "https://api.example.test",
+        config: ClientConfig | None = None,
         owns_handler: bool = True,
+        profile: HandlerProfile | None = None,
+        bindings: tuple[Binding, ...] = (),
     ) -> Self:
         auth = USER_SESSION.configure(
             credentials=credentials,
+            session=session,
             service=LoginService(),
         )
-        client = AsyncClient(
-            base_url=base_url,
+        config = replace(config or ClientConfig(timeout=20), auth=auth)
+        return super().from_handler(
             handler=handler,
+            base_url=base_url,
+            config=config,
             owns_handler=owns_handler,
-            config=ClientConfig(auth=auth, timeout=20),
+            profile=profile,
+            bindings=bindings,
         )
-        return client.bind_sdk(cls)
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.aclose()
 ```
 
 Service преобразует `LoginCredentials` в именованные аргументы плоского `LoginRequest`. Runtime
 отвечает только за выполнение операции, проверку response case и сохранение полученной
-`UserSession`. `USER_SESSION.configure(...)` передаёт service в auth runtime,
-`ClientConfig(auth=auth)` подключает runtime к client, а `client.bind_sdk(cls)` регистрирует
-фабрику scoped SDK для `context.sdk`.
+`UserSession`.
+
+`AuthSdk` наследует `AsyncRoot`: `api_group(...)` объявляет роутеры, а `from_handler`,
+`aclose()` и `async with` уже есть в базовом классе. Override `from_handler` повторяет сигнатуру
+базовой фабрики и добавляет только lifecycle input — `credentials=` для login или `session=` для
+готовой session. `USER_SESSION.configure(...)` передаёт service в auth runtime,
+`replace(config, auth=auth)` подключает runtime к `ClientConfig` (это frozen dataclass, поэтому
+копия создаётся через `dataclasses.replace`), а конструктор корня сам регистрирует фабрику scoped
+SDK для `context.sdk`. Именно так устроен root класс, который эмитит OpenAPI-генератор.
 
 ## 4. Создайте hand-written SDK
 
 ```python
+from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+
 credentials = LoginCredentials(
     email="ada@example.test",
     password=SecretStr("correct-horse"),
@@ -220,7 +224,8 @@ async with AuthSdk.from_handler(
 
 Первый вызов `sdk.account.get_account()` требует `USER_SESSION`, поэтому runtime вызывает
 `LoginService.acquire(...)`. Login выполняется через `context.sdk.auth`, полученная session
-сохраняется, и исходный account request получает `Authorization: Bearer access-v1`.
+сохраняется, и исходный account request получает `Authorization: Bearer access-v1`. Если session
+уже есть, передайте `session=saved_session` вместо `credentials=` — login не выполняется.
 
 :::{note} Не создавайте SDK внутри auth service
 `LoginService` не хранит root SDK и не создаёт отдельный client. Scoped SDK предоставляет

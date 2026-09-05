@@ -1,0 +1,116 @@
+---
+title: Мультисервисный SDK
+description: Адрес сервиса объявляет роутер, исполнителя выбирает сборка через bind().
+sources:
+  - eazy_sdk.SyncRoot
+  - eazy_sdk.AsyncRoot
+  - eazy_sdk.bind
+  - eazy_sdk.Binding
+  - eazy_sdk.api_group
+api_fingerprint: "sha256:6a11a9561db9c8a12b9b03027ff29e331256550a7c6fe3ccd8e053ba9d927930"
+---
+
+Адрес сервиса — часть описания API, наравне с path. Роутер объявляет его атрибутом класса, а
+общее для нескольких роутеров одного сервиса выносится в обычный базовый класс. Отдельного типа
+для «домена» нет: общие атрибуты в Python выражаются наследованием.
+
+```python
+from typing import Annotated
+
+from eazy_sdk import Path, SyncApi, SyncRoot, api, api_group
+from eazy_sdk.request import JsonField
+from eazy_sdk.response import Json
+
+class PaymentsService:
+    """Обычный миксин: всё, что общее у роутеров одного сервиса."""
+
+    base_url = "https://pay.shop.com"
+    errors = PAYMENT_ERRORS
+
+class CardApi(PaymentsService, SyncApi):
+    @api.post("/v1/cards", response=Json(status=201))
+    def register(self, *, number: Annotated[str, JsonField()]) -> Card:
+        raise NotImplementedError
+
+class BooksApi(SyncApi):
+    @api.get("/books/{book_id}", response=Json())
+    def get(self, *, book_id: Annotated[int, Path()]) -> Book:
+        raise NotImplementedError
+
+class ShopSdk(SyncRoot):
+    books = api_group(BooksApi)   # адрес не объявлен → берётся из клиента
+    card = api_group(CardApi)     # адрес из PaymentsService
+```
+
+Однохостовый SDK не пишет ни миксина, ни привязок: объявление не длиннее обычного.
+
+## Резолв адреса операции
+
+| Приоритет | Источник |
+|---|---|
+| 1 | Абсолютный URL в самой декларации операции |
+| 2 | `base_url` из `bind(...)` для класса роутера или его базы |
+| 3 | `base_url`, объявленный на классе роутера или унаследованный по MRO |
+| 4 | `base_url` клиента |
+
+Отсюда главное свойство: мультисервисный SDK работает **на одном клиенте**. Отдельный клиент
+нужен только там, где отличаются транспортные политики: другой impersonation/TLS-профиль, другой
+proxy, отдельная guard-сессия, другие retry и timeout, другой handler.
+
+## Сборка: `bind()`
+
+`bind()` принимает **класс** — роутер или его миксин. Совпадение ищется по MRO, наиболее
+специфичный класс выигрывает.
+
+```python
+from eazy_sdk import Client, bind
+
+main = Client.httpx(base_url="https://api.shop.com")
+
+# один клиент на все сервисы: адреса берутся из роутеров
+sdk = ShopSdk(main)
+
+# платежам нужен свой impersonation и своя guard-сессия
+sdk = ShopSdk(
+    main,
+    bindings=(bind(CardApi, client=Client.curl_cffi(impersonate="chrome")),),
+)
+
+# stage: та же декларация, другой адрес — на весь сервис сразу
+sdk = ShopSdk(main, bindings=(bind(PaymentsService, base_url="https://stage-pay.shop.com"),))
+```
+
+Один клиент на несколько сервисов означает общую guard/protection-сессию, общий proxy и общий
+cookie jar; cookie при этом остаются домен-скоупными по RFC 6265. Если сервису нужна собственная
+транспортная политика — дайте ему свой клиент через `bind(..., client=...)`.
+
+## Что объявляет роутер, что клиент
+
+| Уровень | Что несёт | Почему |
+|---|---|---|
+| Роутер / миксин сервиса | `base_url`, `errors`, `security`, `signing`, `crypto`, `crypto_wire`, `allow` | контракт API: что сервер требует и что возвращает |
+| Клиент | `base_url` по умолчанию, retry, timeout, proxy, impersonation, handler, guard/protection | доставка байтов |
+
+Цепочка дефолтов — одна: корень → MRO роутера → аргументы операции. Слияние выполняется один раз
+при разрешении дескриптора операции, а не на каждом вызове.
+
+## Ошибки объявления и сборки
+
+| Ситуация | Когда падает |
+|---|---|
+| Два миксина в MRO объявляют разный `base_url` | при объявлении роутера |
+| `base_url` не абсолютный URL | при объявлении роутера |
+| Операция несёт схему или подпись вне `allow` | при сборке корня |
+| `bind()` на класс, которого нет ни в одном MRO групп корня | при сборке корня |
+| Две привязки одинаковой специфичности | при сборке корня |
+| `api_group` объявлен на роутере, а не на корне | при объявлении роутера |
+| Операция объявлена на классе корня | при объявлении корня |
+
+`allow` — это allowlist схем и подписей сервиса: он не даёт унести чужой токен на чужой хост.
+Пока `allow` не объявлен, ограничения нет.
+
+## Владение клиентами
+
+`Root(client)` не владеет клиентом: его закрывает тот, кто создал. `Root.from_handler(...)`
+создаёт клиент сам и закрывает его в `close()`/`aclose()`; повторный вызов безопасен. Клиенты,
+переданные через `bind(..., client=...)`, корень не закрывает никогда.

@@ -16,7 +16,7 @@ from typing import Annotated, TypedDict, Unpack, cast
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import ClientConfig, SyncApi, SyncRoot, api, api_group
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.crypto import (
     CryptoContext,
@@ -136,6 +136,10 @@ class PaymentsApi(SyncApi):
         raise NotImplementedError
 
 
+class StoreSdk(SyncRoot):
+    payments = api_group(PaymentsApi)
+
+
 def _decode_request(request: httpx.Request) -> dict[str, object]:
     context = CryptoContext(
         operation_id="demo-server",
@@ -208,12 +212,12 @@ def main() -> None:
         auth=CUSTOMER.static("public-demo-token"),
         key_provider=signing_key,
     )
-    with Client(
-        base_url="https://api.store.example",
+    with StoreSdk.from_handler(
         handler=HttpxHandler(raw_client, owns_client=True),
+        base_url="https://api.store.example",
         config=config,
-    ) as client:
-        result = PaymentsApi(client).create(
+    ) as sdk:
+        result = sdk.payments.create(
             body=CreatePayment(
                 order_id="order-42",
                 card=Card(number="4111111111111111", cvv="123"),

@@ -12,7 +12,7 @@ import pytest
 from adaptix.conversion import get_converter
 from pydantic import BaseModel
 
-from eazy_sdk import ApiDefaults, SyncApi, api
+from eazy_sdk import SyncApi, api
 from eazy_sdk.core import (
     PlanError,
 )
@@ -84,7 +84,7 @@ def test_current_root_body_workaround_exposes_one_wrapper_parameter() -> None:
 
     assert tuple(signature.parameters) == ("self", "request")
     assert "Unpack" in str(signature.parameters["request"].annotation)
-    compiled = descriptor.resolve(ApiDefaults()).compile()
+    compiled = descriptor.resolve().compile()
     assert tuple(compiled.input_slots) == ("user",)
 
 

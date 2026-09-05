@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from eazy_sdk.api import ApiDefaults, AsyncApi, SyncApi, api, api_group
+from eazy_sdk.api import AsyncApi, SyncApi, api, api_group
 from eazy_sdk.clients import (
     AttemptLimitError,
     ClientConfig,
@@ -61,6 +61,7 @@ from eazy_sdk.response import (
     Text,
     UnexpectedResponseError,
 )
+from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
 
 __version__ = "0.2.0a5"
 
@@ -81,10 +82,11 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "AmbiguousModelAdapterError",
     "AmbiguousResponseError",
-    "ApiDefaults",
     "AsyncApi",
     "AsyncClient",
+    "AsyncRoot",
     "AttemptLimitError",
+    "Binding",
     "BindingError",
     "BodyCodec",
     "BodyProjection",
@@ -126,6 +128,7 @@ __all__ = [
     "ScalarCodec",
     "Success",
     "SyncApi",
+    "SyncRoot",
     "Text",
     "TransportError",
     "UnexpectedResponseError",
@@ -133,5 +136,6 @@ __all__ = [
     "UnsupportedModelTypeError",
     "api",
     "api_group",
+    "bind",
     "default_model_adapters",
 ]

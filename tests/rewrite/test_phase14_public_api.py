@@ -10,13 +10,13 @@ import pytest
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from eazy_sdk import (
-    ApiDefaults,
     AsyncApi,
     ClientConfig,
     RetryPolicy,
     UnsafeReplayError,
     api,
 )
+from eazy_sdk.api import _ServiceDefaults
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthContext,
@@ -211,11 +211,9 @@ class RecursiveAccountApi(AsyncApi):
 
 class RecursiveSdk:
     def __init__(self, client: Any, security: object) -> None:
-        defaults = ApiDefaults(security=security)  # type: ignore[arg-type]
-        self.auth = RecursiveAuthApi(client)
-        self.auth.defaults = defaults
-        self.account = RecursiveAccountApi(client)
-        self.account.defaults = defaults
+        defaults = _ServiceDefaults(security=cast(Any, security))
+        self.auth = RecursiveAuthApi(client, defaults=defaults)
+        self.account = RecursiveAccountApi(client, defaults=defaults)
 
 
 class RecursiveAuthService:

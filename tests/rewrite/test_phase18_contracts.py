@@ -211,4 +211,4 @@ class CollidingInjectApi(SyncApi):
 
 def test_inject_collision_is_a_compile_error() -> None:
     with pytest.raises(PlanError, match="injected query wire name collides"):
-        cast(Any, CollidingInjectApi.collision).resolve(CollidingInjectApi.defaults).compile()
+        cast(Any, CollidingInjectApi.collision).resolve().compile()

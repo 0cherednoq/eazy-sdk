@@ -4,7 +4,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 import pytest
 
-from eazy_sdk import ApiDefaults, OperationBindingError, SyncApi, api
+from eazy_sdk import OperationBindingError, SyncApi, api
 from eazy_sdk.compile import (
     CompiledContract,
 )
@@ -74,7 +74,7 @@ class BodyApi(SyncApi):
         raise NotImplementedError
 def _compiled(name: str, *, body_order: tuple[str, ...] | None = None) -> CompiledContract[Any]:
     descriptor = getattr(BodyApi, name)
-    declaration = descriptor.resolve(ApiDefaults())
+    declaration = descriptor.resolve()
     if body_order is not None:
         from dataclasses import replace
 

@@ -119,6 +119,7 @@ def main() -> None:
 
     user = current_user(session)
 
+
     print(f"authenticated: {user.username} ({user.first_name} {user.last_name})")
     print("access token received and kept out of output")
 

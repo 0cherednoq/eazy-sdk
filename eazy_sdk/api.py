@@ -7,12 +7,10 @@ import re
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, replace
 from typing import (
-    TYPE_CHECKING,
     Any,
     Concatenate,
     ParamSpec,
     Protocol,
-    Self,
     TypedDict,
     TypeVar,
     Unpack,
@@ -21,13 +19,13 @@ from typing import (
     get_type_hints,
     overload,
 )
+from urllib.parse import urlsplit
 
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.compile.http_operation import _OperationDeclaration
 from eazy_sdk.compile.input import inspect_method_input
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.crypto import CryptoWire, PayloadCrypto
-from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import SolverRequirement
@@ -35,11 +33,6 @@ from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
 from eazy_sdk.response.cases import ResponseRepresentation
-
-if TYPE_CHECKING:
-    from zapros import AsyncBaseHandler, BaseHandler
-
-    from eazy_sdk.clients import ClientConfig
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -56,13 +49,54 @@ class _Inherit:
 _INHERIT = _Inherit()
 
 
+class _Missing:
+    __slots__ = ()
+
+
+_MISSING = _Missing()
+
+SERVICE_ATTRIBUTES = (
+    "base_url",
+    "errors",
+    "security",
+    "signing",
+    "crypto",
+    "crypto_wire",
+    "allow",
+)
+"""Class attributes a router (or a service mixin in its MRO) may declare."""
+
+
 @dataclass(frozen=True, slots=True)
-class ApiDefaults:
+class _ServiceDefaults:
+    """Service declaration collected from a root class and a router's MRO.
+
+    ``allow=None`` means the service declares no allowlist; ``allow=()`` allows nothing.
+    """
+
+    base_url: str = ""
     security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None
     signing: tuple[RequestSignature, ...] = ()
     crypto: PayloadCrypto | None = None
     crypto_wire: CryptoWire | None = None
     errors: tuple[Error[Any], ...] = ()
+    allow: tuple[object, ...] | None = None
+
+    def extend(self, other: _ServiceDefaults) -> _ServiceDefaults:
+        """Merge a more specific declaration over this one (root → router MRO)."""
+
+        return _ServiceDefaults(
+            base_url=other.base_url or self.base_url,
+            security=self.security if other.security is None else other.security,
+            signing=other.signing or self.signing,
+            crypto=self.crypto if other.crypto is None else other.crypto,
+            crypto_wire=self.crypto_wire if other.crypto_wire is None else other.crypto_wire,
+            errors=(*self.errors, *other.errors),
+            allow=self.allow if other.allow is None else other.allow,
+        )
+
+
+_NO_DEFAULTS = _ServiceDefaults()
 
 
 class _AsyncClient(Protocol):
@@ -128,7 +162,7 @@ class _BoundAsyncOperation[**P, T]:
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         result = await self._api._client._execute_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options,
             with_response=False,
@@ -142,7 +176,7 @@ class _BoundAsyncOperation[**P, T]:
     ) -> ResponseEnvelope[T, Any]:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         result = await self._api._client._execute_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options,
             with_response=True,
@@ -157,7 +191,7 @@ class _BoundAsyncOperation[**P, T]:
     ) -> PreparedCall:
         values, _ = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         return await self._api._client._prepare_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options or PrepareOptions(),
         )
@@ -180,7 +214,7 @@ class _BoundSyncOperation[**P, T]:
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         result = self._api._client._execute_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options,
             with_response=False,
@@ -194,7 +228,7 @@ class _BoundSyncOperation[**P, T]:
     ) -> ResponseEnvelope[T, Any]:
         values, options = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         result = self._api._client._execute_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options,
             with_response=True,
@@ -209,7 +243,7 @@ class _BoundSyncOperation[**P, T]:
     ) -> PreparedCall:
         values, _ = self._descriptor._bind_arguments(self._api, *args, **kwargs)
         return self._api._client._prepare_operation(
-            self._descriptor.resolve(self._api.defaults),
+            self._descriptor.resolve_for(self._api),
             values,
             options=options or PrepareOptions(),
         )
@@ -243,7 +277,7 @@ class _OperationDescriptorBase[TApi, **P, T]:
         self.__doc__ = declaration.__doc__
         self.__signature__ = signature
 
-    def resolve(self, defaults: ApiDefaults) -> _OperationDeclaration[T]:
+    def resolve(self, defaults: _ServiceDefaults = _NO_DEFAULTS) -> _OperationDeclaration[T]:
         security = defaults.security if self.security is _INHERIT else self.security
         signing = defaults.signing if self.signing is _INHERIT else self.signing
         crypto = defaults.crypto if self.crypto is _INHERIT else self.crypto
@@ -259,8 +293,15 @@ class _OperationDescriptorBase[TApi, **P, T]:
                 errors=(*defaults.errors, *responses.errors),
                 fallback=responses.fallback,
             )
+        _validate_allowed(
+            defaults.allow,
+            self.declaration.operation_id,
+            security,
+            cast(tuple[RequestSignature, ...], signing),
+        )
         return replace(
             self.declaration,
+            base_url=defaults.base_url,
             responses=responses,
             security=cast(Any, security),
             signing=cast(tuple[RequestSignature, ...], signing),
@@ -268,6 +309,15 @@ class _OperationDescriptorBase[TApi, **P, T]:
             crypto_wire=cast(CryptoWire | None, crypto_wire),
             crypto_inherit=self.crypto is _INHERIT and defaults.crypto is None,
         )
+
+    def resolve_for(self, api: SyncApi | AsyncApi) -> _OperationDeclaration[T]:
+        """Resolved declaration for one bound router, merged once per router instance."""
+
+        cached = api._resolved.get(self)
+        if cached is None:
+            cached = self.resolve(api._defaults)
+            api._resolved[self] = cached
+        return cast("_OperationDeclaration[T]", cached)
 
     def _bind_arguments(
         self,
@@ -340,128 +390,53 @@ class _SyncOperationDescriptor(_OperationDescriptorBase[TApi, P, T]):
         return _BoundSyncOperation(cast(Any, self), instance)
 
 
-class AsyncApi:
-    """Asynchronous API class: operations, nested ``api_group()`` members, optional ownership.
+class _ApiBase:
+    """Shared router machinery: one client, one merged service declaration."""
 
-    Construct it over an existing client (``UsersApi(client)``) or let it own one via
-    ``from_handler()``/``from_client(..., owns_client=True)``; an owning root closes the client
-    in ``aclose()`` and ``async with``.
+    _service_defaults: _ServiceDefaults = _NO_DEFAULTS
+
+    def __init__(self, client: object, *, defaults: _ServiceDefaults | None = None) -> None:
+        self._client = cast(Any, client)
+        self._defaults = type(self)._service_defaults if defaults is None else defaults
+        self._resolved: dict[object, _OperationDeclaration[Any]] = {}
+
+
+class AsyncApi(_ApiBase):
+    """Asynchronous router: operations plus the service attributes of its own MRO.
+
+    Construct it over an existing client (``UsersApi(client)``); composing several routers
+    into one SDK is the job of :class:`~eazy_sdk.root.AsyncRoot`.
     """
 
-    defaults = ApiDefaults()
+    _client: _AsyncClient
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _validate_api_class(cls, asynchronous=True)
-        _validate_groups(cls, asynchronous=True)
+        _reject_nested_groups(cls)
+        cls._service_defaults = _service_defaults_of(cls)
 
-    def __init__(self, client: _AsyncClient, *, owns_client: bool = False) -> None:
-        self._client = client
-        self._owns_client = owns_client
-        self._closed = False
-
-    @classmethod
-    def from_client(cls, client: _AsyncClient, *, owns_client: bool = False) -> Self:
-        """Bind this API class as the client's scoped SDK root."""
-
-        root = client.bind_sdk(lambda scoped: cls(scoped, owns_client=False))
-        root._owns_client = owns_client
-        return root
-
-    @classmethod
-    def from_handler(
-        cls,
-        *,
-        handler: AsyncBaseHandler,
-        base_url: str = "",
-        config: ClientConfig | None = None,
-        owns_handler: bool = True,
-        profile: HandlerProfile | None = None,
-    ) -> Self:
-        from eazy_sdk.clients import AsyncClient
-
-        client = AsyncClient(
-            base_url=base_url,
-            handler=handler,
-            config=config,
-            owns_handler=owns_handler,
-            profile=profile,
-        )
-        return cls.from_client(client, owns_client=True)
-
-    async def aclose(self) -> None:
-        if not self._closed:
-            self._closed = True
-            if self._owns_client:
-                await self._client.aclose()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.aclose()
+    def __init__(self, client: _AsyncClient, *, defaults: _ServiceDefaults | None = None) -> None:
+        super().__init__(client, defaults=defaults)
 
 
-class SyncApi:
-    """Synchronous API class: operations, nested ``api_group()`` members, optional ownership.
+class SyncApi(_ApiBase):
+    """Synchronous router: operations plus the service attributes of its own MRO.
 
-    Construct it over an existing client (``UsersApi(client)``) or let it own one via
-    ``from_handler()``/``from_client(..., owns_client=True)``; an owning root closes the client
-    in ``close()`` and ``with``.
+    Construct it over an existing client (``UsersApi(client)``); composing several routers
+    into one SDK is the job of :class:`~eazy_sdk.root.SyncRoot`.
     """
 
-    defaults = ApiDefaults()
+    _client: _SyncClient
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _validate_api_class(cls, asynchronous=False)
-        _validate_groups(cls, asynchronous=False)
+        _reject_nested_groups(cls)
+        cls._service_defaults = _service_defaults_of(cls)
 
-    def __init__(self, client: _SyncClient, *, owns_client: bool = False) -> None:
-        self._client = client
-        self._owns_client = owns_client
-        self._closed = False
-
-    @classmethod
-    def from_client(cls, client: _SyncClient, *, owns_client: bool = False) -> Self:
-        """Bind this API class as the client's scoped SDK root."""
-
-        root = client.bind_sdk(lambda scoped: cls(scoped, owns_client=False))
-        root._owns_client = owns_client
-        return root
-
-    @classmethod
-    def from_handler(
-        cls,
-        *,
-        handler: BaseHandler,
-        base_url: str = "",
-        config: ClientConfig | None = None,
-        owns_handler: bool = True,
-        profile: HandlerProfile | None = None,
-    ) -> Self:
-        from eazy_sdk.clients import Client
-
-        client = Client(
-            base_url=base_url,
-            handler=handler,
-            config=config,
-            owns_handler=owns_handler,
-            profile=profile,
-        )
-        return cls.from_client(client, owns_client=True)
-
-    def close(self) -> None:
-        if not self._closed:
-            self._closed = True
-            if self._owns_client:
-                self._client.close()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        self.close()
+    def __init__(self, client: _SyncClient, *, defaults: _ServiceDefaults | None = None) -> None:
+        super().__init__(client, defaults=defaults)
 
 
 class _ApiGroup[TGroup: SyncApi | AsyncApi]:
@@ -476,38 +451,126 @@ class _ApiGroup[TGroup: SyncApi | AsyncApi]:
     def __get__(self, instance: None, owner: type[object]) -> _ApiGroup[TGroup]: ...
 
     @overload
-    def __get__(
-        self, instance: SyncApi | AsyncApi, owner: type[object] | None = None
-    ) -> TGroup: ...
+    def __get__(self, instance: object, owner: type[object] | None = None) -> TGroup: ...
 
     def __get__(
         self,
-        instance: SyncApi | AsyncApi | None,
+        instance: object | None,
         owner: type[object] | None = None,
     ) -> _ApiGroup[TGroup] | TGroup:
         if instance is None:
             return self
-        cached = instance.__dict__.get(self.name)
-        if cached is None:
-            cached = self.api_type(cast(Any, instance._client))
-            instance.__dict__[self.name] = cached
-        return cast(TGroup, cached)
+        build = getattr(instance, "_build_group", None)
+        if build is None:
+            raise TypeError("api_group members are declared on SyncRoot/AsyncRoot subclasses")
+        return cast(TGroup, build(self))
 
 
 def api_group[TGroupApi: SyncApi | AsyncApi](
     api_type: type[TGroupApi],
 ) -> _ApiGroup[TGroupApi]:
-    """Declare a lazily bound nested API group on an API class."""
+    """Declare a lazily bound router member on an SDK root class."""
 
+    if not isinstance(api_type, type) or not issubclass(api_type, SyncApi | AsyncApi):
+        raise TypeError("api_group() requires a SyncApi or AsyncApi subclass")
     return _ApiGroup(api_type)
 
 
-def _validate_groups(root: type[object], *, asynchronous: bool) -> None:
-    expected = AsyncApi if asynchronous else SyncApi
-    for name, value in root.__dict__.items():
-        if isinstance(value, _ApiGroup) and not issubclass(value.api_type, expected):
-            kind = "async" if asynchronous else "sync"
-            raise TypeError(f"{kind} API group {name!r} uses the wrong API kind")
+def _reject_nested_groups(cls: type[object]) -> None:
+    for name, value in cls.__dict__.items():
+        if isinstance(value, _ApiGroup):
+            raise TypeError(
+                f"router {cls.__name__} declares api_group {name!r}; "
+                "api groups belong to a SyncRoot/AsyncRoot composition"
+            )
+
+
+def _declared_service_attribute(cls: type[object], name: str) -> object:
+    """The winning declaration of ``name`` in ``cls.__mro__``, or ``_MISSING``.
+
+    Two unrelated bases declaring different values is a declaration error: MRO order must
+    not silently pick one service over another.
+    """
+
+    declarations = [(base, base.__dict__[name]) for base in cls.__mro__ if name in base.__dict__]
+    if not declarations:
+        return _MISSING
+    winner, value = declarations[0]
+    for base, other in declarations[1:]:
+        if issubclass(winner, base):
+            continue
+        if other is value or other == value:
+            continue
+        raise TypeError(
+            f"{cls.__name__} inherits conflicting {name!r} from "
+            f"{winner.__name__} and {base.__name__}; declare it once"
+        )
+    return value
+
+
+def _service_defaults_of(cls: type[object]) -> _ServiceDefaults:
+    """Collect the service declaration of a router or root class from its MRO."""
+
+    values: dict[str, Any] = {}
+    for name in SERVICE_ATTRIBUTES:
+        declared = _declared_service_attribute(cls, name)
+        if isinstance(declared, _Missing):
+            continue
+        values[name] = _normalize_service_attribute(cls, name, declared)
+    return _ServiceDefaults(**values)
+
+
+def _normalize_service_attribute(cls: type[object], name: str, value: object) -> object:
+    if name == "base_url":
+        if not isinstance(value, str):
+            raise TypeError(f"{cls.__name__}.base_url must be a string")
+        return validate_base_url(value, f"{cls.__name__}.base_url")
+    if name in {"signing", "errors", "allow"}:
+        return value if isinstance(value, tuple) else (value,)
+    return value
+
+
+def validate_base_url(value: str, origin: str) -> str:
+    """An absolute ``scheme://host`` URL, or empty to inherit the client's address."""
+
+    if not value:
+        return ""
+    split = urlsplit(value)
+    if not split.scheme or not split.netloc:
+        raise ValueError(f"{origin} must be an absolute URL, got {value!r}")
+    return value
+
+
+def _security_schemes(
+    security: object,
+) -> tuple[object, ...]:
+    if security is None:
+        return ()
+    if isinstance(security, SecurityPolicy):
+        return tuple(
+            scheme for alternative in security.alternatives for scheme in alternative.schemes
+        )
+    if isinstance(security, SecurityAlternative):
+        return security.schemes
+    return (security,)
+
+
+def _validate_allowed(
+    allow: tuple[object, ...] | None,
+    operation_id: str,
+    security: object,
+    signing: tuple[RequestSignature, ...],
+) -> None:
+    if allow is None:
+        return
+    for item in (*_security_schemes(security), *signing):
+        if any(entry is item or entry == item for entry in allow):
+            continue
+        label = getattr(item, "diagnostic_name", None) or getattr(item, "name", None) or item
+        raise TypeError(
+            f"operation {operation_id!r} carries {label!r}, which the service allowlist "
+            "does not permit"
+        )
 
 
 class _OperationDecorator[T]:
@@ -926,7 +989,6 @@ api = _ApiNamespace()
 
 
 __all__ = [
-    "ApiDefaults",
     "AsyncApi",
     "SyncApi",
     "api",

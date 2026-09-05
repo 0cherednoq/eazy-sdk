@@ -52,8 +52,8 @@ class _ClientCore[TRaw = object]:
         self._can_bind_sdk = bind_sdk
         self.raw = raw
 
-    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk:
-        """Create an SDK root and register its scoped lifecycle factory."""
+    def _register_sdk_factory(self, sdk_factory: Callable[[Any], object]) -> None:
+        """Register the scoped lifecycle factory without building a root of its own."""
 
         if not callable(sdk_factory):
             raise TypeError("SDK binding requires a callable root factory")
@@ -61,6 +61,11 @@ class _ClientCore[TRaw = object]:
             self._runtime.auth.bind_sdk_factory(
                 lambda graph: sdk_factory(self._scoped(graph))
             )
+
+    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk:
+        """Create an SDK root and register its scoped lifecycle factory."""
+
+        self._register_sdk_factory(sdk_factory)
         return sdk_factory(self)
 
     def _scoped(self, graph: LifecycleGraph) -> _ClientCore[TRaw]:

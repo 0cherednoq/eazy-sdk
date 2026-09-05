@@ -33,33 +33,34 @@ middleware, retry, redirect, rate limit и protection остаются в общ
 
 ## Root SDK convenience
 
-`SyncApi`, `AsyncApi` и `api_group()` создают typed root без forwarding wrappers:
+`SyncRoot`/`AsyncRoot` — композиция роутеров. Корень не объявляет операций и не выдаёт клиентов
+наружу: в публичной поверхности SDK видны только роутеры.
 
 ```python
-from eazy_sdk import AsyncApi, api_group
+from eazy_sdk import AsyncClient, AsyncRoot, api_group
 
-class StoreSdk(AsyncApi):
+class StoreSdk(AsyncRoot):
     users = api_group(UsersApi)
     orders = api_group(OrdersApi)
 
-async with StoreSdk.from_handler(
-    handler=handler,
-    base_url="https://api.example",
-) as sdk:
+client = AsyncClient.httpx(base_url="https://api.example")
+async with StoreSdk(client) as sdk:
     user = await sdk.users.get_user(user_id=42)
+await client.aclose()
 ```
 
-Группы создаются лениво и используют тот же client. Ownership задаётся явно:
+Группы создаются лениво. Адрес операции берётся из роутера, если он его объявил, иначе из
+клиента — см. {doc}`Мультисервисный SDK </guides/multi-service>`. Ownership задаётся явно:
 
 | Конструктор | Кто закрывает ресурсы |
 |---|---|
-| `from_handler(..., owns_handler=True)` | root → новый client → handler |
-| `from_handler(..., owns_handler=False)` | root закрывает client, caller сохраняет handler |
-| `from_client(client)` | caller сохраняет client |
-| `from_client(client, owns_client=True)` | root закрывает client |
+| `Root(client)` | client остаётся у caller |
+| `Root.from_handler(..., owns_handler=True)` | root → созданный им client → handler |
+| `Root.from_handler(..., owns_handler=False)` | root закрывает созданный client, caller сохраняет handler |
 
-`from_handler()` регистрирует scoped SDK factory через существующий `bind_sdk()` lifecycle.
-Scoped auth facades никогда не владеют parent resources.
+`close()`/`aclose()` закрывает только те клиенты, которые корень создал сам, и безопасен при
+повторном вызове. Конструктор корня регистрирует scoped SDK factory через существующий
+`bind_sdk()` lifecycle. Scoped auth facades никогда не владеют parent resources.
 
 Root и API groups не сериализуют пользовательские вызовы: независимые calls можно выполнять
 конкурентно в пределах concurrency-контракта выбранного handler. Встроенные auth/protection caches
@@ -69,8 +70,9 @@ Root и API groups не сериализуют пользовательские 
 ## Синхронный клиент и event loop
 
 `Client` не вызывает `asyncio.run()` на каждый запрос: у каждого потока есть свой переиспользуемый
-`asyncio.Runner`, который создаётся лениво и закрывается в `close()`. После каждого вызова текущий
-loop потока сбрасывается, как это делает `asyncio.run()`. Вызов `Client` из потока, в котором уже
+`asyncio.Runner`, который создаётся лениво и закрывается в `close()`. Runner создаётся с
+`loop_factory=asyncio.new_event_loop` и работает на собственном loop: текущий loop потока,
+установленный вызывающим кодом, не изменяется и не сбрасывается. Вызов `Client` из потока, в котором уже
 работает event loop (Jupyter, обработчик `asyncio`-сервера), поднимает `EventLoopConflictError`:
 используйте там `AsyncClient`. Несколько потоков могут делить один `Client`; single-flight
 protection-локи не привязаны к loop.
@@ -106,15 +108,16 @@ response = await client.request(
 )
 ```
 
-`delete`, `get`, `head`, `options`, `patch`, `post`, `put` и `trace` возвращают
-`NormalizedResponse` и делегируют тому же `request(...)`. Повторяющиеся query names запрещены;
-collection требует явного scalar codec.
+Единственный ad-hoc метод клиента — `request(method, url, *, params, headers, cookies, json,
+content, options)`; он возвращает `NormalizedResponse`. Отдельных verb-методов (`get`, `post`, ...)
+у `Client`/`AsyncClient` нет — HTTP-метод передаётся первым аргументом. Повторяющиеся query names
+запрещены; collection требует явного scalar codec.
 
 ## Stability и extension boundaries
 
 | Поверхность | Статус | Правило расширения |
 |---|---|---|
-| `SyncApi`, `AsyncApi`, `api_group`, `Client`, `AsyncClient` | Public | Используйте напрямую; ownership всегда задаётся конструктором |
+| `SyncApi`, `AsyncApi`, `SyncRoot`, `AsyncRoot`, `api_group`, `bind`, `Client`, `AsyncClient` | Public | Используйте напрямую; ownership всегда задаётся конструктором |
 | `api.*`, request markers, `Responses`, `ResponseParser` | Public authoring/SPI | Реализуйте документированные protocol-ы, не наследуйтесь от internal compiler types |
 | Zapros `BaseHandler` / `AsyncBaseHandler` | Transport SPI | Единственная граница собственной сетевой интеграции |
 | `eazy_sdk.testing` | Public test support | Наблюдает фактический Zapros request, не заменяет preparation |

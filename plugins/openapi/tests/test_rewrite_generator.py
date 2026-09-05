@@ -378,10 +378,11 @@ async def test_generated_session_factory_hides_runtime_plumbing_and_executes(
             "handler",
             "credentials",
             "session",
-                "config",
-                "owns_handler",
-                "profile",
-            }
+            "config",
+            "owns_handler",
+            "profile",
+            "bindings",
+        }
 
         httpserver.expect_request(
             "/login",
@@ -858,9 +859,8 @@ def test_canonical_extensions_lower_to_identity_based_ir_and_generated_dependenc
     sys.path.insert(0, str(tmp_path))
     try:
         client_module = importlib.import_module("canonical_sdk.client")
-        from eazy_sdk import ApiDefaults
 
-        declaration = client_module.AsyncDefault.getUser.resolve(ApiDefaults())
+        declaration = client_module.AsyncDefault.getUser.resolve()
         assert declaration.requires[0].dependency is client_module.DEVICE
         assert declaration.signing[0].identity.name == "vendor"
     finally:
