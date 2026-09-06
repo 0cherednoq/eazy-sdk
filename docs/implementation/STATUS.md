@@ -4122,10 +4122,11 @@ per-package pass over `websocket`, `crypto`, `request` and `protection.advanced`
 
 ### State
 
-Active (50.2). Step 50.1 is complete: an operation is a frozen model class published with
-`op(...)`, and the decorator synthesizes exactly that class, so defaults, `default_factory` and
-the request-as-a-value are available on one execution path. Plan:
-`50-declarative-operations.md`; design: `eazy-sdk-declarative-operations.md`.
+Active (50.4). Steps 50.1-50.3 are complete: an operation is a frozen model class published with
+`op(...)` and the decorator synthesizes exactly that class; the response family, the specificity
+of a case and the layer that declared it are all read rather than declared; and a request is a
+value that can be built, copied and sent. Plan: `50-declarative-operations.md`; design:
+`eazy-sdk-declarative-operations.md`.
 
 ### Delivered
 
@@ -4167,6 +4168,48 @@ the request-as-a-value are available on one execution path. Plan:
   `PreparedCall`s (decorator = class, dataclass = Pydantic = msgspec, `UNSET` = omitted), and
   `tests/unit/test_phase50_absence.py` (2 tests) proves there is no second execution path and that
   the removed names stay removed.
+- **50.2.1** Three tests hold the family inference to the four shapes measured in
+  `experiments/response_case_sugar/j_html_service.py`: an HTML catalogue page, its nested card
+  model behind `Scope`, an HTML 502 page on a JSON service and a JSON problem on an HTML
+  service. No operation names `Html()` or `Json()`
+  (`tests/unit/test_phase50_responses.py`, 3 tests).
+- **50.2.2** `Responses.inspect` keeps only the most specific parsed candidates before
+  arbitration (`_most_specific`): exact status over range over `DEFAULT`, explicit media over
+  wildcard over none, `when=` over none, and `precedence` — operation 0, service 1, client 2.
+  A true tie stays ambiguous (5 tests).
+- **50.2.3** `errors={404: (Model, factory)}` raises an application exception that inherits
+  nothing from the library; D-14 and D-15 are raised verbatim (3 tests).
+- **50.2.4** `Json(unwrap="/data")` becomes a `JsonExtractor` carrying an RFC 6901 pointer,
+  applied after decoding and before header sources; a missing path is `Malformed(KeyError)`, an
+  explicit `Json(...)` is never unwrapped, and a service declaring both `protocol` and `unwrap`
+  is D-17 (5 tests).
+- **50.2.5** `ErrorSummary` plus `ApiError.__reduce__`: a pickled error carries the operation,
+  status, media type, attempt, method and redacted target, and never the body or its headers
+  (2 tests).
+- **50.2.6** `ClientConfig.errors` maps an exact host to its error cases; the executor appends
+  them with `precedence=2` and caches the extended contract by `(declaration, host)` (3 tests).
+- **50.2.7** `UnexpectedResponseError.__str__` reads as a sentence and names the commonest cause
+  of an unmatched HTML response — a model with no CSS or XPath metadata; D-18 refuses a document
+  case without `when=` whose model requires nothing, through the html plugin's new
+  `ExtractionSchema.has_required_field` (2 tests).
+- **50.2.8** D-19: a signature that reads (`canonical_json(include=)`) or writes
+  (`body_output(json_pointer=)`) a body field must name a field the body has — for a flat
+  `JsonField` body and a root body model as well as a projection, always by the wire name the
+  model chose (2 tests).
+- **50.2.9** `Serialization.documents` replaces `html=`; `DocumentBackend` declares
+  `media_types`, so an HTML parser and an XML parser sit side by side and the response media
+  chooses. One configured backend always reads; none that accepts the media is a capability
+  error naming both (4 tests).
+- **50.3.1** `ModelAdapter.evolve`/`frozen` on all four adapters, dispatched by
+  `ModelAdapterRegistry.evolve` with one field-name diagnostic for every library (3 tests).
+- **50.3.2** `request()` builds the value with no I/O, `send()` produces the same bytes as the
+  direct call, a foreign operation is refused by name, `evolve()` is the paging loop, and
+  `options=` reaches an `op()` operation through `send` (7 tests).
+- **50.3.3** The typing fixture proves the value types: `request()` and `evolve()` are
+  `HttpOperation[T]`, `send()` is `T`, `send_with_response()` is `ResponseEnvelope[T, Any]`, and
+  a wrong argument type is still rejected inside `send`.
+- **50.3.4** `examples/request_values.py`: paging with no paging abstraction and a queue of
+  request values; registered in `examples/README.md` and `tests/unit/test_docs_examples.py`.
 - **50.1.11** `plugins/openapi/eazy_sdk_openapi/generator.py` emits frozen operation classes
   (`<Pascal>Request(HttpOperation[...])` with `__http__` and short markers) published with
   `op(...)`; `eazy_sdk.codegen` exports the aliases, `markers`, `Http`, `HttpOperation`,
@@ -4176,7 +4219,8 @@ the request-as-a-value are available on one execution path. Plan:
 ### Surface baseline
 
 `uv run python scripts/surface_count.py --total` on master before any phase-50 edit: **436**.
-After 50.1: **456**. Gate for the phase: the number after 50.4.6 is <= 436; Appendix B names the
+After 50.1: **456**; after 50.3: **458** (`ErrorSummary`, `accepts_media`). Gate for the
+phase: the number after 50.4.6 is <= 436; Appendix B names the
 candidates (websocket internals under an underscore, `JsonResponse`, and `Text`/`Bytes` out of the
 root if the budget is still exceeded).
 
@@ -4222,25 +4266,49 @@ Plan §10: items 1-10 were taken by the plan, items 11-22 while executing 50.1.
     (`replace(case, precedence=1)`), so operation cases win a tie.
 22. A codegen-synthesized class is named `<Pascal>Request` -- the former TypedDict name -- because
     it is already unique in the generated module and referenced by the snapshots.
+23. `ClientConfig` gains a fifth field, `errors`; the phase-44 test that enumerates the
+    constructor parameters expects five names. The field itself is prescribed by plan §4.9.
+24. `ErrorSummary` is exported from `eazy_sdk.response`, not the root: the budget keeps the root
+    at 39 names, and the summary is read where the `ApiError` is caught.
+25. `Json` substitutes its own extractor in `__post_init__` when `unwrap` is set and the
+    extractor was left at the default: the pointer is applied by `JsonExtractor` (§4.7), and
+    `extract(model)` cannot see the case's representation.
+26. D-19 replaces the former "target field is not declared" text for projections too, so every
+    body shape has one diagnostic; the phase-21 expectation was rewritten with the reason.
+27. A root body that is not a model (`dict[str, str]`) is not checked against signature
+    pointers: it declares no fields, and `body_output` writes a new key into it.
+28. The forgotten-selectors hint is also computed when no case was even attempted: a JSON model
+    on an HTML page is filtered out by media before parsing, so the hint reads the models of the
+    cases the status alone selects.
+29. `request()`, `evolve()` and `send()` are typed through `HttpOperation[T]` rather than the
+    operation class. Measured: a third type parameter makes `T` uninferable — mypy answers
+    `Need type annotation` and `Any` instead of the result. The class is available at runtime
+    (`Api.op.Operation`, `isinstance`). For the same reason `options=` stays a runtime parameter
+    on a decorated operation: the synthesized constructor does not name it.
+30. `ModelAdapterRegistry.evolve` dispatches by value, so a `TypedDict` (a plain `dict` at
+    runtime) is evolved through the adapter chosen by type. Operations are never `TypedDict`
+    after phase 50, so the public path never meets this.
 
 ### Commands run
 
 | Command / gate | Result |
 |---|---|
-| `uv run pytest -q` | PASS: 1149 passed, 11 skipped. |
-| `uv run mypy` | PASS: no issues found in 325 source files. |
-| `uv run ruff check .` / `uv run ruff format --check .` | PASS. |
+| `uv run pytest -q` | PASS: 1149 passed, 11 skipped after 50.1; 1189 passed, 11 skipped after 50.3 (175.82s). Two full runs in between were killed by the 10s per-test timeout while a test's own event loop was created (`socket.socketpair`) or inside `curl_cffi`; both reproduce without phase-50 changes and pass in isolation. |
+| `uv run mypy` | PASS: no issues found in 325 source files after 50.1; 328 after 50.3. |
+| `uv run ruff check .` | PASS. `ruff format --check .` reports 76 pre-existing files formatted to a narrower line length than the configured 100; the drift is on files phase 50 never touched, so files this phase writes are formatted and the rest are left alone. |
 | `uv run python scripts/absence_audit.py` | PASS. |
 | `uv run python scripts/update_openapi_snapshots.py` + `uv run pytest tests/plugins` | PASS: snapshots regenerated, generated SDK imports and type-checks. |
-| `uv run python scripts/docs_freshness.py update` + `check` | PASS: 63 pages fresh. |
+| `uv run python scripts/docs_freshness.py update` + `check` | PASS: 63 pages fresh. After 50.3, eight pages were stale on `ClientConfig`, `eazy_sdk.response` and `Serialization`; `api-reference/clients.mdx`, `api-reference/response.mdx` and `guides/requests/representation.mdx` got the content for `errors=`, `ErrorSummary`/specificity and `documents=`, then all eight were refreshed. |
 | `uv run python docs-site/scripts/validate_docs.py` | PASS: 78 pages. |
 | strict Sphinx (`-W --keep-going -b dirhtml -c docs-site`) | PASS: build succeeded. |
 | `uv build` | PASS: wheel and sdist. |
 | `uv run python scripts/extras_smoke.py` | PASS: 14 extras. |
 | `uv run python scripts/package_audit.py` | FAIL: `dependency 'pyrefly' has no entry in DISTRIBUTION_IMPORTS`. Pre-existing and not caused by phase 50: the stray `pyrefly>=0.60.0` runtime dependency sits in an uncommitted `pyproject.toml` edit owned by the repository owner; the audit passes once it is removed. |
-| `uv run python scripts/surface_count.py --total` | 456 (baseline 436; the gate applies after 50.4.6). |
+| `uv run pytest -q tests/websocket tests/unit/test_phase49_envelopes.py tests/rewrite/test_phase04_signing.py tests/crypto` | PASS: 138 passed, 8 skipped. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 78 pages. |
+| `uv run python scripts/surface_count.py --total` | 456 after 50.1, 458 after 50.3 (baseline 436; the gate applies after 50.4.6). |
 
 ### Remaining work / blockers
 
-50.2 onwards (response mapping and error layers), then 50.3 (the request as a value) and 50.4
-(other protocols, documentation, the name budget and the phase close).
+50.4: RPC and WebSocket operations as classes, the adaptix plugin, the documentation rewrite and
+the migration page, the name budget (458 now, <= 436 required) and the phase close.

@@ -5,7 +5,7 @@ sources:
   - eazy_sdk.request.Wire
   - eazy_sdk.serialization.Serialization
 draft: false
-api_fingerprint: "sha256:863256a3ee1a8c4f39e8d14569da1f98672cf967f227bc1a7bff0154063a5f34"
+api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e3537770cc77c4a"
 ---
 
 Сериализация — это не одна операция, а четыре преобразования с разными владельцами. Пока они
@@ -14,7 +14,7 @@ api_fingerprint: "sha256:863256a3ee1a8c4f39e8d14569da1f98672cf967f227bc1a7bff015
 | # | Преобразование | Кто владеет | Где объявляется |
 |---|---|---|---|
 | 1 | модель ↔ структура | библиотека моделей | `Serialization(models=…)` на корне |
-| 2 | структура ↔ байты | кодек формата и JSON-бэкенд | кодек — маркер тела операции, бэкенд — `Serialization(json=…)` |
+| 2 | структура ↔ байты | кодек формата и JSON-бэкенд | кодек — маркер тела операции, бэкенд — `Serialization(json=…)`; парсеры документов — `Serialization(documents=(…,))` |
 | 3 | public schema ↔ wire schema | проекция | `Wire(projection=…)` на операции |
 | 4 | байты ↔ байты на проводе | шифрование, порядок, точность | `Wire(encrypted=…, order=…, exact=…)` |
 

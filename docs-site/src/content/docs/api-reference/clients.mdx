@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:ccfab2ed3e7b827dde7db806165b115c4894785d0e47d5ed3a6d6cf4ab6e139b"
+api_fingerprint: "sha256:7a2e802983e1b45e134a7cdddf6d58d55d489a225d31b3fd036b8074292546ad"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -31,6 +31,16 @@ client = AsyncClient(
 `max_redirects`, `timeout`, `rate_limiter`), `security=` (guard/anti-bot; `Security.of(...)`
 понижает установочные guard'ы) и `hooks=` (`middleware`). Аутентификация, ключи подписи и DI живут
 в `Identity`; библиотека моделей — в `Serialization` на корне. Плоских полей у конфига больше нет.
+
+Рядом с группами живут две host-scoped карты: `crypto=` (payload-crypto по адресу) и `errors=` —
+ошибки, которыми хост отвечает независимо от того, какой SDK с ним говорит:
+
+```python
+config = ClientConfig(errors={"books.example": {429: RateLimited, 503: AccessBlocked}})
+```
+
+Ключ — точный хост, без порта. Эти кейсы — самый внешний слой: при совпадении статуса выигрывает
+кейс операции, затем её сервиса, и только потом клиентский.
 
 `CallOptions` управляет timeout, retry/redirect budgets и replay одного вызова. Auth,
 middleware, retry, redirect, rate limit и protection остаются в общем executor; каждый attempt

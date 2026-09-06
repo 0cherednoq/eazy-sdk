@@ -3,7 +3,7 @@ title: Response API
 description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:6b175fdf7091e6607a3fc56aabc564ecca7ab8561c07c3ec7d00890dc6d68d67"
+api_fingerprint: "sha256:6bf5c8d85a1f5942d1a732618cbae223b5bcb6d2f20bdbcac73484dbfe1bc639"
 ---
 
 ## Одна успешная case
@@ -84,11 +84,19 @@ Pyright. Для multi-model parser реализуйте advanced `ResponseParser
 Обычный вызов возвращает значение success case. `method.with_response(...)` возвращает
 `ResponseEnvelope`: `value`, `status_code`, `headers` и normalized raw `response`.
 
-`ApiError[T]` содержит typed `.error` и безопасный `.context`. Ошибки классификации разделены:
+`ApiError[T]` содержит typed `.error` и безопасный `.context`. Свойство `.summary` доступно
+всегда и возвращает `ErrorSummary` — operation_id, статус, media type, номер попытки, метод и
+редактированный target. Именно она переживает `pickle`: сериализованное исключение не несёт ни
+тела ответа, ни его заголовков, а восстановленный `.context` — это `ErrorSummary`.
 
-- `UnexpectedResponseError` — подходящей case нет;
+Ошибки классификации разделены:
+
+- `UnexpectedResponseError` — подходящей case нет; если ответ пришёл документной медиа, а все
+  кандидаты структурные, сообщение это называет;
 - `MalformedResponseError` — body не разобран выбранным parser/extractor;
-- `AmbiguousResponseError` — совпало больше одной case.
+- `AmbiguousResponseError` — совпало больше одной одинаково специфичной case. Специфичность
+  считается так: точный статус > диапазон > `DEFAULT`, явная медиа > wildcard > её отсутствие,
+  `when=` > его отсутствие, кейс операции > кейс сервиса > кейс клиента.
 
 Parsing session создаётся один раз на response attempt, поэтому custom parser или extractor может
 кэшировать decoded document по identity.
