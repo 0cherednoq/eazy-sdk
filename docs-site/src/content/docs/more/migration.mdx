@@ -38,7 +38,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
 | `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
 
-Корень `eazy_sdk` экспортирует 38 имён вместо 55: то, что нужно автору SDK в первый час. Всё
+Корень `eazy_sdk` экспортирует 39 имён вместо 55: то, что нужно автору SDK в первый час. Всё
 остальное импортируется из своего модуля — это не сокрытие, а отказ от второго имени для одной
 вещи.
 
@@ -114,6 +114,45 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 
 Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
 другому клиенту и/или адресу при сборке (`bindings=(...)`).
+
+Операция стала классом. Поля класса — это поля запроса, `__http__` — всё, что операция объявляет,
+а `op(...)` публикует её на роутере. Декоратор остался короткой формой того же самого: он
+синтезирует такой же frozen-класс. Причина — не стиль: у `TypedDict` нет значений по умолчанию и
+нет `default_factory`, а у класса есть, и сам запрос становится значением, которое можно построить,
+изменить и отправить. Подробности — {doc}`Запросы </guides/requests/index>` и {doc}`Запрос как
+значение </guides/requests/values>`.
+
+| Было | Стало | Причина |
+|---|---|---|
+| `def op(self, **request: Unpack[Req]) -> T` | класс `Op(HttpOperation[T])` + `op(Op)` | defaults и `default_factory`, запрос как значение |
+| `responses=Responses(…)` | `success=…`, `errors=…`, `fallback=…` | один способ вместо трёх |
+| `response=Json()` | return-аннотация операции либо `success={200: Model}` | семья выводится из модели |
+| `Annotated[int, Query()]` | `Query[int]` или `Annotated[int, markers.Query("name")]` | короткая форма |
+| `eazy_sdk.Path` (дата-класс) | `eazy_sdk.request.markers.Path` | корневые имена стали алиасами |
+| `eazy_sdk.request.Query` (дата-класс) | `eazy_sdk.request.markers.Query` | то же для остальных маркеров |
+| `Inject(JsonField("x"), dep)` | `Inject(markers.JsonField("x"), dep)` | то же |
+| `Wire(projection=…)` | `projection=BodyProjection(target=…, using=…, encoding=…)` в `__http__` | проекция — представление, не байтовый контракт |
+| `BodyProjection(source=TypedDict, ...)` | `source` опускается: источник — класс операции | одно объявление полей |
+| `eazy_sdk.Responses` | `eazy_sdk.response.Responses` | бюджет корня; вместе с `Success` и `Error` |
+| `eazy_sdk.Text` | `eazy_sdk.response.Text` | вместе с `Bytes` |
+| `Error(404, Json(Problem), exception=NotFound)` | `errors={404: NotFound}` при `class NotFound(ApiError[Model])` | модель объявлена один раз |
+| `Error(..., exception=factory)` | `errors={404: (Model, factory)}` | без наследования от библиотеки |
+| `eazy_sdk.response.JsonResponse` | `eazy_sdk.response.Json` | одно имя для одного понятия |
+| `eazy_sdk.serialization.Serialization.html` | `eazy_sdk.serialization.Serialization.documents` | несколько документных бэкендов, выбор по медиа |
+| `eazy_sdk.websocket.WsOperationKind` | `eazy_sdk.websocket._messages.WsOperationKind` | плумбинг рантайма ушёл из публичной поверхности |
+| `eazy_sdk.websocket.RuntimeComposition` | `eazy_sdk.websocket.composition.RuntimeComposition` | то же |
+| `eazy_sdk.websocket.FrameLimits` | `eazy_sdk.websocket.frames.FrameLimits` | то же, вместе с `frame_from_zapros`/`frame_to_zapros` |
+| `eazy_sdk.response.HtmlExtractor` | `eazy_sdk.response.cases.HtmlExtractor` | вместе с `JsonExtractor` |
+| `eazy_sdk.request.TransportProtocol` | `eazy_sdk.request.wire.TransportProtocol` | читает компилятор, не автор SDK |
+| `eazy_sdk.crypto.ResolvedCrypto` | `eazy_sdk.crypto.core.ResolvedCrypto` | результат компиляции, не объявление |
+| `@ws.call("event") async def f(self, *, ...)` | по-прежнему работает; альтернатива — `class F(WsCall[T])` + `op(F)` | классы и для WebSocket |
+| `ApiError.context` после pickle | `ApiError.summary` (`ErrorSummary`) | сводка вместо тела ответа и заголовков |
+
+Новое без замены: `Omittable[T] = UNSET` — единственный способ не отправить поле; `unwrap = "/data"`
+на сервисе — конверт снимается один раз; `ClientConfig(errors={host: {...}})` — ошибки, которыми
+хост отвечает любому SDK; `RpcOperation`/`Rpc` в `eazy_sdk.protocols` и `WsCall`/`WsSubscribe`/
+`WsSend`/`Ws` в `eazy_sdk.websocket` — те же классы для других протоколов;
+`eazy-sdk-adaptix` — центральный `Retort` как адаптер моделей.
 
 ## 0.2.0a4 → 0.2.0a5
 
