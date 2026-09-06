@@ -260,6 +260,8 @@ class Json[T]:
     extractor: ResponseExtractor = JSON_EXTRACTOR
     status: StatusSelector = 200
     when: ResponseCondition | None = None
+    unwrap: str | None = None
+    """A JSON pointer (RFC 6901) to the payload inside a service envelope, applied first."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +349,8 @@ class Success[T]:
     status: StatusSelector
     response: ResponseRepresentation[T]
     condition: ResponseCondition | None = None
+    precedence: int = 0
+    """Which layer declared the case: 0 the operation, 1 its service, 2 the client."""
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -355,6 +359,7 @@ class Error[T]:
     response: ResponseRepresentation[T]
     exception: ApiErrorFactory[T] = ApiError
     condition: ResponseCondition | None = None
+    precedence: int = 0
 
 
 type ResponseCase[T] = Success[T] | Error[T]
