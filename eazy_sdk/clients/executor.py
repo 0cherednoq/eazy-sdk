@@ -86,7 +86,6 @@ from eazy_sdk.middleware import (
 )
 from eazy_sdk.models import (
     ModelAdapterRegistry,
-    default_model_adapters,
 )
 from eazy_sdk.preparation import PreparationIncompleteError, PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import (
@@ -119,7 +118,6 @@ from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimiter
 from eazy_sdk.request import (
     JsonBody,
     ReplayableStreamBody,
-    WireProfile,
 )
 from eazy_sdk.request.logical import ExactBodyInput, NoBodyInput
 from eazy_sdk.request.prepared import (
@@ -138,6 +136,7 @@ from eazy_sdk.response import (
     Responses,
 )
 from eazy_sdk.response.cases import AttemptIdentity, OperationInfo, PreparedRequestSummary
+from eazy_sdk.serialization import Serialization
 
 from ._http_stages import (
     AuthRefreshTransition,
@@ -223,6 +222,7 @@ class _RuntimeFetch:
     runtime: ExecutionRuntime
     options: EmitOptions
     identity: TransportIdentity
+    serialization: Serialization
 
     async def __call__(
         self,
@@ -239,8 +239,8 @@ class _RuntimeFetch:
             body,
             user_agent=self.identity.user_agent,
             protocol=(
-                self.runtime.profile.protocol
-                if self.runtime.profile is not None
+                self.serialization.profile.protocol
+                if self.serialization.profile is not None
                 else HttpProtocol.HTTP_1_1
             ),
         )
@@ -358,9 +358,10 @@ def _solve_context(
     attempt: int,
     identity: TransportIdentity,
     headers: Mapping[str, str],
+    serialization: Serialization,
 ) -> SolveContext:
     emit_options = options.emit_options()
-    fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity)
+    fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity, serialization)
     return SolveContext(
         operation,
         response,
@@ -439,8 +440,6 @@ class ExecutionRuntime:
     protection_session_owner: object | None = None
     middleware: tuple[object, ...] = ()
     limiter: RateLimiter | None = None
-    models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
-    profile: WireProfile | None = None
     crypto: CryptoRegistry = field(default_factory=CryptoRegistry)
     allow_async_crypto: bool = True
     _protection_state: dict[_ProtectionCacheKey, _ManagedProtectionState] = field(
@@ -538,10 +537,12 @@ class ExecutionCore:
         runtime: ExecutionRuntime,
         *,
         identity: _IdentityScope | None = None,
+        serialization: Serialization | None = None,
         resolution_graph: LifecycleGraph | None = None,
     ) -> None:
         self.runtime = runtime
         self.identity = identity if identity is not None else _IdentityScope()
+        self.serialization = serialization if serialization is not None else Serialization()
         self.resolution_graph = resolution_graph
 
     async def prepare[T](
@@ -591,6 +592,7 @@ class ExecutionCore:
         core = ExecutionCore(
             runtime,
             identity=replace(identity, observer=None),
+            serialization=self.serialization,
             resolution_graph=self.resolution_graph,
         )
         try:
@@ -638,7 +640,7 @@ class ExecutionCore:
                 scope=compiled_contract.scope,
                 requirements=wire_requirements(compiled_contract),
                 fingerprint_context=(
-                    *self.runtime.models.fingerprint_components(),
+                    *self.serialization.models.fingerprint_components(),
                     *_protection_fingerprint_components(
                         before_call_policies,
                         challenge_policies,
@@ -656,7 +658,7 @@ class ExecutionCore:
         initial_compiled_crypto = _compile_http_crypto(
             compiled,
             initial_crypto,
-            self.runtime.models,
+            self.serialization.models,
             allow_async=self.runtime.allow_async_crypto,
         )
         # Preflight deliberately precedes binding-side effects and every provider.
@@ -666,7 +668,7 @@ class ExecutionCore:
             compiled,
             self.runtime.operation_protections,
             self.runtime.solver_bindings,
-            self.runtime.models,
+            self.serialization.models,
         )
         for challenge_policy_item in challenge_policies:
             if self.runtime.solver_bindings.get(challenge_policy_item.solver) is None:
@@ -792,7 +794,7 @@ class ExecutionCore:
                 else _compile_http_crypto(
                     compiled,
                     selected_crypto,
-                    self.runtime.models,
+                    self.serialization.models,
                     allow_async=self.runtime.allow_async_crypto,
                 )
             )
@@ -920,7 +922,7 @@ class ExecutionCore:
                 RequestDocumentStageInput(
                     compiled,
                     attempt_values,
-                    self.runtime.models,
+                    self.serialization.models,
                     mandatory_results,
                 )
             ).document
@@ -935,7 +937,7 @@ class ExecutionCore:
                         raise CryptoConfigurationError(
                             "outbound field crypto requires a semantic JSON request body"
                         )
-                    body_document_override = self.runtime.models.dump(
+                    body_document_override = self.serialization.models.dump(
                         attempt_values.require(body_slot)
                     )
                 if body_document_override is _NO_BODY_DOCUMENT_OVERRIDE:
@@ -963,8 +965,8 @@ class ExecutionCore:
             try:
                 unsigned = RequestPreparer(
                     _service_base_url(compiled.contract, self.runtime),
-                    self.runtime.profile,
-                    self.runtime.models,
+                    self.serialization.profile,
+                    self.serialization.models,
                 ).prepare(
                     compiled,
                     attempt_values,
@@ -1104,7 +1106,7 @@ class ExecutionCore:
                 prepared,
                 compiled.contract.operation_id,
                 number,
-                models=self.runtime.models,
+                models=self.serialization.models,
             )
             proposed_response: object | None = None
             for registration in attempts:
@@ -1128,7 +1130,7 @@ class ExecutionCore:
                             prepared,
                             compiled.contract.operation_id,
                             number,
-                            models=self.runtime.models,
+                            models=self.serialization.models,
                         )
                     if isinstance(decision, ProposeAction):
                         proposed_response = decision.action
@@ -1297,6 +1299,7 @@ class ExecutionCore:
                             attempt,
                             identity,
                             _slot_headers(compiled, values),
+                            self.serialization,
                         ),
                     )
                 except Exception as exc:
@@ -1362,6 +1365,7 @@ class ExecutionCore:
             attempt,
             identity,
             request_headers,
+            self.serialization,
         )
         fingerprint = identity.fingerprint()
 
@@ -1461,6 +1465,7 @@ class ExecutionCore:
                             0,
                             _transport_identity(self.runtime, headers),
                             headers,
+                            self.serialization,
                         ),
                     )
                 except Exception as exc:

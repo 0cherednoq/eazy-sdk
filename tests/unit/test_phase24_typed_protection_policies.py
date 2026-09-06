@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk import AsyncApi, Identity, PlanError, api
+from eazy_sdk import AsyncApi, Identity, PlanError, Security, api
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions, ClientConfig
@@ -614,8 +614,10 @@ def test_persistence_modes_and_malformed_config_contract() -> None:
 
     with pytest.raises(TypeError, match="malformed policy"):
         ClientConfig(
-            protection=ProtectionBundle(
-                challenge_policies=(cast(Any, object()),),
+            security=Security(
+                ProtectionBundle(
+                    challenge_policies=(cast(Any, object()),),
+                ),
             ),
         )
 
@@ -633,7 +635,7 @@ def test_old_ambiguous_config_fields_and_executor_discovery_are_absent() -> None
         "solver_bindings",
     ):
         assert old_name not in config_parameters
-    for name in ("protection", "guards", "retry"):
+    for name in ("resilience", "security", "hooks"):
         assert name in config_parameters
 
     source = inspect.getsource(sys.modules[ExecutionRuntime.__module__])
@@ -650,11 +652,7 @@ def test_malformed_policy_is_rejected_by_strict_typing(tmp_path: Path) -> None:
 from eazy_sdk.clients import ClientConfig
 from eazy_sdk.protection.advanced import ProtectionBundle
 
-ClientConfig(
-    protection=ProtectionBundle(
-        challenge_policies=(object(),),
-    ),
-)
+ClientConfig(security=Security( ProtectionBundle( challenge_policies=(object(),), ), ))
 ClientConfig(challenge_polices=())
 """,
         encoding="utf-8",

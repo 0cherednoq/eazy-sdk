@@ -98,7 +98,7 @@ class GuardSolution:
 
 
 class Guard[TChallenge]:
-    """Subclass, override ``detect()`` and ``solve()``, install with ``ClientConfig(guards=[...])``.
+    """Subclass, override ``detect()`` and ``solve()``, install with ``Security.of(...)``.
 
     Class attributes configure the guard: ``scope`` (default: every request of the client),
     ``cache`` (default ``"session"``), ``replay`` (default ``safe_method(max_replays=1)``),

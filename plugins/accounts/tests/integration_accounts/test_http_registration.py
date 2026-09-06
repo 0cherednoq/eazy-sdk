@@ -28,6 +28,7 @@ from eazy_sdk import (
     AsyncApi,
     ClientConfig,
     Identity,
+    Resilience,
     RetryPolicy,
     UnsafeReplayError,
     api,
@@ -516,8 +517,10 @@ async def test_unsafe_localhost_create_is_not_retried_or_persisted(
             cookies={},
         ),
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=2),
+                auth_retries=0,
+            ),
         ),
     )
     store: MemoryRegistrationStore[

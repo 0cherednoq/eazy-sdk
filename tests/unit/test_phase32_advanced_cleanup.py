@@ -10,7 +10,7 @@ import pytest
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
 import eazy_sdk.protection.advanced as advanced
-from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Security, SyncApi, api
 from eazy_sdk.clients.executor import _ProtectionLockRegistry
 from eazy_sdk.protection import (
     Guard,
@@ -205,8 +205,10 @@ def test_policies_are_validating_dataclasses_not_protocols() -> None:
         ProtectionBundle(challenge_policies=(object(),))  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="malformed policy"):
         ClientConfig(
-            protection=ProtectionBundle(
-                challenge_policies=(object(),),  # type: ignore[arg-type]
+            security=Security(
+                ProtectionBundle(
+                    challenge_policies=(object(),),  # type: ignore[arg-type]
+                ),
             ),
         )
 
@@ -230,14 +232,14 @@ def test_detector_model_is_inferred_from_the_return_annotation() -> None:
 async def test_malformed_challenge_is_a_dedicated_error_with_policy_and_cause() -> None:
     handler = Handler([b'{"revision":"seven"}'])
     config = ClientConfig(
-        guards=[
+        security=Security.of(
             challenge_guard(
                 name="phase32.malformed",
                 detect=detect_revision,
                 solver=_solver,
                 apply=solution_fields(cookies={"clearance": "token"}),
             )
-        ]
+        ),
     )
     async with AsyncClient(base_url=BASE_URL, handler=handler, config=config) as client:
         with pytest.raises(ChallengeParseError) as error:
@@ -253,7 +255,7 @@ async def test_malformed_challenge_is_a_dedicated_error_with_policy_and_cause() 
 async def test_two_definitive_policies_matching_one_response_is_a_configuration_error() -> None:
     handler = Handler([b'{"revision":1}'])
     config = ClientConfig(
-        guards=[
+        security=Security.of(
             challenge_guard(
                 name="phase32.first",
                 detect=detect_revision,
@@ -266,7 +268,7 @@ async def test_two_definitive_policies_matching_one_response_is_a_configuration_
                 solver=_solver,
                 apply=solution_fields(cookies={"second": "token"}),
             ),
-        ]
+        ),
     )
     async with AsyncClient(base_url=BASE_URL, handler=handler, config=config) as client:
         with pytest.raises(AmbiguousChallengeError) as error:
@@ -289,7 +291,7 @@ async def test_replay_budget_is_per_policy_not_shared() -> None:
 
     handler = Handler([b'{"kind":"a"}', b'{"kind":"a"}'])
     config = ClientConfig(
-        guards=[
+        security=Security.of(
             challenge_guard(
                 name="phase32.a",
                 detect=detect_a,
@@ -304,7 +306,7 @@ async def test_replay_budget_is_per_policy_not_shared() -> None:
                 apply=solution_fields(cookies={"b": "token"}),
                 cache="call",
             ),
-        ]
+        ),
     )
     async with AsyncClient(base_url=BASE_URL, handler=handler, config=config) as client:
         with pytest.raises(ReplayDeniedError, match="budget of this policy"):
@@ -377,7 +379,7 @@ async def test_single_flight_lock_survives_multiple_event_loops_and_threads() ->
 
     def run_sync() -> None:
         with Client(
-            base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+            base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
         ) as client:
             workers = [threading.Thread(target=worker, args=(client,)) for _ in range(4)]
             for thread in workers:

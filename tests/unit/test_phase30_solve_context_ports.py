@@ -11,7 +11,7 @@ import pytest
 from eazy_sdk_presets import cloudflare, host
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Resilience, SyncApi, api
 from eazy_sdk.core.kernel import OperationIdentity
 from eazy_sdk.handlers import CONSERVATIVE_HANDLER_PROFILE, HandlerProfile
 from eazy_sdk.protection import (
@@ -194,7 +194,7 @@ def _guard(solver: FetchingSolver) -> InstallableProtection:
 async def test_solver_fetch_uses_the_same_handler_and_bypasses_guards() -> None:
     solver = FetchingSolver()
     handler = OriginHandler()
-    config = ClientConfig(timeout=30.0).with_protection(_guard(solver))
+    config = ClientConfig(resilience=Resilience(timeout=30.0)).with_protection(_guard(solver))
     async with AsyncClient(base_url=BASE_URL, handler=handler, config=config) as client:
         assert await ProtectedApi(client).protected() == {"ok": True}
 
@@ -270,7 +270,7 @@ async def test_deadline_is_absent_without_a_call_timeout() -> None:
 async def test_sync_client_solver_receives_the_same_ports() -> None:
     solver = FetchingSolver()
     handler = SyncOriginHandler()
-    config = ClientConfig(timeout=5.0).with_protection(_guard(solver))
+    config = ClientConfig(resilience=Resilience(timeout=5.0)).with_protection(_guard(solver))
 
     def run() -> dict[str, object]:
         with Client(base_url=BASE_URL, handler=handler, config=config) as client:

@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:82f551b5571ffa3e868950d658bae168bd45a614536458630345dcf4a422fcb7"
+api_fingerprint: "sha256:ccfab2ed3e7b827dde7db806165b115c4894785d0e47d5ed3a6d6cf4ab6e139b"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -15,17 +15,22 @@ api_fingerprint: "sha256:82f551b5571ffa3e868950d658bae168bd45a614536458630345dcf
 ```python
 from zapros import AsyncStdNetworkHandler
 
-from eazy_sdk import AsyncClient, ClientConfig
+from eazy_sdk import AsyncClient, ClientConfig, Resilience
 
 client = AsyncClient(
     base_url="https://api.example",
     handler=AsyncStdNetworkHandler(),
-    config=ClientConfig(timeout=5.0),
+    config=ClientConfig(resilience=Resilience(timeout=5.0)),
 )
 ```
 
 По умолчанию client владеет handler. Передайте `owns_handler=False`, если lifecycle handler
 остаётся у caller. Sync client отклоняет async handler и наоборот.
+
+`ClientConfig` состоит из трёх групп по владельцу: `resilience=` (`retry`, `auth_retries`,
+`max_redirects`, `timeout`, `rate_limiter`), `security=` (guard/anti-bot; `Security.of(...)`
+понижает установочные guard'ы) и `hooks=` (`middleware`). Аутентификация, ключи подписи и DI живут
+в `Identity`; библиотека моделей — в `Serialization` на корне. Плоских полей у конфига больше нет.
 
 `CallOptions` управляет timeout, retry/redirect budgets и replay одного вызова. Auth,
 middleware, retry, redirect, rate limit и protection остаются в общем executor; каждый attempt
@@ -85,7 +90,7 @@ protection-локи не привязаны к loop.
 
 `ClientConfig` включает dependencies, auth, middleware, `retry=`, rate limiter, signing key provider,
 crypto и одну группу `protection=` (`ProtectionBundle`). First-party preset, `Guard` или custom `challenge_guard()`
-устанавливайте через `ClientConfig(guards=[...])` либо эквивалентный immutable
+устанавливайте через `ClientConfig(security=Security.of(...))` либо эквивалентный immutable
 `config.with_protection(guard)`; `client.invalidate_protection(*guards_or_names)` сбрасывает
 закэшированные решения без доступа к runtime. `ProtectionBundle` объединяет
 `operation_protections`, `before_call_policies`, `challenge_policies` и `solver_bindings`;

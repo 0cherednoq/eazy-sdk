@@ -23,6 +23,8 @@ from eazy_sdk import (
     ClientConfig,
     HandlerProfile,
     Identity,
+    Resilience,
+    Serialization,
     api,
     api_group,
 )
@@ -158,6 +160,7 @@ class DummyJsonSdk(AsyncRoot):
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> Self:
         if identity is not None:
             raise ValueError("identity cannot be combined with credentials or session")
@@ -169,11 +172,12 @@ class DummyJsonSdk(AsyncRoot):
         return super().from_handler(
             handler=handler,
             base_url=base_url,
-            config=config or ClientConfig(timeout=20),
+            config=config or ClientConfig(resilience=Resilience(timeout=20)),
             owns_handler=owns_handler,
             profile=profile,
             bindings=bindings,
             identity=Identity(auth=(auth,)),
+            serialization=serialization,
         )
 
 

@@ -27,6 +27,7 @@ from eazy_sdk.request import (
     RequestBody,
 )
 from eazy_sdk.response import NormalizedResponse
+from eazy_sdk.serialization import Serialization
 
 from .base import CallOptions, EventLoopConflictError
 from .executor import ExecutionCore, ExecutionRuntime, _protection_identities
@@ -53,14 +54,19 @@ class _ClientCore[TRaw = object]:
         self._can_bind_sdk = bind_sdk
         self.raw = raw
 
-    def _core_for(self, identity: _IdentityScope | None) -> ExecutionCore:
-        """Execution core for one session scope; the transport runtime stays shared."""
+    def _core_for(
+        self,
+        identity: _IdentityScope | None,
+        serialization: Serialization | None = None,
+    ) -> ExecutionCore:
+        """Execution core for one caller and one SDK; the transport runtime stays shared."""
 
-        if identity is None:
+        if identity is None and serialization is None:
             return self._core
         return ExecutionCore(
             self._runtime,
             identity=identity,
+            serialization=serialization,
             resolution_graph=self._resolution_graph,
         )
 

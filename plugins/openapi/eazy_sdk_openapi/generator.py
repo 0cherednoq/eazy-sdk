@@ -147,7 +147,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             ")",
             "from eazy_sdk.codegen import (",
             "    DEFAULT, ApiError, AsyncApi, AsyncClient, Binding, Bytes, BytesBody,",
-            "    Identity,",
+            "    Identity, Security, Serialization,",
             "    CallOptions, Client, ClientConfig,",
             "    Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,",
             "    MultipartBody, Part, Path, Query, QueryString, SyncApi,",
@@ -402,9 +402,13 @@ def _api_facade(
                 "",
                 (
                     f"    def __init__(self, client: {client_type}, *, "
-                    "bindings: tuple[Binding, ...] = (), identity: Identity | None = None) -> None:"
+                    "bindings: tuple[Binding, ...] = (), identity: Identity | None = None,"
+                    " serialization: Serialization | None = None) -> None:"
                 ),
-                "        super().__init__(client, bindings=bindings, identity=identity)",
+                (
+                    "        super().__init__("
+                    "client, bindings=bindings, identity=identity, serialization=serialization)"
+                ),
                 "        auth_client = cast(AsyncClient, client._async_view())",
                 "        self._auth_api = AsyncAPI(auth_client, identity=identity)",
             ]
@@ -423,6 +427,7 @@ def _api_facade(
                 "        profile: HandlerProfile | None = None,",
                 "        bindings: tuple[Binding, ...] = (),",
                 "        identity: Identity | None = None,",
+                "        serialization: Serialization | None = None,",
             ]
         )
     else:
@@ -439,6 +444,7 @@ def _api_facade(
                 "        profile: HandlerProfile | None = None,",
                 "        bindings: tuple[Binding, ...] = (),",
                 "        identity: Identity | None = None,",
+                "        serialization: Serialization | None = None,",
             ]
         )
     lines.extend(
@@ -468,6 +474,7 @@ def _api_facade(
             "            profile=profile,",
             "            bindings=bindings,",
             "            identity=identity,",
+            "            serialization=serialization,",
             "        )",
         ]
     )
@@ -602,12 +609,8 @@ def _protection_config(
         "def _protection_config(config: ClientConfig | None) -> ClientConfig:",
         "    base = config or ClientConfig()",
         f"    generated = {_tuple_expression(flows)}",
-        "    return replace(",
-        "        base,",
-        "        protection=ProtectionBundle(operation_protections=generated).merge(",
-        "            base.bundle",
-        "        ),",
-        "    )",
+        "    merged = ProtectionBundle(operation_protections=generated).merge(base.bundle)",
+        "    return replace(base, security=Security(merged))",
     ]
 
 

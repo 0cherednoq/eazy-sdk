@@ -297,6 +297,7 @@ def test_a_root_is_not_a_router_and_exposes_no_transport() -> None:
             "close",
             "from_handler",
             "identity",
+            "serialization",
         }
 
 

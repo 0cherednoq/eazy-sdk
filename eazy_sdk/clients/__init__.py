@@ -12,7 +12,7 @@ from .base import (
     RetryPolicy,
     UnsafeReplayError,
 )
-from .config import ClientConfig
+from .config import ClientConfig, Hooks, Resilience, Security
 
 if TYPE_CHECKING:
     from .zapros_client import AsyncClient, Client
@@ -35,7 +35,10 @@ __all__ = [
     "Client",
     "ClientConfig",
     "EventLoopConflictError",
+    "Hooks",
     "RedirectLimitError",
+    "Resilience",
     "RetryPolicy",
+    "Security",
     "UnsafeReplayError",
 ]

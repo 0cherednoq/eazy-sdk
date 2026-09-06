@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 from eazy_sdk_html import CSS, Scope
 
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Resilience, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import Path
 from eazy_sdk.response import Html, Responses, Success
@@ -67,7 +67,7 @@ def main() -> None:
     with Client(
         base_url=BASE_URL,
         handler=HttpxHandler(),
-        config=ClientConfig(timeout=20),
+        config=ClientConfig(resilience=Resilience(timeout=20)),
     ) as client:
         catalog = BooksApi(client).page(page=1)
 

@@ -646,7 +646,7 @@ def before_call_policy[TChallenge, TSolution](
 class ProtectionBundle:
     """Complete protection configuration: flows, policies and their solver bindings.
 
-    Installable guards lower into one bundle; ``ClientConfig(protection=...)`` holds the merged
+    Installable guards lower into one bundle; ``Security(protection=...)`` holds the merged
     bundle of a client. ``solver_bindings`` accepts a tuple of ``SolverBinding`` or a
     ``SolverBindings`` registry and is normalized to a tuple.
     """

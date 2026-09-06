@@ -6,7 +6,7 @@ from typing import Annotated, TypedDict, Unpack
 
 from pydantic import BaseModel, Field
 
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Resilience, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import JsonField, Path, Query
 from eazy_sdk.response import Json, Responses, Success
@@ -64,7 +64,7 @@ def main() -> None:
     with Client(
         base_url=BASE_URL,
         handler=HttpxHandler(),
-        config=ClientConfig(timeout=20),
+        config=ClientConfig(resilience=Resilience(timeout=20)),
     ) as client:
         posts = JsonPlaceholderApi(client)
 

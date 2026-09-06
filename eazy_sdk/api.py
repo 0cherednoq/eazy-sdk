@@ -39,6 +39,7 @@ from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
 from eazy_sdk.response.cases import ResponseRepresentation
+from eazy_sdk.serialization import Serialization
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -118,6 +119,7 @@ class _AsyncClient(Protocol):
         options: CallOptions | None,
         with_response: bool,
         identity: _IdentityScope | None,
+        serialization: Serialization | None,
     ) -> TResult | ResponseEnvelope[TResult, Any]: ...
 
     async def _prepare_operation[TResult](
@@ -127,6 +129,7 @@ class _AsyncClient(Protocol):
         *,
         options: PrepareOptions,
         identity: _IdentityScope | None,
+        serialization: Serialization | None,
     ) -> PreparedCall: ...
 
 
@@ -143,6 +146,7 @@ class _SyncClient(Protocol):
         options: CallOptions | None,
         with_response: bool,
         identity: _IdentityScope | None,
+        serialization: Serialization | None,
     ) -> PreparedCall | TResult | ResponseEnvelope[TResult, Any]: ...
 
     def _prepare_operation[TResult](
@@ -152,6 +156,7 @@ class _SyncClient(Protocol):
         *,
         options: PrepareOptions,
         identity: _IdentityScope | None,
+        serialization: Serialization | None,
     ) -> PreparedCall: ...
 
 
@@ -177,6 +182,7 @@ class _BoundAsyncOperation[**P, T]:
             options=options,
             with_response=False,
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
         return cast(T, result)
 
@@ -192,6 +198,7 @@ class _BoundAsyncOperation[**P, T]:
             options=options,
             with_response=True,
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
         return cast(ResponseEnvelope[T, Any], result)
 
@@ -207,6 +214,7 @@ class _BoundAsyncOperation[**P, T]:
             values,
             options=options or PrepareOptions(),
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
 
 
@@ -232,6 +240,7 @@ class _BoundSyncOperation[**P, T]:
             options=options,
             with_response=False,
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
         return cast(T, result)
 
@@ -247,6 +256,7 @@ class _BoundSyncOperation[**P, T]:
             options=options,
             with_response=True,
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
         return cast(ResponseEnvelope[T, Any], result)
 
@@ -262,6 +272,7 @@ class _BoundSyncOperation[**P, T]:
             values,
             options=options or PrepareOptions(),
             identity=self._api._scope,
+            serialization=self._api._serialization,
         )
 
 
@@ -416,6 +427,7 @@ class _ApiBase:
         client: object,
         *,
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
         defaults: _ServiceDefaults | None = None,
         scope: _IdentityScope | None = None,
     ) -> None:
@@ -424,10 +436,14 @@ class _ApiBase:
         self._client = cast(Any, client)
         self._defaults = type(self)._service_defaults if defaults is None else defaults
         self._scope = scope if scope is not None else _identity_scope(identity)
+        self._serialization = serialization if serialization is not None else Serialization()
         self._resolved: dict[object, _OperationDeclaration[Any]] = {}
         if scope is None and identity is not None:
             bind_session_lifecycle(self._scope, client, lambda scoped: type(self)(
-                scoped, defaults=self._defaults, scope=self._scope
+                scoped,
+                serialization=self._serialization,
+                defaults=self._defaults,
+                scope=self._scope,
             ))
 
 
@@ -451,10 +467,17 @@ class AsyncApi(_ApiBase):
         client: _AsyncClient,
         *,
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
         defaults: _ServiceDefaults | None = None,
         scope: _IdentityScope | None = None,
     ) -> None:
-        super().__init__(client, identity=identity, defaults=defaults, scope=scope)
+        super().__init__(
+            client,
+            identity=identity,
+            serialization=serialization,
+            defaults=defaults,
+            scope=scope,
+        )
 
 
 class SyncApi(_ApiBase):
@@ -477,10 +500,17 @@ class SyncApi(_ApiBase):
         client: _SyncClient,
         *,
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
         defaults: _ServiceDefaults | None = None,
         scope: _IdentityScope | None = None,
     ) -> None:
-        super().__init__(client, identity=identity, defaults=defaults, scope=scope)
+        super().__init__(
+            client,
+            identity=identity,
+            serialization=serialization,
+            defaults=defaults,
+            scope=scope,
+        )
 
 
 class _ApiGroup[TGroup: SyncApi | AsyncApi]:

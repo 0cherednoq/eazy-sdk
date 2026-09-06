@@ -11,7 +11,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 import httpx
 import pytest
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Identity, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Identity, Resilience, api
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import (
     AuthExecution,
@@ -153,7 +153,7 @@ async def test_projection_target_crypto_and_exact_signature_are_fresh_on_retry()
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=2)),
+        config=ClientConfig(resilience=Resilience(retry=RetryPolicy.safe(max_attempts=2))),
     ) as client:
         await PaymentApi(client, identity=SECRET_KEY_IDENTITY).pay(card_number="4111", amount=50)
 
@@ -217,7 +217,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(max_redirects=1),
+        config=ClientConfig(resilience=Resilience(max_redirects=1)),
     ) as client:
         await RedirectApi(client, identity=SECRET_KEY_IDENTITY).send(
             card_number="4111", amount=50
@@ -324,7 +324,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_auth_replay() -> Non
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(auth_retries=1),
+        config=ClientConfig(resilience=Resilience(auth_retries=1)),
     ) as client:
         identity = Identity(auth=(auth,), key_provider=lambda _r: SigningKey(b"secret"))
         await AuthApi(client, identity=identity).send(card_number="4111", amount=50)

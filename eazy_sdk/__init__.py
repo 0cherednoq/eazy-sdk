@@ -8,8 +8,11 @@ from eazy_sdk.api import AsyncApi, SyncApi, api, api_group
 from eazy_sdk.clients import (
     AttemptLimitError,
     ClientConfig,
+    Hooks,
     RedirectLimitError,
+    Resilience,
     RetryPolicy,
+    Security,
     UnsafeReplayError,
 )
 from eazy_sdk.codecs import BodyCodec, DelimitedScalarCodec, ScalarCodec
@@ -63,6 +66,7 @@ from eazy_sdk.response import (
     UnexpectedResponseError,
 )
 from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
+from eazy_sdk.serialization import Serialization
 
 __version__ = "0.2.0a5"
 
@@ -102,6 +106,7 @@ __all__ = [
     "GraphError",
     "HandlerProfile",
     "Header",
+    "Hooks",
     "Html",
     "Identity",
     "Inject",
@@ -123,11 +128,14 @@ __all__ = [
     "PreparedValue",
     "Query",
     "RedirectLimitError",
+    "Resilience",
     "ResponseEnvelope",
     "ResponseExtractor",
     "Responses",
     "RetryPolicy",
     "ScalarCodec",
+    "Security",
+    "Serialization",
     "Success",
     "SyncApi",
     "SyncRoot",

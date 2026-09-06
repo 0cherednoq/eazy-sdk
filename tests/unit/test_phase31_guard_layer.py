@@ -10,7 +10,7 @@ from typing import Annotated
 import pytest
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Security, SyncApi, api
 from eazy_sdk.ext import RequestScope
 from eazy_sdk.protection import (
     ChallengeSolveError,
@@ -139,7 +139,7 @@ async def test_one_guard_class_and_one_config_line_solve_once_per_session() -> N
     guard = CookieGuard()
     handler = OriginHandler()
     async with AsyncClient(
-        base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+        base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
     ) as client:
         service = ProtectedApi(client)
         assert await service.protected() == {"ok": True}
@@ -152,18 +152,19 @@ async def test_one_guard_class_and_one_config_line_solve_once_per_session() -> N
 
 def test_guards_argument_lowers_like_with_protection_and_is_not_applied_twice() -> None:
     guard = CookieGuard()
-    direct = ClientConfig(guards=[guard])
+    direct = ClientConfig(security=Security.of(guard))
     fluent = ClientConfig().with_protection(guard)
-    assert direct.guards == ()
+    assert not hasattr(direct, "guards")
     assert [policy.identity for policy in direct.bundle.challenge_policies] == ["CookieGuard"]
     assert len(direct.bundle.challenge_policies) == len(fluent.bundle.challenge_policies) == 1
     assert len(direct.bundle.solver_bindings) == 1
     # A copy of a lowered config must not lower the same guard a second time.
-    assert len(ClientConfig(guards=[guard]).with_protection().bundle.challenge_policies) == 1
+    installed = ClientConfig(security=Security.of(guard)).with_protection()
+    assert len(installed.bundle.challenge_policies) == 1
     with pytest.raises(ValueError, match="duplicate protection policy identity"):
-        ClientConfig(guards=[guard, CookieGuard()])
+        ClientConfig(security=Security.of(guard, CookieGuard()))
     with pytest.raises(ProtectionConfigurationError):
-        ClientConfig(guards=[object()])  # type: ignore[list-item]
+        ClientConfig(security=Security.of(object()))  # type: ignore[arg-type]
 
 
 def test_guard_defaults_lower_to_session_scoped_until_rejected() -> None:
@@ -197,7 +198,7 @@ async def test_guard_declared_headers_sync_solve_and_undeclared_destinations() -
 
     handler = OriginHandler()
     async with AsyncClient(
-        base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[HeaderGuard()])
+        base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(HeaderGuard()))
     ) as client:
         assert await ProtectedApi(client).protected() == {"ok": True}
     assert handler.requests[1].headers.get("X-Token") == "t3"
@@ -238,7 +239,7 @@ async def test_cache_none_and_call_solve_again_on_the_next_call() -> None:
         )
         handler = OriginHandler()
         async with AsyncClient(
-            base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+            base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
         ) as client:
             assert await ProtectedApi(client).protected() == {"ok": True}
             assert await ProtectedApi(client).protected() == {"ok": True}
@@ -299,7 +300,7 @@ async def test_expires_in_bounds_session_cache() -> None:
     guard = ExpiringGuard()
     handler = OriginHandler()
     async with AsyncClient(
-        base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+        base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
     ) as client:
         assert await ProtectedApi(client).protected() == {"ok": True}
         assert await ProtectedApi(client).protected() == {"ok": True}
@@ -323,7 +324,7 @@ async def test_public_invalidation_by_guard_name_and_all() -> None:
     )
     handler = OriginHandler()
     async with AsyncClient(
-        base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard, other])
+        base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard, other))
     ) as client:
         service = ProtectedApi(client)
         assert await service.protected() == {"ok": True}
@@ -349,7 +350,7 @@ async def test_sync_client_guard_and_invalidation() -> None:
 
     def run() -> int:
         with Client(
-            base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+            base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
         ) as client:
             service = SyncProtectedApi(client)
             assert service.protected() == {"ok": True}
@@ -374,7 +375,7 @@ async def test_session_cache_single_flights_concurrent_challenges() -> None:
     guard = SlowGuard()
     handler = OriginHandler()
     async with AsyncClient(
-        base_url=BASE_URL, handler=handler, config=ClientConfig(guards=[guard])
+        base_url=BASE_URL, handler=handler, config=ClientConfig(security=Security.of(guard))
     ) as client:
         service = ProtectedApi(client)
         results = await asyncio.gather(*(service.protected() for _ in range(4)))
@@ -390,7 +391,9 @@ async def test_guard_solve_errors_are_wrapped_and_redacted() -> None:
             return self.solution(headers={"X-Undeclared": "secret-value"})
 
     async with AsyncClient(
-        base_url=BASE_URL, handler=OriginHandler(), config=ClientConfig(guards=[BrokenGuard()])
+        base_url=BASE_URL,
+        handler=OriginHandler(),
+        config=ClientConfig(security=Security.of(BrokenGuard())),
     ) as client:
         with pytest.raises(ChallengeSolveError) as error:
             await ProtectedApi(client).protected()

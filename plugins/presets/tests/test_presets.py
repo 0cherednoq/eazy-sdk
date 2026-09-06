@@ -11,7 +11,7 @@ from eazy_sdk_presets import cloudflare, host, json_field, operation, recaptcha
 from eazy_sdk_presets import header as preset_header
 from zapros import AsyncBaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, PlanError, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, PlanError, Resilience, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
@@ -479,12 +479,12 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
 
 
 def test_with_protection_is_immutable_and_rejects_duplicate_policy_identity() -> None:
-    original = ClientConfig(auth_retries=0)
+    original = ClientConfig(resilience=Resilience(auth_retries=0))
     preset = cloudflare.challenge_pages(scope=host("api.test"))
 
     configured = original.with_protection(preset)
 
-    assert original.protection is None
+    assert not original.bundle
     assert configured.bundle.challenge_policies == (preset,)
     assert configured.bundle.solver_bindings == ()
     with pytest.raises(ValueError, match="duplicate protection policy identity"):
@@ -508,7 +508,7 @@ async def test_unbound_installed_preset_fails_before_public_handler() -> None:
         action="create",
         apply=json_field("captcha_token"),
     )
-    config = ClientConfig(auth_retries=0).with_protection(preset)
+    config = ClientConfig(resilience=Resilience(auth_retries=0)).with_protection(preset)
 
     async with AsyncClient(
         base_url="https://api.test",

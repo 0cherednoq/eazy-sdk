@@ -15,12 +15,12 @@ uv add eazy-sdk-presets
 ## Install a first-party preset
 
 Create the handler and solver in your SDK composition root. Install the returned preset through
-`ClientConfig(guards=[...])`; the immutable `ClientConfig.with_protection(...)` call is equivalent.
+`ClientConfig(security=Security.of(...))`; the immutable `ClientConfig.with_protection(...)` call is equivalent.
 The solver below is a stub: the [Cloudflare page](/guides/protection/cloudflare) shows a complete
 one.
 
 ```python target
-from eazy_sdk import ClientConfig
+from eazy_sdk import ClientConfig, Security
 from eazy_sdk.protection import SolveContext, host
 from eazy_sdk_presets import cloudflare
 
@@ -44,7 +44,7 @@ guard = cloudflare.challenge_pages(
     solver=CloudflareSolver(browser_pool),
 )
 
-config = ClientConfig(guards=[guard])
+config = ClientConfig(security=Security.of(guard))
 ```
 
 The solver implements `Challenge -> Solution`. Whether it uses a browser, JavaScript, WASM, or a
@@ -54,12 +54,12 @@ remote API is private to the solver. The runtime does not require implementation
 
 Subclass `Guard` for a custom protocol. `detect()` receives an immutable `ResponseContext` and
 returns either one typed challenge or `None`; `solve()` (sync or async) returns
-`self.solution(...)`. Install the instance with `ClientConfig(guards=[...])`:
+`self.solution(...)`. Install the instance with `ClientConfig(security=Security.of(...))`:
 
 ```python target
 from dataclasses import dataclass
 
-from eazy_sdk import ClientConfig
+from eazy_sdk import ClientConfig, Security
 from eazy_sdk.protection import (
     Guard,
     GuardSolution,
@@ -115,7 +115,7 @@ class KadGuard(Guard[KadChallenge]):
         )
 
 
-config = ClientConfig(guards=[KadGuard()])
+config = ClientConfig(security=Security.of(KadGuard()))
 ```
 
 Class attributes configure the guard:

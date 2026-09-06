@@ -8,7 +8,7 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import AsyncApi, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, ClientConfig, Resilience, Security, SyncApi, api
 from eazy_sdk.clients import CallOptions, RetryPolicy
 from eazy_sdk.core import (
     PlanError,
@@ -365,11 +365,13 @@ async def test_mandatory_protection_verifies_and_injects_multiple_fields_atomica
             cookies={},
         ),
         config=ClientConfig(
-            protection=ProtectionBundle(
-                operation_protections=(flow,),
-                solver_bindings=SolverBindings(
-                        bind_solver(LOGIN_PROTECTION, FakeSolver()),
-                    ),
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=(flow,),
+                    solver_bindings=SolverBindings(
+                            bind_solver(LOGIN_PROTECTION, FakeSolver()),
+                        ),
+                ),
             ),
         ),
     )
@@ -399,15 +401,17 @@ async def test_missing_protection_solver_fails_before_acquire_or_main_network() 
             cookies={},
         ),
         config=ClientConfig(
-            protection=ProtectionBundle(
-                operation_protections=(
-                        protection_flow(
-                            LOGIN_PROTECTION,
-                            acquire=ProtectionApi.acquire,
-                            solve=True,
-                            verify=ProtectionApi.verify,
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=(
+                            protection_flow(
+                                LOGIN_PROTECTION,
+                                acquire=ProtectionApi.acquire,
+                                solve=True,
+                                verify=ProtectionApi.verify,
+                            ),
                         ),
-                    ),
+                ),
             ),
         ),
     )
@@ -436,10 +440,12 @@ async def test_acquire_only_csrf_flow_injects_before_the_main_operation() -> Non
             cookies={},
         ),
         config=ClientConfig(
-            protection=ProtectionBundle(
-                operation_protections=(
-                        protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
-                    ),
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=(
+                            protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+                        ),
+                ),
             ),
         ),
     )
@@ -491,19 +497,21 @@ async def test_mandatory_protection_injects_nested_target_paths() -> None:
             cookies={},
         ),
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            protection=ProtectionBundle(
-                operation_protections=(
-                        protection_flow(
-                            LOGIN_PROTECTION,
-                            acquire=ProtectionApi.acquire,
-                            solve=True,
-                            verify=ProtectionApi.verify,
+            resilience=Resilience(retry=RetryPolicy.safe(max_attempts=2)),
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=(
+                            protection_flow(
+                                LOGIN_PROTECTION,
+                                acquire=ProtectionApi.acquire,
+                                solve=True,
+                                verify=ProtectionApi.verify,
+                            ),
                         ),
-                    ),
-                solver_bindings=SolverBindings(
-                        bind_solver(LOGIN_PROTECTION, FakeSolver()),
-                    ),
+                    solver_bindings=SolverBindings(
+                            bind_solver(LOGIN_PROTECTION, FakeSolver()),
+                        ),
+                ),
             ),
         ),
     )
@@ -581,10 +589,12 @@ async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:
             cookies={},
         ),
         config=ClientConfig(
-            protection=ProtectionBundle(
-                operation_protections=(
-                        protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
-                    ),
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=(
+                            protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+                        ),
+                ),
             ),
         ),
     )
@@ -614,8 +624,10 @@ async def test_invalid_mandatory_protection_configuration_fails_before_network(
             cookies={},
         ),
         config=ClientConfig(
-            protection=ProtectionBundle(
-                operation_protections=configured if invalid_mapping else (),
+            security=Security(
+                ProtectionBundle(
+                    operation_protections=configured if invalid_mapping else (),
+                ),
             ),
         ),
     )

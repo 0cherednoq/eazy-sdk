@@ -23,7 +23,7 @@ neither are `ChallengeParseError` and `AmbiguousChallengeError`: those two come 
 | `SolveContext` | Operation identity, immutable response context, attempt number, `deadline`, `fetch`, `identity`, and `request_headers` |
 | `ProtectedFetch` | Async `(url, *, method, headers, body) -> NormalizedResponse` port over the client's own transport session |
 | `TransportIdentity` | Frozen `user_agent`/`proxy`/`impersonation` evidence with a redacted `repr` and a `fingerprint()` digest |
-| `InstallableProtection` | Structural object accepted by `ClientConfig(guards=[...])` and `with_protection()` |
+| `InstallableProtection` | Structural object accepted by `Security.of(...)` and `with_protection()` |
 | `Guard[TChallenge]` | One-class guard: `detect()`, sync/async `solve()`, `self.solution(...)`, class-level `scope`/`cache`/`replay`/`headers`/`query`/`body` |
 | `GuardSolution` | Solution batch built by `Guard.solution()` (cookies, declared headers/query/body, `expires_at`) |
 | `challenge_guard()` | Lowers one detector, solver (object or function), solution mapping, cache and replay policy |
@@ -41,7 +41,7 @@ class VendorGuard(Guard[VendorChallenge]):
         return self.solution(cookies={"clearance": await vendor.solve(challenge)})
 
 
-config = ClientConfig(guards=[VendorGuard()])
+config = ClientConfig(security=Security.of(VendorGuard()))
 ```
 
 The functional form is `challenge_guard(detect=..., solver=..., apply=solution_fields(...),

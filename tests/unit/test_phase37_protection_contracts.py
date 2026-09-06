@@ -10,7 +10,7 @@ from typing import ClassVar
 import pytest
 from zapros import AsyncBaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Resilience, Security, api
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.core.kernel import OperationIdentity
 from eazy_sdk.protection import Guard, GuardCache, GuardSolution, SolveContext, advanced, host
@@ -97,7 +97,7 @@ async def test_only_session_cache_single_flights_concurrent_calls(
     guard = type("CachedGuard", (SlowGuard,), {"cache": cache})()
     origin = Origin()
     async with AsyncClient(
-        base_url=BASE_URL, handler=origin, config=ClientConfig(guards=[guard])
+        base_url=BASE_URL, handler=origin, config=ClientConfig(security=Security.of(guard))
     ) as client:
         service = ProtectedApi(client)
         results = await asyncio.gather(*(service.protected() for _ in range(3)))
@@ -135,7 +135,7 @@ async def test_fetch_returns_redirects_as_is_and_carries_the_full_budget() -> No
     async with AsyncClient(
         base_url=BASE_URL,
         handler=origin,
-        config=ClientConfig(guards=[guard], timeout=5.0),
+        config=ClientConfig(resilience=Resilience(timeout=5.0), security=Security.of(guard)),
     ) as client:
         assert await ProtectedApi(client).protected() == {"ok": True}
     assert guard.redirect_status == 302

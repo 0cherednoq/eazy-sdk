@@ -9,7 +9,7 @@ import msgspec
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, Resilience, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import BodyProjection, JsonBody
@@ -269,8 +269,10 @@ async def test_omitted_projection_key_stays_omitted_on_retry() -> None:
     client = _client(
         handler,
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=2),
+                auth_retries=0,
+            ),
         ),
     )
     async with client:
@@ -326,8 +328,10 @@ async def test_projection_gets_a_fresh_mutable_source_copy_for_each_target_famil
     client = _client(
         handler,
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=2),
+                auth_retries=0,
+            ),
         ),
     )
     async with client:

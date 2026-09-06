@@ -20,7 +20,10 @@ from eazy_sdk.clients import (
     CallOptions,
     Client,
     ClientConfig,
+    Hooks,
+    Resilience,
     RetryPolicy,
+    Security,
 )
 from eazy_sdk.dependencies import (
     DependencyCachePolicy,
@@ -70,6 +73,7 @@ from eazy_sdk.response import (
     Text,
 )
 from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
+from eazy_sdk.serialization import Serialization
 
 
 class Unset:
@@ -108,6 +112,7 @@ __all__ = [
     "FormBody",
     "FromProtection",
     "Header",
+    "Hooks",
     "Identity",
     "Json",
     "JsonBody",
@@ -121,11 +126,14 @@ __all__ = [
     "QueryString",
     "ReplayableStreamBody",
     "RequestDependency",
+    "Resilience",
     "ResponseEnvelope",
     "Responses",
     "RetryPolicy",
+    "Security",
     "SecurityAlternative",
     "SecurityPolicy",
+    "Serialization",
     "SolverRequirement",
     "StatusRange",
     "Success",

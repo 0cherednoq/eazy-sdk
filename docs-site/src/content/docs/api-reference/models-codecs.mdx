@@ -223,7 +223,7 @@ Eazy SDK не включает aliases принудительно. Наприм�
 from collections.abc import Mapping
 from typing import cast
 
-from eazy_sdk import ClientConfig
+from eazy_sdk import Serialization
 from eazy_sdk.models import (
     ModelAdapterRegistry,
     ModelDumpMode,
@@ -315,7 +315,7 @@ class VendorUserAdapter:
         )
 
 models = default_model_adapters().with_adapter(VendorUserAdapter())
-config = ClientConfig(models=models)
+serialization = Serialization(models=models)
 ```
 
 `with_adapter(...)` добавляет новую семью моделей. Если требуется изменить сериализацию уже
@@ -327,7 +327,7 @@ models = default_model_adapters().replace_adapter(
     "dataclass",
     ProjectDataclassAdapter(),  # name = "dataclass"
 )
-config = ClientConfig(models=models)
+serialization = Serialization(models=models)
 ```
 
 Передайте `config` при создании клиента:

@@ -14,7 +14,7 @@ api_fingerprint: "sha256:ce421c31faf043b2c3c28a5f810d3da2db865b8d595ab69a68ffcdc
 ```python
 from time import monotonic
 
-from eazy_sdk import Client, ClientConfig
+from eazy_sdk import Client, ClientConfig, Hooks
 from eazy_sdk.middleware import call_middleware
 
 class TraceCalls:
@@ -29,7 +29,7 @@ TRACE = call_middleware(TraceCalls())
 client = Client(
     base_url=base_url,
     handler=handler,
-    config=ClientConfig(middleware=(TRACE,)),
+    config=ClientConfig(hooks=Hooks(middleware=(TRACE,))),
 )
 ```
 

@@ -13,7 +13,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, ClientConfig, Identity, SyncApi, api
+from eazy_sdk import AsyncApi, ClientConfig, Identity, Resilience, SyncApi, api
 from eazy_sdk.clients import CallOptions, RetryPolicy
 from eazy_sdk.crypto import (
     CryptoConfigurationError,
@@ -352,10 +352,12 @@ async def test_retry_runs_outbound_crypto_again_with_fresh_algorithm_state() -> 
             cookies={},
         ),
         config=ClientConfig(
-            retry=RetryPolicy.safe(
-                max_attempts=2,
-                retry_statuses=frozenset({503}),
-            )
+            resilience=Resilience(
+                retry=RetryPolicy.safe(
+                    max_attempts=2,
+                    retry_statuses=frozenset({503}),
+                ),
+            ),
         ),
     )
     result = await AsyncPaymentsApi(client).create(

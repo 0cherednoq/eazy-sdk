@@ -1,66 +1,47 @@
-"""Immutable client policy shared by every public transport factory."""
+"""Immutable client policy, grouped by owner.
+
+A client delivers bytes. What survives here is transport policy only: how hard to try
+(:class:`Resilience`), what guards the host puts in front of it (:class:`Security`) and what
+observes the exchange (:class:`Hooks`). Credentials, signing keys and dependencies belong to
+:class:`~eazy_sdk.identity.Identity`; the model library and encoding backend belong to
+:class:`~eazy_sdk.serialization.Serialization` on the SDK root; signatures and payload-crypto
+profiles are contract, declared on the operation or the router.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 from eazy_sdk.crypto import CryptoRegistry
 from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.middleware import MiddlewareRegistration
-from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.protection.advanced import (
     InstallableProtection,
     ProtectionBundle,
     ProtectionConfigurationError,
 )
 from eazy_sdk.ratelimit_runtime import RateLimiter
-from eazy_sdk.request import WireProfile
 
 from .base import CallOptions, RetryPolicy
 from .executor import ExecutionRuntime
 
 
 @dataclass(frozen=True, slots=True)
-class ClientConfig:
-    """Transport-independent client runtime policy.
+class Resilience:
+    """How hard one call tries: retry, auth replay, redirects, timeout, rate limiting."""
 
-    Protection is one group: pass installable guards through ``guards=`` (lowered at
-    construction) or a complete ``ProtectionBundle`` through ``protection=``; ``retry=`` groups
-    the retry policy. ``with_protection()`` returns a copy with more guards installed.
-    """
-
-    protection: ProtectionBundle | None = None
-    middleware: tuple[MiddlewareRegistration, ...] = ()
-    rate_limiter: RateLimiter | None = None
-    models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
-    profile: WireProfile | None = None
     retry: RetryPolicy = field(default_factory=RetryPolicy.none)
     auth_retries: int = 1
     max_redirects: int = 0
     timeout: float | None = None
-    crypto: CryptoRegistry | None = None
-    guards: Sequence[InstallableProtection] = ()
-    """Installable guards lowered at construction; equivalent to ``with_protection(*guards)``."""
+    rate_limiter: RateLimiter | None = None
 
     def __post_init__(self) -> None:
         if self.auth_retries < 0 or self.max_redirects < 0:
             raise ValueError("client retry budgets cannot be negative")
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("timeout must be positive")
-        if self.protection is not None and not isinstance(self.protection, ProtectionBundle):
-            raise TypeError("protection must be a ProtectionBundle")
-        if self.guards:
-            guards = tuple(self.guards)
-            object.__setattr__(self, "guards", ())
-            object.__setattr__(self, "protection", self.with_protection(*guards).protection)
-
-    @property
-    def bundle(self) -> ProtectionBundle:
-        """The installed protection, empty when nothing is configured."""
-
-        return self.protection if self.protection is not None else ProtectionBundle()
 
     def call_options(self) -> CallOptions:
         retry_replays = self.retry.retries
@@ -73,10 +54,24 @@ class ClientConfig:
             retry=self.retry,
         )
 
-    def with_protection(
-        self,
-        *protections: InstallableProtection,
-    ) -> ClientConfig:
+
+@dataclass(frozen=True, slots=True)
+class Security:
+    """Guard and anti-bot policy: clearance is bound to the host, session and IP."""
+
+    protection: ProtectionBundle = field(default_factory=ProtectionBundle)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.protection, ProtectionBundle):
+            raise TypeError("protection must be a ProtectionBundle")
+
+    @classmethod
+    def of(cls, *guards: InstallableProtection) -> Security:
+        """Lower installable guards into one bundle, in the factory rather than after it."""
+
+        return cls().with_protection(*guards)
+
+    def with_protection(self, *protections: InstallableProtection) -> Security:
         """Return a copy with ``protections`` lowered and merged into ``protection``."""
 
         bundles: list[ProtectionBundle] = []
@@ -95,8 +90,43 @@ class ClientConfig:
                     "installable protection lowered to an empty bundle"
                 )
             bundles.append(bundle)
-        merged = self.bundle.merge(*bundles)
-        return replace(self, protection=merged if merged else None)
+        return Security(self.protection.merge(*bundles))
+
+
+@dataclass(frozen=True, slots=True)
+class Hooks:
+    """What observes and wraps the exchange without deciding its content."""
+
+    middleware: tuple[MiddlewareRegistration, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ClientConfig:
+    """Transport policy in three groups, plus the host-scoped crypto rules of phase 48.
+
+    ``crypto`` holds the host/path-scoped payload-crypto registry. It is the one field still
+    waiting for a decision (phase 48.4): declaring crypto by address is a second way to say
+    what the operation and the router already say by place.
+    """
+
+    resilience: Resilience = field(default_factory=Resilience)
+    security: Security = field(default_factory=Security)
+    hooks: Hooks = field(default_factory=Hooks)
+    crypto: CryptoRegistry | None = None
+
+    @property
+    def bundle(self) -> ProtectionBundle:
+        """The installed protection, empty when nothing is configured."""
+
+        return self.security.protection
+
+    def call_options(self) -> CallOptions:
+        return self.resilience.call_options()
+
+    def with_protection(self, *protections: InstallableProtection) -> ClientConfig:
+        """Return a copy with ``protections`` lowered and merged into ``security``."""
+
+        return replace(self, security=self.security.with_protection(*protections))
 
 
 def _runtime_from_boundary(
@@ -108,22 +138,21 @@ def _runtime_from_boundary(
     allow_async_crypto: bool,
     protection_session_owner: object | None = None,
 ) -> ExecutionRuntime:
+    bundle = config.security.protection
     return ExecutionRuntime(
         handler_profile=profile,
         send=send,
         base_url=base_url,
-        operation_protections=config.bundle.operation_protections,
-        before_call_policies=config.bundle.before_call_policies,
-        challenge_policies=config.bundle.challenge_policies,
-        solver_bindings=config.bundle.solvers,
+        operation_protections=bundle.operation_protections,
+        before_call_policies=bundle.before_call_policies,
+        challenge_policies=bundle.challenge_policies,
+        solver_bindings=bundle.solvers,
         protection_session_owner=protection_session_owner,
-        middleware=config.middleware,
-        limiter=config.rate_limiter,
-        models=config.models,
-        profile=config.profile,
+        middleware=config.hooks.middleware,
+        limiter=config.resilience.rate_limiter,
         crypto=config.crypto or CryptoRegistry(),
         allow_async_crypto=allow_async_crypto,
     )
 
 
-__all__ = ["ClientConfig"]
+__all__ = ["ClientConfig", "Hooks", "Resilience", "Security"]

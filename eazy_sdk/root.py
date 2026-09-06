@@ -31,6 +31,7 @@ from eazy_sdk.identity import (
     _IdentityScope,
     bind_session_lifecycle,
 )
+from eazy_sdk.serialization import Serialization
 
 if TYPE_CHECKING:
     from zapros import AsyncBaseHandler, BaseHandler
@@ -94,6 +95,9 @@ class _RootBase:
     identity: ClassVar[Identity | None] = None
     """Session scope shared by every router of this root; the constructor overrides it."""
 
+    serialization: ClassVar[Serialization | None] = None
+    """Model library and encoding backend of this SDK; the constructor overrides it."""
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _reject_root_operations(cls)
@@ -116,23 +120,29 @@ class _RootBase:
         *,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> None:
-        self._setup(client, tuple(bindings), identity, scope=None)
+        self._setup(client, tuple(bindings), identity, serialization, scope=None)
 
     def _setup(
         self,
         client: object,
         bindings: tuple[Binding, ...],
         identity: Identity | None,
+        serialization: Serialization | None,
         *,
         scope: _IdentityScope | None,
     ) -> None:
         selected = type(self).identity if identity is None else identity
         if selected is not None and not isinstance(selected, Identity):
             raise TypeError("identity= accepts an Identity")
+        chosen = type(self).serialization if serialization is None else serialization
+        if chosen is not None and not isinstance(chosen, Serialization):
+            raise TypeError("serialization= accepts a Serialization")
         self._default_client = client
         self._bindings = bindings
         self._identity = selected
+        self._serialization = chosen if chosen is not None else Serialization()
         self._scope = scope if scope is not None else _identity_scope(selected)
         self._owned: tuple[Any, ...] = ()
         self._closed = False
@@ -146,20 +156,20 @@ class _RootBase:
         cls,
         client: object,
         bindings: tuple[Binding, ...],
-        identity: Identity | None,
+        serialization: Serialization,
         scope: _IdentityScope,
     ) -> Self:
         """Build a scoped copy for the auth lifecycle without re-registering factories."""
 
         root = cls.__new__(cls)
-        _RootBase._setup(root, client, bindings, identity, scope=scope)
+        _RootBase._setup(root, client, bindings, None, serialization, scope=scope)
         return root
 
     def _register_lifecycle(self) -> None:
         bind_session_lifecycle(
             self._scope,
             self._default_client,
-            _scoped_factory(type(self), self._default_client, self._bindings, self._scope),
+            _scoped_factory(type(self), self._bindings, self._serialization, self._scope),
         )
 
     def _build_group(self, group: _ApiGroup[Any]) -> SyncApi | AsyncApi:
@@ -168,6 +178,7 @@ class _RootBase:
             plan = self._plan[group.name]
             cached = group.api_type(
                 cast(Any, plan.client),
+                serialization=self._serialization,
                 defaults=plan.defaults,
                 scope=self._scope,
             )
@@ -191,8 +202,11 @@ class SyncRoot(_RootBase):
         *,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> None:
-        super().__init__(client, bindings=bindings, identity=identity)
+        super().__init__(
+            client, bindings=bindings, identity=identity, serialization=serialization
+        )
 
     @classmethod
     def from_handler(
@@ -205,6 +219,7 @@ class SyncRoot(_RootBase):
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> Self:
         """Build the default client over ``handler`` and let the root own it."""
 
@@ -217,7 +232,9 @@ class SyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(client, bindings=bindings, identity=identity)
+        root = cls(
+            client, bindings=bindings, identity=identity, serialization=serialization
+        )
         root._owned = (client,)
         return root
 
@@ -250,8 +267,11 @@ class AsyncRoot(_RootBase):
         *,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> None:
-        super().__init__(client, bindings=bindings, identity=identity)
+        super().__init__(
+            client, bindings=bindings, identity=identity, serialization=serialization
+        )
 
     @classmethod
     def from_handler(
@@ -264,6 +284,7 @@ class AsyncRoot(_RootBase):
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
         identity: Identity | None = None,
+        serialization: Serialization | None = None,
     ) -> Self:
         """Build the default client over ``handler`` and let the root own it."""
 
@@ -276,7 +297,9 @@ class AsyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(client, bindings=bindings, identity=identity)
+        root = cls(
+            client, bindings=bindings, identity=identity, serialization=serialization
+        )
         root._owned = (client,)
         return root
 
@@ -296,12 +319,12 @@ class AsyncRoot(_RootBase):
 
 def _scoped_factory(
     root_type: type[_RootBase],
-    default_client: object,
     bindings: tuple[Binding, ...],
+    serialization: Serialization,
     scope: _IdentityScope,
 ) -> Any:
     def build(scoped: object) -> object:
-        return root_type._rebuild(scoped, bindings, None, scope)
+        return root_type._rebuild(scoped, bindings, serialization, scope)
 
     return build
 

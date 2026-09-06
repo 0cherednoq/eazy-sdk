@@ -4,14 +4,14 @@ description: Ограничение частоты фактических HTTP-�
 sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.ratelimit_runtime
-api_fingerprint: "sha256:3b4d99c9dbb837d39a0818c6af4828ed847d55a6b3933a888975e0c67b278ecb"
+api_fingerprint: "sha256:5b7c59fb7d5846812774c5941f1ce661c08817c6d91dab71aba500a442b63f25"
 ---
 
 Реализуйте limiter и передайте его в `ClientConfig`. Limiter резервирует право на фактическую
 отправку, а не на logical API call.
 
 ```python
-from eazy_sdk import Client, ClientConfig
+from eazy_sdk import Client, ClientConfig, Resilience
 from eazy_sdk.ratelimit_runtime import RateLimitDecision
 
 class ApiLimiter:
@@ -22,7 +22,7 @@ class ApiLimiter:
 client = Client(
     base_url=base_url,
     handler=handler,
-    config=ClientConfig(rate_limiter=ApiLimiter()),
+    config=ClientConfig(resilience=Resilience(rate_limiter=ApiLimiter())),
 )
 ```
 

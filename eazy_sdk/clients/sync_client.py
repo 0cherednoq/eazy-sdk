@@ -10,6 +10,7 @@ from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaratio
 from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
+from eazy_sdk.serialization import Serialization
 
 from ._core import _UNSET, _ClientCore, _raw_call, _SyncRunner
 from .base import CallOptions
@@ -54,9 +55,10 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         options: CallOptions | None = None,
         with_response: bool,
         identity: _IdentityScope | None = None,
+        serialization: Serialization | None = None,
     ) -> T | ResponseEnvelope[T, TRaw]:
         call = declaration.call(values)
-        result = self._run(call, options, identity)
+        result = self._run(call, options, identity, serialization)
         if with_response:
             return envelope(result)
         return cast(T, result.value)
@@ -74,7 +76,7 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         options: CallOptions | None = None,
     ) -> NormalizedResponse[TRaw]:
         call = _raw_call(method, url, params, headers, cookies, json, content)
-        return cast(NormalizedResponse[TRaw], self._run(call, options, None).value)
+        return cast(NormalizedResponse[TRaw], self._run(call, options, None, None).value)
 
     def _prepare_operation[T](
         self,
@@ -83,9 +85,10 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         *,
         options: PrepareOptions,
         identity: _IdentityScope | None = None,
+        serialization: Serialization | None = None,
     ) -> PreparedCall:
         return self._runner.run(
-            self._core_for(identity).prepare(
+            self._core_for(identity, serialization).prepare(
                 declaration.call(values), options=self._prepare_options(options)
             )
         )
@@ -109,9 +112,12 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         call: _OperationCall[T],
         options: CallOptions | None,
         identity: _IdentityScope | None = None,
+        serialization: Serialization | None = None,
     ) -> Any:
         return self._runner.run(
-            self._core_for(identity).execute(call, options=options or self._default_options)
+            self._core_for(identity, serialization).execute(
+                call, options=options or self._default_options
+            )
         )
 
 

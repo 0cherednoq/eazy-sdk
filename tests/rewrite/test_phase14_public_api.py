@@ -14,6 +14,7 @@ from eazy_sdk import (
     AsyncRoot,
     ClientConfig,
     Identity,
+    Resilience,
     RetryPolicy,
     UnsafeReplayError,
     api,
@@ -939,8 +940,11 @@ def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() ->
         "CallOptions",
         "Client",
         "ClientConfig",
+        "Hooks",
         "RedirectLimitError",
+        "Resilience",
         "RetryPolicy",
+        "Security",
         "UnsafeReplayError",
     }
     assert {"Client", "AsyncClient"} <= set(codegen_api.__all__)
@@ -984,7 +988,7 @@ async def test_retry_policy_safe_retries_status_with_bounded_deterministic_backo
         sleep=sleep,
         random_source=lambda: 0.5,
     )
-    config = ClientConfig(retry=policy, auth_retries=0)
+    config = ClientConfig(resilience=Resilience( retry=policy, auth_retries=0, ))
     identity = Identity(observer=lambda phase, value: observed.append((phase, value)))
     client = client_from_httpx(
         httpx.AsyncClient(
@@ -1017,8 +1021,10 @@ async def test_retry_policy_rejects_unsafe_operation_without_idempotency_proof()
             cookies={},
         ),
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=2),
+                auth_retries=0,
+            ),
         ),
     )
     with pytest.raises(UnsafeReplayError, match="idempotent"):
@@ -1041,7 +1047,7 @@ async def test_retry_none_emits_exactly_once() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(retry=RetryPolicy.none(), auth_retries=0),
+        config=ClientConfig(resilience=Resilience( retry=RetryPolicy.none(), auth_retries=0, )),
     )
     response = await _protected_call(client, None)
     await client.aclose()
@@ -1086,8 +1092,10 @@ async def test_retry_exhaustion_uses_the_contract_typed_terminal_error() -> None
             cookies={},
         ),
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=3),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=3),
+                auth_retries=0,
+            ),
         ),
     )
 
@@ -1139,7 +1147,7 @@ async def test_auth_refresh_and_response_retry_keep_independent_budgets() -> Non
             headers={},
             cookies={},
         ),
-        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=2)),
+        config=ClientConfig(resilience=Resilience(retry=RetryPolicy.safe(max_attempts=2))),
     )
     response = await _protected_call(client, auth.scheme, identity=Identity(auth=(auth,)))
     await client.aclose()
@@ -1174,7 +1182,12 @@ async def test_response_retry_reprepares_and_resigns_every_attempt() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=3), auth_retries=0),
+        config=ClientConfig(
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=3),
+                auth_retries=0,
+            ),
+        ),
     )
     response = await _protected_call(
         client,
@@ -1194,7 +1207,9 @@ def test_sync_and_async_factories_share_the_same_immutable_config_schema() -> No
     import asyncio
 
     attempts = {"sync": 0, "async": 0}
-    config = ClientConfig(retry=RetryPolicy.safe(max_attempts=2), auth_retries=0)
+    config = ClientConfig(
+        resilience=Resilience(retry=RetryPolicy.safe(max_attempts=2), auth_retries=0)
+    )
 
     def sync_handler(_request: httpx.Request) -> httpx.Response:
         attempts["sync"] += 1

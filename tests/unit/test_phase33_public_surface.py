@@ -28,7 +28,9 @@ from eazy_sdk import (
     Json,
     Path,
     Query,
+    Resilience,
     Responses,
+    Security,
     Success,
     SyncApi,
     SyncRoot,
@@ -186,26 +188,27 @@ def test_client_config_groups_protection_into_one_bundle() -> None:
         def solve(self, challenge: int, context: SolveContext) -> GuardSolution:
             return self.solution(cookies={"c": "v"})
 
-    config = ClientConfig(guards=[CookieGuard()])
-    assert isinstance(config.protection, ProtectionBundle)
-    assert [p.identity for p in config.protection.challenge_policies] == ["CookieGuard"]
-    assert len(config.protection.solver_bindings) == 1
-    assert ClientConfig().protection is None
+    config = ClientConfig(security=Security.of(CookieGuard()))
+    assert isinstance(config.bundle, ProtectionBundle)
+    assert [p.identity for p in config.bundle.challenge_policies] == ["CookieGuard"]
+    assert len(config.bundle.solver_bindings) == 1
     assert ClientConfig().bundle == ProtectionBundle()
     assert not ClientConfig().bundle
     parameters = inspect.signature(ClientConfig).parameters
-    assert {"protection", "guards", "retry", "timeout"} <= set(parameters)
+    assert {"resilience", "security", "hooks"} <= set(parameters)
     for removed in ("operation_protections", "before_call_policies", "challenge_policies",
                     "solver_bindings", "challenge_solvers", "operation_protection_solvers",
-                    "auth", "key_provider", "dependencies", "observer"):
+                    "auth", "key_provider", "dependencies", "observer",
+                    "protection", "guards", "retry", "timeout", "models", "profile"):
         assert removed not in parameters
+    resilience = inspect.signature(Resilience).parameters
+    assert {"retry", "auth_retries", "max_redirects", "timeout", "rate_limiter"} == set(resilience)
     with pytest.raises(TypeError, match="ProtectionBundle"):
-        ClientConfig(protection=object())  # type: ignore[arg-type]
+        ClientConfig(security=Security(object()))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="duplicate"):
-        ClientConfig(guards=[CookieGuard()]).with_protection(CookieGuard())
-    merged = ClientConfig(guards=[CookieGuard()]).with_protection()
-    assert merged.protection is not None
-    assert [p.identity for p in merged.protection.challenge_policies] == ["CookieGuard"]
+        ClientConfig(security=Security.of(CookieGuard())).with_protection(CookieGuard())
+    merged = ClientConfig(security=Security.of(CookieGuard())).with_protection()
+    assert [p.identity for p in merged.bundle.challenge_policies] == ["CookieGuard"]
 
 
 def test_internal_and_codegen_do_not_advertise_private_surface() -> None:

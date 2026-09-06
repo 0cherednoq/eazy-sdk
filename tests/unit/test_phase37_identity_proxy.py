@@ -8,7 +8,7 @@ from typing import Annotated, Any, ClassVar, cast
 import pytest
 from zapros import AsyncBaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Security, api
 from eazy_sdk.handlers import CONSERVATIVE_HANDLER_PROFILE, EmitOptions, HandlerProfile
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.redaction import REDACTED
@@ -139,7 +139,7 @@ def test_emit_options_carry_only_the_timeout_and_the_profile_declares_the_proxy(
 async def test_declared_proxy_reaches_the_solver_and_binds_the_clearance() -> None:
     origin = Origin(proxy=PROXY_A)
     guard = UserAgentGuard()
-    config = ClientConfig(guards=[guard])
+    config = ClientConfig(security=Security.of(guard))
     async with AsyncClient(base_url=BASE_URL, handler=origin, config=config) as client:
         service = ProtectedApi(client)
         await service.protected()
@@ -161,7 +161,7 @@ async def test_declared_proxy_reaches_the_solver_and_binds_the_clearance() -> No
 async def test_guard_that_rewrites_user_agent_keeps_one_identity_per_attempt() -> None:
     origin = Origin()
     guard = UserAgentGuard()
-    config = ClientConfig(guards=[guard])
+    config = ClientConfig(security=Security.of(guard))
     async with AsyncClient(base_url=BASE_URL, handler=origin, config=config) as client:
         service = ProtectedApi(client)
         for _ in range(3):
@@ -194,7 +194,7 @@ async def test_guard_that_rewrites_user_agent_keeps_one_identity_per_attempt() -
 async def test_public_user_agent_change_still_invalidates_the_clearance() -> None:
     origin = Origin()
     guard = TokenGuard()
-    config = ClientConfig(guards=[guard])
+    config = ClientConfig(security=Security.of(guard))
     async with AsyncClient(base_url=BASE_URL, handler=origin, config=config) as client:
         service = PublicUaApi(client)
         await service.protected()

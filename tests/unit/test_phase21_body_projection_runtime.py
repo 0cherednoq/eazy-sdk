@@ -10,7 +10,7 @@ import msgspec
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, Resilience, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
@@ -109,8 +109,10 @@ async def test_projection_and_codec_are_fresh_once_per_retry_attempt() -> None:
         BodyProjection(PublicBody, NestedWire, to_wire, codec),
         handler,
         config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            auth_retries=0,
+            resilience=Resilience(
+                retry=RetryPolicy.safe(max_attempts=2),
+                auth_retries=0,
+            ),
         ),
     )
 
@@ -144,7 +146,7 @@ async def test_projection_is_fresh_on_managed_redirect() -> None:
     await _execute(
         BodyProjection(PublicBody, NestedWire, to_wire, JsonBody()),
         handler,
-        config=ClientConfig(auth_retries=0, max_redirects=1),
+        config=ClientConfig(resilience=Resilience( auth_retries=0, max_redirects=1, )),
     )
 
     assert projection_calls == 2

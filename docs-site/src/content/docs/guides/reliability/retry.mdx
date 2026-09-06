@@ -5,17 +5,19 @@ sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.RetryPolicy
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:f0773dbed908ca6ac392854d182f40494720ad81eaeb294f4bae14ef56e4f6da"
+api_fingerprint: "sha256:4c6470836770bd71296b9e662577f3bce4de7f2b5e0507eb93d3b854788e6377"
 ---
 
 Настройте retry один раз в `ClientConfig` и при необходимости сузьте budget через `CallOptions`
 конкретного вызова.
 
 ```python
-from eazy_sdk import AsyncClient, ClientConfig, RetryPolicy
+from eazy_sdk import AsyncClient, ClientConfig, Resilience, RetryPolicy
 from eazy_sdk.clients import CallOptions
 
-config = ClientConfig(retry=RetryPolicy.safe(max_attempts=3), timeout=5.0)
+config = ClientConfig(
+    resilience=Resilience(retry=RetryPolicy.safe(max_attempts=3), timeout=5.0)
+)
 client = AsyncClient(base_url=base_url, handler=handler, config=config)
 
 payment = await api.payments.get_payment(

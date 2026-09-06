@@ -38,6 +38,21 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
 | `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
 
+`ClientConfig` перестал быть плоским списком из пятнадцати полей: остались три группы по владельцу
+плюс host-scoped `crypto` (его судьба решается в фазе 48). `guards=` понижается фабрикой
+`Security.of(...)`, а не мутацией frozen-объекта в `__post_init__`.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.ClientConfig.retry` | `eazy_sdk.Resilience.retry` | Вместе с `auth_retries`, `max_redirects`, `timeout` и `rate_limiter`. |
+| `eazy_sdk.ClientConfig.timeout` | `eazy_sdk.Resilience.timeout` | Валидация бюджетов переехала в группу. |
+| `eazy_sdk.ClientConfig.rate_limiter` | `eazy_sdk.Resilience.rate_limiter` | |
+| `eazy_sdk.ClientConfig.protection` | `eazy_sdk.Security.protection` | Пустой `ProtectionBundle` вместо `None`; `ClientConfig.bundle` не изменился. |
+| `eazy_sdk.ClientConfig.guards` | `eazy_sdk.Security.of` | Публичного поля, которое всегда пусто, больше нет. |
+| `eazy_sdk.ClientConfig.middleware` | `eazy_sdk.Hooks.middleware` | |
+| `eazy_sdk.ClientConfig.models` | `eazy_sdk.Serialization.models` | Библиотека моделей — реализация SDK, объявляется на корне. |
+| `eazy_sdk.ClientConfig.profile` | `eazy_sdk.Serialization.profile` | Временный дом: фаза 48 заменяет `WireProfile` контрактом операции. |
+
 Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
 другому клиенту и/или адресу при сборке (`bindings=(...)`).
 
@@ -64,8 +79,8 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.AsyncSdk` | `eazy_sdk.AsyncApi` | То же для async. |
 | `eazy_sdk.Client.get` | `eazy_sdk.Client.request` | Сырые verb-методы (`get/post/...`) удалены; остался `request(method, url, ...)`. |
 | `eazy_sdk.AsyncClient.post` | `eazy_sdk.AsyncClient.request` | То же для async. |
-| `eazy_sdk.ClientConfig.challenge_policies` | `eazy_sdk.ClientConfig.guards` | Guard'ы и presets ставятся через `guards=[...]`. |
-| `eazy_sdk.ClientConfig.challenge_solvers` | `eazy_sdk.ClientConfig.protection` | Advanced-политики и solver-биндинги — одна группа `ProtectionBundle`. |
+| `eazy_sdk.ClientConfig.challenge_policies` | `eazy_sdk.Security.of` | Guard'ы и presets ставятся через `security=Security.of(...)` (в 0.2.0a4 это было `guards=[...]`). |
+| `eazy_sdk.ClientConfig.challenge_solvers` | `eazy_sdk.Security.protection` | Advanced-политики и solver-биндинги — одна группа `ProtectionBundle`. |
 | `eazy_sdk.clients.AttemptLimitExceeded` | `eazy_sdk.clients.AttemptLimitError` | Единый суффикс `*Error`. |
 | `eazy_sdk.clients.RedirectLimitExceeded` | `eazy_sdk.clients.RedirectLimitError` | |
 | `eazy_sdk.handlers.TransportFailure` | `eazy_sdk.handlers.TransportError` | |
@@ -79,7 +94,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.protection.advanced.ProtectionSolver` | `eazy_sdk.protection.advanced.ChallengeSolver` | Один протокол солвера. |
 | `eazy_sdk.protection.advanced.SolutionCookieSet` | `eazy_sdk.protection.advanced.PrivateCookieSetBinding` | Фабрика `solution_cookie_set()` осталась. |
 
-Простой путь теперь — класс `Guard` из `eazy_sdk.protection` и `ClientConfig(guards=[...])`.
+Простой путь теперь — класс `Guard` из `eazy_sdk.protection` и `Security.of(...)`.
 
 ### Вынесенные пакеты
 
