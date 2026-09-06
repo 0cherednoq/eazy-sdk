@@ -505,7 +505,7 @@ def _compile_input_layout(
     )
     body_projection = cast(
         BodyProjection[object, object] | None,
-        getattr(getattr(contract, "wire", None), "projection", None),
+        getattr(contract, "projection", None),
     )
     return _InputLayoutPass(
         contract,
@@ -770,7 +770,12 @@ def _compile_fingerprint_pass(
         )
         projection_fingerprint = (
             f"body-projection:{layout.body_projection.fingerprint_name}",
-            f"body-projection-source:{_type_identity(layout.body_projection.source)}",
+            "body-projection-source:"
+            + _type_identity(
+                layout.body_projection.source
+                if layout.body_projection.source is not None
+                else getattr(contract, "operation_type", None)
+            ),
             f"body-projection-target:{_type_identity(layout.body_projection.target)}",
             f"body-projection-encoding:{type(layout.body_projection.encoding).__module__}."
             f"{type(layout.body_projection.encoding).__qualname__}:{encoding_name}",

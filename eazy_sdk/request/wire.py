@@ -19,8 +19,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from eazy_sdk.request.descriptors import BodyProjection
-
 type TransportProtocol = Literal["http/1.1", "http/2", "http/3"]
 
 
@@ -64,11 +62,10 @@ class Wire:
     """One declaration of a request's representation, inherited operation → router → mixin.
 
     Every field is optional and ``None`` means "inherit": an operation that declares only a
-    projection keeps the encryption its service declared. Nothing here is decoration — each
+    field order keeps the encryption its service declared. Nothing here is decoration — each
     field reaches the bytes, and a test walks them to prove it.
     """
 
-    projection: BodyProjection[Any, Any] | None = None
     encrypted: object | None = None
     order: FieldOrder | None = None
     exact: bool | None = None
@@ -87,7 +84,6 @@ class Wire:
             **{
                 name: value
                 for name in (
-                    "projection",
                     "encrypted",
                     "order",
                     "exact",

@@ -66,6 +66,7 @@ from eazy_sdk.crypto._http import (
 )
 from eazy_sdk.crypto._inputs import resolve_crypto_inputs
 from eazy_sdk.dependencies import (
+    RequestDependency,
     _DependencyCaches,
     _lower_requirements,
     _resolve_requirements,
@@ -1107,6 +1108,8 @@ class _AttemptRun[T]:
         self.call_states: dict[str, _ManagedProtectionState] = {}
         self.applied_shared: dict[str, tuple[_ProtectionCacheKey, _ManagedProtectionState]] = {}
         self.mandatory_results: dict[int, object] = {}
+        self.injected: dict[RequestDependency[Any], object] = {}
+        """The ``requires=`` values of the current attempt, handed to a two-argument projection."""
         self.transport_retry = TransportRetryPolicy()
         self.response_retry = ResponseRetryPolicy()
         self.redirect = RedirectPolicy()
@@ -1256,6 +1259,7 @@ class _AttemptRun[T]:
         self, state: AttemptState, compiled_crypto: CompiledPayloadCrypto | None
     ) -> tuple[OperationValues, tuple[Any, ...], CryptoValues, tuple[tuple[str, FrozenValue], ...]]:
         contract = self.compiled.contract
+        self.injected = {}
         dependency_patch = await _resolve_requirements(
             _lower_requirements(
                 (*contract.requires, *contract.inject),
@@ -1266,6 +1270,7 @@ class _AttemptRun[T]:
             operation_id=contract.operation_id,
             attempt=state.number,
             caches=self.dependencies,
+            resolved=self.injected,
         )
         crypto_values = CryptoValues()
         crypto_aad: tuple[tuple[str, FrozenValue], ...] = ()
@@ -1738,7 +1743,11 @@ class _RequestBuild:
         run = self.run_context
         self.document = build_request_document(
             RequestDocumentStageInput(
-                run.compiled, self.values, run.core.serialization.models, run.mandatory_results
+                run.compiled,
+                self.values,
+                run.core.serialization.models,
+                run.mandatory_results,
+                run.injected,
             )
         ).document
 

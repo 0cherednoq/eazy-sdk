@@ -24,6 +24,9 @@ from eazy_sdk.core.kernel import (
 from eazy_sdk.request.descriptors import Form, JsonField, Part
 from eazy_sdk.request.params import Cookie, Header, Path, Query
 
+type Injected = Mapping[RequestDependency[Any], object]
+"""The resolved ``requires=`` values of one attempt, as a projection receives them."""
+
 
 class DependencyCachePolicy(Enum):
     NONE = "none"
@@ -272,9 +275,11 @@ async def _resolve_requirements(
     operation_id: str,
     attempt: int,
     caches: _DependencyCaches | None = None,
+    resolved: dict[RequestDependency[Any], object] | None = None,
 ) -> ValuePatch:
     caches = caches or _DependencyCaches()
-    resolved: dict[RequestDependency[Any], object] = {}
+    if resolved is None:
+        resolved = {}
     operations: list[Any] = []
     for requirement in _compile_dependency_order(requirements):
         dependency = requirement.dependency
@@ -430,6 +435,7 @@ __all__ = [
     "DependencyRegistry",
     "DependencySpec",
     "Inject",
+    "Injected",
     "ProviderUnavailable",
     "RequestDependency",
     "dependency",

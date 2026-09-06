@@ -18,7 +18,7 @@ from eazy_sdk.api import (
     SyncApi,
     _ApiGroup,
     _AsyncClient,
-    _OperationDescriptorBase,
+    _OperationDescriptor,
     _service_defaults_of,
     _ServiceDefaults,
     _SyncClient,
@@ -78,7 +78,7 @@ class _GroupPlan:
 
 def _reject_root_operations(cls: type[object]) -> None:
     for name in vars(cls):
-        if isinstance(inspect.getattr_static(cls, name), _OperationDescriptorBase):
+        if isinstance(inspect.getattr_static(cls, name), _OperationDescriptor):
             raise TypeError(
                 f"SDK root {cls.__name__} declares operation {name!r}; "
                 "a root only composes routers"
@@ -388,7 +388,7 @@ def _validate_router(name: str, router: type[object], defaults: _ServiceDefaults
 
     for attribute in dir(router):
         descriptor = inspect.getattr_static(router, attribute)
-        if isinstance(descriptor, _OperationDescriptorBase):
+        if isinstance(descriptor, _OperationDescriptor):
             try:
                 descriptor.resolve(defaults)
             except TypeError as error:

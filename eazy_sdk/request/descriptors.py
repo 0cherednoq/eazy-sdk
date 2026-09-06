@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from eazy_sdk.codecs import BodyCodec, ScalarCodec
+
+if TYPE_CHECKING:
+    from eazy_sdk.dependencies import Injected
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,12 +63,17 @@ class ReplayableStreamBody:
 
 @dataclass(frozen=True, slots=True)
 class BodyProjection[TSource, TWire]:
-    """Project caller-visible values into one private semantic wire body."""
+    """Project caller-visible values into one private semantic wire body.
 
-    source: type[TSource]
+    ``source`` defaults to the operation class itself: every field without a placement
+    marker feeds the projection. ``using`` takes the source value and, when declared with
+    two parameters, the resolved ``requires=`` dependencies as a second argument.
+    """
+
     target: type[TWire]
-    using: Callable[[TSource], TWire]
+    using: Callable[[TSource], TWire] | Callable[[TSource, Injected], TWire]
     encoding: JsonBody | FormBody | MultipartBody | BodyCodec
+    source: type[TSource] | None = None
     name: str | None = None
 
     def __post_init__(self) -> None:
@@ -89,11 +97,12 @@ class BodyProjection[TSource, TWire]:
         if self.name is not None:
             return self.name
         callable_name = getattr(self.using, "__name__", type(self.using).__qualname__)
-        return (
+        source = (
             f"{self.source.__module__}.{self.source.__qualname__}"
-            f"->{self.target.__module__}.{self.target.__qualname__}"
-            f":{callable_name}"
+            if self.source is not None
+            else "operation"
         )
+        return f"{source}->{self.target.__module__}.{self.target.__qualname__}:{callable_name}"
 
 
 @dataclass(frozen=True, slots=True)

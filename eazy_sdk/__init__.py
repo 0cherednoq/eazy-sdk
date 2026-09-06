@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from eazy_sdk.api import AsyncApi, SyncApi, api, api_group
+from eazy_sdk.api import AsyncApi, SyncApi, api, api_group, op
 from eazy_sdk.clients import ClientConfig, Hooks, Resilience, RetryPolicy, Security
 from eazy_sdk.dependencies import Inject
 from eazy_sdk.handlers import HandlerProfile, TransportError
 from eazy_sdk.identity import Identity
+from eazy_sdk.operation import Http, HttpOperation
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.request import (
     BodyProjection,
@@ -23,21 +24,18 @@ from eazy_sdk.request import (
     FormBody,
     Header,
     JsonBody,
+    JsonField,
     Path,
     Query,
 )
 from eazy_sdk.response import (
-    Bytes,
-    Error,
     Html,
     Json,
     ResponseEnvelope,
-    Responses,
-    Success,
-    Text,
     UnexpectedResponseError,
 )
 from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
+from eazy_sdk.sentinels import UNSET, Omittable
 from eazy_sdk.serialization import Serialization
 
 __version__ = "0.2.0a5"
@@ -57,42 +55,43 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "UNSET",
     "AsyncApi",
     "AsyncClient",
     "AsyncRoot",
     "Binding",
     "BodyProjection",
-    "Bytes",
     "Client",
     "ClientConfig",
     "Cookie",
-    "Error",
     "FormBody",
     "HandlerProfile",
     "Header",
     "Hooks",
     "Html",
+    "Http",
+    "HttpOperation",
     "Identity",
     "Inject",
     "Json",
     "JsonBody",
+    "JsonField",
+    "Omittable",
     "Path",
     "PrepareOptions",
     "PreparedCall",
     "Query",
     "Resilience",
     "ResponseEnvelope",
-    "Responses",
     "RetryPolicy",
     "Security",
     "Serialization",
-    "Success",
     "SyncApi",
     "SyncRoot",
-    "Text",
     "TransportError",
     "UnexpectedResponseError",
     "api",
     "api_group",
     "bind",
+    "op",
 ]

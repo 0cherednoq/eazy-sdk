@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import copy
+import inspect
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import cast
+from dataclasses import dataclass, field
+from typing import Any, cast
 from urllib.parse import urljoin
 
 from eazy_sdk.clients.base import RedirectLimitError, UnsafeReplayError
@@ -16,6 +17,7 @@ from eazy_sdk.core import (
     ValuePatch,
     WriterConflictError,
 )
+from eazy_sdk.dependencies import RequestDependency
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, ModelDumpMode
 from eazy_sdk.protection.advanced import SignalMatch, SignalOutcome
@@ -32,6 +34,7 @@ class RequestDocumentStageInput[T]:
     values: OperationValues
     models: ModelAdapterRegistry
     private_values: Mapping[int, object]
+    injected: Mapping[RequestDependency[Any], object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +54,7 @@ def build_request_document[T](
             stage.values,
             stage.models,
             stage.private_values,
+            stage.injected,
         )
     elif compiled.private_body_writers:
         document = _managed_body_document(compiled, stage.values, stage.models)
@@ -182,21 +186,62 @@ def _require_redirect_budget(remaining: int) -> None:
         raise RedirectLimitError("redirect budget exhausted")
 
 
+def _projection_source[T](compiled: CompiledContract[T], values: OperationValues) -> object:
+    """What the projection reads: the operation value itself, or the declared source dict.
+
+    With no ``source`` declared the projection receives the operation instance rebuilt
+    from the attempt's values, so it reads fields the way the author wrote them. With an
+    explicit ``source`` model it receives the mapping of source fields, as before.
+    """
+
+    projection = compiled.body_projection
+    assert projection is not None
+    operation_type = getattr(compiled.contract, "operation_type", None)
+    if projection.source is None and operation_type is not None:
+        arguments = {
+            name: copy.deepcopy(values.require(slot))
+            for name, slot in compiled.input_slots.items()
+            if values.contains(slot)
+        }
+        return operation_type(**arguments)
+    return {
+        name: copy.deepcopy(values.require(slot))
+        for name, slot in compiled.projection_slots.items()
+        if values.contains(slot)
+    }
+
+
+def _projection_arity(using: object) -> int:
+    try:
+        parameters = inspect.signature(cast(Any, using)).parameters.values()
+    except (TypeError, ValueError):
+        return 1
+    positional = [
+        parameter
+        for parameter in parameters
+        if parameter.kind
+        in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+    ]
+    if any(parameter.kind is inspect.Parameter.VAR_POSITIONAL for parameter in parameters):
+        return 2
+    return len(positional)
+
+
 def _project_body[T](
     compiled: CompiledContract[T],
     values: OperationValues,
     models: ModelAdapterRegistry,
     private_values: Mapping[int, object],
+    injected: Mapping[RequestDependency[Any], object] = {},
 ) -> object:
     projection = compiled.body_projection
     assert projection is not None
-    source = {
-        name: copy.deepcopy(values.require(slot))
-        for name, slot in compiled.projection_slots.items()
-        if values.contains(slot)
-    }
+    source = _projection_source(compiled, values)
     try:
-        projected = projection.using(source)
+        using = cast(Any, projection.using)
+        projected = (
+            using(source, injected) if _projection_arity(using) >= 2 else using(source)
+        )
     except Exception:
         raise OperationBindingError(
             code="projection_failed",
