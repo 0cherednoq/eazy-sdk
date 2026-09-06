@@ -13,7 +13,7 @@ from eazy_sdk.core import (
     OperationValues,
     RequestLocation,
 )
-from eazy_sdk.request import Query
+from eazy_sdk.request.markers import Query
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 
 

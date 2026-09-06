@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, SecretStr
 from eazy_sdk import Client, ClientConfig, Identity, Resilience, SyncApi, api
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import JsonField
+from eazy_sdk.request.markers import JsonField
 from eazy_sdk.response import ApiError, Error, Json, Responses, Success
 
 BASE_URL = "https://dummyjson.com"

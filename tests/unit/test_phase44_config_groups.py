@@ -16,7 +16,6 @@ from eazy_sdk import (
     ClientConfig,
     Hooks,
     Json,
-    Path,
     Resilience,
     Responses,
     RetryPolicy,
@@ -32,7 +31,7 @@ from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.protection.advanced import ProtectionBundle
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request.markers import JsonBody, Path
 from eazy_sdk.response import ResponseContext
 
 BASE = "https://config.test"

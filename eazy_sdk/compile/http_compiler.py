@@ -38,8 +38,8 @@ from eazy_sdk.core.kernel import (
 )
 from eazy_sdk.dependencies import Inject
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, default_model_adapters
-from eazy_sdk.request import BodyProjection, Cookie, Header, Query
 from eazy_sdk.request.descriptors import (
+    BodyProjection,
     BytesBody,
     FormBody,
     JsonBody,
@@ -47,6 +47,7 @@ from eazy_sdk.request.descriptors import (
     MultipartBody,
     ReplayableStreamBody,
 )
+from eazy_sdk.request.params import Cookie, Header, Query
 from eazy_sdk.request.signatures import (
     SignaturePlan,
     _body_output_path,

@@ -12,12 +12,7 @@ from eazy_sdk.core import (
     OperationValues,
 )
 from eazy_sdk.core.errors import PlanError
-from eazy_sdk.request import (
-    Cookie,
-    Header,
-    Path,
-    Query,
-)
+from eazy_sdk.request.markers import Cookie, Header, Path, Query
 from eazy_sdk.request.prepared import RequestPreparer
 from eazy_sdk.response import Responses
 

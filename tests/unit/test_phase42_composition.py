@@ -15,7 +15,6 @@ from eazy_sdk import (
     AsyncRoot,
     Client,
     Json,
-    Path,
     Responses,
     Success,
     SyncApi,
@@ -27,6 +26,7 @@ from eazy_sdk import (
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from eazy_sdk.request import SigningKeyRequirement, body_digest, header_output, hmac_sha256
+from eazy_sdk.request.markers import Path
 from eazy_sdk.testing import RecordingHandler
 
 

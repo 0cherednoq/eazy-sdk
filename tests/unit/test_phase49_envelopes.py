@@ -41,7 +41,6 @@ from eazy_sdk.protocols import (
 )
 from eazy_sdk.protocols.jsonrpc import RpcEnvelopeError
 from eazy_sdk.request import (
-    JsonField,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -49,6 +48,7 @@ from eazy_sdk.request import (
     header_output,
     hmac_sha256,
 )
+from eazy_sdk.request.markers import JsonField
 from eazy_sdk.request.pipeline import REQUEST_PIPELINE, RequestStage
 from eazy_sdk.response import Json, MalformedResponseError, Responses
 from eazy_sdk.response.cases import ApiError

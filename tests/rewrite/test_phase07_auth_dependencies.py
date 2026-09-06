@@ -67,7 +67,7 @@ from eazy_sdk.dependencies import (
 from eazy_sdk.dependencies import (
     _ResultBinding as ResultBinding,
 )
-from eazy_sdk.request import Path
+from eazy_sdk.request.markers import Path
 
 
 def request_slot[T](

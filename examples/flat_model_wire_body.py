@@ -15,7 +15,8 @@ import httpx
 
 from eazy_sdk import AsyncApi, AsyncClient, api
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody, Wire
+from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
 

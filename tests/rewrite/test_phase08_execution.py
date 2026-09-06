@@ -55,9 +55,6 @@ from eazy_sdk.protection.advanced import (
 )
 from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimitDecision
 from eazy_sdk.request import (
-    Header,
-    Query,
-    ReplayableStreamBody,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -65,6 +62,7 @@ from eazy_sdk.request import (
     hmac_sha256,
     method,
 )
+from eazy_sdk.request.markers import Header, Query, ReplayableStreamBody
 from eazy_sdk.request.prepared import (
     HttpProtocol,
     PreparedRequest,

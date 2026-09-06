@@ -19,7 +19,7 @@ from eazy_sdk.core import (
 from eazy_sdk.middleware import RedirectTo, RetryAttempt
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, ModelDumpMode
 from eazy_sdk.protection.advanced import SignalMatch, SignalOutcome
-from eazy_sdk.request import MultipartBody
+from eazy_sdk.request.descriptors import MultipartBody
 from eazy_sdk.request.prepared import _NO_BODY_DOCUMENT_OVERRIDE
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.cases import ResponseOutcome, SuccessOutcome

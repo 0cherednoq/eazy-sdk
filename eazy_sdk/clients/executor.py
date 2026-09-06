@@ -118,10 +118,7 @@ from eazy_sdk.protection.advanced import (
 )
 from eazy_sdk.protocols import CorrelationKey
 from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimiter
-from eazy_sdk.request import (
-    JsonBody,
-    ReplayableStreamBody,
-)
+from eazy_sdk.request.descriptors import JsonBody, ReplayableStreamBody
 from eazy_sdk.request.logical import ExactBodyInput, NoBodyInput
 from eazy_sdk.request.pipeline import REQUEST_PIPELINE, RequestStage
 from eazy_sdk.request.prepared import (

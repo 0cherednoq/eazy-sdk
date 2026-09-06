@@ -502,6 +502,11 @@ D-11 срабатывает до D-10. Для msgspec `w` и `v` совпада�
 Пример эквивалентности (golden-тест 50.1.9):
 
 ```python
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation, Path, Query, SyncApi, api, op
+
+
 class UsersApi(SyncApi):
     @api.get("/users/{user_id}", errors={404: UserNotFound})
     def get_user(self, *, user_id: Path[int], locale: Query[str] = "en") -> User:

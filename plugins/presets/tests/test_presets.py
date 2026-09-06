@@ -35,10 +35,7 @@ from eazy_sdk.protection.advanced import (
     _inspect_signals,
     bind_solver,
 )
-from eazy_sdk.request import (
-    Header,
-    JsonField,
-)
+from eazy_sdk.request.markers import Header, JsonField
 from eazy_sdk.request.prepared import BufferedBody, HttpProtocol, PreparedRequest
 from eazy_sdk.response import (
     Headers,

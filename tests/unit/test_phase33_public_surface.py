@@ -26,8 +26,6 @@ from eazy_sdk import (
     Client,
     ClientConfig,
     Json,
-    Path,
-    Query,
     Resilience,
     Responses,
     Security,
@@ -39,6 +37,7 @@ from eazy_sdk import (
 )
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.protection.advanced import ProtectionBundle
+from eazy_sdk.request.markers import Path, Query
 from eazy_sdk.response import ResponseContext
 
 

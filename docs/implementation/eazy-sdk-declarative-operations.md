@@ -198,6 +198,9 @@ class SearchOrders(HttpOperation[SearchPage], msgspec.Struct, rename="pascal", f
 ### 4.2. Декоратор как короткая форма той же операции
 
 ```python
+from eazy_sdk import Path, Query, SyncApi, api
+
+
 class UsersApi(SyncApi):
     @api.get("/users/{user_id}", errors={404: UserNotFound})
     def get_user(self, *, user_id: Path[int], locale: Query[str] = "en") -> User:

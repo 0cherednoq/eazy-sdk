@@ -36,14 +36,8 @@ from eazy_sdk.auth import (
 )
 from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.exceptions import HeaderValidationError
-from eazy_sdk.request import (
-    JsonBody,
-    SigningKey,
-    SigningKeyRequirement,
-    header_output,
-    hmac_sha256,
-    method,
-)
+from eazy_sdk.request import SigningKey, SigningKeyRequirement, header_output, hmac_sha256, method
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import (
     ApiError,
     Error,

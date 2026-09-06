@@ -44,7 +44,8 @@ from eazy_sdk.protection.advanced import (
     private_header,
     until_rejected,
 )
-from eazy_sdk.request import BodyProjection, Cookie, JsonBody, Path, Query, Wire
+from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request.markers import Cookie, JsonBody, Path, Query
 from eazy_sdk.request.prepared import HttpProtocol
 from eazy_sdk.response import (
     ApiError,

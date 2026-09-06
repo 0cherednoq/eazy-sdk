@@ -19,7 +19,7 @@ from eazy_sdk.core import (
     RequestLocation,
 )
 from eazy_sdk.core.errors import PlanError
-from eazy_sdk.request import Header, Query
+from eazy_sdk.request.markers import Header, Query
 from eazy_sdk.response import Bytes, Responses, Success
 
 

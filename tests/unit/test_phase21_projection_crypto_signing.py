@@ -40,7 +40,6 @@ from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.protection.advanced import FromProtection, SolverRequirement
 from eazy_sdk.request import (
     BodyProjection,
-    JsonBody,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -50,6 +49,7 @@ from eazy_sdk.request import (
     hmac_sha256,
     method,
 )
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Empty, Responses, Success
 
 SECRET_KEY_IDENTITY = Identity(key_provider=lambda _requirement: SigningKey(b"secret"))

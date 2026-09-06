@@ -27,7 +27,7 @@ from eazy_sdk.auth import (
     session_scheme,
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, NormalizedResponse, Responses
 
 MAIN = "https://api.shop.com"

@@ -16,7 +16,7 @@ from typing import Annotated, TypedDict, Unpack, assert_type
 
 from eazy_sdk import AsyncApi, PrepareOptions, PreparedCall, api, api_group
 from eazy_sdk.ext import ParseAttempt, ParsedValue, ResponseParser
-from eazy_sdk.request import Path
+from eazy_sdk.request.markers import Path
 from eazy_sdk.response import Json, ResponseContext, callable_parser
 
 

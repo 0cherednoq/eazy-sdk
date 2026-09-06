@@ -26,7 +26,7 @@ from eazy_sdk.protection import (
     solution_fields,
 )
 from eazy_sdk.redaction import REDACTED, redact_url_credentials
-from eazy_sdk.request import Header
+from eazy_sdk.request.markers import Header
 from eazy_sdk.response import Json, NormalizedResponse, ResponseContext, Responses, Success
 
 BASE_URL = "https://phase30.test"

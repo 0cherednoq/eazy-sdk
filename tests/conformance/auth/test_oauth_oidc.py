@@ -13,7 +13,7 @@ from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.auth import Auth, BasicScheme, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions
-from eazy_sdk.request import Form
+from eazy_sdk.request.markers import Form
 from eazy_sdk.response import NormalizedResponse, Responses
 from tests._support.client_harness import ClientHarness
 

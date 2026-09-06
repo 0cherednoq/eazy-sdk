@@ -13,8 +13,9 @@ from typing import Annotated, Any
 import pytest
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import Client, ClientConfig, Json, Path, Resilience, RetryPolicy, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Json, Resilience, RetryPolicy, SyncApi, api
 from eazy_sdk.driver import SynchronousSuspensionError, driving_synchronously, run_sync, sleep
+from eazy_sdk.request.markers import Path
 
 BASE = "https://drivers.test"
 

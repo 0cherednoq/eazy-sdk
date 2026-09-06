@@ -10,7 +10,6 @@ from zapros import BaseHandler, Request, Response
 
 from eazy_sdk import Client, ClientConfig, Identity, Resilience, RetryPolicy, SyncApi, api
 from eazy_sdk.request import (
-    JsonBody,
     SigningKey,
     SigningKeyRequirement,
     body_digest,
@@ -19,6 +18,7 @@ from eazy_sdk.request import (
     join,
     target,
 )
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Html, Json, Responses, Success
 
 KEY = SigningKeyRequirement("phase18-signing")

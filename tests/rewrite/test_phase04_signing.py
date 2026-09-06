@@ -24,11 +24,7 @@ from eazy_sdk.handlers import EmitOptions, ZaprosSyncEmitter
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import (
     DeclarativeSignature,
-    Header,
     HmacSha256,
-    JsonBody,
-    Path,
-    Query,
     SigningKey,
     SigningKeyRequirement,
     body_digest,
@@ -45,6 +41,7 @@ from eazy_sdk.request import (
     query_output,
     target,
 )
+from eazy_sdk.request.markers import Header, JsonBody, Path, Query
 from eazy_sdk.request.prepared import (
     BufferedBody,
     RequestPreparer,

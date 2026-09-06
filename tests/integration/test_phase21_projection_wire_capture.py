@@ -20,7 +20,6 @@ from eazy_sdk.crypto import (
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import (
     BodyProjection,
-    JsonBody,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -28,6 +27,7 @@ from eazy_sdk.request import (
     header_output,
     hmac_sha256,
 )
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Empty, Responses, Success
 
 

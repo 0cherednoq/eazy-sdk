@@ -14,7 +14,7 @@ from eazy_sdk.handlers import (
     HandlerProfile,
     RedirectControl,
 )
-from eazy_sdk.request import Query
+from eazy_sdk.request.markers import Query
 from eazy_sdk.request.prepared import BufferedBody, HttpProtocol, PreparedRequest
 from eazy_sdk.response import (
     Headers,

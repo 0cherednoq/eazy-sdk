@@ -8,11 +8,12 @@ from typing import Annotated, cast
 
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import Client, Json, Path, SyncApi, api
+from eazy_sdk import Client, Json, SyncApi, api
 from eazy_sdk.auth import session_auth, session_scheme
 from eazy_sdk.auth.session_runtime import generated_session_auth, generated_session_scheme
 from eazy_sdk.clients import executor
 from eazy_sdk.codegen import generated_session_auth as codegen_session_auth
+from eazy_sdk.request.markers import Path
 
 
 class Handler(BaseHandler):

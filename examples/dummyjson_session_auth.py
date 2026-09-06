@@ -35,7 +35,7 @@ from eazy_sdk.auth import (
     session_scheme,
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import JsonField
+from eazy_sdk.request.markers import JsonField
 from eazy_sdk.response import ApiError, Error, Json, Responses, Success
 
 BASE_URL = "https://dummyjson.com"

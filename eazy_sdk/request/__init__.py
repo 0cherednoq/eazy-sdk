@@ -1,4 +1,9 @@
-"""Request authoring descriptors and immutable prepared artifacts."""
+"""Request authoring markers, signatures, wire declarations and immutable prepared artifacts.
+
+``Path``, ``Query`` and the other placement names here are the short form, ``Query[int]``:
+an alias over ``Annotated``. The descriptor classes behind them, which take a wire name and
+options, are reached through :mod:`eazy_sdk.request.markers`.
+"""
 
 from eazy_sdk.codecs import (
     BodyCodec,
@@ -9,25 +14,22 @@ from eazy_sdk.codecs import (
     ScalarEncodeContext,
 )
 
-from .descriptors import (
-    BodyProjection,
+from . import markers
+from .descriptors import BodyProjection, MultipartPart, RequestBody
+from .params import QueryString
+from .short import (
     BytesBody,
+    Cookie,
     Form,
     FormBody,
+    Header,
     JsonBody,
     JsonField,
     MultipartBody,
-    MultipartPart,
     Part,
-    ReplayableStreamBody,
-    RequestBody,
-)
-from .params import (
-    Cookie,
-    Header,
     Path,
     Query,
-    QueryString,
+    ReplayableStreamBody,
 )
 from .signatures import (
     DeclarativeSignature,
@@ -100,6 +102,7 @@ __all__ = [
     "hmac_sha256",
     "join",
     "literal",
+    "markers",
     "method",
     "path",
     "previous_signature",

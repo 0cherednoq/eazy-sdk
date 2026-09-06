@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import Path
+from eazy_sdk.request.markers import Path
 from eazy_sdk.response import ApiError, Error, Json, Responses, Success
 
 

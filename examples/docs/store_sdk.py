@@ -34,7 +34,6 @@ from eazy_sdk.crypto import (
 )
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import (
-    JsonBody,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -42,6 +41,7 @@ from eazy_sdk.request import (
     header_output,
     hmac_sha256,
 )
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
 

@@ -24,7 +24,8 @@ from eazy_sdk.protection.advanced import (
     bind_solver,
     protection_flow,
 )
-from eazy_sdk.request import BodyProjection, JsonBody, Path, Query, Wire
+from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request.markers import JsonBody, Path, Query
 from eazy_sdk.response import Json, ResponseEnvelope, Responses
 from tests._support.zapros_clients import client_from_httpx
 

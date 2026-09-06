@@ -8,7 +8,7 @@ import pytest
 
 from eazy_sdk import AsyncApi, SyncApi, TransportError, api
 from eazy_sdk.clients import CallOptions
-from eazy_sdk.request import ReplayableStreamBody
+from eazy_sdk.request.markers import ReplayableStreamBody
 from eazy_sdk.request.prepared import ReplayableBodyStream
 from eazy_sdk.response import Json, Responses, Success
 from eazy_sdk.response.normalized import cast_headers

@@ -40,7 +40,7 @@ from eazy_sdk import AsyncApi, AsyncClient, AsyncRoot, ClientConfig, Identity, a
 from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken, session_auth
 from eazy_sdk.auth.session import SessionKey, SessionRevision, SessionRevisionError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, NormalizedResponse, Responses
 
 

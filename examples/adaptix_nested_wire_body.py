@@ -14,7 +14,8 @@ from adaptix.conversion import get_converter, link_constant, link_function
 
 from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody, Wire
+from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
 

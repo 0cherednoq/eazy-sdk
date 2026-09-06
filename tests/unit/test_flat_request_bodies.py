@@ -15,16 +15,8 @@ from eazy_sdk.core import (
     apply_patch_atomic,
 )
 from eazy_sdk.core.errors import OperationBindingError
-from eazy_sdk.request import (
-    DelimitedScalarCodec,
-    FieldOrder,
-    Form,
-    JsonBody,
-    JsonField,
-    MultipartPart,
-    Part,
-    Wire,
-)
+from eazy_sdk.request import DelimitedScalarCodec, FieldOrder, MultipartPart, Wire
+from eazy_sdk.request.markers import Form, JsonBody, JsonField, Part
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer, UnsignedPreparedRequest
 from eazy_sdk.response import Responses
 

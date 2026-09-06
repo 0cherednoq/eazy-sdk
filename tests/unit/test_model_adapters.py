@@ -27,7 +27,7 @@ from eazy_sdk.models import (
     ModelField,
     default_model_adapters,
 )
-from eazy_sdk.request import FormBody, JsonBody, MultipartBody
+from eazy_sdk.request.markers import FormBody, JsonBody, MultipartBody
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 from eazy_sdk.response import (
     Extracted,

@@ -41,26 +41,19 @@ from eazy_sdk.protection.advanced import (
     SolverRequirement,
     protection_flow,
 )
-from eazy_sdk.request import (
+from eazy_sdk.request import FieldOrder, JsonPolicy, QueryCodec, Wire
+from eazy_sdk.request.descriptors import (
     BodyProjection,
     BytesBody,
-    Cookie,
-    FieldOrder,
     Form,
     FormBody,
-    Header,
     JsonBody,
     JsonField,
-    JsonPolicy,
     MultipartBody,
     Part,
-    Path,
-    Query,
-    QueryCodec,
-    QueryString,
     ReplayableStreamBody,
-    Wire,
 )
+from eazy_sdk.request.params import Cookie, Header, Path, Query, QueryString
 from eazy_sdk.response import (
     DEFAULT,
     ApiError,

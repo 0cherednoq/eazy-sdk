@@ -17,7 +17,7 @@ from eazy_sdk.core import (
     PlanError,
 )
 from eazy_sdk.models import default_model_adapters
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Responses
 from tests._support.body_projection_proof import BodyProjection
 from tests._support.body_projection_proof import JsonBody as ProofJsonBody
@@ -165,7 +165,8 @@ from typing import TypedDict, Unpack, assert_type
 from adaptix import P
 from adaptix.conversion import get_converter, link_constant, link_function
 
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection
+from eazy_sdk.request.markers import JsonBody
 
 
 class RegisterUser(TypedDict):
@@ -310,7 +311,8 @@ async def call_async(register_async: AsyncRegisterCall) -> None:
 NEGATIVE_TYPING = r'''# pyright: strict
 from typing import TypedDict, Unpack
 
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection
+from eazy_sdk.request.markers import JsonBody
 
 
 class Source(TypedDict):

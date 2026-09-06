@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from eazy_sdk import Client, ClientConfig, Resilience, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import JsonField, Path, Query
+from eazy_sdk.request.markers import JsonField, Path, Query
 from eazy_sdk.response import Json, Responses, Success
 
 BASE_URL = "https://jsonplaceholder.typicode.com"

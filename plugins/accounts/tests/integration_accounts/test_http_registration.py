@@ -36,14 +36,8 @@ from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_cookie
 from eazy_sdk.auth.cookies import HttpCookieSession, parse_session_cookie
 from eazy_sdk.auth.session import MemorySessionStore, SessionKey, SessionLifecycleConfig
 from eazy_sdk.clients import UnsafeReplayError
-from eazy_sdk.request import (
-    JsonBody,
-    SigningKey,
-    SigningKeyRequirement,
-    header_output,
-    hmac_sha256,
-    method,
-)
+from eazy_sdk.request import SigningKey, SigningKeyRequirement, header_output, hmac_sha256, method
+from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 from tests._support.zapros_clients import client_from_httpx
 

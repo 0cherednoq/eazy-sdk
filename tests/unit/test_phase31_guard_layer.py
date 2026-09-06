@@ -28,7 +28,7 @@ from eazy_sdk.protection.advanced import (
     ProtectionStateScope,
     _ChallengeGuard,
 )
-from eazy_sdk.request import Header
+from eazy_sdk.request.markers import Header
 from eazy_sdk.response import Json, ResponseContext, Responses, Success
 
 BASE_URL = "https://phase31.test"

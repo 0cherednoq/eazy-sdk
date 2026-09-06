@@ -14,14 +14,8 @@ from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PrepareOptions
 from eazy_sdk.protection.advanced import InstallableProtection
-from eazy_sdk.request import (
-    BytesBody,
-    Cookie,
-    Header,
-    JsonBody,
-    Query,
-    RequestBody,
-)
+from eazy_sdk.request.descriptors import BytesBody, JsonBody, RequestBody
+from eazy_sdk.request.params import Cookie, Header, Query
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.serialization import Serialization
 

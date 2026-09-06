@@ -36,9 +36,6 @@ from eazy_sdk.crypto.core import CryptoContext, FrozenValue
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import (
     BodyProjection,
-    JsonBody,
-    JsonField,
-    Query,
     SigningKey,
     SigningKeyRequirement,
     Wire,
@@ -49,6 +46,7 @@ from eazy_sdk.request import (
     hmac_sha256,
     literal,
 )
+from eazy_sdk.request.markers import JsonBody, JsonField, Query
 from eazy_sdk.request.pipeline import REQUEST_PIPELINE, RequestStage
 from eazy_sdk.request.wire import (
     DEFAULT_JSON_POLICY,

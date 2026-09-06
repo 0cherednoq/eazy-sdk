@@ -12,7 +12,7 @@ from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Security, api
 from eazy_sdk.handlers import CONSERVATIVE_HANDLER_PROFILE, EmitOptions, HandlerProfile
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.redaction import REDACTED
-from eazy_sdk.request import Header
+from eazy_sdk.request.markers import Header
 from eazy_sdk.response import Json, ResponseContext, Responses, Success
 
 BASE_URL = "https://phase37.test"

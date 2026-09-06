@@ -12,7 +12,8 @@ from eazy_sdk.core import (
     PlanNodeKind,
     RequestLocation,
 )
-from eazy_sdk.request import BodyProjection, JsonBody, JsonField, Path, Query, Wire
+from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request.markers import JsonBody, JsonField, Path, Query
 from eazy_sdk.response import Responses
 
 RESPONSES: Responses[object] = Responses(success=())

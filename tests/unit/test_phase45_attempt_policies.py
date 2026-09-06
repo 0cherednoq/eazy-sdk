@@ -45,13 +45,13 @@ from eazy_sdk.clients.base import UnsafeReplayError
 from eazy_sdk.handlers import TransportError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import (
-    JsonBody,
     SigningKey,
     SigningKeyRequirement,
     body_digest,
     header_output,
     hmac_sha256,
 )
+from eazy_sdk.request.markers import JsonBody
 
 BASE = "https://attempts.test"
 

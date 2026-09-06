@@ -13,17 +13,8 @@ from eazy_sdk.core import (
     PlanError,
     RequestLocation,
 )
-from eazy_sdk.request import (
-    Cookie,
-    Form,
-    Header,
-    JsonBody,
-    JsonField,
-    Part,
-    Path,
-    Query,
-    QueryString,
-)
+from eazy_sdk.request import QueryString
+from eazy_sdk.request.markers import Cookie, Form, Header, JsonBody, JsonField, Part, Path, Query
 from eazy_sdk.response import Responses
 
 RESPONSES: Responses[object] = Responses(success=())
@@ -202,7 +193,7 @@ def test_mypy_preserves_required_and_known_unpacked_keywords(tmp_path: FilePath)
 from typing import Annotated, TypedDict, Unpack
 
 from eazy_sdk import SyncApi, api
-from eazy_sdk.request import JsonField
+from eazy_sdk.request.markers import JsonField
 from eazy_sdk.response import Responses
 
 class CreatePost(TypedDict):

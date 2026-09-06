@@ -27,19 +27,17 @@ from eazy_sdk.models import (
     ModelField,
     default_model_adapters,
 )
-from eazy_sdk.request import (
+from eazy_sdk.request import FieldOrder, MultipartPart, Wire
+from eazy_sdk.request.markers import (
     BytesBody,
     Cookie,
-    FieldOrder,
     FormBody,
     Header,
     JsonBody,
     MultipartBody,
-    MultipartPart,
     Path,
     Query,
     ReplayableStreamBody,
-    Wire,
 )
 from eazy_sdk.request.prepared import (
     BufferedBody,
