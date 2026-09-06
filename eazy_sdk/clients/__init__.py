@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from eazy_sdk.driver import SynchronousSuspensionError
+
 from .base import (
     AttemptLimitError,
     CallOptions,
-    EventLoopConflictError,
     RedirectLimitError,
     RetryPolicy,
     UnsafeReplayError,
@@ -34,11 +35,11 @@ __all__ = [
     "CallOptions",
     "Client",
     "ClientConfig",
-    "EventLoopConflictError",
     "Hooks",
     "RedirectLimitError",
     "Resilience",
     "RetryPolicy",
     "Security",
+    "SynchronousSuspensionError",
     "UnsafeReplayError",
 ]

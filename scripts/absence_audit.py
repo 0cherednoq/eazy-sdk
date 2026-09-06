@@ -91,6 +91,12 @@ REMOVED_SYMBOLS = {
     "ProtectionIdentityMismatch",
     "StaticNetworkIdentity",
     "resolve_network_identity",
+    # Phase 43: authentication left the transport for Identity.
+    "ApiDefaults",
+    # Phase 46: the synchronous client no longer runs an event loop.
+    "EventLoopConflictError",
+    "_SyncRunner",
+    "_close_runner",
 }
 
 PHASE17_PUBLIC_TEXT = (
@@ -382,10 +388,14 @@ def audit() -> list[str]:
         ROOT / "plugins" / "xml" / "README.md",
         ROOT / "README.md",
     )
+    # The migration page names what is gone on purpose; that is its whole job.
+    migration_page = ROOT / "docs-site" / "src" / "content" / "docs" / "more" / "migration.mdx"
     for entry in public_text_roots:
         paths = (entry,) if entry.is_file() else entry.rglob("*")
         for path in paths:
             if not path.is_file() or path.suffix.lower() not in {".py", ".md", ".mdx"}:
+                continue
+            if path == migration_page:
                 continue
             text = path.read_text(encoding="utf-8")
             for symbol in REMOVED_SYMBOLS:

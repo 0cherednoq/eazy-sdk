@@ -7,35 +7,19 @@ from typing import Any, cast
 
 from eazy_sdk.auth.lifecycle import LifecycleGraph
 from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
+from eazy_sdk.driver import run_sync
 from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
 from eazy_sdk.serialization import Serialization
 
-from ._core import _UNSET, _ClientCore, _raw_call, _SyncRunner
+from ._core import _UNSET, _ClientCore, _raw_call
 from .base import CallOptions
-from .executor import ExecutionRuntime, envelope
+from .executor import envelope
 
 
 class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
-    def __init__(
-        self,
-        runtime: ExecutionRuntime,
-        *,
-        raw: object | None = None,
-        default_options: CallOptions | None = None,
-        resolution_graph: LifecycleGraph | None = None,
-        bind_sdk: bool = True,
-        runner: _SyncRunner | None = None,
-    ) -> None:
-        super().__init__(
-            runtime,
-            raw=raw,
-            default_options=default_options,
-            resolution_graph=resolution_graph,
-            bind_sdk=bind_sdk,
-        )
-        self._runner = runner or _SyncRunner()
+    """The synchronous driver: one execution specification, stepped on this thread."""
 
     def _scoped(self, graph: LifecycleGraph) -> _SyncClientCore[TRaw]:
         return _SyncClientCore(
@@ -44,7 +28,6 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
             default_options=self._default_options,
             resolution_graph=graph,
             bind_sdk=False,
-            runner=self._runner,
         )
 
     def _execute_operation[T](
@@ -87,19 +70,16 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         identity: _IdentityScope | None = None,
         serialization: Serialization | None = None,
     ) -> PreparedCall:
-        return self._runner.run(
+        return run_sync(
             self._core_for(identity, serialization).prepare(
                 declaration.call(values), options=self._prepare_options(options)
             )
         )
 
     def close(self) -> None:
-        try:
-            close = getattr(self.raw, "close", None)
-            if close is not None:
-                close()
-        finally:
-            self._runner.close()
+        close = getattr(self.raw, "close", None)
+        if close is not None:
+            close()
 
     def __enter__(self) -> _SyncClientCore[TRaw]:
         return self
@@ -114,7 +94,7 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         identity: _IdentityScope | None = None,
         serialization: Serialization | None = None,
     ) -> Any:
-        return self._runner.run(
+        return run_sync(
             self._core_for(identity, serialization).execute(
                 call, options=options or self._default_options
             )

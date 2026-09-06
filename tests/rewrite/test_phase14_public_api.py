@@ -936,7 +936,7 @@ def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() ->
     assert set(clients_api.__all__) == {
         "AsyncClient",
         "AttemptLimitError",
-        "EventLoopConflictError",
+        "SynchronousSuspensionError",
         "CallOptions",
         "Client",
         "ClientConfig",

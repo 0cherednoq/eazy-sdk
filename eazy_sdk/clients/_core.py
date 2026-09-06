@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import threading
-from collections.abc import Coroutine, Mapping
+from collections.abc import Mapping
 from dataclasses import replace
-from typing import Any
 from urllib.parse import unquote_plus, urlsplit
 
 from eazy_sdk.auth.lifecycle import LifecycleGraph
@@ -29,7 +25,7 @@ from eazy_sdk.request import (
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.serialization import Serialization
 
-from .base import CallOptions, EventLoopConflictError
+from .base import CallOptions
 from .executor import ExecutionCore, ExecutionRuntime, _protection_identities
 
 _UNSET = object()
@@ -87,58 +83,6 @@ class _ClientCore[TRaw = object]:
         if options.call_options is not None:
             return options
         return replace(options, call_options=self._default_options)
-
-
-class _SyncRunner:
-    """Per-thread reusable ``asyncio.Runner`` for the synchronous client.
-
-    One event loop per thread is created lazily and reused by every call, instead of
-    paying for ``asyncio.run()`` on each request. Calling from a thread that already runs
-    an event loop raises ``EventLoopConflictError``: use ``AsyncClient`` there.
-    """
-
-    def __init__(self) -> None:
-        self._local = threading.local()
-        self._runners: list[asyncio.Runner] = []
-        self._lock = threading.Lock()
-        self._closed = False
-
-    def run[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            pass
-        else:
-            coroutine.close()
-            raise EventLoopConflictError(
-                "the synchronous Client cannot run inside an active event loop; "
-                "use AsyncClient from asynchronous code"
-            )
-        with self._lock:
-            if self._closed:
-                coroutine.close()
-                raise RuntimeError("Eazy SDK Client is closed")
-            runner = getattr(self._local, "runner", None)
-            if runner is None:
-                # An explicit loop factory keeps ``Runner`` from installing its loop as the
-                # thread's current event loop, so a loop the caller set stays untouched.
-                runner = asyncio.Runner(loop_factory=asyncio.new_event_loop)
-                self._local.runner = runner
-                self._runners.append(runner)
-        return runner.run(coroutine)
-
-    def close(self) -> None:
-        self._closed = True
-        with self._lock:
-            runners, self._runners = self._runners, []
-        self._local = threading.local()
-        for runner in runners:
-            _close_runner(runner)
-
-    def __del__(self) -> None:
-        # A client that was never closed must not leak event-loop sockets.
-        with contextlib.suppress(Exception):
-            self.close()
 
 
 def _raw_call(
@@ -218,24 +162,3 @@ def _validate_raw_query(url: str, params: Mapping[str, object] | None) -> None:
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"duplicate raw query names are unsupported: {duplicates}")
-
-
-def _close_runner(runner: asyncio.Runner) -> None:
-    """Close a runner; when another loop runs in this thread, close its loop directly.
-
-    ``Runner.close()`` awaits shutdown coroutines on the runner's loop, which is impossible
-    while a different loop is running (for example when a forgotten client is garbage
-    collected inside asynchronous code). Closing the idle loop directly releases its
-    sockets without creating coroutines that could never be awaited.
-    """
-
-    loop = getattr(runner, "_loop", None)
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        with contextlib.suppress(RuntimeError):
-            runner.close()
-            return
-    if loop is not None and not loop.is_closed() and not loop.is_running():
-        with contextlib.suppress(RuntimeError):
-            loop.close()

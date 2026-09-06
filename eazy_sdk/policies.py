@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
+from eazy_sdk.driver import sleep as _default_sleep
 from eazy_sdk.handlers import EmitOptions
 from eazy_sdk.middleware import MiddlewareRegistration
 
@@ -24,7 +24,7 @@ class RetryPolicy:
     base_delay: float = 0.0
     max_delay: float = 0.0
     jitter: float = 0.0
-    _sleep: AsyncSleep = dataclass_field(default=asyncio.sleep, repr=False, compare=False)
+    _sleep: AsyncSleep = dataclass_field(default=_default_sleep, repr=False, compare=False)
     _random: RandomSource = dataclass_field(default=random.random, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -48,7 +48,7 @@ class RetryPolicy:
         max_delay: float = 30.0,
         jitter: float = 0.0,
         retry_statuses: frozenset[int] = frozenset({408, 429, 500, 502, 503, 504}),
-        sleep: AsyncSleep = asyncio.sleep,
+        sleep: AsyncSleep = _default_sleep,
         random_source: RandomSource = random.random,
     ) -> RetryPolicy:
         return cls(

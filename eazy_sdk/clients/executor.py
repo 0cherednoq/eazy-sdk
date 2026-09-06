@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import threading
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterator, Mapping
@@ -69,6 +68,7 @@ from eazy_sdk.dependencies import (
     _lower_requirements,
     _resolve_requirements,
 )
+from eazy_sdk.driver import sleep
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportError, validate_profile
 from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.middleware import (
@@ -440,7 +440,7 @@ class _ProtectionLockRegistry:
         try:
             delay = 0.001
             while not entry.lock.acquire(blocking=False):
-                await asyncio.sleep(delay)
+                await sleep(delay)
                 delay = min(delay * 2, _MAX_POLL_DELAY)
             try:
                 yield
@@ -1328,7 +1328,7 @@ class _AttemptRun[T]:
             )
         )
         if decision.delay > 0:
-            await asyncio.sleep(decision.delay)
+            await sleep(decision.delay)
         self.core._observe("rate_limit", state.number)
 
     async def _body_document(

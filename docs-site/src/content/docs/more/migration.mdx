@@ -38,6 +38,15 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
 | `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
 
+Синхронный клиент больше не создаёт event loop: тот же конвейер шагается на вызывающем потоке.
+`Client` теперь можно вызывать из кода, где loop уже работает; взамен колбэк, который сам уходит
+в сеть через `await`, поднимает `SynchronousSuspensionError` вместо того, чтобы молча крутиться в
+приватном loop.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.clients.EventLoopConflictError` | `eazy_sdk.clients.SynchronousSuspensionError` | Ошибка сменила причину: не «loop уже работает», а «этот колбэк действительно приостанавливается». |
+
 `ClientConfig` перестал быть плоским списком из пятнадцати полей: остались три группы по владельцу
 плюс host-scoped `crypto` (его судьба решается в фазе 48). `guards=` понижается фабрикой
 `Security.of(...)`, а не мутацией frozen-объекта в `__post_init__`.

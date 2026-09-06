@@ -172,11 +172,12 @@ response bodies, solution values, cookies, credentials, proxy configuration, or 
 Replay budgets are counted per policy: one policy cannot replay on another policy's budget.
 
 Solvers are awaited by the runtime in both clients. In the synchronous `Client` an `async def
-solve()` runs on the client's per-thread event loop: one reusable `asyncio.Runner` is created
-lazily for each calling thread and shared by every call made from it (a call from a thread that
-already runs a loop raises `EventLoopConflictError`). `Guard.solve()` and function solvers may
-also be plain synchronous callables. Single-flight locks are loop-agnostic, so one sync client
-shared by several threads still solves each session challenge once.
+solve()` runs on the calling thread without an event loop, because a solver that only reads the
+challenge and calls `context.fetch(...)` never suspends. One that awaits asynchronous I/O of its
+own does suspend, and raises `SynchronousSuspensionError`: use `AsyncClient` there, or make the
+solver synchronous. `Guard.solve()` and function solvers may be plain synchronous callables.
+Single-flight locks are loop-agnostic, so one sync client shared by several threads still solves
+each session challenge once.
 
 ## Advanced lowering SPI
 

@@ -14,7 +14,7 @@ from zapros import BaseHandler, Request, Response
 
 import eazy_sdk
 from eazy_sdk import Client, Json, Path, SyncApi, api
-from eazy_sdk.clients import AttemptLimitError, EventLoopConflictError, RedirectLimitError
+from eazy_sdk.clients import AttemptLimitError, RedirectLimitError
 from eazy_sdk.clients._core import _ClientCore
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.sync_client import _SyncClientCore
@@ -31,10 +31,13 @@ from eazy_sdk.websocket.middleware import MessageMiddlewareApplication, WsContin
 
 class Handler(BaseHandler):
     def __init__(self) -> None:
-        self.loops: list[int] = []
+        self.loops: list[int | None] = []
 
     def handle(self, request: Request) -> Response:
-        self.loops.append(id(asyncio.get_running_loop()))
+        try:
+            self.loops.append(id(asyncio.get_running_loop()))
+        except RuntimeError:
+            self.loops.append(None)
         return Response(
             200, [("Content-Type", "application/json")], content=b'{"name":"Ada"}', request=request
         )
@@ -93,14 +96,12 @@ def test_configuration_errors_share_one_base() -> None:
     assert issubclass(accounts.RegistrationConfigurationError, ConfigurationError)
 
 
-def test_sync_client_reuses_one_loop_per_thread_and_rejects_running_loops() -> None:
+def test_a_synchronous_call_needs_no_loop_of_its_own_anywhere() -> None:
     handler = Handler()
     with Client(base_url="https://api.test", handler=handler) as client:
         users = Users(client)
         users.get(user_id=1)
         users.get(user_id=2)
-        assert len(set(handler.loops)) == 1
-        main_loop = handler.loops[0]
 
         def worker() -> None:
             users.get(user_id=3)
@@ -108,13 +109,16 @@ def test_sync_client_reuses_one_loop_per_thread_and_rejects_running_loops() -> N
         thread = threading.Thread(target=worker)
         thread.start()
         thread.join()
-        assert len(handler.loops) == 3 and handler.loops[2] != main_loop
+
+        caller: list[int] = []
 
         async def inside_loop() -> None:
-            with pytest.raises(EventLoopConflictError, match="AsyncClient"):
-                users.get(user_id=4)
+            caller.append(id(asyncio.get_running_loop()))
+            assert users.get(user_id=4) == {"name": "Ada"}
 
         asyncio.run(inside_loop())
+    assert handler.loops[:3] == [None, None, None], "the client installed no loop of its own"
+    assert handler.loops[3] == caller[0], "a call inside a loop keeps the caller's loop"
     with pytest.raises(RuntimeError, match="closed"):
         users.get(user_id=5)
 

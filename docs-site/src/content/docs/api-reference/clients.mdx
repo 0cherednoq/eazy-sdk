@@ -78,18 +78,23 @@ Root и API groups не сериализуют пользовательские 
 
 ## Синхронный клиент и event loop
 
-`Client` не вызывает `asyncio.run()` на каждый запрос: у каждого потока есть свой переиспользуемый
-`asyncio.Runner`, который создаётся лениво и закрывается в `close()`. Runner создаётся с
-`loop_factory=asyncio.new_event_loop` и работает на собственном loop: текущий loop потока,
-установленный вызывающим кодом, не изменяется и не сбрасывается. Вызов `Client` из потока, в котором уже
-работает event loop (Jupyter, обработчик `asyncio`-сервера), поднимает `EventLoopConflictError`:
-используйте там `AsyncClient`. Несколько потоков могут делить один `Client`; single-flight
+`Client` не создаёт event loop вообще. Синхронный драйвер шагает ту же спецификацию исполнения
+на вызывающем потоке: на синхронном транспорте в конвейере ничто не приостанавливается, поэтому
+цикл не нужен. Отсюда два следствия. Первое: `Client` можно вызывать из кода, где loop уже
+работает (Jupyter, обработчик `asyncio`-сервера) — установленный вызывающим loop не трогается.
+Второе: то, что действительно ждёт (backoff, задержка rate limiter, занятый protection-лок),
+блокирует поток, а не крутит loop.
+
+Чего синхронный драйвер не делает — не исполняет настоящий асинхронный ввод-вывод внутри
+колбэка. Solver, middleware или auth service, который сам уходит в сеть через `await`,
+приостанавливается, и тогда поднимается `SynchronousSuspensionError`: используйте `AsyncClient`
+или сделайте этот колбэк синхронным. Несколько потоков могут делить один `Client`; single-flight
 protection-локи не привязаны к loop.
 
 ## Client configuration
 
-`ClientConfig` включает dependencies, auth, middleware, `retry=`, rate limiter, signing key provider,
-crypto и одну группу `protection=` (`ProtectionBundle`). First-party preset, `Guard` или custom `challenge_guard()`
+`ClientConfig` включает `resilience=` (retry, auth-replay, redirects, timeout, rate limiter),
+`security=` (`ProtectionBundle`), `hooks=` (middleware) и host-scoped `crypto`. First-party preset, `Guard` или custom `challenge_guard()`
 устанавливайте через `ClientConfig(security=Security.of(...))` либо эквивалентный immutable
 `config.with_protection(guard)`; `client.invalidate_protection(*guards_or_names)` сбрасывает
 закэшированные решения без доступа к runtime. `ProtectionBundle` объединяет

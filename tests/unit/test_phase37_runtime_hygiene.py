@@ -6,14 +6,12 @@ import asyncio
 import threading
 from typing import Annotated, cast
 
-import pytest
 from zapros import BaseHandler, Request, Response
 
 from eazy_sdk import Client, Json, Path, SyncApi, api
 from eazy_sdk.auth import session_auth, session_scheme
 from eazy_sdk.auth.session_runtime import generated_session_auth, generated_session_scheme
 from eazy_sdk.clients import executor
-from eazy_sdk.clients._core import _SyncRunner
 from eazy_sdk.codegen import generated_session_auth as codegen_session_auth
 
 
@@ -49,43 +47,23 @@ def test_sync_client_keeps_the_loop_the_caller_installed() -> None:
         own_loop.close()
 
 
-def test_sync_runner_never_installs_a_current_loop_in_a_fresh_thread() -> None:
+def test_a_synchronous_call_installs_no_loop_in_a_fresh_thread() -> None:
     seen: dict[str, object] = {}
 
-    async def probe() -> int:
-        return 1
-
     def worker() -> None:
-        runner = _SyncRunner()
+        with Client(base_url="https://api.test", handler=Handler()) as client:
+            seen["result"] = Users(client).get(user_id=1)
         try:
-            seen["result"] = runner.run(probe())
-            try:
-                # Raises in a non-main thread unless a loop was installed there.
-                seen["current"] = asyncio.get_event_loop()
-            except RuntimeError:
-                seen["current"] = None
-        finally:
-            runner.close()
+            # Raises in a non-main thread unless a loop was installed there.
+            seen["current"] = asyncio.get_event_loop()
+        except RuntimeError:
+            seen["current"] = None
 
     thread = threading.Thread(target=worker)
     thread.start()
     thread.join()
-    assert seen["result"] == 1
+    assert seen["result"] == {"name": "Ada"}
     assert seen["current"] is None
-
-
-def test_closed_runner_rejects_new_work_under_the_lock() -> None:
-    runner = _SyncRunner()
-
-    async def probe() -> int:
-        return 1
-
-    assert runner.run(probe()) == 1
-    runner.close()
-    with pytest.raises(RuntimeError, match="closed"):
-        runner.run(probe())
-    with pytest.raises(RuntimeError, match="closed"):
-        runner.run(probe())
 
 
 def test_protection_lock_backoff_is_capped_at_ten_milliseconds() -> None:
