@@ -148,16 +148,15 @@ decorator.
 | `security` | Auth scheme или policy | inherited |
 | `requires`, `inject` | Managed request dependencies | `()` |
 | `signing` | Request signatures | inherited |
-| `crypto`, `crypto_wire` | Payload crypto и wire policy | inherited |
+| `crypto` | Payload crypto | inherited |
 | `protections` | Mandatory protection requirements | `()` |
-| `body` | `BodyProjection` | `None` |
-| `wire` | `WireOptions` | `None` |
+| `wire` | `Wire` — представление запроса на проводе | inherited |
 | `tags` | Metadata | `()` |
 | `idempotent` | Явное replay-доказательство | выводится из method |
 | `raw_response` | Вернуть normalized response | `False` |
 
-Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `crypto_wire`, `errors` и `allow`
-обычными атрибутами класса; они наследуются по MRO, поэтому общий для нескольких роутеров
+Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `wire`, `errors`, `signed` и
+`allow` обычными атрибутами класса; они наследуются по MRO, поэтому общий для нескольких роутеров
 сервис описывается обычным базовым классом (см. {doc}`Мультисервисный SDK </guides/multi-service>`).
 
 ## Подготовка без отправки

@@ -11,7 +11,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 ## 0.2.0a5 → 0.3.0
 
 Корень SDK стал отдельным типом. `SyncApi`/`AsyncApi` — это роутер: операции и атрибуты сервиса
-(`base_url`, `errors`, `security`, `signing`, `crypto`, `crypto_wire`, `allow`). Композиция,
+(`base_url`, `errors`, `security`, `signing`, `crypto`, `wire`, `signed`, `allow`). Композиция,
 владение клиентами и привязки живут в `SyncRoot`/`AsyncRoot`; `api_group(...)` объявляется только
 на корне. Подробности — {doc}`Мультисервисный SDK </guides/multi-service>`.
 
@@ -76,7 +76,25 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.guards` | `eazy_sdk.Security.of` | Публичного поля, которое всегда пусто, больше нет. |
 | `eazy_sdk.ClientConfig.middleware` | `eazy_sdk.Hooks.middleware` | |
 | `eazy_sdk.ClientConfig.models` | `eazy_sdk.Serialization.models` | Библиотека моделей — реализация SDK, объявляется на корне. |
-| `eazy_sdk.ClientConfig.profile` | `eazy_sdk.Serialization.profile` | Временный дом: фаза 48 заменяет `WireProfile` контрактом операции. |
+| `eazy_sdk.ClientConfig.profile` | `eazy_sdk.request.Wire` | `WireProfile` был наполовину мёртв: фаза 48 заменила его контрактом представления на операции. |
+
+Слово «wire» теперь означает ровно одно — представление запроса на проводе. Всё, что влияет на
+байты, объявляется одним `Wire` на операции (и наследуется от роутера и миксина сервиса); всё, что
+не влияет, — одним `Serialization` на корне. Подпись объявляется только по месту: адресных правил
+`sign(scope=…)` больше нет, потому что опечатка в `hosts=` оставляла запрос молча неподписанным.
+Подробности — {doc}`Представление запроса </guides/requests/representation>`.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.request.WireOptions` | `eazy_sdk.request.Wire` | `order=FieldOrder(query=…, header=…, cookie=…, body=…)`, `exact=`, `transport=`. |
+| `eazy_sdk.request.SigningRule` | `eazy_sdk.request.hmac_sha256` | Подпись объявляет операция или роутер параметром `signing=`; scoped-правил нет. |
+| `eazy_sdk.request.SigningOverride` | `eazy_sdk.SyncApi` | Переопределение — это объявление на более специфичном роутере. |
+| `eazy_sdk.crypto.CryptoWire` | `eazy_sdk.crypto.Encrypted` | Тип шифрованного представления; у HTTP-операции это `wire=Wire(encrypted=…)`. |
+| `eazy_sdk.crypto.CryptoRule.wire` | `eazy_sdk.crypto.CryptoRule.encrypted` | Одно имя для одного понятия и в HTTP, и в WebSocket: `ws.call(encrypted=…)` — тоже. |
+
+Новое без замены: `eazy_sdk.serialization.Serialization(json=…, html=…)` — JSON-бэкенд и парсер
+документов объявляются на корне, а бэкенд, не способный выполнить контракт операции, отвергается
+при компиляции, а не молча меняет байты.
 
 Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
 другому клиенту и/или адресу при сборке (`bindings=(...)`).

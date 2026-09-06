@@ -8,7 +8,7 @@ sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.crypto
   - eazy_sdk.websocket
-api_fingerprint: "sha256:925dfe92e26a009f271a07c364f429b53a175654d80ad955b4d280a42bcb05e2"
+api_fingerprint: "sha256:001922aacc284c40c0fe939f8180e3094ebbfd5321f39b7f61905a208fde5760"
 ---
 
 Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
@@ -346,6 +346,7 @@ from eazy_sdk.crypto import (
     encrypt_encoded,
     http_encrypted,
 )
+from eazy_sdk.request import Wire
 
 PAYMENT_CRYPTO = payload_crypto(
     "store-payments-v2",
@@ -370,10 +371,10 @@ class PaymentsApi(AsyncApi):
         security=CUSTOMER,
         signing=PAYMENTS_HMAC,
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=http_encrypted(
+        wire=Wire(encrypted=http_encrypted(
             content_type="application/vnd.store.encrypted+json",
             clear_content_type="application/json",
-        ),
+        )),
     )
     async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
         raise NotImplementedError
@@ -417,7 +418,7 @@ class PaymentsSocket(AsyncWsApi):
         payload=JsonPayload(CreatePayment),
         replies=Replies((SuccessReply("payment-created", PaymentResult),)),
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=websocket_encrypted(frame_kind="binary"),
+        encrypted=websocket_encrypted(frame_kind="binary"),
     )
     async def create(
         self,

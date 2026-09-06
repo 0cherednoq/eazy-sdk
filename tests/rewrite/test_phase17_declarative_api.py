@@ -24,7 +24,7 @@ from eazy_sdk.protection.advanced import (
     bind_solver,
     protection_flow,
 )
-from eazy_sdk.request import BodyProjection, JsonBody, Path, Query
+from eazy_sdk.request import BodyProjection, JsonBody, Path, Query, Wire
 from eazy_sdk.response import Json, ResponseEnvelope, Responses
 from tests._support.zapros_clients import client_from_httpx
 
@@ -198,7 +198,7 @@ class AuthApi(AsyncApi):
         operation_id="login",
         responses=USER_RESPONSES,
         protections=(LOGIN_PROTECTION,),
-        body=LOGIN_BODY,
+        wire=Wire(projection=LOGIN_BODY),
     )
     async def login(self, **request: Unpack[LoginPublic]) -> User:
         raise AssertionError("declaration body must not execute")
@@ -208,7 +208,7 @@ class AuthApi(AsyncApi):
         operation_id="loginCsrf",
         responses=USER_RESPONSES,
         protections=(CSRF_PROTECTION,),
-        body=CSRF_BODY,
+        wire=Wire(projection=CSRF_BODY),
     )
     async def login_csrf(self, **request: Unpack[LoginPublic]) -> User:
         raise AssertionError("declaration body must not execute")
@@ -218,7 +218,7 @@ class AuthApi(AsyncApi):
         operation_id="loginInvalid",
         responses=USER_RESPONSES,
         protections=(LOGIN_PROTECTION,),
-        body=INVALID_BODY,
+        wire=Wire(projection=INVALID_BODY),
     )
     async def login_invalid(self, **request: Unpack[LoginPublic]) -> User:
         raise AssertionError("declaration body must not execute")
@@ -228,8 +228,8 @@ class AuthApi(AsyncApi):
         operation_id="loginNested",
         responses=USER_RESPONSES,
         protections=(LOGIN_PROTECTION,),
-        body=NESTED_BODY,
         idempotent=True,
+        wire=Wire(projection=NESTED_BODY),
     )
     async def login_nested(self, **request: Unpack[LoginPublic]) -> User:
         raise AssertionError("declaration body must not execute")
@@ -547,7 +547,7 @@ def test_overlapping_private_writer_paths_fail_during_compile() -> None:
             "/overlap",
             responses=USER_RESPONSES,
             protections=(LOGIN_PROTECTION,),
-            body=projection,
+            wire=Wire(projection=projection),
         )
         async def overlap(self, **request: Unpack[LoginPublic]) -> User:
             raise NotImplementedError
@@ -570,7 +570,7 @@ async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:
             "/collision",
             responses=USER_RESPONSES,
             protections=(CSRF_PROTECTION,),
-            body=projection,
+            wire=Wire(projection=projection),
         )
         async def collision(self, **request: Unpack[LoginPublic]) -> User:
             raise NotImplementedError

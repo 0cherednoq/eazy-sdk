@@ -2,11 +2,14 @@
 
 from .schema import (
     CSS,
+    DEFAULT_HTML_BACKEND,
     ExtractionCompileError,
     ExtractionError,
     ExtractionField,
     ExtractionSchema,
     HtmlDocument,
+    ParselBackend,
+    ParselNode,
     Scope,
     XPath,
     compile_extraction_schema,
@@ -15,11 +18,14 @@ from .schema import (
 
 __all__ = [
     "CSS",
+    "DEFAULT_HTML_BACKEND",
     "ExtractionCompileError",
     "ExtractionError",
     "ExtractionField",
     "ExtractionSchema",
     "HtmlDocument",
+    "ParselBackend",
+    "ParselNode",
     "Scope",
     "XPath",
     "compile_extraction_schema",

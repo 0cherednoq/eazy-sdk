@@ -13,7 +13,7 @@ from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Resilience, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection, JsonBody, Wire
 from eazy_sdk.response import Json, Responses, Success
 
 
@@ -88,7 +88,7 @@ async def test_optional_projection_key_may_be_omitted() -> None:
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", body=projection, responses=RESPONSES)
+        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
         async def search(self, **request: Unpack[OptionalSource]) -> Reply:
             raise NotImplementedError
 
@@ -121,7 +121,7 @@ async def test_explicit_none_is_distinct_from_omission() -> None:
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", body=projection, responses=RESPONSES)
+        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
         async def search(self, **request: Unpack[OptionalSource]) -> Reply:
             raise NotImplementedError
 
@@ -155,7 +155,7 @@ async def test_required_projection_key_fails_before_mapper_and_handler() -> None
     )
 
     class SearchApi(AsyncApi):
-        @api.post("/search", body=projection, responses=RESPONSES)
+        @api.post("/search", responses=RESPONSES, wire=Wire(projection=projection))
         async def search(self, **request: Unpack[RequiredSource]) -> Reply:
             raise NotImplementedError
 
@@ -199,7 +199,7 @@ async def test_binding_diagnostics_are_structured_and_do_not_expose_values() -> 
     )
 
     class SearchApi(AsyncApi):
-        @api.post("/search", body=projection, responses=RESPONSES)
+        @api.post("/search", responses=RESPONSES, wire=Wire(projection=projection))
         async def search(self, **request: Unpack[OptionalSource]) -> Reply:
             raise NotImplementedError
 
@@ -258,7 +258,7 @@ async def test_omitted_projection_key_stays_omitted_on_retry() -> None:
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", body=projection, responses=RESPONSES)
+        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
         async def search(self, **request: Unpack[OptionalSource]) -> Reply:
             raise NotImplementedError
 
@@ -317,7 +317,7 @@ async def test_projection_gets_a_fresh_mutable_source_copy_for_each_target_famil
     )
 
     class MutationApi(AsyncApi):
-        @api.put("/mutate", body=projection, responses=RESPONSES)
+        @api.put("/mutate", responses=RESPONSES, wire=Wire(projection=projection))
         async def mutate(self, **request: Unpack[MutableSource]) -> Reply:
             raise NotImplementedError
 

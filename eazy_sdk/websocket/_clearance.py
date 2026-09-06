@@ -65,7 +65,7 @@ class _ProtectionMixin(_WsClientBase):
             configured = self.config.crypto
             if isinstance(configured, PayloadCrypto):
                 selected_profile = configured
-                selected_wire = selected_wire or self.config.crypto_wire
+                selected_wire = selected_wire or self.config.encrypted
             elif isinstance(configured, CryptoRegistry):
                 resolved = configured.resolve_websocket(
                     endpoint=self.endpoint,
@@ -76,15 +76,15 @@ class _ProtectionMixin(_WsClientBase):
                 )
                 if resolved is not None:
                     selected_profile = resolved.profile
-                    if resolved.wire is not None:
-                        if not isinstance(resolved.wire, WebSocketEncrypted):
+                    if resolved.encrypted is not None:
+                        if not isinstance(resolved.encrypted, WebSocketEncrypted):
                             raise CryptoConfigurationError(
                                 "WebSocket crypto rule requires a WebSocketEncrypted binding"
                             )
-                        selected_wire = resolved.wire
+                        selected_wire = resolved.encrypted
         if selected_profile is None:
             return None
-        actual_wire = selected_wire or self.config.crypto_wire or WebSocketEncrypted()
+        actual_wire = selected_wire or self.config.encrypted or WebSocketEncrypted()
         outbound_model: object | None = None
         if isinstance(outbound, JsonPayload) and outbound.model is not object:
             outbound_model = outbound.model

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from eazy_sdk.core.errors import EazySdkError
-from eazy_sdk.core.http_plan import WireRequirements
+from eazy_sdk.core.http_plan import TransportRequirements
 from eazy_sdk.redaction import redact_url_credentials
 from eazy_sdk.request.prepared import HttpProtocol
 
@@ -101,7 +101,7 @@ class CapabilityMismatchError(EazySdkError):
         return "handler capability mismatch: " + ", ".join(self.dimensions)
 
 
-def validate_profile(requirements: WireRequirements, profile: HandlerProfile) -> None:
+def validate_profile(requirements: TransportRequirements, profile: HandlerProfile) -> None:
     failures: list[str] = []
     for requirement in requirements.dimensions:
         if requirement.dimension == "protocol":

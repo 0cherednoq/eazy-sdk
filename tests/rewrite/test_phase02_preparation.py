@@ -30,6 +30,7 @@ from eazy_sdk.models import (
 from eazy_sdk.request import (
     BytesBody,
     Cookie,
+    FieldOrder,
     FormBody,
     Header,
     JsonBody,
@@ -38,7 +39,7 @@ from eazy_sdk.request import (
     Path,
     Query,
     ReplayableStreamBody,
-    WireOptions,
+    Wire,
 )
 from eazy_sdk.request.prepared import (
     BufferedBody,
@@ -63,7 +64,7 @@ class Contract:
     )
     body: object | None = None
     responses: object = "responses"
-    wire: WireOptions | None = None
+    wire: Wire = dataclasses.field(default_factory=Wire)
     input_fields: tuple[InputField, ...] = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
@@ -203,7 +204,7 @@ def test_explicit_body_order_changes_only_that_operation() -> None:
         Contract(
             parameters=(Path("payment_id"),),
             body=JsonBody(),
-            wire=WireOptions(body_order=("currency", "amount")),
+            wire=Wire(order=FieldOrder(body=("currency", "amount"))),
         ),
         path={"payment_id": "1"},
         body=body,
@@ -217,7 +218,7 @@ def test_explicit_body_order_changes_only_that_operation() -> None:
             Contract(
                 parameters=(Path("payment_id"),),
                 body=JsonBody(),
-                wire=WireOptions(body_order=("missing",)),
+                wire=Wire(order=FieldOrder(body=("missing",))),
             ),
             path={"payment_id": "1"},
             body=body,

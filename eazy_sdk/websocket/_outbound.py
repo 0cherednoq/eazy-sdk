@@ -99,14 +99,14 @@ class _EmitMixin(_WsClientBase):
         replay: WsReplayPolicy | None = None,
         payload_schema: OutboundPayload | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> None:
         policy = replay or NeverReplay()
         selected_crypto = self._compile_operation_crypto(
             crypto,
-            crypto_wire,
+            encrypted,
             inherit=crypto_inherit,
             operation_id=operation_id or discriminator,
             channel=None,
@@ -145,7 +145,7 @@ class _EmitMixin(_WsClientBase):
         payload_schema: OutboundPayload | None = None,
         replies: Replies | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> object:
@@ -153,7 +153,7 @@ class _EmitMixin(_WsClientBase):
         effective_timeout = self.config.call_timeout if timeout is None else timeout
         selected_crypto = self._compile_operation_crypto(
             crypto,
-            crypto_wire,
+            encrypted,
             inherit=crypto_inherit,
             operation_id=operation_id or discriminator,
             channel=None,
@@ -196,13 +196,13 @@ class _EmitMixin(_WsClientBase):
         payload_schema: OutboundPayload | None = None,
         messages: Messages | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> Subscription[object]:
         selected_crypto = self._compile_operation_crypto(
             crypto,
-            crypto_wire,
+            encrypted,
             inherit=crypto_inherit,
             operation_id=operation_id or discriminator,
             channel=channel,
@@ -293,7 +293,7 @@ class _EmitMixin(_WsClientBase):
                 replay=replay,
                 payload_schema=declaration.payload,
                 crypto=declaration.crypto,
-                crypto_wire=declaration.crypto_wire,
+                encrypted=declaration.encrypted,
                 crypto_inherit=declaration.crypto_inherit,
                 operation_id=declaration.operation_id,
             )
@@ -308,7 +308,7 @@ class _EmitMixin(_WsClientBase):
                 payload_schema=declaration.payload,
                 replies=declaration.replies,
                 crypto=declaration.crypto,
-                crypto_wire=declaration.crypto_wire,
+                encrypted=declaration.encrypted,
                 crypto_inherit=declaration.crypto_inherit,
                 operation_id=declaration.operation_id,
             )
@@ -320,7 +320,7 @@ class _EmitMixin(_WsClientBase):
                 payload_schema=declaration.payload,
                 messages=declaration.messages,
                 crypto=declaration.crypto,
-                crypto_wire=declaration.crypto_wire,
+                encrypted=declaration.encrypted,
                 crypto_inherit=declaration.crypto_inherit,
                 operation_id=declaration.operation_id,
             )
@@ -543,16 +543,16 @@ class _EmitMixin(_WsClientBase):
                 correlation=record.correlation,
                 channel=record.channel,
             )
-        if record.crypto is not None and record.crypto_wire is not None:
-            envelope = apply_ws_crypto_metadata(envelope, record.crypto_wire, crypto_outputs)
+        if record.crypto is not None and record.encrypted is not None:
+            envelope = apply_ws_crypto_metadata(envelope, record.encrypted, crypto_outputs)
         frame = await self._prepare_envelope(
             envelope,
             semantic_payload,
             correlation=record.correlation,
             channel=record.channel,
             operation=record.discriminator,
-            crypto=(record.crypto, record.crypto_wire)
-            if record.crypto is not None and record.crypto_wire is not None
+            crypto=(record.crypto, record.encrypted)
+            if record.crypto is not None and record.encrypted is not None
             else None,
             operation_id=record.discriminator,
         )
@@ -584,7 +584,7 @@ class _EmitMixin(_WsClientBase):
             loop.create_future(),
             replies=replies,
             crypto=crypto[0] if crypto is not None else None,
-            crypto_wire=crypto[1] if crypto is not None else None,
+            encrypted=crypto[1] if crypto is not None else None,
         )
         self._pending[key] = pending
         frame = await self._prepare_outbound(

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import types
 from dataclasses import dataclass
-from typing import Annotated, Any, Union, cast, get_args, get_origin
-
-from parsel import Selector
+from typing import Annotated, Any, ClassVar, Union, cast, get_args, get_origin
 
 from eazy_sdk.models import (
     ModelAdapterRegistry,
@@ -14,11 +12,14 @@ from eazy_sdk.models import (
     UnsupportedModelTypeError,
     default_model_adapters,
 )
+from eazy_sdk.serialization import DocumentBackend, DocumentNode, SelectorMarker
 
 
 @dataclass(frozen=True, slots=True)
 class CSS:
     expression: str
+
+    language: ClassVar[str] = "css"
 
     def __post_init__(self) -> None:
         if not self.expression:
@@ -29,12 +30,11 @@ class CSS:
 class XPath:
     expression: str
 
+    language: ClassVar[str] = "xpath"
+
     def __post_init__(self) -> None:
         if not self.expression:
             raise ValueError("XPath expression must not be empty")
-
-
-type SelectorMarker = CSS | XPath
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,13 +76,36 @@ class ExtractionSchema:
     fields: tuple[ExtractionField, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ParselBackend:
+    """The parser this plugin brings; parsel reads both selector languages."""
+
+    name: str = "parsel"
+
+    @property
+    def selector_languages(self) -> frozenset[str]:
+        return frozenset({"css", "xpath"})
+
+    def parse(self, data: bytes | str) -> DocumentNode:
+        from parsel import Selector
+
+        text = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else data
+        return ParselNode(Selector(text=text, type="html"))
+
+
+DEFAULT_HTML_BACKEND: DocumentBackend = ParselBackend()
+
+
 def compile_extraction_schema(
     model: type[object],
     *,
     models: ModelAdapterRegistry | None = None,
+    backend: DocumentBackend | None = None,
 ) -> ExtractionSchema:
     registry = models or default_model_adapters()
-    return _compile_model(model, registry, stack=())
+    schema = _compile_model(model, registry, stack=())
+    _check_selector_languages(schema, backend or DEFAULT_HTML_BACKEND, seen=set())
+    return schema
 
 
 def parse_html[T](
@@ -90,45 +113,66 @@ def parse_html[T](
     model: type[T],
     *,
     models: ModelAdapterRegistry | None = None,
+    backend: DocumentBackend | None = None,
 ) -> T:
     registry = models or default_model_adapters()
-    document = HtmlDocument(html)
+    document = HtmlDocument(html, backend=backend)
     return document.load(model, models=registry)
 
 
 class HtmlDocument:
-    def __init__(self, html: bytes | str) -> None:
-        text = html.decode("utf-8", errors="replace") if isinstance(html, bytes) else html
-        self._root = _ParselNode(Selector(text=text, type="html"))
+    def __init__(self, html: bytes | str, *, backend: DocumentBackend | None = None) -> None:
+        self._backend = backend or DEFAULT_HTML_BACKEND
+        self._root = self._backend.parse(html)
 
     def load[T](self, model: type[T], *, models: ModelAdapterRegistry) -> T:
         primitive = self.extract(cast(type[object], model), models=models)
         return models.load(model, primitive)
 
     def extract(self, model: type[object], *, models: ModelAdapterRegistry) -> dict[str, object]:
-        schema = compile_extraction_schema(model, models=models)
+        schema = compile_extraction_schema(model, models=models, backend=self._backend)
         return _extract_model(schema, self._root, path=(model.__name__,))
 
 
+def _check_selector_languages(
+    schema: ExtractionSchema,
+    backend: DocumentBackend,
+    *,
+    seen: set[type[object]],
+) -> None:
+    """Reject a selector the chosen parser cannot speak, while it is still a declaration."""
+
+    if schema.model in seen:
+        return
+    seen.add(schema.model)
+    for field in schema.fields:
+        for marker in (field.selector, field.scope.selector if field.scope else None):
+            if marker is None or marker.language in backend.selector_languages:
+                continue
+            spoken = ", ".join(sorted(backend.selector_languages)) or "no selector language"
+            raise ExtractionCompileError(
+                f"{schema.model.__name__}.{field.model_field.name} selects by "
+                f"{marker.language!r}, which the {backend.name!r} document backend cannot "
+                f"read (it speaks {spoken})"
+            )
+        if field.nested is not None:
+            _check_selector_languages(field.nested, backend, seen=seen)
+
+
 @dataclass(frozen=True, slots=True)
-class _ParselNode:
+class ParselNode:
     selector: Any
 
     def values(self, marker: SelectorMarker) -> tuple[str, ...]:
-        selected = (
-            self.selector.css(marker.expression)
-            if isinstance(marker, CSS)
-            else self.selector.xpath(marker.expression)
-        )
-        return tuple(str(value) for value in selected.getall())
+        return tuple(str(value) for value in self._select(marker).getall())
 
-    def nodes(self, marker: SelectorMarker) -> tuple[_ParselNode, ...]:
-        selected = (
-            self.selector.css(marker.expression)
-            if isinstance(marker, CSS)
-            else self.selector.xpath(marker.expression)
-        )
-        return tuple(_ParselNode(node) for node in selected)
+    def nodes(self, marker: SelectorMarker) -> tuple[ParselNode, ...]:
+        return tuple(ParselNode(node) for node in self._select(marker))
+
+    def _select(self, marker: SelectorMarker) -> Any:
+        if marker.language == "css":
+            return self.selector.css(marker.expression)
+        return self.selector.xpath(marker.expression)
 
 
 def _compile_model(
@@ -190,7 +234,7 @@ def _nested_schema(
 
 def _extract_model(
     schema: ExtractionSchema,
-    node: _ParselNode,
+    node: DocumentNode,
     *,
     path: tuple[str, ...],
 ) -> dict[str, object]:
@@ -267,11 +311,14 @@ def _unwrap(annotation: object) -> tuple[object, tuple[object, ...]]:
 
 __all__ = [
     "CSS",
+    "DEFAULT_HTML_BACKEND",
     "ExtractionCompileError",
     "ExtractionError",
     "ExtractionField",
     "ExtractionSchema",
     "HtmlDocument",
+    "ParselBackend",
+    "ParselNode",
     "Scope",
     "XPath",
     "compile_extraction_schema",

@@ -9,8 +9,9 @@ from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
 from eazy_sdk.protection.advanced import SolverRequirement
-from eazy_sdk.request import BodyProjection, WireOptions
+from eazy_sdk.request.pipeline import RequestEnvelope
 from eazy_sdk.request.signatures import RequestSignature
+from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 from eazy_sdk.response import Responses
 
 from .http_compiler import (
@@ -44,14 +45,14 @@ class _OperationDeclaration[T]:
     inject: tuple[object, ...] = ()
     signing: tuple[RequestSignature, ...] = ()
     protections: tuple[SolverRequirement[Any, Any], ...] = ()
-    body_projection: BodyProjection[Any, Any] | None = None
-    wire: WireOptions | None = None
+    wire: Wire = EMPTY_WIRE
+    envelope: RequestEnvelope | None = None
+    """The protocol envelope stage of the request pipeline, when the operation has one."""
     scope: RequestScope = field(default_factory=RequestScope)
     tags: tuple[str, ...] = ()
     idempotent: bool | None = None
     raw_response: bool = False
     crypto: CryptoProfile | None = None
-    crypto_wire: object | None = None
     crypto_inherit: bool = True
 
     @property

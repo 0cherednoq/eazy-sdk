@@ -126,12 +126,12 @@ def test_projection_extension_lowers_to_deterministic_ir_and_source(version: str
     source = render_client(ir, config=generation_config())
     assert source == render_client(ir, config=generation_config())
     assert hashlib.sha256(source.encode()).hexdigest() == (
-        "20c8cc131332849ba637e3d4a7c18580df75e2ceddcc167cc4900b9cf50f3fcd"
+        "1c0eff118d1d45c8e6f65805db527aabceca0bc7a81a8a990224cb844a79431a"
     )
     assert "class RegisterUserPublicBody(TypedDict, total=False):" in source
     assert "class _RegisterUserProjectionTarget(OpenAPIModel):" in source
     assert "class RegisterUserRequest(RegisterUserPublicBody, total=False):" in source
-    assert "body=_REGISTER_USER_BODY_PROJECTION" in source
+    assert "wire=Wire(projection=_REGISTER_USER_BODY_PROJECTION" in source
     assert "name='registration-v1'" in source
     assert (
         "from projection_application import register_to_wire as "

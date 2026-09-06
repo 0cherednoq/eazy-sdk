@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -14,7 +13,6 @@ from typing import Any, Literal, Protocol, cast
 
 from eazy_sdk.core.errors import GraphError, PlanError, WriterConflictError
 from eazy_sdk.core.http import RequestLocation
-from eazy_sdk.core.http_plan import RequestScope, ScopeContext
 from eazy_sdk.core.kernel import PythonTypeValidator, ValueSlot
 from eazy_sdk.request.prepared import (
     BufferedBody,
@@ -28,6 +26,7 @@ from eazy_sdk.request.prepared import (
     ReservedOutput,
     UnsignedPreparedRequest,
 )
+from eazy_sdk.request.wire import dump_json
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -180,12 +179,7 @@ class JsonProjection:
             selected = {pointer: _json_pointer(semantic, pointer) for pointer in self.include}
         if self.omit_null and isinstance(selected, Mapping):
             selected = {key: value for key, value in selected.items() if value is not None}
-        return json.dumps(
-            selected,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=self.sort_keys,
-        ).encode()
+        return dump_json(selected, signing.request.body.json, sort_keys=self.sort_keys)
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,24 +309,6 @@ type SigningKeyProvider = Callable[[SigningKeyRequirement], SigningKey]
 class SignaturePlan:
     signatures: tuple[RequestSignature, ...]
     reserved_outputs: tuple[ReservedOutput, ...]
-
-
-class SigningOverrideMode(Enum):
-    USE = "use"
-    EXTEND = "extend"
-    UNSIGNED = "unsigned"
-
-
-@dataclass(frozen=True, slots=True)
-class SigningOverride:
-    mode: SigningOverrideMode
-    signatures: tuple[RequestSignature, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class SigningRule:
-    signatures: tuple[RequestSignature, ...]
-    scope: RequestScope
 
 
 def compile_signatures(signatures: Sequence[RequestSignature]) -> SignaturePlan:
@@ -469,47 +445,6 @@ def custom_signature(
     name: str = "custom",
 ) -> CustomSignature:
     return CustomSignature(SignatureIdentity(name), signer, reads, outputs, key)
-
-
-def use(*signatures: RequestSignature) -> SigningOverride:
-    return SigningOverride(SigningOverrideMode.USE, signatures)
-
-
-def extend(*signatures: RequestSignature) -> SigningOverride:
-    return SigningOverride(SigningOverrideMode.EXTEND, signatures)
-
-
-def unsigned() -> SigningOverride:
-    return SigningOverride(SigningOverrideMode.UNSIGNED)
-
-
-def sign(*signatures: RequestSignature, scope: RequestScope) -> SigningRule:
-    return SigningRule(signatures, scope)
-
-
-def select_signatures(
-    *,
-    context: ScopeContext,
-    endpoint: SigningOverride | None = None,
-    group_default: tuple[RequestSignature, ...] | None = None,
-    api_default: tuple[RequestSignature, ...] | None = None,
-    rules: tuple[SigningRule, ...] = (),
-) -> tuple[RequestSignature, ...]:
-    inherited = group_default if group_default is not None else api_default
-    if inherited is None:
-        inherited = tuple(
-            signature
-            for rule in rules
-            if rule.scope.matches(context)
-            for signature in rule.signatures
-        )
-    if endpoint is None:
-        return inherited
-    if endpoint.mode is SigningOverrideMode.UNSIGNED:
-        return ()
-    if endpoint.mode is SigningOverrideMode.USE:
-        return endpoint.signatures
-    return (*inherited, *endpoint.signatures)
 
 
 def method() -> RequestComponent:
@@ -712,7 +647,7 @@ def _apply_body_output(
             value.decode(),
             output.position,
         )
-        content = json.dumps(semantic, ensure_ascii=False, separators=(",", ":")).encode()
+        content = dump_json(semantic, view.json)
         frozen = cast(Any, _freeze(semantic))
         return BufferedBody(content, body.content_type), replace(
             view, content=content, json_view=frozen

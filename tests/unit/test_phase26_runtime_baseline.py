@@ -10,6 +10,7 @@ from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
 from eazy_sdk.compile.http_compiler import compile_endpoint
 from eazy_sdk.handlers import EmitOptions, TransportError
+from eazy_sdk.request.pipeline import RequestStage
 from eazy_sdk.request.prepared import PreparedRequest
 from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success
 from tests.rewrite.test_phase08_execution import CAPABILITIES
@@ -93,10 +94,15 @@ def test_http_transition_trace_and_fingerprint_are_frozen_before_stage_extractio
     assert sync_api.trace(options=options) == {"ok": True}
     assert asyncio.run(async_api.trace(options=options)) == {"ok": True}
 
+    # Phase 48 added one diagnostic event — which representation stages an attempt ran —
+    # and changed nothing else about the trace or the plan fingerprint.
+    stages = ("stages", (RequestStage.ENCODE, RequestStage.SIGN))
     expected = [
         ("start_attempt", (1, "initial")),
+        stages,
         ("prepared", "request"),
         ("start_attempt", (2, "transport-retry")),
+        stages,
         ("prepared", "request"),
         ("emit", 2),
     ]

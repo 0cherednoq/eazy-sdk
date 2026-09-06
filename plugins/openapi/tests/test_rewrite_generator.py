@@ -518,7 +518,7 @@ def test_security_or_of_and_and_wire_options_are_lowered() -> None:
     assert ir.operations[0].wire is not None
     source = render_client(ir)
     assert "any_of(all_of(BEARER, DEVICE), all_of(DEVICE))" in source
-    assert "query_order=('expand',)" in source
+    assert "order=FieldOrder(query=('expand',)" in source
     assert "idempotent=True" in source
 
 
@@ -773,7 +773,7 @@ def test_canonical_protection_flow_generates_typed_wire_injection(tmp_path: Path
     assert "def _project_login_body(" in source
     assert "_LOGIN_BODY_PROJECTION = BodyProjection(" in source
     assert "protections=(LOGIN_PROTECTION,)" in source
-    assert "body=_LOGIN_BODY_PROJECTION" in source
+    assert "wire=Wire(projection=_LOGIN_BODY_PROJECTION" in source
     assert "wire_body=" not in source
     assert "protection_flow(LOGIN_PROTECTION" in source
     compile(source, "generated/client.py", "exec")

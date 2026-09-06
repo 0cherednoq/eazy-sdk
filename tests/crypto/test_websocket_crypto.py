@@ -109,7 +109,7 @@ class PaymentsSocket(AsyncWsApi):
         payload=JsonPayload(CreatePayment),
         replies=REPLIES,
         crypto=PROFILE,
-        crypto_wire=WIRE,
+        encrypted=WIRE,
     )
     async def create(self, number: str, amount: int) -> PaymentResult:
         raise AssertionError("declaration body must not execute")
@@ -121,7 +121,7 @@ class TextPaymentsSocket(AsyncWsApi):
         payload=JsonPayload(CreatePayment),
         replies=REPLIES,
         crypto=PROFILE,
-        crypto_wire=TEXT_WIRE,
+        encrypted=TEXT_WIRE,
     )
     async def create(self, number: str, amount: int) -> PaymentResult:
         raise AssertionError("declaration body must not execute")
@@ -288,7 +288,7 @@ async def test_reconnect_reencrypts_replayed_exchange_with_new_generation_contex
                 "create",
                 {"deduplication_key": "one"},
                 crypto=replay_profile,
-                crypto_wire=WIRE,
+                encrypted=WIRE,
                 replay=ReplayWithDeduplication("one", max_replays=1),
             )
         )
@@ -331,7 +331,7 @@ async def test_subscription_decrypts_frame_and_field_before_message_model_valida
             channel="payments",
             messages=Messages((Message("created", PaymentResult),)),
             crypto=PROFILE,
-            crypto_wire=WIRE,
+            encrypted=WIRE,
         )
         sent = await _wait_for_send(connection)
         assert _decrypt_frame(sent.data)["data"] == {
@@ -389,7 +389,7 @@ async def test_exact_frame_transform_observes_ciphertext_that_is_sent() -> None:
             "notify",
             {"number": "4111", "amount": 500},
             crypto=PROFILE,
-            crypto_wire=WIRE,
+            encrypted=WIRE,
         )
 
     assert isinstance(connection.sent[0], BinaryMessage)

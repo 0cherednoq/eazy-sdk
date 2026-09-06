@@ -34,7 +34,7 @@ _INHERIT_CRYPTO = _InheritCrypto()
 @dataclass(frozen=True, slots=True)
 class WsApiDefaults:
     crypto: PayloadCrypto | None = None
-    crypto_wire: WebSocketEncrypted | None = None
+    encrypted: WebSocketEncrypted | None = None
 
 
 class _WsClient(Protocol):
@@ -58,7 +58,7 @@ class _WsOperationDeclaration:
     replies: Replies | None = None
     messages: Messages | None = None
     crypto: PayloadCrypto | None = None
-    crypto_wire: WebSocketEncrypted | None = None
+    encrypted: WebSocketEncrypted | None = None
     crypto_inherit: bool = True
 
 
@@ -88,12 +88,12 @@ class _WsOperationDescriptor[TApi, **P, T]:
         function: Callable[..., object],
         declaration: _WsOperationDeclaration,
         crypto: object,
-        crypto_wire: object,
+        encrypted: object,
     ) -> None:
         self.function = function
         self.declaration = declaration
         self.crypto = crypto
-        self.crypto_wire = crypto_wire
+        self.encrypted = encrypted
         self.signature = inspect.signature(function)
         self.self_parameter = next(iter(self.signature.parameters))
         self.__name__ = function.__name__
@@ -105,11 +105,11 @@ class _WsOperationDescriptor[TApi, **P, T]:
         from dataclasses import replace
 
         crypto = defaults.crypto if self.crypto is _INHERIT_CRYPTO else self.crypto
-        wire = defaults.crypto_wire if self.crypto_wire is _INHERIT_CRYPTO else self.crypto_wire
+        wire = defaults.encrypted if self.encrypted is _INHERIT_CRYPTO else self.encrypted
         return replace(
             self.declaration,
             crypto=cast(PayloadCrypto | None, crypto),
-            crypto_wire=cast(WebSocketEncrypted | None, wire),
+            encrypted=cast(WebSocketEncrypted | None, wire),
             crypto_inherit=self.crypto is _INHERIT_CRYPTO and defaults.crypto is None,
         )
 
@@ -176,7 +176,7 @@ class _WsOperationDecorator:
         replies: Replies | None,
         messages: Messages | None,
         crypto: object,
-        crypto_wire: object,
+        encrypted: object,
     ) -> None:
         if not discriminator:
             raise ValueError("WebSocket discriminator cannot be empty")
@@ -189,7 +189,7 @@ class _WsOperationDecorator:
         self.replies = replies
         self.messages = messages
         self.crypto = crypto
-        self.crypto_wire = crypto_wire
+        self.encrypted = encrypted
 
     def __call__(
         self,
@@ -210,7 +210,7 @@ class _WsOperationDecorator:
             self.replies,
             self.messages,
         )
-        return _WsOperationDescriptor(function, declaration, self.crypto, self.crypto_wire)
+        return _WsOperationDescriptor(function, declaration, self.crypto, self.encrypted)
 
 
 class _WsDecorators:
@@ -222,7 +222,7 @@ class _WsDecorators:
         replay: WsReplayPolicy | None = None,
         payload: OutboundPayload | None = None,
         crypto: PayloadCrypto | None | _InheritCrypto = _INHERIT_CRYPTO,
-        crypto_wire: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
+        encrypted: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
     ) -> _WsOperationDecorator:
         return _WsOperationDecorator(
             WsOperationKind.SEND,
@@ -234,7 +234,7 @@ class _WsDecorators:
             None,
             None,
             crypto,
-            crypto_wire,
+            encrypted,
         )
 
     def call(
@@ -246,7 +246,7 @@ class _WsDecorators:
         payload: OutboundPayload | None = None,
         replies: Replies | None = None,
         crypto: PayloadCrypto | None | _InheritCrypto = _INHERIT_CRYPTO,
-        crypto_wire: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
+        encrypted: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
     ) -> _WsOperationDecorator:
         return _WsOperationDecorator(
             WsOperationKind.CALL,
@@ -258,7 +258,7 @@ class _WsDecorators:
             replies,
             None,
             crypto,
-            crypto_wire,
+            encrypted,
         )
 
     def subscribe(
@@ -270,7 +270,7 @@ class _WsDecorators:
         payload: OutboundPayload | None = None,
         messages: Messages | None = None,
         crypto: PayloadCrypto | None | _InheritCrypto = _INHERIT_CRYPTO,
-        crypto_wire: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
+        encrypted: WebSocketEncrypted | None | _InheritCrypto = _INHERIT_CRYPTO,
     ) -> _WsOperationDecorator:
         return _WsOperationDecorator(
             WsOperationKind.SUBSCRIBE,
@@ -282,7 +282,7 @@ class _WsDecorators:
             None,
             messages,
             crypto,
-            crypto_wire,
+            encrypted,
         )
 
 

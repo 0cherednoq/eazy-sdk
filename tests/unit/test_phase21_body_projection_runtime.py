@@ -15,7 +15,7 @@ from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
 from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection, JsonBody, Wire
 from eazy_sdk.response import Json, Responses, Success
 
 
@@ -44,7 +44,7 @@ async def _execute(
     value: str = "visible",
 ) -> Reply:
     class ProjectionApi(AsyncApi):
-        @api.put("/project", body=projection, responses=RESPONSES)
+        @api.put("/project", responses=RESPONSES, wire=Wire(projection=projection))
         async def operation(self, **request: Unpack[PublicBody]) -> Reply:
             raise NotImplementedError
 
@@ -299,7 +299,7 @@ async def test_projection_mapper_cannot_mutate_caller_collections() -> None:
     projection = BodyProjection(ListSource, ListWire, mutate, JsonBody())
 
     class ProjectionApi(AsyncApi):
-        @api.put("/project", body=projection, responses=RESPONSES)
+        @api.put("/project", responses=RESPONSES, wire=Wire(projection=projection))
         async def operation(self, **request: Unpack[ListSource]) -> Reply:
             raise NotImplementedError
 

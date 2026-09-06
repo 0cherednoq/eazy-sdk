@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from typing import Protocol
 
 from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
+from eazy_sdk.request.wire import DEFAULT_JSON_POLICY, JsonPolicy, dump_json
 
 from ._messages import (
     EncodedFrame,
@@ -110,16 +110,12 @@ class HmacSha256MessageSignature:
     output_path: tuple[str, ...] = ("signature",)
     include_paths: tuple[tuple[str, ...], ...] = ()
     name: str = "hmac-sha256-message"
+    json: JsonPolicy = DEFAULT_JSON_POLICY
+    """The signature base is encoded exactly the way the codec encodes the frame."""
 
     def protect(self, message: PreparedMessage) -> PreparedMessage:
         projected = _projection(message.envelope, self.output_path, self.include_paths)
-        base = json.dumps(
-            thaw_value(projected),
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
+        base = dump_json(thaw_value(projected), self.json, sort_keys=True)
         signature = hmac.new(self.key.reveal(), base, hashlib.sha256).hexdigest()
         return _with_output(message, self.output_path, signature)
 

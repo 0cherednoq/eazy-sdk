@@ -7,7 +7,7 @@ sources:
   - eazy_sdk_html.XPath
   - eazy_sdk_html.Scope
   - eazy_sdk.response.Html
-api_fingerprint: "sha256:ffbee561c78cb7ad473a73ac8a19c003c002968a87cd8f75dd546ccdb7a8e509"
+api_fingerprint: "sha256:bf54a15461b80fb0c22b792587ea48002d86949b142eafa0a100f33dcc560763"
 ---
 
 `parse_html` извлекает typed model без HTTP и без Zapros. Один schema contract работает с
@@ -53,3 +53,19 @@ CATALOG_RESPONSES = Responses(
 `Html(Model)` выполняет extractor → primitive tree → `ModelAdapter`. Для нестандартного формата
 реализуйте `ResponseExtractor`; старый `Parsed(...)` остаётся явным parser escape hatch для
 протоколов, которые не выражаются extractor schema.
+
+## Парсер выбирается на корне
+
+Селекторы — контракт операции; парсер, который строит документ, — реализация, поэтому он
+объявляется один раз:
+
+```python
+from eazy_sdk.serialization import Serialization
+
+store = Store(client, serialization=Serialization(html=ParselBackend()))
+```
+
+По умолчанию используется parsel, который читает и CSS, и XPath. Бэкенды не взаимозаменяемы по
+языку селекторов, и это проверяется **при компиляции**: операция с `XPath(...)` на парсере без
+XPath отвергается с указанием поля, языка и бэкенда, а не даёт пустое извлечение в рантайме —
+пустой результат выглядел бы как «сервер перестал присылать поле».

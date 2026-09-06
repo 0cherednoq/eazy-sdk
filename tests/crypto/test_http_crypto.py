@@ -42,6 +42,7 @@ from eazy_sdk.request import (
     ReplayableStreamBody,
     SigningKey,
     SigningKeyRequirement,
+    Wire,
     body_digest,
     header_output,
     hmac_sha256,
@@ -138,8 +139,8 @@ class AsyncPaymentsApi(AsyncApi):
         "/payments",
         responses=RESPONSES,
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=WIRE,
         idempotent=True,
+        wire=Wire(encrypted=WIRE),
     )
     async def create(
         self,
@@ -150,12 +151,7 @@ class AsyncPaymentsApi(AsyncApi):
 
 
 class SyncPaymentsApi(SyncApi):
-    @api.post(
-        "/payments",
-        responses=RESPONSES,
-        crypto=PAYMENT_CRYPTO,
-        crypto_wire=WIRE,
-    )
+    @api.post("/payments", responses=RESPONSES, crypto=PAYMENT_CRYPTO, wire=Wire(encrypted=WIRE))
     def create(
         self,
         *,
@@ -461,7 +457,7 @@ async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> 
                     hosts=("api.example",),
                     path_prefixes=("/",),
                 ),
-                wire=WIRE,
+                encrypted=WIRE,
             ),
         )
     )
@@ -488,7 +484,7 @@ async def test_crypto_wire_rejects_manual_representation_header_before_network()
             "/conflict",
             responses=RESPONSES,
             crypto=PAYMENT_CRYPTO,
-            crypto_wire=WIRE,
+            wire=Wire(encrypted=WIRE),
         )
         async def create(
             self,
@@ -536,8 +532,8 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
             "/signed",
             responses=RESPONSES,
             crypto=PAYMENT_CRYPTO,
-            crypto_wire=WIRE,
             signing=signature,
+            wire=Wire(encrypted=WIRE),
         )
         async def create(
             self,
@@ -659,7 +655,7 @@ async def test_redirect_re_resolves_crypto_scope_and_rebuilds_from_logical_body(
             CryptoRule(
                 PAYMENT_CRYPTO,
                 http_crypto_scope(hosts=("api.example",)),
-                wire=redirect_wire,
+                encrypted=redirect_wire,
             ),
         )
     )
@@ -693,12 +689,7 @@ async def test_content_coding_runs_before_whole_payload_encryption() -> None:
     responses: Responses[None] = Responses(success=(Success(204, Empty()),))
 
     class CompressedApi(AsyncApi):
-        @api.post(
-            "/compressed",
-            responses=responses,
-            crypto=profile,
-            crypto_wire=WIRE,
-        )
+        @api.post("/compressed", responses=responses, crypto=profile, wire=Wire(encrypted=WIRE))
         async def send(
             self,
             *,

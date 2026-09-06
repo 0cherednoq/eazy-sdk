@@ -44,7 +44,7 @@ from eazy_sdk.protection.advanced import (
     private_header,
     until_rejected,
 )
-from eazy_sdk.request import BodyProjection, Cookie, JsonBody, Path, Query
+from eazy_sdk.request import BodyProjection, Cookie, JsonBody, Path, Query, Wire
 from eazy_sdk.request.prepared import HttpProtocol
 from eazy_sdk.response import (
     ApiError,
@@ -189,7 +189,7 @@ KAD_SEARCH_BODY = BodyProjection(
 
 
 class AsyncKadApi(AsyncApi):
-    @api.post("/Kad/SearchInstances", body=KAD_SEARCH_BODY, response=Json())
+    @api.post("/Kad/SearchInstances", response=Json(), wire=Wire(projection=KAD_SEARCH_BODY))
     async def search_instances(
         self,
         *,

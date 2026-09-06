@@ -3,7 +3,7 @@ title: Signing
 description: Публичный API подписи запросов.
 sources:
   - eazy_sdk.request.signatures
-api_fingerprint: "sha256:09cd39210a7dc9f0de65566ced9f07559a8f6311ee95204bea43b7dceeee238a"
+api_fingerprint: "sha256:35cabc99ddaae562cde32a34de5215588540d6b91c7fa14d9c58fc1db35d9e82"
 ---
 
 ## HMAC
@@ -39,9 +39,18 @@ body_output(name, encoding="hex")
 `query(...)`, `canonical_json(...)`, `wire_body()` и `previous_signature(...)`.
 
 Output может записать подпись в header, query, cookie или body. `encoding` принимает `hex`,
-`base64` или `raw`; `position` фиксирует место для exact wire API. `sign(...)` регистрирует
-reusable scoped rule, а `use(...)`, `extend(...)` и `unsigned()` задают operation override.
+`base64` или `raw`; `position` фиксирует место для exact wire API.
 
-`ClientConfig.key_provider` является callable
+Подпись объявляется **по месту объявления**: параметром `signing=` операции или атрибутом
+`signing` роутера/миксина сервиса, наследуемым по MRO. Адресных (host/path) правил подписи нет:
+глядя на операцию, всегда видно, подписана она или нет, а опечатка в правиле не может оставить
+запрос молча неподписанным. Роутер может объявить `signed = True` — тогда операция без подписи
+отвергается при компиляции.
+
+База подписи считается от тех же байтов, которые уйдут, — в том числе когда тело зашифровано
+целиком, — и кодируется той же `JsonPolicy`, что и тело
+(см. {doc}`Представление запроса </guides/requests/representation>`).
+
+`Identity.key_provider` является callable
 `(SigningKeyRequirement) -> SigningKey`. Secrets отсутствуют в arguments операции и redacted в
 `repr`.

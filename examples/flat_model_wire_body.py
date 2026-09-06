@@ -15,7 +15,7 @@ import httpx
 
 from eazy_sdk import AsyncApi, AsyncClient, api
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection, JsonBody, Wire
 from eazy_sdk.response import Json, Responses, Success
 
 
@@ -117,8 +117,8 @@ class RegistrationApi(AsyncApi):
     @api.post(
         "/register",
         operation_id="registerUser",
-        body=REGISTER_BODY,
         responses=REGISTER_RESPONSES,
+        wire=Wire(projection=REGISTER_BODY),
     )
     async def register(self, **request: Unpack[RegisterUser]) -> RegisteredUser:
         raise NotImplementedError

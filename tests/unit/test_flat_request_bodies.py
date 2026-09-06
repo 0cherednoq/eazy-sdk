@@ -17,12 +17,13 @@ from eazy_sdk.core import (
 from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.request import (
     DelimitedScalarCodec,
+    FieldOrder,
     Form,
     JsonBody,
     JsonField,
     MultipartPart,
     Part,
-    WireOptions,
+    Wire,
 )
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer, UnsignedPreparedRequest
 from eazy_sdk.response import Responses
@@ -79,7 +80,7 @@ def _compiled(name: str, *, body_order: tuple[str, ...] | None = None) -> Compil
     if body_order is not None:
         from dataclasses import replace
 
-        declaration = replace(declaration, wire=WireOptions(body_order=body_order))
+        declaration = replace(declaration, wire=Wire(order=FieldOrder(body=body_order)))
     return cast(CompiledContract[Any], declaration.compile())
 
 

@@ -55,10 +55,10 @@ from .http_plan import (
     ScopeContext as ScopeContext,
 )
 from .http_plan import (
-    WireRequirement as WireRequirement,
+    TransportRequirement as TransportRequirement,
 )
 from .http_plan import (
-    WireRequirements as WireRequirements,
+    TransportRequirements as TransportRequirements,
 )
 from .http_plan import (
     bind_plan as bind_plan,

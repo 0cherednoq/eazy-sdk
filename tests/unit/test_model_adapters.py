@@ -38,6 +38,7 @@ from eazy_sdk.response import (
     Success,
 )
 from eazy_sdk.response.cases import ParseAttempt, ParsedValue, SuccessOutcome
+from eazy_sdk.serialization import Serialization
 
 
 @dataclass
@@ -472,7 +473,7 @@ def test_custom_model_adapter_is_used_explicitly_by_response_parsing() -> None:
     )
 
     outcome: Any = Responses(success=(Success(200, Json(CustomModel)),)).inspect(
-        ResponseContext(response, models=registry)
+        ResponseContext(response, serialization=Serialization(models=registry))
     )
 
     assert isinstance(outcome, SuccessOutcome)
@@ -503,7 +504,7 @@ def test_custom_response_extractor_returns_primitives_then_model_adapter_loads()
 
     outcome: Any = Responses(
         success=(Success(200, Extracted(CustomModel, using=extractor)),)
-    ).inspect(ResponseContext(response, models=registry))
+    ).inspect(ResponseContext(response, serialization=Serialization(models=registry)))
 
     assert isinstance(outcome, SuccessOutcome)
     assert outcome.value == CustomModel("from-extractor")

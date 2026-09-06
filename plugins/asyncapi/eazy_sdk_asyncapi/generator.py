@@ -249,7 +249,7 @@ def _render_crypto_registry(ir: AsyncAPIIR) -> list[str]:
                 "            scope=websocket_crypto_scope(",
                 f"                operation_ids=({operation.operation_id!r},),",
                 "            ),",
-                "            wire=websocket_encrypted(",
+                "            encrypted=websocket_encrypted(",
                 f"                frame_kind={wire['frameKind']!r},",
                 f"                text_safe={wire['textSafe']!r},",
                 f"                clear_frame_kind={wire['clearFrameKind']!r},",

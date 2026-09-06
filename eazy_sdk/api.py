@@ -25,7 +25,7 @@ from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.compile.http_operation import _OperationDeclaration
 from eazy_sdk.compile.input import inspect_method_input
 from eazy_sdk.core.http_plan import RequestScope
-from eazy_sdk.crypto import CryptoWire, PayloadCrypto
+from eazy_sdk.crypto import PayloadCrypto
 from eazy_sdk.identity import (
     Identity,
     _identity_scope,
@@ -35,8 +35,8 @@ from eazy_sdk.identity import (
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import SolverRequirement
-from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
+from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
 from eazy_sdk.response.cases import ResponseRepresentation
 from eazy_sdk.serialization import Serialization
@@ -67,8 +67,9 @@ SERVICE_ATTRIBUTES = (
     "errors",
     "security",
     "signing",
+    "signed",
     "crypto",
-    "crypto_wire",
+    "wire",
     "allow",
 )
 """Class attributes a router (or a service mixin in its MRO) may declare."""
@@ -85,9 +86,11 @@ class _ServiceDefaults:
     security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None
     signing: tuple[RequestSignature, ...] = ()
     crypto: PayloadCrypto | None = None
-    crypto_wire: CryptoWire | None = None
+    wire: Wire | None = None
     errors: tuple[Error[Any], ...] = ()
     allow: tuple[object, ...] | None = None
+    signed: bool = False
+    """Every operation of this service must carry a signature; unsigned is a declaration error."""
 
     def extend(self, other: _ServiceDefaults) -> _ServiceDefaults:
         """Merge a more specific declaration over this one (root → router MRO)."""
@@ -97,9 +100,10 @@ class _ServiceDefaults:
             security=self.security if other.security is None else other.security,
             signing=other.signing or self.signing,
             crypto=self.crypto if other.crypto is None else other.crypto,
-            crypto_wire=self.crypto_wire if other.crypto_wire is None else other.crypto_wire,
+            wire=other.wire.over(self.wire) if other.wire is not None else self.wire,
             errors=(*self.errors, *other.errors),
             allow=self.allow if other.allow is None else other.allow,
+            signed=self.signed or other.signed,
         )
 
 
@@ -287,7 +291,6 @@ class _OperationDescriptorBase[TApi, **P, T]:
         security: object,
         signing: object,
         crypto: object,
-        crypto_wire: object,
         inherit_errors: bool,
     ) -> None:
         self.declaration = operation
@@ -297,7 +300,6 @@ class _OperationDescriptorBase[TApi, **P, T]:
         self.security = security
         self.signing = signing
         self.crypto = crypto
-        self.crypto_wire = crypto_wire
         self.inherit_errors = inherit_errors
         self.__name__ = declaration.__name__
         self.__qualname__ = declaration.__qualname__
@@ -308,7 +310,6 @@ class _OperationDescriptorBase[TApi, **P, T]:
         security = defaults.security if self.security is _INHERIT else self.security
         signing = defaults.signing if self.signing is _INHERIT else self.signing
         crypto = defaults.crypto if self.crypto is _INHERIT else self.crypto
-        crypto_wire = defaults.crypto_wire if self.crypto_wire is _INHERIT else self.crypto_wire
         if signing is None:
             signing = ()
         elif not isinstance(signing, tuple):
@@ -326,6 +327,11 @@ class _OperationDescriptorBase[TApi, **P, T]:
             security,
             cast(tuple[RequestSignature, ...], signing),
         )
+        if defaults.signed and not signing:
+            raise TypeError(
+                f"operation {self.declaration.operation_id!r} carries no signature, and its "
+                "service requires every operation to be signed"
+            )
         return replace(
             self.declaration,
             base_url=defaults.base_url,
@@ -333,7 +339,7 @@ class _OperationDescriptorBase[TApi, **P, T]:
             security=cast(Any, security),
             signing=cast(tuple[RequestSignature, ...], signing),
             crypto=cast(PayloadCrypto | None, crypto),
-            crypto_wire=cast(CryptoWire | None, crypto_wire),
+            wire=self.declaration.wire.over(defaults.wire),
             crypto_inherit=self.crypto is _INHERIT and defaults.crypto is None,
         )
 
@@ -566,7 +572,13 @@ def _declared_service_attribute(cls: type[object], name: str) -> object:
     not silently pick one service over another.
     """
 
-    declarations = [(base, base.__dict__[name]) for base in cls.__mro__ if name in base.__dict__]
+    declarations = [
+        (base, base.__dict__[name])
+        for base in cls.__mro__
+        if name in base.__dict__
+        # A router member named ``signing`` or ``errors`` is a member, not a declaration.
+        and not isinstance(base.__dict__[name], _ApiGroup | _OperationDescriptorBase)
+    ]
     if not declarations:
         return _MISSING
     winner, value = declarations[0]
@@ -599,6 +611,10 @@ def _normalize_service_attribute(cls: type[object], name: str, value: object) ->
         if not isinstance(value, str):
             raise TypeError(f"{cls.__name__}.base_url must be a string")
         return validate_base_url(value, f"{cls.__name__}.base_url")
+    if name == "signed":
+        if not isinstance(value, bool):
+            raise TypeError(f"{cls.__name__}.signed must be a boolean")
+        return value
     if name in {"signing", "errors", "allow"}:
         return value if isinstance(value, tuple) else (value,)
     return value
@@ -660,10 +676,8 @@ class _OperationDecorator[T]:
         inject: tuple[object, ...],
         signing: object,
         crypto: object,
-        crypto_wire: object,
         protections: tuple[SolverRequirement[Any, Any], ...],
-        body: BodyProjection[Any, Any] | None,
-        wire: WireOptions | None,
+        wire: Wire,
         tags: tuple[str, ...],
         idempotent: bool | None,
         raw_response: bool,
@@ -679,9 +693,7 @@ class _OperationDecorator[T]:
         self.inject = inject
         self.signing = signing
         self.crypto = crypto
-        self.crypto_wire = crypto_wire
         self.protections = protections
-        self.body = body
         self.wire = wire
         self.tags = tags
         self.idempotent = idempotent
@@ -751,7 +763,7 @@ class _OperationDecorator[T]:
             operation_id=operation_id,
             path=self.path,
             self_parameter=self_parameter,
-            body_projection=self.body,
+            body_projection=self.wire.projection,
         )
         unpacked_parameter = next(
             (
@@ -777,7 +789,6 @@ class _OperationDecorator[T]:
             requires=self.requires,
             inject=self.inject,
             protections=self.protections,
-            body_projection=self.body,
             wire=self.wire,
             scope=scope,
             tags=self.tags,
@@ -798,7 +809,6 @@ class _OperationDecorator[T]:
             self.security,
             self.signing,
             self.crypto,
-            self.crypto_wire,
             self.inherit_errors,
         )
 
@@ -835,10 +845,8 @@ class _OperationOptions(TypedDict, total=False):
     inject: tuple[object, ...]
     signing: object
     crypto: PayloadCrypto | None | _Inherit
-    crypto_wire: CryptoWire | None | _Inherit
     protections: tuple[SolverRequirement[Any, Any], ...]
-    body: BodyProjection[Any, Any] | None
-    wire: WireOptions | None
+    wire: Wire
     tags: tuple[str, ...]
     idempotent: bool | None
     raw_response: bool
@@ -867,10 +875,8 @@ class _Verb:
         inject: tuple[object, ...] = (),
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
-        crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
         protections: tuple[SolverRequirement[Any, Any], ...] = (),
-        body: BodyProjection[Any, Any] | None = None,
-        wire: WireOptions | None = None,
+        wire: Wire = EMPTY_WIRE,
         tags: tuple[str, ...] = (),
         idempotent: bool | None = None,
         raw_response: bool = False,
@@ -891,10 +897,8 @@ class _Verb:
         inject: tuple[object, ...] = (),
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
-        crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
         protections: tuple[SolverRequirement[Any, Any], ...] = (),
-        body: BodyProjection[Any, Any] | None = None,
-        wire: WireOptions | None = None,
+        wire: Wire = EMPTY_WIRE,
         tags: tuple[str, ...] = (),
         idempotent: bool | None = None,
         raw_response: bool = False,
@@ -914,10 +918,8 @@ class _Verb:
         inject: tuple[object, ...] = (),
         signing: object = _INHERIT,
         crypto: PayloadCrypto | None | _Inherit = _INHERIT,
-        crypto_wire: CryptoWire | None | _Inherit = _INHERIT,
         protections: tuple[SolverRequirement[Any, Any], ...] = (),
-        body: BodyProjection[Any, Any] | None = None,
-        wire: WireOptions | None = None,
+        wire: Wire = EMPTY_WIRE,
         tags: tuple[str, ...] = (),
         idempotent: bool | None = None,
         raw_response: bool = False,
@@ -950,9 +952,7 @@ class _Verb:
             inject=inject,
             signing=signing,
             crypto=crypto,
-            crypto_wire=crypto_wire,
             protections=protections,
-            body=body,
             wire=wire,
             tags=tags,
             idempotent=idempotent,

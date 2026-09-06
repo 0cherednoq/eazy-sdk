@@ -104,16 +104,6 @@ class MultipartPart:
     headers: tuple[tuple[str, str], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class WireOptions:
-    query_order: tuple[str, ...] | None = None
-    header_order: tuple[str, ...] | None = None
-    cookie_order: tuple[str, ...] | None = None
-    body_order: tuple[str, ...] | None = None
-    exact: bool = False
-    protocol: Literal["http/1.1", "http/2", "http/3"] | None = None
-
-
 type RequestBody = (
     JsonBody | FormBody | MultipartBody | BytesBody | ReplayableStreamBody | BodyCodec
 )

@@ -425,7 +425,7 @@ class _ConnectionMixin(_WsClientBase):
                 message = await unprotect_ws_message(
                     message,
                     record.crypto,
-                    record.crypto_wire or WebSocketEncrypted(),
+                    record.encrypted or WebSocketEncrypted(),
                     context=await self._crypto_context(
                         record.crypto,
                         record.discriminator,

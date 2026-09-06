@@ -104,7 +104,7 @@ class WsClientConfig:
     message_middleware: tuple[MessageMiddlewareApplication, ...] = ()
     subscription_middleware: tuple[SubscriptionMiddlewareApplication, ...] = ()
     crypto: CryptoRegistry | PayloadCrypto | None = None
-    crypto_wire: WebSocketEncrypted | None = None
+    encrypted: WebSocketEncrypted | None = None
     dependencies: DependencyRegistry = field(default_factory=DependencyRegistry, repr=False)
     message_reserved_outputs: tuple[MessageReservedOutput, ...] = field(
         init=False,
@@ -168,7 +168,7 @@ class _PendingExchange:
     send_started: bool = False
     replies: Replies | None = None
     crypto: CompiledPayloadCrypto | None = None
-    crypto_wire: WebSocketEncrypted | None = None
+    encrypted: WebSocketEncrypted | None = None
 
 
 @dataclass(slots=True)
@@ -189,7 +189,7 @@ class _SubscriptionRecord:
     outbound: OutboundPayload
     messages: Messages | None
     crypto: CompiledPayloadCrypto | None = None
-    crypto_wire: WebSocketEncrypted | None = None
+    encrypted: WebSocketEncrypted | None = None
 
 
 class _AttemptDeliveryFailure(Exception):
@@ -406,7 +406,7 @@ class _WsClientBase:
         replay: WsReplayPolicy | None = None,
         payload_schema: OutboundPayload | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> None:
@@ -422,7 +422,7 @@ class _WsClientBase:
         payload_schema: OutboundPayload | None = None,
         replies: Replies | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> object:
@@ -440,7 +440,7 @@ class _WsClientBase:
         payload_schema: OutboundPayload | None = None,
         messages: Messages | None = None,
         crypto: PayloadCrypto | None = None,
-        crypto_wire: WebSocketEncrypted | None = None,
+        encrypted: WebSocketEncrypted | None = None,
         crypto_inherit: bool = True,
         operation_id: str | None = None,
     ) -> Subscription[object]:

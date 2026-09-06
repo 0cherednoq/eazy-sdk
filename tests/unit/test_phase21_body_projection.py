@@ -12,7 +12,7 @@ from eazy_sdk.core import (
     PlanNodeKind,
     RequestLocation,
 )
-from eazy_sdk.request import BodyProjection, JsonBody, JsonField, Path, Query
+from eazy_sdk.request import BodyProjection, JsonBody, JsonField, Path, Query, Wire
 from eazy_sdk.response import Responses
 
 RESPONSES: Responses[object] = Responses(success=())
@@ -79,7 +79,7 @@ def _compile(api_type: type[SyncApi], method: str = "operation") -> Any:
 
 def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:
     class ProjectionApi(SyncApi):
-        @api.post("/project", body=PROJECTION, responses=RESPONSES)
+        @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
         def operation(self, **request: Unpack[PublicBody]) -> object:
             raise NotImplementedError
 
@@ -117,7 +117,7 @@ def test_projection_source_can_be_a_structural_subset_of_public_input() -> None:
     projection = BodyProjection(UpdateBody, UpdateWire, update_to_wire, JsonBody())
 
     class UpdateApi(SyncApi):
-        @api.patch("/users/{user_id}", body=projection, responses=RESPONSES)
+        @api.patch("/users/{user_id}", responses=RESPONSES, wire=Wire(projection=projection))
         def operation(self, **request: Unpack[UpdateRequest]) -> object:
             raise NotImplementedError
 
@@ -131,14 +131,14 @@ def test_projection_source_can_be_a_structural_subset_of_public_input() -> None:
 
 def test_projection_identity_contributes_to_plan_fingerprint() -> None:
     class First(SyncApi):
-        @api.post("/project", body=PROJECTION, responses=RESPONSES)
+        @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
         def operation(self, **request: Unpack[PublicBody]) -> object:
             raise NotImplementedError
 
     named = BodyProjection(PublicBody, WireBody, to_wire, JsonBody(), "named-v2")
 
     class Second(SyncApi):
-        @api.post("/project", body=named, responses=RESPONSES)
+        @api.post("/project", responses=RESPONSES, wire=Wire(projection=named))
         def operation(self, **request: Unpack[PublicBody]) -> object:
             raise NotImplementedError
 
@@ -157,7 +157,7 @@ def test_rejects_projection_source_that_is_not_a_typed_dict() -> None:
     with pytest.raises(PlanError, match=r"source.*must be a TypedDict"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=invalid, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=invalid))
             def operation(self, **request: Unpack[PublicBody]) -> object:
                 raise NotImplementedError
 
@@ -166,7 +166,7 @@ def test_rejects_projection_when_source_is_absent_from_direct_input() -> None:
     with pytest.raises(PlanError, match="not present in the public input"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=PROJECTION, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
             def operation(self) -> object:
                 raise NotImplementedError
 
@@ -181,7 +181,7 @@ def test_rejects_unknown_source_key() -> None:
     with pytest.raises(PlanError, match=r"source field 'missing'.*not present"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=projection, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))
             def operation(self, **request: Unpack[PublicBody]) -> object:
                 raise NotImplementedError
 
@@ -210,14 +210,14 @@ def test_rejects_projection_source_shape_mismatch(
 
         declaration = cast(Any, operation)
         declaration.__annotations__ = {"request": request_annotation, "return": object}
-        api.post("/project", body=projection, responses=RESPONSES)(declaration)
+        api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))(declaration)
 
 
 def test_rejects_unplaced_field_outside_projection_source() -> None:
     with pytest.raises(PlanError, match=r"outside.*no placement"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=PROJECTION, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
             def operation(self, **request: Unpack[ExtraRequest]) -> object:
                 raise NotImplementedError
 
@@ -229,7 +229,7 @@ def test_rejects_projection_source_with_another_placement() -> None:
     ):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=PROJECTION, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
             def operation(self, **request: Unpack[PlacedRequest]) -> object:
                 raise NotImplementedError
 
@@ -238,7 +238,7 @@ def test_rejects_projection_mixed_with_other_body_paths() -> None:
     with pytest.raises(PlanError, match="mixes a body projection"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", body=PROJECTION, responses=RESPONSES)
+            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
             def operation(self, **request: Unpack[MixedRequest]) -> object:
                 raise NotImplementedError
 
@@ -257,7 +257,7 @@ def test_rejects_unsupported_projection_target_during_compile() -> None:
     )
 
     class InvalidApi(SyncApi):
-        @api.post("/project", body=projection, responses=RESPONSES)
+        @api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))
         def operation(self, **request: Unpack[PublicBody]) -> object:
             raise NotImplementedError
 

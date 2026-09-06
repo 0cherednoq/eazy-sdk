@@ -9,6 +9,7 @@ from xml.etree import ElementTree
 
 from eazy_sdk.ext import EncodeContext, Malformed, ParseAttempt, ParsedValue
 from eazy_sdk.response import ResponseContext
+from eazy_sdk.serialization import DocumentNode, SelectorMarker
 
 
 class XmlDecodeError(ValueError):
@@ -74,6 +75,42 @@ class _BoundXmlResponse:
             return Malformed(exc)
 
 
+@dataclass(frozen=True, slots=True)
+class ElementTreeBackend:
+    """The stdlib XML parser, offered through the same protocol the HTML parser uses.
+
+    ElementTree reads a subset of XPath and no CSS at all, so it declares exactly that:
+    an operation selecting by CSS is rejected while it is still a declaration, instead of
+    extracting nothing from a document that parsed perfectly well.
+    """
+
+    name: str = "elementtree"
+
+    @property
+    def selector_languages(self) -> frozenset[str]:
+        return frozenset({"xpath"})
+
+    def parse(self, data: bytes | str) -> DocumentNode:
+        text = data.decode("utf-8") if isinstance(data, bytes) else data
+        try:
+            return ElementTreeNode(ElementTree.fromstring(text))
+        except ElementTree.ParseError as exc:
+            raise XmlDecodeError("XML document could not be parsed") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class ElementTreeNode:
+    element: ElementTree.Element
+
+    def values(self, marker: SelectorMarker) -> tuple[str, ...]:
+        return tuple(item.element.text or "" for item in self.nodes(marker))
+
+    def nodes(self, marker: SelectorMarker) -> tuple[ElementTreeNode, ...]:
+        if marker.language != "xpath":
+            raise XmlDecodeError(f"the elementtree backend cannot read {marker.language!r}")
+        return tuple(ElementTreeNode(found) for found in self.element.findall(marker.expression))
+
+
 def _fill(element: ElementTree.Element, value: object) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
@@ -108,4 +145,12 @@ def _element_value(element: ElementTree.Element) -> object:
     return output
 
 
-__all__ = ["ElementTreeXmlCodec", "XmlBody", "XmlCodec", "XmlDecodeError", "XmlResponse"]
+__all__ = [
+    "ElementTreeBackend",
+    "ElementTreeNode",
+    "ElementTreeXmlCodec",
+    "XmlBody",
+    "XmlCodec",
+    "XmlDecodeError",
+    "XmlResponse",
+]

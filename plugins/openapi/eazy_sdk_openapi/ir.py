@@ -172,7 +172,7 @@ class SignatureIR:
 
 
 @dataclass(frozen=True, slots=True)
-class CryptoWireIR:
+class EncryptedIR:
     content_type: str = "application/octet-stream"
     clear_content_type: str = "application/json"
     plaintext_statuses: tuple[int, ...] = ()
@@ -182,7 +182,7 @@ class CryptoWireIR:
 class CryptoUseIR:
     profile: str
     direction: str = "bidirectional"
-    wire: CryptoWireIR = CryptoWireIR()
+    wire: EncryptedIR = EncryptedIR()
 
 
 @dataclass(frozen=True, slots=True)
@@ -941,7 +941,7 @@ def _crypto_use(raw: Any, pointer: str, operation_id: str) -> CryptoUseIR | None
     return CryptoUseIR(
         profile,
         cast(str, direction),
-        CryptoWireIR(content_type, clear_content_type, tuple(statuses)),
+        EncryptedIR(content_type, clear_content_type, tuple(statuses)),
     )
 
 

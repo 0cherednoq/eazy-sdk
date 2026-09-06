@@ -30,5 +30,5 @@ class AsyncAuthApi(AsyncApi):
 `email=ada%40example.test&password=secret`. Отсутствующее optional поле `remember` не попадает в body.
 
 Для полной Pydantic-модели используйте `FormBody()`. Не смешивайте `FormBody()` и отдельные
-`Form()` fields. Порядок полей при необходимости задаётся через `WireOptions(body_order=(...))`.
+`Form()` fields. Порядок полей при необходимости задаётся через `wire=Wire(order=FieldOrder(body=(...)))`.
 Пример ответа: status `200`, JSON `{"access_token":"..."}`.

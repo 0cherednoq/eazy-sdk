@@ -14,7 +14,7 @@ from adaptix.conversion import get_converter, link_constant, link_function
 
 from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import BodyProjection, JsonBody, Wire
 from eazy_sdk.response import Json, Responses, Success
 
 
@@ -149,8 +149,8 @@ class RegistrationApi(SyncApi):
     @api.post(
         "/register",
         operation_id="adaptixRegisterUser",
-        body=REGISTER_BODY,
         responses=REGISTER_RESPONSES,
+        wire=Wire(projection=REGISTER_BODY),
     )
     def register(self, **request: Unpack[RegisterUser]) -> RegisteredUser:
         raise NotImplementedError

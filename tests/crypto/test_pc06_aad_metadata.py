@@ -45,6 +45,7 @@ from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request import (
     JsonBody,
     SigningKeyRequirement,
+    Wire,
     header_output,
     hmac_sha256,
     method,
@@ -121,13 +122,13 @@ RESPONSES = Responses[Payload](success={200: Json(Payload)})
 
 
 class AsyncMetadataApi(AsyncApi):
-    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, crypto_wire=HTTP_WIRE)
+    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, wire=Wire(encrypted=HTTP_WIRE))
     async def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
 
 class SyncMetadataApi(SyncApi):
-    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, crypto_wire=HTTP_WIRE)
+    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, wire=Wire(encrypted=HTTP_WIRE))
     def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
@@ -140,7 +141,6 @@ class SigningCollisionApi(AsyncApi):
         "/metadata",
         responses=RESPONSES,
         crypto=HTTP_PROFILE,
-        crypto_wire=HTTP_WIRE,
         signing=(
             hmac_sha256(
                 key=SIGNING_KEY,
@@ -148,6 +148,7 @@ class SigningCollisionApi(AsyncApi):
                 output=header_output("X-Key-Id"),
             ),
         ),
+        wire=Wire(encrypted=HTTP_WIRE),
     )
     async def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError

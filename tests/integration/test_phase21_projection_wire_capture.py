@@ -23,6 +23,7 @@ from eazy_sdk.request import (
     JsonBody,
     SigningKey,
     SigningKeyRequirement,
+    Wire,
     body_digest,
     header_output,
     hmac_sha256,
@@ -88,9 +89,9 @@ async def test_projected_crypto_and_signature_match_localhost_first_hop(
         @api.put(
             "/capture",
             responses=responses,
-            body=projection,
             crypto=crypto,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def capture(self, **request: Unpack[CaptureSource]) -> None:
             raise NotImplementedError

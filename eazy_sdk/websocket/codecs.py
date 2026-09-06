@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.request.wire import DEFAULT_JSON_POLICY, JsonPolicy, dump_json
 
 from ._messages import EncodedFrame, FrameKind, FrozenValue, InboundFrame, freeze_value, thaw_value
 from .errors import FrameTooLargeError
@@ -22,19 +23,15 @@ class WsCodec(Protocol):
 class JsonTextCodec:
     max_inbound_bytes: int = 1_048_576
     max_outbound_bytes: int = 1_048_576
+    json: JsonPolicy = DEFAULT_JSON_POLICY
+    """How a frame becomes bytes; the per-message signature reads the same policy."""
 
     def __post_init__(self) -> None:
         if self.max_inbound_bytes <= 0 or self.max_outbound_bytes <= 0:
             raise ValueError("codec size limits must be positive")
 
     def encode(self, value: FrozenValue) -> EncodedFrame:
-        data = json.dumps(
-            thaw_value(value),
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
+        data = dump_json(thaw_value(value), self.json, sort_keys=True).decode("utf-8")
         size = len(data.encode("utf-8"))
         if size > self.max_outbound_bytes:
             raise FrameTooLargeError(actual=size, limit=self.max_outbound_bytes, kind="text")

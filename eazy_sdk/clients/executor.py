@@ -32,9 +32,9 @@ from eazy_sdk.core import (
     OperationValues,
     PlanError,
     ScopeContext,
+    TransportRequirement,
+    TransportRequirements,
     ValuePatch,
-    WireRequirement,
-    WireRequirements,
     apply_patch_atomic,
     bind_plan,
 )
@@ -120,6 +120,7 @@ from eazy_sdk.request import (
     ReplayableStreamBody,
 )
 from eazy_sdk.request.logical import ExactBodyInput, NoBodyInput
+from eazy_sdk.request.pipeline import REQUEST_PIPELINE, RequestStage
 from eazy_sdk.request.prepared import (
     _NO_BODY_DOCUMENT_OVERRIDE,
     BufferedBody,
@@ -135,8 +136,13 @@ from eazy_sdk.response import (
     ResponseEnvelope,
     Responses,
 )
-from eazy_sdk.response.cases import AttemptIdentity, OperationInfo, PreparedRequestSummary
-from eazy_sdk.serialization import Serialization
+from eazy_sdk.response.cases import (
+    AttemptIdentity,
+    OperationInfo,
+    PreparedRequestSummary,
+    PreparedResponseExtractor,
+)
+from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from ._decisions import (
     AuthRefreshTransition,
@@ -267,11 +273,7 @@ class _RuntimeFetch:
             headers,
             body,
             user_agent=self.identity.user_agent,
-            protocol=(
-                self.serialization.profile.protocol
-                if self.serialization.profile is not None
-                else HttpProtocol.HTTP_1_1
-            ),
+            protocol=HttpProtocol.HTTP_1_1,
         )
         response = await _maybe_await(self.runtime.send(prepared, options=self.options))
         if not isinstance(response, NormalizedResponse):
@@ -537,14 +539,14 @@ def _managed_preparation_requirements(
     return tuple(dict.fromkeys(requirements))
 
 
-def wire_requirements(contract: _OperationDeclaration[Any]) -> WireRequirements:
-    dimensions: list[WireRequirement] = []
+def transport_requirements(contract: _OperationDeclaration[Any]) -> TransportRequirements:
+    dimensions: list[TransportRequirement] = []
     wire = contract.wire
-    if wire is not None and wire.protocol is not None:
-        dimensions.append(WireRequirement("protocol", wire.protocol))
-    if wire is not None and wire.exact:
+    if wire.transport is not None:
+        dimensions.append(TransportRequirement("protocol", wire.transport))
+    if wire.is_exact:
         dimensions.extend(
-            WireRequirement(name, "CAPTURE_VERIFIED")
+            TransportRequirement(name, "CAPTURE_VERIFIED")
             for name in (
                 "exact_target",
                 "header_order",
@@ -554,8 +556,8 @@ def wire_requirements(contract: _OperationDeclaration[Any]) -> WireRequirements:
             )
         )
     if any(isinstance(field.placement, ReplayableStreamBody) for field in contract.input_fields):
-        dimensions.append(WireRequirement("replayable_streams", "BEST_EFFORT"))
-    return WireRequirements(tuple(dimensions))
+        dimensions.append(TransportRequirement("replayable_streams", "BEST_EFFORT"))
+    return TransportRequirements(tuple(dimensions))
 
 
 class ExecutionCore:
@@ -693,7 +695,11 @@ class ExecutionCore:
             if policy.scope.matches(scope_context)
         )
         declared = (
-            replace(contract, crypto=initial_crypto[0], crypto_wire=initial_crypto[1])
+            replace(
+                contract,
+                crypto=initial_crypto[0],
+                wire=replace(contract.wire, encrypted=initial_crypto[1]),
+            )
             if initial_crypto is not None
             else contract
         )
@@ -701,7 +707,7 @@ class ExecutionCore:
             compiled: Any = compile_endpoint(
                 declared,
                 scope=declared.scope,
-                requirements=wire_requirements(declared),
+                requirements=transport_requirements(declared),
                 fingerprint_context=(
                     *self.serialization.models.fingerprint_components(),
                     *_protection_fingerprint_components(before_policies, challenge_policies),
@@ -727,6 +733,7 @@ class ExecutionCore:
         """Capability and solver checks precede binding side effects and every provider."""
 
         validate_profile(compiled.plan.requirements, self.runtime.handler_profile)
+        _validate_serialization(contract, self.serialization)
         mandatory = _validate_mandatory_protections(
             contract,
             compiled,
@@ -1047,6 +1054,7 @@ class ExecutionCore:
         if self.identity.observer is not None:
             self.identity.observer(phase, value)
 
+
 @dataclass(slots=True)
 class _PreparedAttempt:
     """Everything one prepared attempt carries into its response phase."""
@@ -1331,49 +1339,6 @@ class _AttemptRun[T]:
             await sleep(decision.delay)
         self.core._observe("rate_limit", state.number)
 
-    async def _body_document(
-        self,
-        state: AttemptState,
-        values: OperationValues,
-        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
-        compiled_crypto: CompiledPayloadCrypto | None,
-        crypto_values: CryptoValues,
-        crypto_aad: tuple[tuple[str, FrozenValue], ...],
-        outputs: list[CryptoOutputValue[object]],
-    ) -> object:
-        document = build_request_document(
-            RequestDocumentStageInput(
-                self.compiled, values, self.core.serialization.models, self.mandatory_results
-            )
-        ).document
-        if compiled_crypto is None or not compiled_crypto.outbound_fields or state.omit_body:
-            return document
-        if document is _NO_BODY_DOCUMENT_OVERRIDE:
-            body_slot = self.compiled.body_slot
-            if body_slot is None:
-                raise CryptoConfigurationError(
-                    "outbound field crypto requires a semantic JSON request body"
-                )
-            document = self.core.serialization.models.dump(values.require(body_slot))
-        if document is _NO_BODY_DOCUMENT_OVERRIDE:
-            raise CryptoConfigurationError(
-                "outbound field crypto requires a semantic JSON request body"
-            )
-        return await prepare_http_document(
-            document,
-            compiled_crypto,
-            context=self._crypto_context(
-                state,
-                selected,
-                compiled_crypto,
-                CryptoDirection.OUTBOUND,
-                CryptoStage.DOCUMENT,
-                crypto_values,
-                crypto_aad,
-            ),
-            outputs=outputs,
-        )
-
     def _crypto_context(
         self,
         state: AttemptState,
@@ -1408,51 +1373,15 @@ class _AttemptRun[T]:
         crypto_values: CryptoValues,
         crypto_aad: tuple[tuple[str, FrozenValue], ...],
     ) -> Any:
-        outputs: list[CryptoOutputValue[object]] = []
-        document = await self._body_document(
-            state, values, selected, compiled_crypto, crypto_values, crypto_aad, outputs
+        """Run the declared pipeline; the order lives in ``REQUEST_PIPELINE``, not here."""
+
+        build = _RequestBuild(
+            self, state, values, selected, compiled_crypto, crypto_values, crypto_aad
         )
-        signature_plan = self.compiled.signature_plan
-        try:
-            unsigned = RequestPreparer(
-                _service_base_url(self.compiled.contract, self.core.runtime),
-                self.core.serialization.profile,
-                self.core.serialization.models,
-            ).prepare(
-                self.compiled,
-                values,
-                reserved_outputs=reserve_outputs(signature_plan),
-                url_override=state.url if state.redirected else None,
-                method_override=state.method,
-                omit_body=state.omit_body,
-                body_document_override=document,
-            )
-        except BindingError:
-            raise OperationBindingError(
-                code="preparation_failed",
-                operation_id=self.compiled.contract.operation_id,
-                field=None,
-                phase="prepare",
-                detail="request values could not be prepared",
-            ) from None
-        if self._encodes_body(selected, compiled_crypto, state):
-            assert selected is not None and compiled_crypto is not None
-            unsigned = await protect_http_request(
-                unsigned,
-                compiled_crypto,
-                selected[1],
-                context=self._crypto_context(
-                    state,
-                    selected,
-                    compiled_crypto,
-                    CryptoDirection.OUTBOUND,
-                    CryptoStage.ENCODED,
-                    crypto_values,
-                    crypto_aad,
-                ),
-                outputs=outputs,
-            )
-        prepared = self._sign(unsigned, signature_plan)
+        for stage in REQUEST_PIPELINE:
+            await build.run(stage)
+        prepared = build.prepared
+        self.core._observe("stages", tuple(build.executed))
         self.core._observe(
             "prepared",
             PreparedRequestSummary(
@@ -1604,7 +1533,7 @@ class _AttemptRun[T]:
             attempt.request,
             self.compiled.contract.operation_id,
             state.number,
-            models=self.core.serialization.models,
+            serialization=self.core.serialization,
         )
 
     async def _after_response(
@@ -1713,6 +1642,161 @@ class _AttemptRun[T]:
         self.call_states[policy.identity] = managed
         if shared is not None:
             self.applied_shared[policy.identity] = shared
+
+
+class _RequestBuild:
+    """One attempt's walk through :data:`REQUEST_PIPELINE`.
+
+    Each method knows how to run one stage and nothing about what comes before or after,
+    so the order can only be changed in one place. A stage the operation did not declare
+    is skipped rather than executed as a no-op, and ``executed`` records what really ran.
+    """
+
+    def __init__(
+        self,
+        run: _AttemptRun[Any],
+        state: AttemptState,
+        values: OperationValues,
+        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+        compiled_crypto: CompiledPayloadCrypto | None,
+        crypto_values: CryptoValues,
+        crypto_aad: tuple[tuple[str, FrozenValue], ...],
+    ) -> None:
+        self.run_context = run
+        self.state = state
+        self.values = values
+        self.selected = selected
+        self.crypto = compiled_crypto
+        self.crypto_values = crypto_values
+        self.crypto_aad = crypto_aad
+        self.document: object = _NO_BODY_DOCUMENT_OVERRIDE
+        self.outputs: list[CryptoOutputValue[object]] = []
+        self.unsigned: Any = None
+        self.prepared: Any = None
+        self.executed: list[RequestStage] = []
+
+    async def run(self, stage: RequestStage) -> None:
+        if not self._declared(stage):
+            return
+        self.executed.append(stage)
+        if stage is RequestStage.PROJECTION:
+            self._project()
+        elif stage is RequestStage.ENVELOPE:
+            self._wrap()
+        elif stage is RequestStage.DOCUMENT_CRYPTO:
+            await self._encrypt_document()
+        elif stage is RequestStage.ENCODE:
+            self._encode()
+        elif stage is RequestStage.ENCODED_CRYPTO:
+            await self._encrypt_encoded()
+        else:
+            self._sign()
+
+    def _declared(self, stage: RequestStage) -> bool:
+        compiled = self.run_context.compiled
+        if stage is RequestStage.PROJECTION:
+            return compiled.body_projection is not None or bool(compiled.private_body_writers)
+        if stage is RequestStage.ENVELOPE:
+            return compiled.contract.envelope is not None
+        if stage is RequestStage.DOCUMENT_CRYPTO:
+            return (
+                self.crypto is not None
+                and bool(self.crypto.outbound_fields)
+                and not self.state.omit_body
+            )
+        if stage is RequestStage.ENCODED_CRYPTO:
+            return self.run_context._encodes_body(self.selected, self.crypto, self.state)
+        return True
+
+    def _project(self) -> None:
+        run = self.run_context
+        self.document = build_request_document(
+            RequestDocumentStageInput(
+                run.compiled, self.values, run.core.serialization.models, run.mandatory_results
+            )
+        ).document
+
+    def _wrap(self) -> None:
+        envelope = self.run_context.compiled.contract.envelope
+        self.document = envelope.wrap(self.document, self.run_context.compiled.contract)
+
+    async def _encrypt_document(self) -> None:
+        run = self.run_context
+        crypto = self.crypto
+        assert crypto is not None
+        if self.document is _NO_BODY_DOCUMENT_OVERRIDE:
+            body_slot = run.compiled.body_slot
+            if body_slot is not None:
+                self.document = run.core.serialization.models.dump(self.values.require(body_slot))
+        if self.document is _NO_BODY_DOCUMENT_OVERRIDE:
+            raise CryptoConfigurationError(
+                "outbound field crypto requires a semantic JSON request body"
+            )
+        self.document = await prepare_http_document(
+            self.document,
+            crypto,
+            context=run._crypto_context(
+                self.state,
+                self.selected,
+                crypto,
+                CryptoDirection.OUTBOUND,
+                CryptoStage.DOCUMENT,
+                self.crypto_values,
+                self.crypto_aad,
+            ),
+            outputs=self.outputs,
+        )
+
+    def _encode(self) -> None:
+        run = self.run_context
+        state = self.state
+        try:
+            self.unsigned = RequestPreparer(
+                _service_base_url(run.compiled.contract, run.core.runtime),
+                run.core.serialization.models,
+                run.core.serialization.json,
+            ).prepare(
+                run.compiled,
+                self.values,
+                reserved_outputs=reserve_outputs(run.compiled.signature_plan),
+                url_override=state.url if state.redirected else None,
+                method_override=state.method,
+                omit_body=state.omit_body,
+                body_document_override=self.document,
+            )
+        except BindingError:
+            raise OperationBindingError(
+                code="preparation_failed",
+                operation_id=run.compiled.contract.operation_id,
+                field=None,
+                phase="prepare",
+                detail="request values could not be prepared",
+            ) from None
+
+    async def _encrypt_encoded(self) -> None:
+        run = self.run_context
+        selected, crypto = self.selected, self.crypto
+        assert selected is not None and crypto is not None
+        self.unsigned = await protect_http_request(
+            self.unsigned,
+            crypto,
+            selected[1],
+            context=run._crypto_context(
+                self.state,
+                selected,
+                crypto,
+                CryptoDirection.OUTBOUND,
+                CryptoStage.ENCODED,
+                self.crypto_values,
+                self.crypto_aad,
+            ),
+            outputs=self.outputs,
+        )
+
+    def _sign(self) -> None:
+        self.prepared = self.run_context._sign(
+            self.unsigned, self.run_context.compiled.signature_plan
+        )
 
 
 def _protection_identities(
@@ -1944,6 +2028,36 @@ def _find_shared_state(
     return max(candidates, key=lambda item: item[1].generation) if candidates else None
 
 
+def _validate_serialization(
+    contract: _OperationDeclaration[Any],
+    serialization: Serialization,
+) -> None:
+    """Refuse an operation whose bytes the declared backends cannot produce or read.
+
+    Both halves fail the same way if left to the runtime: a JSON backend that quietly
+    encodes differently breaks a signature computed over the bytes, and a parser that does
+    not speak the operation's selector language extracts nothing at all. Neither is worth
+    discovering on the first call to a private API, so both are settled here.
+    """
+
+    policy = contract.wire.json_policy
+    if not serialization.json.supports(policy):
+        raise BackendCapabilityError(
+            f"operation {contract.operation_id!r} requires JSON encoding {policy!r}, which the "
+            f"{serialization.json.name!r} backend cannot produce"
+        )
+    responses = contract.responses
+    for case in getattr(responses, "cases", ()):
+        extractor = getattr(case.response, "extractor", None)
+        model = getattr(case.response, "model", None)
+        if not isinstance(extractor, PreparedResponseExtractor) or model is None:
+            continue
+        try:
+            extractor.prepare(model, serialization)
+        except BackendCapabilityError as exc:
+            raise BackendCapabilityError(f"operation {contract.operation_id!r}: {exc}") from exc
+
+
 def _validate_mandatory_protections(
     declaration: _OperationDeclaration[Any],
     compiled: Any,
@@ -2083,7 +2197,7 @@ def _resolve_http_crypto(
     url: str,
 ) -> tuple[PayloadCrypto, HttpEncrypted] | None:
     profile = contract.crypto
-    wire: object = contract.crypto_wire
+    wire: object = contract.wire.encrypted
     if profile is None:
         if not contract.crypto_inherit:
             return None
@@ -2097,7 +2211,7 @@ def _resolve_http_crypto(
         if resolved is None:
             return None
         profile = resolved.profile
-        wire = resolved.wire
+        wire = resolved.encrypted
     if not isinstance(profile, PayloadCrypto):
         raise CryptoConfigurationError("HTTP operation requires a PayloadCrypto profile")
     if wire is None:
@@ -2212,6 +2326,7 @@ def _compile_http_crypto(
             else root_body.annotation if root_body is not None else None
         ),
         inbound_models=_http_inbound_models(compiled.contract),
+        json=compiled.contract.wire.json_policy,
     )
     _validate_projection_writer_graph(compiled, compiled_profile)
     return compiled_profile
@@ -2294,7 +2409,7 @@ def _response_context(
     operation_id: str,
     attempt: int,
     *,
-    models: ModelAdapterRegistry,
+    serialization: Serialization,
 ) -> ResponseContext[Any]:
     content = prepared.body.content if hasattr(prepared.body, "content") else b""
     return ResponseContext(
@@ -2304,7 +2419,7 @@ def _response_context(
             prepared.method.decode("ascii"), prepared.target.decode("ascii"), len(content)
         ),
         OperationInfo(operation_id),
-        models,
+        serialization,
     )
 
 

@@ -43,6 +43,7 @@ from eazy_sdk.request import (
     JsonBody,
     SigningKey,
     SigningKeyRequirement,
+    Wire,
     body_digest,
     body_output,
     header_output,
@@ -123,9 +124,9 @@ async def test_projection_target_crypto_and_exact_signature_are_fresh_on_retry()
         @api.put(
             "/payments",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def pay(self, **request: Unpack[PaymentSource]) -> None:
             raise NotImplementedError
@@ -192,9 +193,9 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
         @api.put(
             "/redirect",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[PaymentSource]) -> None:
             raise NotImplementedError
@@ -291,10 +292,10 @@ async def test_projection_crypto_and_signature_are_fresh_on_auth_replay() -> Non
         @api.put(
             "/auth-replay",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
             signing=signature,
             security=scheme,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[PaymentSource]) -> None:
             raise NotImplementedError
@@ -383,10 +384,9 @@ async def test_custom_compression_precedes_encoded_crypto_and_exact_signing() ->
             "/compressed",
             operation_id="compressedProjection",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
-            crypto_wire=wire,
             signing=signature,
+            wire=Wire(projection=projection, encrypted=wire),
         )
         async def send(self, **request: Unpack[PaymentSource]) -> None:
             raise NotImplementedError
@@ -466,8 +466,8 @@ async def test_nested_body_reserved_output_uses_the_projected_target_path() -> N
         @api.post(
             "/signed",
             responses=NO_CONTENT,
-            body=projection,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError
@@ -517,9 +517,9 @@ def test_private_and_signature_writer_collision_fails_during_compile() -> None:
         @api.post(
             "/collision",
             responses=NO_CONTENT,
-            body=projection,
             protections=(SIGNATURE_PROTECTION,),
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError
@@ -541,8 +541,8 @@ def test_body_signature_output_must_select_a_declared_target_field() -> None:
         @api.post(
             "/invalid-target",
             responses=NO_CONTENT,
-            body=projection,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError
@@ -566,9 +566,9 @@ async def test_body_signature_output_and_encoded_crypto_fail_before_key_or_netwo
         @api.post(
             "/invalid",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError
@@ -627,9 +627,9 @@ async def test_body_signature_and_field_crypto_writer_collision_fails_before_sid
         @api.post(
             "/invalid-field",
             responses=NO_CONTENT,
-            body=projection,
             crypto=crypto,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError
@@ -690,8 +690,8 @@ async def test_document_crypto_is_bound_to_projection_target_not_public_source()
         @api.put(
             "/invalid-model",
             responses=NO_CONTENT,
-            body=projection,
             crypto=invalid_crypto,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[PaymentSource]) -> None:
             raise NotImplementedError
@@ -739,8 +739,8 @@ async def test_projection_rejects_prepopulated_nested_signature_output() -> None
         @api.post(
             "/occupied",
             responses=NO_CONTENT,
-            body=projection,
             signing=signature,
+            wire=Wire(projection=projection),
         )
         async def send(self, **request: Unpack[SignedSource]) -> None:
             raise NotImplementedError

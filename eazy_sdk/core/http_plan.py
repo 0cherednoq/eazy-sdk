@@ -52,14 +52,14 @@ class PlanNode:
 
 
 @dataclass(frozen=True, slots=True)
-class WireRequirement:
+class TransportRequirement:
     dimension: str
     minimum: str
 
 
 @dataclass(frozen=True, slots=True)
-class WireRequirements:
-    dimensions: tuple[WireRequirement, ...] = ()
+class TransportRequirements:
+    dimensions: tuple[TransportRequirement, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +129,7 @@ class ExecutionPlan[T]:
     phases: tuple[PlanNode, ...]
     responses: object
     scope: RequestScope
-    requirements: WireRequirements
+    requirements: TransportRequirements
     replay: CompiledReplayPolicy
     fingerprint: str
 
@@ -169,13 +169,13 @@ def compile_plan[T](
     nodes: tuple[PlanNode, ...],
     responses: object,
     scope: RequestScope | None = None,
-    requirements: WireRequirements | None = None,
+    requirements: TransportRequirements | None = None,
     replay: CompiledReplayPolicy | None = None,
     fingerprint_context: tuple[str, ...] = (),
     slot_fingerprint: tuple[tuple[object, ...], ...] | None = None,
 ) -> ExecutionPlan[T]:
     scope = scope or RequestScope()
-    requirements = requirements or WireRequirements()
+    requirements = requirements or TransportRequirements()
     replay = replay or CompiledReplayPolicy()
     ordered = compile_graph(nodes)
     payload = {

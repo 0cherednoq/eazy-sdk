@@ -13,6 +13,7 @@ from eazy_sdk.request.prepared import (
     ReplayableBodyStream,
     UnsignedPreparedRequest,
 )
+from eazy_sdk.request.wire import dump_json
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.normalized import cast_headers
 
@@ -90,6 +91,7 @@ async def protect_http_request(
                 content,
                 wire.content_type,
                 sensitive=view.body.sensitive,
+                json=view.body.json,
             ),
         )
     return replace(
@@ -142,12 +144,7 @@ async def unprotect_http_response[TRaw](
                 "decrypted payload is not a valid JSON document"
             ) from None
         decrypted = await decrypt_document(document, compiled.inbound_fields, context=context)
-        content = json.dumps(
-            thaw_value(decrypted),
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        content = dump_json(thaw_value(decrypted), compiled.json)
         transformed = True
     if not transformed:
         return response

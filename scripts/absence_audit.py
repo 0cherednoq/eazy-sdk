@@ -97,6 +97,13 @@ REMOVED_SYMBOLS = {
     "EventLoopConflictError",
     "_SyncRunner",
     "_close_runner",
+    # Phase 48: one meaning of "wire", and one way to declare a signature.
+    "WireProfile",
+    "WireOptions",
+    "SigningRule",
+    "SigningOverride",
+    "SigningOverrideMode",
+    "select_signatures",
 }
 
 PHASE17_PUBLIC_TEXT = (

@@ -7,7 +7,7 @@ import pytest
 import requests
 from zapros import URL, Headers, Request
 
-from eazy_sdk.core.http_plan import WireRequirement, WireRequirements
+from eazy_sdk.core.http_plan import TransportRequirement, TransportRequirements
 from eazy_sdk.handlers import (
     CapabilityLevel,
     CapabilityMismatchError,
@@ -105,13 +105,13 @@ def test_handler_profile_is_metadata_and_has_no_send_method() -> None:
 
 def test_handler_profile_rejects_unmet_wire_requirement() -> None:
     profile = HandlerProfile(protocols=frozenset({HttpProtocol.HTTP_1_1}))
-    requirement = WireRequirement(
+    requirement = TransportRequirement(
         "preencoded_body",
         CapabilityLevel.CAPTURE_VERIFIED.name,
     )
 
     with pytest.raises(CapabilityMismatchError, match="preencoded_body"):
-        validate_profile(WireRequirements((requirement,)), profile)
+        validate_profile(TransportRequirements((requirement,)), profile)
 
 
 def test_requests_handler_fails_closed_for_duplicate_request_headers() -> None:

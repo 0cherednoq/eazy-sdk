@@ -60,7 +60,7 @@ from eazy_sdk.request import (
     ReplayableStreamBody,
     SigningKey,
     SigningKeyRequirement,
-    WireOptions,
+    Wire,
     header_output,
     hmac_sha256,
     method,
@@ -223,7 +223,7 @@ def test_sync_and_async_clients_use_the_same_core() -> None:
         AsyncItemsApi(async_client, identity=Identity(observer=async_observer)).items(page=2)
     )
     assert sync_value == async_value == {"ok": True}
-    assert sync_trace == async_trace == ["start_attempt", "prepared", "emit"]
+    assert sync_trace == async_trace == ["start_attempt", "stages", "prepared", "emit"]
 
 
 def test_generic_request_passes_through_the_same_executor() -> None:
@@ -257,7 +257,7 @@ def test_preflight_fails_before_attempt_middleware() -> None:
         )
     )
     with pytest.raises(Exception, match="capability mismatch"):
-        endpoint = dataclass_replace(contract(), wire=WireOptions(exact=True))
+        endpoint = dataclass_replace(contract(), wire=Wire(exact=True))
         execute_sync(client, endpoint)
     assert not called
 

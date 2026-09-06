@@ -17,7 +17,7 @@ from eazy_sdk.codegen import (
     Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,
     MultipartBody, Part, Path, Query, QueryString, SyncApi,
     Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,
-    WireOptions, all_of, any_of,
+    FieldOrder, Wire, all_of, any_of,
     FromProtection, ProtectionBundle, SolverRequirement, protection_flow,
 )
 from .auth import *

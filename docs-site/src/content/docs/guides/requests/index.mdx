@@ -19,6 +19,7 @@ middleware и сети.
 | Form field | `Annotated[T, Form()]` | {doc}`Form body </guides/requests/form>` |
 | Multipart part | `Annotated[T, Part()]` | {doc}`Multipart </guides/requests/multipart>` |
 | Готовые bytes | `Annotated[bytes, BytesBody()]` | {doc}`Bytes </guides/requests/bytes>` |
+| Представление на проводе | `wire=Wire(...)` | {doc}`Представление запроса </guides/requests/representation>` |
 
 Выберите один стиль на operation: direct keyword-only параметры с обычными Python defaults или
 единый `Unpack[TypedDict]`. Pydantic/dataclass/msgspec нужны для вложенного document или

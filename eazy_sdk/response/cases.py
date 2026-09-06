@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property, reduce
 from http.cookies import SimpleCookie
-from typing import Protocol, cast
+from typing import Protocol, cast, runtime_checkable
 
 from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.core.kernel import (
@@ -31,7 +31,8 @@ from eazy_sdk.core.kernel import (
 from eazy_sdk.core.kernel import (
     ParsedValue as ParsedValue,
 )
-from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+from eazy_sdk.models import ModelAdapterRegistry
+from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from .headers import Headers, _apply_header_sources
 from .normalized import NormalizedResponse, cast_headers
@@ -66,8 +67,12 @@ class ResponseContext[TRaw = object]:
     attempt: AttemptIdentity = AttemptIdentity(1)
     request: PreparedRequestSummary = PreparedRequestSummary("", "", 0)
     operation: OperationInfo = OperationInfo("generic")
-    models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
+    serialization: Serialization = field(default_factory=Serialization)
     _artifacts: dict[int, object] = field(default_factory=dict, compare=False, repr=False)
+
+    @property
+    def models(self) -> ModelAdapterRegistry:
+        return self.serialization.models
 
     @cached_property
     def bytes(self) -> bytes:
@@ -135,6 +140,19 @@ class ResponseExtractor(Protocol):
     def bind(self, response: ResponseContext[object]) -> BoundResponseExtractor: ...
 
 
+@runtime_checkable
+class PreparedResponseExtractor(Protocol):
+    """An extractor that can be asked, before the first call, whether it can do the job.
+
+    Extraction by selector is the one place where a backend choice can fail silently: a
+    parser that does not speak the operation's selector language returns nothing, which
+    reads exactly like a server that stopped sending the field. So the extractor gets a
+    compile-time half, and the executor calls it once per operation.
+    """
+
+    def prepare(self, model: type[object], serialization: Serialization) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class _TypedCallableParser[T]:
     model: type[T]
@@ -191,6 +209,16 @@ JSON_EXTRACTOR = JsonExtractor()
 class HtmlExtractor:
     name: str = "html"
 
+    def prepare(self, model: type[object], serialization: Serialization) -> None:
+        from eazy_sdk_html import compile_extraction_schema
+
+        try:
+            compile_extraction_schema(
+                model, models=serialization.models, backend=serialization.html
+            )
+        except Exception as exc:
+            raise BackendCapabilityError(str(exc)) from exc
+
     def bind(self, response: ResponseContext[object]) -> BoundResponseExtractor:
         return _BoundHtmlExtractor(response, self)
 
@@ -210,10 +238,12 @@ class _BoundHtmlExtractor:
                     'pip install "eazy-sdk[html]"'
                 ) from exc
 
+            serialization = self.response.serialization
             document = self.response.cached(
-                self.identity, lambda: HtmlDocument(self.response.bytes)
+                self.identity,
+                lambda: HtmlDocument(self.response.bytes, backend=serialization.html),
             )
-            return ParsedValue(document.extract(model, models=self.response.models))
+            return ParsedValue(document.extract(model, models=serialization.models))
         except Exception as exc:
             return Malformed(exc)
 

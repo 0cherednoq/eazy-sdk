@@ -3,11 +3,13 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import hmac
+import inspect
 from dataclasses import dataclass
 
 import pytest
 from zapros import Client as ZaprosClient
 
+from eazy_sdk import Json, SyncApi, api
 from eazy_sdk.compile import (
     CompiledContract,
     InputField,
@@ -15,11 +17,8 @@ from eazy_sdk.compile import (
 )
 from eazy_sdk.core import (
     GraphError,
-    OperationIdentity,
     OperationValues,
     RequestLocation,
-    RequestScope,
-    ScopeContext,
 )
 from eazy_sdk.handlers import EmitOptions, ZaprosSyncEmitter
 from eazy_sdk.handlers.httpx import HttpxHandler
@@ -35,7 +34,6 @@ from eazy_sdk.request import (
     body_digest,
     body_output,
     cookie_output,
-    extend,
     header,
     header_output,
     hmac_sha256,
@@ -45,12 +43,7 @@ from eazy_sdk.request import (
     previous_signature,
     query,
     query_output,
-    sign,
     target,
-    use,
-)
-from eazy_sdk.request import (
-    unsigned as unsigned_signing,
 )
 from eazy_sdk.request.prepared import (
     BufferedBody,
@@ -66,7 +59,6 @@ from eazy_sdk.request.signatures import (
     compile_signatures,
     custom_signature,
     reserve_outputs,
-    select_signatures,
     sign_prepared,
     whole_prepared_request,
 )
@@ -302,51 +294,39 @@ def test_capture_server_recomputes_signature_from_emitted_bytes() -> None:
         raw_client.close()
 
 
-def test_api_group_scoped_and_endpoint_signing_precedence_is_explicit() -> None:
-    api_signature = hmac_sha256(key=KEY, base=method(), output=header_output("X-Api"), name="api")
-    group_signature = hmac_sha256(
-        key=KEY, base=method(), output=header_output("X-Group"), name="group"
+def test_signing_is_chosen_by_declaration_site_and_can_be_required() -> None:
+    """Phase 48: signatures follow the router MRO, never the request address."""
+
+    router_signature = hmac_sha256(
+        key=KEY, base=method(), output=header_output("X-Router"), name="router"
     )
     endpoint_signature = hmac_sha256(
         key=KEY, base=method(), output=header_output("X-Endpoint"), name="endpoint"
     )
-    scoped_signature = hmac_sha256(
-        key=KEY, base=method(), output=header_output("X-Scoped"), name="scoped"
-    )
-    context = ScopeContext(
-        "https", "api.example", "/payments/1", "POST", OperationIdentity("createPayment")
-    )
-    rules = (
-        sign(
-            scoped_signature,
-            scope=RequestScope(hosts=frozenset({"api.example"})),
-        ),
-    )
-    assert select_signatures(context=context, api_default=(api_signature,), rules=rules) == (
-        api_signature,
-    )
-    assert select_signatures(
-        context=context,
-        group_default=(group_signature,),
-        api_default=(api_signature,),
-        rules=rules,
-    ) == (group_signature,)
-    assert select_signatures(
-        context=context,
-        endpoint=use(endpoint_signature),
-        group_default=(group_signature,),
-    ) == (endpoint_signature,)
-    assert select_signatures(
-        context=context,
-        endpoint=extend(endpoint_signature),
-        group_default=(group_signature,),
-    ) == (group_signature, endpoint_signature)
-    assert (
-        select_signatures(
-            context=context,
-            endpoint=unsigned_signing(),
-            group_default=(group_signature,),
-        )
-        == ()
-    )
-    assert select_signatures(context=context, rules=rules) == (scoped_signature,)
+
+    class SignedService:
+        signing = (router_signature,)
+        signed = True
+
+    class PaymentsApi(SignedService, SyncApi):
+        @api.post("/inherits", response=Json())
+        def inherits(self) -> dict[str, object]:
+            raise NotImplementedError
+
+        @api.post("/overrides", response=Json(), signing=(endpoint_signature,))
+        def overrides(self) -> dict[str, object]:
+            raise NotImplementedError
+
+    defaults = PaymentsApi._service_defaults
+    inherited = inspect.getattr_static(PaymentsApi, "inherits").resolve(defaults)
+    overridden = inspect.getattr_static(PaymentsApi, "overrides").resolve(defaults)
+    assert inherited.signing == (router_signature,)
+    assert overridden.signing == (endpoint_signature,)
+
+    class Unsigned(SignedService, SyncApi):
+        @api.post("/forgot", response=Json(), signing=())
+        def forgot(self) -> dict[str, object]:
+            raise NotImplementedError
+
+    with pytest.raises(TypeError, match="requires every operation to be signed"):
+        inspect.getattr_static(Unsigned, "forgot").resolve(Unsigned._service_defaults)

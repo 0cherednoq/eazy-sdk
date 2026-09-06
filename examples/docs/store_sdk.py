@@ -37,6 +37,7 @@ from eazy_sdk.request import (
     JsonBody,
     SigningKey,
     SigningKeyRequirement,
+    Wire,
     body_digest,
     header_output,
     hmac_sha256,
@@ -130,7 +131,7 @@ class PaymentsApi(SyncApi):
         security=CUSTOMER,
         signing=PAYMENTS_HMAC,
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=PAYMENT_WIRE,
+        wire=Wire(encrypted=PAYMENT_WIRE),
     )
     def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
         raise NotImplementedError

@@ -68,7 +68,8 @@ _GENERATED_RESERVED_NAMES = frozenset(
         "Unset",
         "AsyncClient",
         "Client",
-        "WireOptions",
+        "Wire",
+        "FieldOrder",
         "PayloadCrypto",
     }
 )
@@ -160,7 +161,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     lines.extend(
         [
             "    Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,",
-            "    WireOptions, all_of, any_of,",
+            "    FieldOrder, Wire, all_of, any_of,",
             "    FromProtection, ProtectionBundle, SolverRequirement, protection_flow,",
             ")",
         ]
@@ -311,7 +312,7 @@ def _crypto_registry(ir: OpenAPIIR) -> list[str]:
                 "            scope=http_crypto_scope(",
                 f"                operation_ids=({operation.operation_id!r},),",
                 "            ),",
-                "            wire=http_encrypted(",
+                "            encrypted=http_encrypted(",
                 f"                content_type={wire.content_type!r},",
                 f"                clear_content_type={wire.clear_content_type!r},",
                 f"                plaintext_statuses=frozenset({wire.plaintext_statuses!r}),",
@@ -1308,12 +1309,7 @@ def _operation_decorator(
         *([f"        requires={_requirements(operation)},"] if operation.requires else []),
         *([f"        signing={_signature_uses(operation)},"] if operation.signatures else []),
         *([f"        protections={_protection_uses(operation)},"] if operation.protections else []),
-        *(
-            [f"        body={_projection_constant_name(operation)},"]
-            if operation.protections or operation.body_projection is not None
-            else []
-        ),
-        *([f"        wire={_wire(operation)},"] if operation.wire is not None else []),
+        *([f"        wire={_wire(operation)},"] if _has_wire(operation) else []),
         *(
             [f"        idempotent={operation.idempotent!r},"]
             if operation.idempotent is not None
@@ -1367,16 +1363,40 @@ def _security_policy(operation: OperationIR) -> str:
     return f"any_of({', '.join(alternatives)})"
 
 
-def _wire(operation: OperationIR) -> str:
-    wire = operation.wire
-    if wire is None:
-        return "None"
+def _has_wire(operation: OperationIR) -> bool:
     return (
-        "WireOptions("
-        f"query_order={wire.query_order!r}, header_order={wire.header_order!r}, "
-        f"cookie_order={wire.cookie_order!r}, body_order={wire.body_order!r}, "
-        f"exact={wire.exact!r}, protocol={wire.protocol!r})"
+        operation.wire is not None
+        or bool(operation.protections)
+        or operation.body_projection is not None
     )
+
+
+def _wire(operation: OperationIR) -> str:
+    """One representation declaration: the projection, the field order and the protocol."""
+
+    pieces: list[str] = []
+    if operation.protections or operation.body_projection is not None:
+        pieces.append(f"projection={_projection_constant_name(operation)}")
+    wire = operation.wire
+    if wire is not None:
+        if any(
+            item is not None
+            for item in (
+                wire.query_order,
+                wire.header_order,
+                wire.cookie_order,
+                wire.body_order,
+            )
+        ):
+            pieces.append(
+                f"order=FieldOrder(query={wire.query_order!r}, header={wire.header_order!r}, "
+                f"cookie={wire.cookie_order!r}, body={wire.body_order!r})"
+            )
+        if wire.exact:
+            pieces.append(f"exact={wire.exact!r}")
+        if wire.protocol is not None:
+            pieces.append(f"transport={wire.protocol!r}")
+    return "Wire(" + ", ".join(pieces) + ")"
 
 
 def _requirements(operation: OperationIR) -> str:

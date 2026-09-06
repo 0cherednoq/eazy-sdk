@@ -31,7 +31,8 @@ users = await AsyncUsersApi(client).search(q="ada", limit=10)
 
 Переименуйте wire-параметр через `Query("page-size")`. Параметры `style`, `explode` и
 `allow_reserved` нужны для OpenAPI-compatible сериализации сложных значений. Для API, которое
-чувствительно к порядку query, задайте `WireOptions(query_order=(...))` в декораторе.
+чувствительно к порядку query, задайте `wire=Wire(order=FieldOrder(query=(...)))` в
+декораторе; правило percent-кодирования — `wire=Wire(query=QueryCodec(space="plus"))`.
 
 Пример ответа: status `200`, `Content-Type: application/json`, body
 `[{"id":42,"name":"Ada"}]`.

@@ -21,7 +21,7 @@ from eazy_sdk.core.http_plan import (
     PlanNode,
     PlanNodeKind,
     RequestScope,
-    WireRequirements,
+    TransportRequirements,
     compile_plan,
 )
 from eazy_sdk.core.kernel import (
@@ -257,7 +257,7 @@ class _FingerprintPass:
 class _ResponseCapabilityPass:
     responses: object
     scope: RequestScope
-    requirements: WireRequirements
+    requirements: TransportRequirements
     replay: CompiledReplayPolicy
     diagnostic: CompilerPassDiagnostic
 
@@ -268,7 +268,7 @@ def compile_endpoint[T](
     registry: HttpCompilerRegistry | None = None,
     scope: RequestScope | None = None,
     source: SourcePointer | None = None,
-    requirements: WireRequirements | None = None,
+    requirements: TransportRequirements | None = None,
     fingerprint_context: tuple[str, ...] = (),
     private_bindings: tuple[object, ...] = (),
 ) -> CompiledContract[T]:
@@ -276,7 +276,7 @@ def compile_endpoint[T](
     if registry.kind is not HTTP_COMPILER_KIND:
         raise PlanError(f"HTTP compiler received {registry.kind.name!r} registry; expected 'http'")
     scope = scope or RequestScope()
-    requirements = requirements or WireRequirements()
+    requirements = requirements or TransportRequirements()
     if not contract.operation_id:
         raise PlanError("operation_id must not be empty")
     layout = _compile_input_layout(contract, source=source)
@@ -504,7 +504,7 @@ def _compile_input_layout(
     )
     body_projection = cast(
         BodyProjection[object, object] | None,
-        getattr(contract, "body_projection", None),
+        getattr(getattr(contract, "wire", None), "projection", None),
     )
     return _InputLayoutPass(
         contract,
@@ -796,7 +796,7 @@ def _compile_fingerprint_pass(
         *(
             (
                 f"crypto:{crypto.name}",
-                f"crypto-wire:{type(getattr(contract, 'crypto_wire', None)).__name__}",
+                f"crypto-wire:{_encrypted_name(contract)}",
             )
             if isinstance(crypto, CryptoProfile)
             else ()
@@ -825,7 +825,7 @@ def _compile_fingerprint_pass(
 def _compile_response_capability_pass(
     contract: EndpointLike,
     scope: RequestScope,
-    requirements: WireRequirements,
+    requirements: TransportRequirements,
 ) -> _ResponseCapabilityPass:
     replay = CompiledReplayPolicy(
         max_attempts=1,
@@ -1142,6 +1142,13 @@ def _validate_overlapping_paths(
                 raise PlanError(
                     f"{owner} paths overlap: {'.'.join(path)} and {'.'.join(other)}"
                 )
+
+
+def _encrypted_name(contract: object) -> str:
+    """Fingerprint the encrypted-body declaration without importing the crypto package."""
+
+    wire = getattr(contract, "wire", None)
+    return type(getattr(wire, "encrypted", None)).__name__
 
 
 def _type_identity(annotation: object) -> str:

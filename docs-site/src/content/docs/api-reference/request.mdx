@@ -1,10 +1,10 @@
 ---
 title: Request API
-description: Маркеры размещения, тела и wire options.
+description: Маркеры размещения, тела и представление запроса на проводе.
 sources:
   - eazy_sdk.request
   - eazy_sdk.core.errors.OperationBindingError
-api_fingerprint: "sha256:cf3fbe2441403a2703724ec0cb1d52ad4a519111cf8093325d19d7ee12a11de2"
+api_fingerprint: "sha256:2238212a0ce0dd5e35b9e48968a06efef205703d4d3585526470ce15bbb1c7d6"
 ---
 
 Маркеры используются либо в явных keyword-only параметрах метода, либо в полях operation
@@ -53,8 +53,9 @@ lower-ятся одинаково, но не смешиваются в одно�
 | Обязательное значение в любом стиле | Параметр без default / required key | Ошибка `bind` до mapper и I/O |
 | Явно переданный `None` | Любой стиль с nullable type | Key присутствует со значением `None` |
 
-`WireOptions` фиксирует порядок и exact/protocol настройки только там, где сервер требует точных
-байтов. `CallOptions | None` — зарезервированный keyword-only параметр управления одним вызовом.
+`Wire` фиксирует представление запроса на проводе — всё, что влияет на байты, — и объявляется там
+же, где остальной контракт операции. `CallOptions | None` — зарезервированный keyword-only
+параметр управления одним вызовом.
 
 ## Placement markers
 
@@ -109,8 +110,11 @@ attempt, включая retry и redirect.
 msgspec model. Root body markers нужны для scalar/array payload, вложенного document или случая,
 когда модель действительно владеет validation и serialization policy.
 
-`WireOptions` принимает `query_order`, `header_order`, `cookie_order`, `body_order`, `exact` и
-`protocol`. Exact requirements проверяются до resolver calls и network side effects.
+`Wire` принимает `projection`, `encrypted`, `order` (`FieldOrder(query=…, header=…, cookie=…,
+body=…)`), `exact`, `encoding` (`JsonPolicy`), `query` (`QueryCodec`) и `transport`. Каждое поле
+`None` означает «наследовать», поэтому операция, объявившая только `encoding`, сохраняет
+шифрование своего сервиса. `exact` и `transport` проверяются как capability транспорта — до
+resolver calls и сетевых side effects.
 
 Custom `BodyCodec` можно использовать вместо root body marker или как encoding `BodyProjection`:
 он получает уже адаптированные semantic primitives и `EncodeContext(operation_id=...)`, затем

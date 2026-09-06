@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import gzip
-import json
 import zlib
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -30,7 +29,6 @@ from eazy_sdk.request.descriptors import (
     MultipartPart,
     Part,
     ReplayableStreamBody,
-    WireOptions,
 )
 from eazy_sdk.request.logical import (
     ExactBodyInput,
@@ -53,6 +51,16 @@ from eazy_sdk.request.params import (
     serialize_path,
     serialize_query,
     serialize_querystring,
+)
+from eazy_sdk.request.wire import (
+    DEFAULT_JSON_BACKEND,
+    DEFAULT_JSON_POLICY,
+    DEFAULT_QUERY_CODEC,
+    EMPTY_WIRE,
+    JsonBackend,
+    JsonPolicy,
+    QueryCodec,
+    encode_query_component,
 )
 
 if TYPE_CHECKING:
@@ -81,6 +89,7 @@ class BodyLayout:
     slots: tuple[ValueSlot[Any], ...] = ()
     flat: bool = False
     projected: bool = False
+    json: JsonPolicy = DEFAULT_JSON_POLICY
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,16 +100,7 @@ class RequestLayout:
     cookies: tuple[ValueSlot[Any], ...]
     body: BodyLayout
     extras: ComponentExtrasPolicy = ComponentExtrasPolicy.ERROR
-
-
-@dataclass(frozen=True, slots=True)
-class WireProfile:
-    protocol: HttpProtocol = HttpProtocol.HTTP_1_1
-    exact: bool = False
-    query_space: Literal["percent", "plus"] = "percent"
-    percent_uppercase: bool = True
-    json_ensure_ascii: bool = False
-    automatic_fields: tuple[str, ...] = ("Host", "Content-Length", "Content-Type", "Cookie")
+    query_codec: QueryCodec = DEFAULT_QUERY_CODEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +165,8 @@ class PreparedBodyView:
     json_view: FrozenJsonValue | None = None
     form_fields: tuple[PreparedFormField, ...] | None = None
     sensitive: bool = False
+    json: JsonPolicy = DEFAULT_JSON_POLICY
+    """The policy these bytes were produced with, so a signature reproduces them exactly."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,8 +244,8 @@ class PreparedRequest:
 @dataclass(frozen=True, slots=True)
 class RequestPreparer:
     base_url: str
-    profile: WireProfile | None = None
     models: ModelAdapterRegistry = dataclasses.field(default_factory=default_model_adapters)
+    json: JsonBackend = DEFAULT_JSON_BACKEND
 
     def prepare[T](
         self,
@@ -258,7 +260,6 @@ class RequestPreparer:
         body_document_override: object = _NO_BODY_DOCUMENT_OVERRIDE,
     ) -> UnsignedPreparedRequest:
         layout = compile_layout(compiled)
-        profile = self.profile or WireProfile()
         contract = compiled.contract
         url = url_override or _resolve_url(self.base_url, contract.path)
         split = urlsplit(url)
@@ -287,6 +288,7 @@ class RequestPreparer:
             values,
             compiled.descriptors,
             compiled.wire_names,
+            codec=layout.query_codec,
             operation_id=contract.operation_id,
             models=self.models,
         )
@@ -314,6 +316,7 @@ class RequestPreparer:
                 values,
                 boundary=boundary,
                 models=self.models,
+                json=self.json,
                 descriptors=compiled.descriptors,
                 wire_names=compiled.wire_names,
                 operation_id=contract.operation_id,
@@ -363,7 +366,7 @@ class RequestPreparer:
             target=view.target,
             headers=headers,
             body=body,
-            protocol=profile.protocol,
+            protocol=_transport_protocol(compiled),
             reserved_outputs=reserved_outputs,
             view=view,
             body_input=body_input,
@@ -371,7 +374,8 @@ class RequestPreparer:
 
 
 def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
-    wire = cast(WireOptions | None, getattr(compiled.contract, "wire", None))
+    wire = getattr(compiled.contract, "wire", None) or EMPTY_WIRE
+    order = wire.order
     groups = {
         RequestLocation.PATH: tuple(compiled.path_slots.values()),
         RequestLocation.QUERY: tuple(compiled.query_slots.values()),
@@ -381,19 +385,19 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
     }
     query = _apply_order(
         groups[RequestLocation.QUERY],
-        wire.query_order if wire else None,
+        getattr(order, 'query', None),
         "query",
         compiled.wire_names,
     )
     headers = _apply_order(
         groups[RequestLocation.HEADER],
-        wire.header_order if wire else None,
+        getattr(order, 'header', None),
         "header",
         compiled.wire_names,
     )
     cookies = _apply_order(
         groups[RequestLocation.COOKIE],
-        wire.cookie_order if wire else None,
+        getattr(order, 'cookie', None),
         "cookie",
         compiled.wire_names,
     )
@@ -407,13 +411,13 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
     if projection is not None:
         body_layout = BodyLayout(
             projection.encoding,
-            wire.body_order if wire else None,
+            getattr(order, 'body', None),
             projected=True,
         )
     elif flat_body_slots:
         body_slots = _apply_order(
             flat_body_slots,
-            wire.body_order if wire else None,
+            getattr(order, 'body', None),
             "body",
             compiled.wire_names,
         )
@@ -429,7 +433,7 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
         descriptor = compiled.descriptors[body_slots[0]] if body_slots else None
         body_layout = BodyLayout(
             descriptor,
-            wire.body_order if wire else None,
+            getattr(order, 'body', None),
             slots=body_slots,
         )
     return RequestLayout(
@@ -437,7 +441,8 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
         query=query,
         headers=headers,
         cookies=cookies,
-        body=body_layout,
+        body=replace(body_layout, json=wire.json_policy),
+        query_codec=wire.query_codec,
     )
 
 
@@ -473,6 +478,7 @@ def _query_parts(
     *,
     operation_id: str,
     models: ModelAdapterRegistry,
+    codec: QueryCodec = DEFAULT_QUERY_CODEC,
 ) -> tuple[tuple[PreparedQueryPair, ...], bytes]:
     output: list[PreparedQueryPair] = []
     raw_query: bytes | None = None
@@ -511,8 +517,8 @@ def _query_parts(
                 PreparedQueryPair(
                     name=name.encode("utf-8"),
                     value=raw.encode("utf-8"),
-                    encoded_name=encoded_name.encode("ascii"),
-                    encoded_value=encoded_value.encode("ascii"),
+                    encoded_name=encode_query_component(encoded_name, codec).encode("ascii"),
+                    encoded_value=encode_query_component(encoded_value, codec).encode("ascii"),
                     slot=slot,
                 )
             )
@@ -678,12 +684,26 @@ def _header_value(name: bytes, value: object) -> bytes:
     return encoded
 
 
+def _transport_protocol[T](compiled: CompiledContract[T]) -> HttpProtocol:
+    """The protocol the request declares, defaulting to the one every handler speaks."""
+
+    declared = (getattr(compiled.contract, "wire", None) or EMPTY_WIRE).transport
+    if declared is None:
+        return HttpProtocol.HTTP_1_1
+    return {
+        "http/1.1": HttpProtocol.HTTP_1_1,
+        "http/2": HttpProtocol.HTTP_2,
+        "http/3": HttpProtocol.HTTP_3,
+    }[declared]
+
+
 def _body(
     layout: BodyLayout,
     values: OperationValues,
     *,
     boundary: str | None,
     models: ModelAdapterRegistry,
+    json: JsonBackend,
     descriptors: Mapping[ValueSlot[object], object],
     wire_names: Mapping[ValueSlot[object], str],
     operation_id: str,
@@ -730,20 +750,26 @@ def _body(
             else document_override
         )
         semantic = _order_mapping(semantic, layout.field_order)
-        content = json.dumps(
-            semantic,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            default=_json_default,
-        ).encode("utf-8")
+        content = json.dumps(semantic, layout.json, default=_json_default)
         frozen = _freeze_json(semantic)
+        # A declared encoding is a promise about bytes, so those bytes are what leaves. With
+        # no promise the logical input travels instead, and the transport encodes it in its
+        # own idiom — which is how a handler keeps a browser's exact JSON shape.
+        body_input: ZaprosBodyInput = (
+            ExactBodyInput(content, descriptor.content_type)
+            if layout.json != DEFAULT_JSON_POLICY
+            else JsonInput(semantic)
+        )
         return (
             BufferedBody(content, descriptor.content_type.encode("ascii")),
             PreparedBodyView(
-                content, descriptor.content_type, frozen, sensitive=body_sensitive
+                content,
+                descriptor.content_type,
+                frozen,
+                sensitive=body_sensitive,
+                json=layout.json,
             ),
-            JsonInput(semantic),
+            body_input,
         )
     if has_document_override and not layout.projected:
         raise PlanError("document body override requires a JSON body descriptor")

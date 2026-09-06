@@ -88,7 +88,7 @@ cookie jar; cookie при этом остаются домен-скоупным�
 
 | Уровень | Что несёт | Почему |
 |---|---|---|
-| Роутер / миксин сервиса | `base_url`, `errors`, `security`, `signing`, `crypto`, `crypto_wire`, `allow` | контракт API: что сервер требует и что возвращает |
+| Роутер / миксин сервиса | `base_url`, `errors`, `security`, `signing`, `crypto`, `wire`, `signed`, `allow` | контракт API: что сервер требует и что возвращает |
 | Клиент | `base_url` по умолчанию, retry, timeout, proxy, impersonation, handler, guard/protection | доставка байтов |
 
 Цепочка дефолтов — одна: корень → MRO роутера → аргументы операции. Слияние выполняется один раз

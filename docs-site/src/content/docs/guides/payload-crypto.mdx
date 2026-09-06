@@ -3,7 +3,7 @@ title: Шифрование payload
 description: Подключите application-owned шифрование полей или всего payload к HTTP и WebSocket.
 sources:
   - eazy_sdk.crypto
-api_fingerprint: "sha256:ac6e7e586ec155766f7b83ebe7f266b033ad67a4d1051e04178559c7d4d7be85"
+api_fingerprint: "sha256:2717342daecd0183655426505a548d5a65e7bda221dba900471ea3a6a21451c7"
 ---
 
 Eazy SDK управляет стадиями и wire-представлением, но не предоставляет cipher, keyring или KMS
@@ -92,7 +92,7 @@ from typing import Annotated, TypedDict, Unpack
 
 from eazy_sdk import AsyncApi, api
 from eazy_sdk.crypto import http_encrypted
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request import JsonBody, Wire
 
 class CreatePaymentRequest(TypedDict):
     body: Annotated[CreatePayment, JsonBody()]
@@ -101,11 +101,11 @@ class PaymentsApi(AsyncApi):
     @api.post(
         "/v1/payments",
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=http_encrypted(
+        wire=Wire(encrypted=http_encrypted(
             content_type="application/vnd.example.encrypted+json",
             clear_content_type="application/json",
             plaintext_statuses=frozenset({400, 422}),
-        ),
+        )),
     )
     async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
         raise NotImplementedError
@@ -132,7 +132,7 @@ class PaymentsSocket(AsyncWsApi):
         payload=JsonPayload(CreatePayment),
         replies=Replies((SuccessReply("created", PaymentResult),)),
         crypto=PAYMENT_CRYPTO,
-        crypto_wire=websocket_encrypted(frame_kind="binary"),
+        encrypted=websocket_encrypted(frame_kind="binary"),
     )
     async def create(self, number: str, amount: int) -> PaymentResult:
         raise NotImplementedError

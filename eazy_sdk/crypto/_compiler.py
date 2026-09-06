@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from eazy_sdk.models import ModelAdapterRegistry
+from eazy_sdk.request.wire import DEFAULT_JSON_POLICY, JsonPolicy
 
 from .core import (
     CryptoConfigurationError,
@@ -50,6 +51,8 @@ class CompiledPayloadCrypto:
     profile: PayloadCrypto
     outbound_fields: tuple[CompiledEncryptField, ...]
     inbound_fields: tuple[CompiledDecryptField, ...]
+    json: JsonPolicy = DEFAULT_JSON_POLICY
+    """The operation's encoding, so a decrypted document is re-encoded the way it arrived."""
 
 
 def validate_crypto_runtime(profile: PayloadCrypto, *, allow_async: bool) -> None:
@@ -79,6 +82,7 @@ def compile_payload_crypto(
     *,
     outbound_model: object | None = None,
     inbound_models: tuple[object, ...] = (),
+    json: JsonPolicy = DEFAULT_JSON_POLICY,
 ) -> CompiledPayloadCrypto:
     outbound: list[CompiledEncryptField] = []
     inbound: list[CompiledDecryptField] = []
@@ -125,7 +129,7 @@ def compile_payload_crypto(
     _validate_resolved_paths(tuple(item.wire_path for item in outbound), "outbound")
     _validate_resolved_paths(tuple(item.wire_path for item in inbound), "inbound")
     _validate_declared_outputs(profile)
-    return CompiledPayloadCrypto(profile, tuple(outbound), tuple(inbound))
+    return CompiledPayloadCrypto(profile, tuple(outbound), tuple(inbound), json)
 
 
 async def encrypt_document(

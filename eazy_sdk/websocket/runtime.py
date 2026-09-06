@@ -109,7 +109,7 @@ class AsyncWsClient(_ConnectionMixin, _ReconnectMixin, _ProtectionMixin, _EmitMi
         self._inbound_crypto: tuple[CompiledPayloadCrypto, WebSocketEncrypted] | None = None
         self._crypto_connection_values: dict[int, object] = {}
         if isinstance(self.config.crypto, PayloadCrypto):
-            default_wire = self.config.crypto_wire or WebSocketEncrypted()
+            default_wire = self.config.encrypted or WebSocketEncrypted()
             default_compiled = compile_payload_crypto(self.config.crypto, self.config.models)
             _validate_websocket_crypto(
                 default_compiled,

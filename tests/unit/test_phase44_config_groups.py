@@ -213,8 +213,6 @@ def test_a_root_may_declare_serialization_on_the_class() -> None:
 def test_serialization_validates_what_it_accepts() -> None:
     with pytest.raises(TypeError, match="ModelAdapterRegistry"):
         Serialization(models=object())  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="WireProfile"):
-        Serialization(profile=object())  # type: ignore[arg-type]
 
 
 def test_a_client_no_longer_declares_serialization_or_identity() -> None:

@@ -462,7 +462,7 @@ class WebSocketEncrypted:
         _validate_binding_outputs(self.metadata, casefold=False)
 
 
-type CryptoWire = HttpEncrypted | WebSocketEncrypted
+type Encrypted = HttpEncrypted | WebSocketEncrypted
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,7 +490,7 @@ class CryptoRule:
     profile: PayloadCrypto
     scope: CryptoScope
     priority: int = 0
-    wire: CryptoWire | None = None
+    encrypted: Encrypted | None = None
     directions: frozenset[CryptoDirection] = frozenset(
         (CryptoDirection.OUTBOUND, CryptoDirection.INBOUND)
     )
@@ -503,7 +503,7 @@ class CryptoRule:
 @dataclass(frozen=True, slots=True)
 class ResolvedCrypto:
     profile: PayloadCrypto
-    wire: CryptoWire | None
+    encrypted: Encrypted | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -937,7 +937,7 @@ def _select_rule(matches: tuple[CryptoRule, ...], protocol: str) -> ResolvedCryp
         rule.profile.inbound if CryptoDirection.INBOUND in rule.directions else None,
         rule.profile.inputs,
     )
-    return ResolvedCrypto(profile, rule.wire)
+    return ResolvedCrypto(profile, rule.encrypted)
 
 
 __all__ = [
@@ -961,13 +961,13 @@ __all__ = [
     "CryptoStage",
     "CryptoStreamingUnsupportedError",
     "CryptoValues",
-    "CryptoWire",
     "DecryptEncoded",
     "DecryptField",
     "EncodedDecryptor",
     "EncodedEncryptor",
     "EncryptEncoded",
     "EncryptField",
+    "Encrypted",
     "EncryptedFrameKindMismatchError",
     "EncryptedMediaTypeMismatchError",
     "FrozenArray",
