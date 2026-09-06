@@ -85,7 +85,9 @@ def _client(bodies: list[bytes], config: ClientConfig | None = None) -> Client:
 
 def test_the_config_is_three_groups_plus_the_crypto_registry() -> None:
     parameters = set(inspect.signature(ClientConfig).parameters)
-    assert parameters == {"resilience", "security", "hooks", "crypto"}
+    # ``errors`` joined the groups in phase 50.2.6: what a host answers with is client
+    # policy, not contract, and it is scoped by exact host like ``crypto``.
+    assert parameters == {"resilience", "security", "hooks", "crypto", "errors"}
     for flat in (
         "retry",
         "auth_retries",
