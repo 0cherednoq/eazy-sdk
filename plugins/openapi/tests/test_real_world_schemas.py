@@ -125,17 +125,20 @@ def test_generation_matches_snapshot_and_passes_strict_mypy(
     assert "query_values" not in actual["client.py"]
     assert "inputs.py" not in actual
     assert "EndpointContract" not in actual["client.py"]
-    assert "TypedDict" in actual["client.py"]
-    assert "Unpack" in actual["client.py"]
+    assert "Unpack" not in actual["client.py"]
+    assert "HttpOperation[" in actual["client.py"]
     if case.package == "museum_sdk":
         assert "class AsyncTickets(AsyncApi):" in actual["client.py"]
         assert "tickets = api_group(AsyncTickets)" in actual["client.py"]
         assert "Error as ErrorModel" in actual["client.py"]
-        assert "    @api.post(" in actual["client.py"]
-        assert "    async def buyMuseumTickets(" in actual["client.py"]
-        assert "class GetMuseumHoursRequest(TypedDict, total=False):" in actual["client.py"]
-        assert "start_date: Annotated[str | None, Query('startDate')]" in actual["client.py"]
-        assert "**request: Unpack[GetMuseumHoursRequest]" in actual["client.py"]
+        assert "    __http__ = Http.post(" in actual["client.py"]
+        assert "    buyMuseumTickets = op(BuyMuseumTicketsRequest)" in actual["client.py"]
+        assert "class GetMuseumHoursRequest(HttpOperation[MuseumHours]):" in actual["client.py"]
+        assert (
+            "start_date: Annotated[Omittable[str], markers.Query('startDate')] = UNSET"
+            in actual["client.py"]
+        )
+        assert "    getMuseumHours = op(GetMuseumHoursRequest)" in actual["client.py"]
     assert all(
         path.read_bytes().endswith(b"\n") and not path.read_bytes().endswith(b"\n\n")
         for path in package.iterdir()

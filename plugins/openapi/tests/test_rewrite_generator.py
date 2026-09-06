@@ -305,27 +305,29 @@ def test_supported_versions_normalize_to_shared_contracts(version: str) -> None:
     assert "lambda" not in source
     assert "attrgetter" not in source
     assert "EndpointContract" not in source
-    assert "class GetUserRequest(TypedDict, total=False):" in source
-    assert "**request: Unpack[GetUserRequest]" in source
-    assert source.count("@api.get(") == 2
+    assert "class GetUserRequest(HttpOperation[" in source
+    assert source.count("getUser = op(GetUserRequest)") == 2
+    assert source.count("__http__ = Http.get(") == 1
 
 
 def test_operation_is_a_decorated_method_with_response_on_its_descriptor() -> None:
+    """Phase 50: one operation class, published on both routers with ``op()``."""
+
     source = render_client(parse_openapi(specification("3.1.1")))
 
+    operation_class = source.index("class GetUserRequest(HttpOperation[")
+    spec = source.index("    __http__ = Http.get(", operation_class)
     async_router = source.index("class AsyncDefault(AsyncApi):")
-    async_decorator = source.index("    @api.get(", async_router)
-    async_method = source.index("    async def getUser(", async_decorator)
+    async_member = source.index("    getUser = op(GetUserRequest)", async_router)
     sync_router = source.index("class SyncDefault(SyncApi):")
-    sync_decorator = source.index("    @api.get(", sync_router)
-    sync_method = source.index("    def getUser(", sync_decorator)
+    sync_member = source.index("    getUser = op(GetUserRequest)", sync_router)
 
-    assert async_router < async_decorator < async_method < sync_router
-    assert sync_router < sync_decorator < sync_method
+    assert operation_class < spec < async_router < async_member < sync_router
+    assert sync_router < sync_member
     assert "EndpointContract" not in source
     assert "_with_response" not in source
-    assert "class GetUserRequest(TypedDict, total=False):" in source
-    assert source.count("**request: Unpack[GetUserRequest]") == 2
+    assert "@dataclass(frozen=True, slots=True, kw_only=True)" in source
+    assert source.count("op(GetUserRequest)") == 2
     assert "operation_id='getUser'" in source
     assert "frozenset" not in source
     assert "requires=()," not in source
@@ -333,7 +335,7 @@ def test_operation_is_a_decorated_method_with_response_on_its_descriptor() -> No
     assert "wire=None," not in source
     assert "idempotent=None," not in source
     assert "fallback=None," not in source
-    assert "raise NotImplementedError" in source
+    assert "raise NotImplementedError" not in source
 
     tagged_spec = specification("3.1.1")
     tagged_spec["paths"]["/users/{user_id}"]["get"]["tags"] = ["Users"]
@@ -539,18 +541,20 @@ def test_input_is_the_only_parameter_declaration_and_normalizes_wire_names() -> 
     ir = parse_openapi(spec)
     client = render_client(ir)
 
-    assert "user_id: Required[Annotated[str, Path('user_id')]]" in client
-    assert "user_id_query: Annotated[str | None, Query('user_id')]" in client
-    assert "options_: Annotated[int | None, Query('options')]" in client
-    assert "filter_name: Annotated[str | None, Query('filter[name]')]" in client
-    assert "**request: Unpack[GetUserRequest]" in client
+    assert "user_id: Path[str]" in client
+    assert "user_id_query: Annotated[Omittable[str], markers.Query('user_id')] = UNSET" in client
+    assert "options_: Annotated[Omittable[int], markers.Query('options')] = UNSET" in client
+    assert (
+        "filter_name: Annotated[Omittable[str], markers.Query('filter[name]')] = UNSET" in client
+    )
+    assert "getUser = op(GetUserRequest)" in client
     assert "parameters=" not in client
     assert "body=" not in client
     assert "path_values" not in client
     assert "query_values" not in client
     assert "        /," not in client
     assert "EndpointContract" not in client
-    assert client.count("**request: Unpack[GetUserRequest]") == 2
+    assert client.count("getUser = op(GetUserRequest)") == 2
 
 
 def test_query_array_requiring_repeated_keys_is_rejected_with_source_pointer() -> None:
@@ -597,7 +601,7 @@ def test_inline_flat_json_body_becomes_pydantic_request_model() -> None:
     assert "serialize_by_alias=True" in client
     assert "ticket_count: Annotated[int, Field(alias='ticketCount')]" in client
     assert "note: str | None = None" in client
-    assert "body: Required[Annotated[GetUserRequestBody, JsonBody(" in client
+    assert "body: Annotated[GetUserRequestBody, markers.JsonBody(" in client
 
 
 @pytest.mark.parametrize(
@@ -641,7 +645,7 @@ def test_flat_form_and_multipart_bodies_become_pydantic_request_models(
     source = render_client(parse_openapi(spec))
     assert "class GetUserRequestBody(OpenAPIModel):" in source
     assert field in source
-    assert f"body: Required[Annotated[GetUserRequestBody, {marker}" in source
+    assert f"body: Annotated[GetUserRequestBody, markers.{marker}" in source
 
 
 def test_optional_body_with_required_properties_keeps_root_boundary() -> None:
@@ -659,7 +663,7 @@ def test_optional_body_with_required_properties_keeps_root_boundary() -> None:
         },
     }
     client = render_client(parse_openapi(spec))
-    assert "body: Annotated[dict[str, Any] | None, JsonBody(" in client
+    assert "body: Annotated[Omittable[dict[str, Any]], markers.JsonBody(" in client
     assert "JsonField('name')" not in client
 
 
@@ -679,7 +683,7 @@ def test_nested_or_constrained_body_keeps_root_boundary(schema: dict[str, Any]) 
         "content": {"application/json": {"schema": schema}},
     }
     client = render_client(parse_openapi(spec))
-    assert "body: Required[Annotated[" in client
+    assert "body: Annotated[" in client
     assert "JsonBody(" in client
 
 
@@ -773,7 +777,7 @@ def test_canonical_protection_flow_generates_typed_wire_injection(tmp_path: Path
     assert "def _project_login_body(" in source
     assert "_LOGIN_BODY_PROJECTION = BodyProjection(" in source
     assert "protections=(LOGIN_PROTECTION,)" in source
-    assert "wire=Wire(projection=_LOGIN_BODY_PROJECTION" in source
+    assert "projection=_LOGIN_BODY_PROJECTION" in source
     assert "wire_body=" not in source
     assert "protection_flow(LOGIN_PROTECTION" in source
     compile(source, "generated/client.py", "exec")

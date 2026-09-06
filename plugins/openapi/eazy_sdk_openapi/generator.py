@@ -71,6 +71,12 @@ _GENERATED_RESERVED_NAMES = frozenset(
         "Wire",
         "FieldOrder",
         "PayloadCrypto",
+        "Http",
+        "HttpOperation",
+        "Omittable",
+        "dataclass",
+        "markers",
+        "op",
     }
 )
 
@@ -129,22 +135,24 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     ]
     if has_crypto:
         lines.extend(["from collections.abc import Mapping", ""])
-    if ir.protection_flows:
-        lines.extend(["from dataclasses import replace", ""])
+    dataclass_names = "dataclass, replace" if ir.protection_flows else "dataclass"
+    lines.extend([f"from dataclasses import {dataclass_names}", ""])
+    typing_names = ["Annotated", "Any"]
+    if has_projection:
+        typing_names.append("Callable")
+    typing_names.append("Literal")
+    if any(operation.protections or operation.body_projection for operation in ir.operations):
+        typing_names.append("Required")
+    typing_names.extend(["TypedDict", "cast"])
     lines.extend(
         [
-            (
-                "from typing import Annotated, Any, Callable, Literal, Required, "
-                "TypedDict, Unpack, cast"
-                if has_projection
-                else "from typing import Annotated, Any, Literal, Required, TypedDict, Unpack, cast"
-            ),
+            f"from typing import {', '.join(typing_names)}",
             "",
             "from pydantic import ConfigDict, Field",
             "from zapros import AsyncBaseHandler, BaseHandler",
             "",
             "from eazy_sdk import (",
-            "    AsyncApi, AsyncRoot, HandlerProfile, SyncApi, SyncRoot, api, api_group,",
+            "    AsyncApi, AsyncRoot, HandlerProfile, SyncApi, SyncRoot, api_group,",
             ")",
             "from eazy_sdk.codegen import (",
             "    DEFAULT, ApiError, AsyncApi, AsyncClient, Binding, Bytes, BytesBody,",
@@ -152,6 +160,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             "    CallOptions, Client, ClientConfig,",
             "    Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,",
             "    MultipartBody, Part, Path, Query, QueryString, SyncApi,",
+            "    Http, HttpOperation, Omittable, UNSET, markers, op,",
         ]
     )
     if any(operation.protections or operation.body_projection for operation in ir.operations):
@@ -160,7 +169,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
         lines.append("    AuthContext, generated_session_auth, generated_session_scheme,")
     lines.extend(
         [
-            "    Error, Json, ResponseEnvelope, Responses, StatusRange, Success, Text,",
+            "    Error, Json, ResponseEnvelope, StatusRange, Success, Text,",
             "    FieldOrder, Wire, all_of, any_of,",
             "    FromProtection, ProtectionBundle, SolverRequirement, protection_flow,",
             ")",
@@ -220,9 +229,9 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     for operation in ir.operations:
         lines.extend(_operation_body_model(operation, model_bindings))
     for operation in ir.operations:
-        lines.extend(_operation_request_model(operation, model_bindings))
-    for operation in ir.operations:
         lines.extend(_operation_errors(operation, model_bindings))
+    for operation in ir.operations:
+        lines.extend(_operation_request_model(operation, model_bindings))
     for _attribute, class_name, operations in routers:
         lines.extend(
             _router_class(
@@ -375,6 +384,8 @@ def _router_class(
     ]
     for operation in operations:
         lines.extend(_method(operation, model_bindings, asynchronous=asynchronous))
+    if not operations:
+        lines.append("    pass")
     return lines
 
 
@@ -945,7 +956,7 @@ def _parameter_marker(item: ParameterIR, python_name: str) -> str:
             arguments.append(f"explode={item.explode!r}")
         if item.allow_reserved:
             arguments.append("allow_reserved=True")
-    return f"{descriptor}({', '.join(arguments)})"
+    return f"markers.{descriptor}({', '.join(arguments)})"
 
 
 def _root_body_marker(media_type: str) -> str:
@@ -959,7 +970,7 @@ def _root_body_marker(media_type: str) -> str:
         descriptor = "BytesBody"
     else:
         descriptor = "BytesBody"
-    return f"{descriptor}(content_type={media_type!r})"
+    return f"markers.{descriptor}(content_type={media_type!r})"
 
 
 def _body_field_marker(media_type: str, wire_name: str) -> str:
@@ -969,7 +980,7 @@ def _body_field_marker(media_type: str, wire_name: str) -> str:
         descriptor = "Part"
     else:
         descriptor = "JsonField"
-    return f"{descriptor}({wire_name!r})"
+    return f"markers.{descriptor}({wire_name!r})"
 
 
 def _generated_type_reserved(ir: OpenAPIIR) -> set[str]:
@@ -1042,48 +1053,114 @@ def _operation_errors(operation: OperationIR, model_bindings: Mapping[str, str])
     return lines
 
 
+
 def _operation_request_model(
     operation: OperationIR,
     model_bindings: Mapping[str, str],
 ) -> list[str]:
+    """One frozen operation class per operation: the request as a value plus ``__http__``."""
+
     names = _request_field_names(operation)
-    if not names:
-        return []
-    base = (
-        _projection_source_model_name(operation)
-        if operation.protections or operation.body_projection is not None
-        else "TypedDict"
-    )
-    lines = [f"class {_request_model_name(operation)}({base}, total=False):"]
+    class_name = _request_model_name(operation)
+    result = _result(operation, model_bindings)
+    lines = [
+        "@dataclass(frozen=True, slots=True, kw_only=True)",
+        f"class {class_name}(HttpOperation[{result}]):",
+        *_http_spec(operation, model_bindings),
+    ]
+    fields: list[str] = []
     parameter_names = names[: len(operation.parameters)]
     for item, python_name in zip(operation.parameters, parameter_names, strict=False):
         annotation = _type(item.type_expression, model_bindings)
-        if not item.required and "None" not in annotation:
-            annotation = f"{annotation} | None"
-        annotation = f"Annotated[{annotation}, {_parameter_marker(item, python_name)}]"
-        if item.required:
-            annotation = f"Required[{annotation}]"
-        lines.append(f"    {python_name}: {annotation}")
-    if (
-        operation.request_body is not None
-        and not operation.protections
-        and operation.body_projection is None
+        fields.append(
+            _operation_field(
+                python_name,
+                annotation,
+                marker=_parameter_marker(item, python_name),
+                short=_parameter_short(item, python_name),
+                required=item.required,
+            )
+        )
+    if operation.request_body is not None and (
+        operation.protections or operation.body_projection is not None
     ):
+        source_fields = _projection_source_fields(operation)
+        source_names = names[len(operation.parameters) :]
+        for field, python_name in zip(source_fields, source_names, strict=True):
+            annotation = _type(field.type_expression, model_bindings)
+            required = (
+                field.required
+                if operation.body_projection is not None
+                else bool(operation.request_body.required and field.required)
+            )
+            fields.append(
+                _operation_field(
+                    python_name, annotation, marker=None, short=None, required=required
+                )
+            )
+    elif operation.request_body is not None:
         body = operation.request_body
         if body.fields is not None or operation.protections:
             annotation = _body_model_name(operation)
         else:
             annotation = _type(body.type_expression, model_bindings)
-        if not body.required and "None" not in annotation:
-            annotation = f"{annotation} | None"
-        annotation = f"Annotated[{annotation}, {_root_body_marker(body.media_type)}]"
-        if body.required:
-            annotation = f"Required[{annotation}]"
-        lines.append(f"    {names[-1]}: {annotation}")
-    if len(lines) == 1:
-        lines.append("    pass")
+        fields.append(
+            _operation_field(
+                names[-1],
+                annotation,
+                marker=_root_body_marker(body.media_type),
+                short=None,
+                required=body.required,
+            )
+        )
+    if fields:
+        lines.append("")
+        lines.extend(fields)
     lines.extend(["", ""])
     return lines
+
+
+def _operation_field(
+    python_name: str,
+    annotation: str,
+    *,
+    marker: str | None,
+    short: str | None,
+    required: bool,
+) -> str:
+    """One field line: the short marker when the wire name is the Python name, else qualified."""
+
+    if not required:
+        annotation = f"Omittable[{annotation}]"
+    if short is not None:
+        declared = f"{short}[{annotation}]"
+    elif marker is not None:
+        declared = f"Annotated[{annotation}, {marker}]"
+    else:
+        declared = annotation
+    default = "" if required else " = UNSET"
+    return f"    {python_name}: {declared}{default}"
+
+
+def _parameter_short(item: ParameterIR, python_name: str) -> str | None:
+    """``Query`` when ``Query[T]`` says everything the qualified marker would say."""
+
+    if item.location == "querystring" or item.name != python_name:
+        return None
+    descriptor = _parameter_descriptor(item)
+    if _parameter_marker(item, python_name) != f"markers.{descriptor}({item.name!r})":
+        return None
+    return descriptor
+
+
+def _parameter_descriptor(item: ParameterIR) -> str:
+    return {
+        "path": "Path",
+        "query": "Query",
+        "querystring": "QueryString",
+        "header": "Header",
+        "cookie": "Cookie",
+    }[item.location]
 
 
 def _request_model_name(operation: OperationIR) -> str:
@@ -1265,7 +1342,8 @@ def _projection_source_fields(operation: OperationIR) -> tuple[Any, ...]:
     return tuple(field for field in fields if field.name not in managed)
 
 
-def _operation_decorator(
+
+def _http_spec(
     operation: OperationIR,
     model_bindings: Mapping[str, str],
 ) -> list[str]:
@@ -1293,14 +1371,12 @@ def _operation_decorator(
             else:
                 failures.append(case)
     lines = [
-        f"    @api.{verb}(",
+        f"    __http__ = Http.{verb}(",
         f"        {operation.path!r},",
         f"        operation_id={operation.operation_id!r},",
-        f"        responses=Responses[{_result(operation, model_bindings)}](",
         *_response_variants("success", successes),
         *(_response_variants("errors", failures) if failures else []),
         *([f"        fallback={fallback},"] if fallback != "None" else []),
-        "        ),",
         *(
             [f"        security={_security_policy(operation)},"]
             if operation.security is not None
@@ -1309,6 +1385,11 @@ def _operation_decorator(
         *([f"        requires={_requirements(operation)},"] if operation.requires else []),
         *([f"        signing={_signature_uses(operation)},"] if operation.signatures else []),
         *([f"        protections={_protection_uses(operation)},"] if operation.protections else []),
+        *(
+            [f"        projection={_projection_constant_name(operation)},"]
+            if operation.protections or operation.body_projection is not None
+            else []
+        ),
         *([f"        wire={_wire(operation)},"] if _has_wire(operation) else []),
         *(
             [f"        idempotent={operation.idempotent!r},"]
@@ -1364,10 +1445,14 @@ def _security_policy(operation: OperationIR) -> str:
 
 
 def _has_wire(operation: OperationIR) -> bool:
-    return (
-        operation.wire is not None
-        or bool(operation.protections)
-        or operation.body_projection is not None
+    wire = operation.wire
+    return wire is not None and (
+        any(
+            item is not None
+            for item in (wire.query_order, wire.header_order, wire.cookie_order, wire.body_order)
+        )
+        or bool(wire.exact)
+        or wire.protocol is not None
     )
 
 
@@ -1375,8 +1460,6 @@ def _wire(operation: OperationIR) -> str:
     """One representation declaration: the projection, the field order and the protocol."""
 
     pieces: list[str] = []
-    if operation.protections or operation.body_projection is not None:
-        pieces.append(f"projection={_projection_constant_name(operation)}")
     wire = operation.wire
     if wire is not None:
         if any(
@@ -1420,24 +1503,17 @@ def _protection_constant(name: str) -> str:
     return _constant(name)
 
 
+
 def _method(
     operation: OperationIR,
     model_bindings: Mapping[str, str],
     *,
     asynchronous: bool,
 ) -> list[str]:
+    """A router member: the operation class published with ``op()``."""
+
     name = _identifier(operation.operation_id)
-    prefix = "async def" if asynchronous else "def"
-    return_type = _result(operation, model_bindings)
-    lines = ["", *_operation_decorator(operation, model_bindings)]
-    lines.extend([f"    {prefix} {name}(", "        self,", "        *,"])
-    names = _request_field_names(operation)
-    lines.append("        options: CallOptions | None = None,")
-    if names:
-        lines.append(f"        **request: Unpack[{_request_model_name(operation)}],")
-    lines.append(f"    ) -> {return_type}:")
-    lines.append("        raise NotImplementedError")
-    return lines
+    return [f"    {name} = op({_request_model_name(operation)})"]
 
 
 def _status(value: int | str) -> str:

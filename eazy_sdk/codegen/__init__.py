@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from eazy_sdk.api import AsyncApi, SyncApi
+from eazy_sdk.api import AsyncApi, SyncApi, op
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthContext,
@@ -35,25 +35,34 @@ from eazy_sdk.dependencies import (
     value,
 )
 from eazy_sdk.identity import Identity
+from eazy_sdk.operation import Http, HttpOperation
 from eazy_sdk.protection.advanced import (
     FromProtection,
     ProtectionBundle,
     SolverRequirement,
     protection_flow,
 )
-from eazy_sdk.request import FieldOrder, JsonPolicy, QueryCodec, Wire
-from eazy_sdk.request.descriptors import (
+from eazy_sdk.request import (
     BodyProjection,
     BytesBody,
+    Cookie,
+    FieldOrder,
     Form,
     FormBody,
+    Header,
     JsonBody,
     JsonField,
+    JsonPolicy,
     MultipartBody,
     Part,
+    Path,
+    Query,
+    QueryCodec,
+    QueryString,
     ReplayableStreamBody,
+    Wire,
+    markers,
 )
-from eazy_sdk.request.params import Cookie, Header, Path, Query, QueryString
 from eazy_sdk.response import (
     DEFAULT,
     ApiError,
@@ -69,14 +78,8 @@ from eazy_sdk.response import (
     Text,
 )
 from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
+from eazy_sdk.sentinels import UNSET, Omittable, Unset
 from eazy_sdk.serialization import Serialization
-
-
-class Unset:
-    __slots__ = ()
-
-
-UNSET = Unset()
 
 __all__ = [
     "DEFAULT",
@@ -110,12 +113,15 @@ __all__ = [
     "FromProtection",
     "Header",
     "Hooks",
+    "Http",
+    "HttpOperation",
     "Identity",
     "Json",
     "JsonBody",
     "JsonField",
     "JsonPolicy",
     "MultipartBody",
+    "Omittable",
     "Parsed",
     "Part",
     "Path",
@@ -147,6 +153,8 @@ __all__ = [
     "field",
     "generated_session_auth",
     "generated_session_scheme",
+    "markers",
+    "op",
     "protection_flow",
     "value",
 ]
