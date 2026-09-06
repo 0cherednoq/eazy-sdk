@@ -53,6 +53,8 @@ class PreparedRequestSummary:
 @dataclass(frozen=True, slots=True)
 class OperationInfo:
     operation_id: str
+    correlation: str | None = None
+    """The protocol correlation this attempt sent, where the operation has an envelope."""
 
 
 @dataclass(frozen=True, slots=True)

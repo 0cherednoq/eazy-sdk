@@ -10,6 +10,7 @@ import pytest
 from zapros.websocket import TextMessage
 
 from eazy_sdk.core.kernel import Malformed, MalformedCase, ParsedValue
+from eazy_sdk.protocols import InboundMessageKind, ProtocolMessage
 from eazy_sdk.websocket import (
     AsyncWsApi,
     AsyncWsClient,
@@ -22,7 +23,6 @@ from eazy_sdk.websocket import (
     FrameKind,
     HmacSha256MessageSignature,
     InboundFrame,
-    InboundMessageKind,
     JsonEventProtocol,
     JsonPayload,
     MalformedMessageError,
@@ -31,7 +31,6 @@ from eazy_sdk.websocket import (
     Nonce,
     PerMessageAuth,
     PreparedMessage,
-    ProtocolMessage,
     RemoteMessageError,
     ReplayWithDeduplication,
     Replies,

@@ -28,11 +28,10 @@ from eazy_sdk.crypto import (
 from eazy_sdk.crypto._compiler import CompiledPayloadCrypto
 from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+from eazy_sdk.protocols import ChannelKey, CorrelationKey, ProtocolMessage
 
 from ._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
     FrozenValue,
     MessageReservedOutput,
     PreparedMessage,
@@ -62,7 +61,6 @@ from .protection import (
     compile_message_transforms,
 )
 from .protocols import (
-    ProtocolMessage,
     WsProtocol,
 )
 from .schemas import (

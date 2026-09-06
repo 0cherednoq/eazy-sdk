@@ -1,9 +1,8 @@
 """Async WebSocket protocol and runtime API."""
 
+
 from ._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
     EncodedFrame,
     FrameKind,
     FrozenArray,
@@ -97,10 +96,7 @@ from .protection import (
 from .protocols import (
     CloseDisposition,
     ControlEvent,
-    ControlKind,
-    InboundMessageKind,
     JsonEventProtocol,
-    ProtocolMessage,
     WsProtocol,
 )
 from .runtime import AsyncWsClient, WsCallOptions, WsClientConfig, WsSessionState
@@ -120,14 +116,11 @@ __all__ = [
     "AmbiguousMessageError",
     "AsyncWsApi",
     "AsyncWsClient",
-    "ChannelKey",
     "CloseDisposition",
     "ConnectionGeneration",
     "ConnectionMiddleware",
     "ConnectionMiddlewareApplication",
     "ControlEvent",
-    "ControlKind",
-    "CorrelationKey",
     "CustomMessageSignature",
     "CustomMessageSigner",
     "DeliveryNotSentError",
@@ -149,7 +142,6 @@ __all__ = [
     "GraphqlTransportWsProtocol",
     "HmacSha256MessageSignature",
     "InboundFrame",
-    "InboundMessageKind",
     "InboundMessageTransform",
     "JsonEventProtocol",
     "JsonPayload",
@@ -174,7 +166,6 @@ __all__ = [
     "ProtocolAuth",
     "ProtocolConfigurationError",
     "ProtocolEnvelopeError",
-    "ProtocolMessage",
     "ReconnectPolicy",
     "RecoverBySequence",
     "RecoverByToken",

@@ -7,13 +7,12 @@ import pytest
 from zapros.websocket import CloseMessage, TextMessage
 
 from eazy_sdk.core.kernel import ParsedValue
+from eazy_sdk.protocols import ControlKind, InboundMessageKind
 from eazy_sdk.websocket import (
     AsyncWsClient,
     CloseDisposition,
-    ControlKind,
     GraphqlOperationError,
     GraphqlTransportWsProtocol,
-    InboundMessageKind,
     ProtocolAuth,
     ReconnectPolicy,
     ResubscribeFromStart,

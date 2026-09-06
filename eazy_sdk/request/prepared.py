@@ -697,6 +697,59 @@ def _transport_protocol[T](compiled: CompiledContract[T]) -> HttpProtocol:
     }[declared]
 
 
+def _body_value(
+    layout: BodyLayout,
+    values: OperationValues,
+    descriptors: Mapping[ValueSlot[object], object],
+    wire_names: Mapping[ValueSlot[object], str],
+    operation_id: str,
+) -> object:
+    """The semantic body before any encoding: flat fields collected, or the one root value."""
+
+    if not layout.flat:
+        return values.require(layout.slots[0])
+    flat_values: dict[str, object] = {}
+    for slot in layout.slots:
+        if not values.contains(slot):
+            continue
+        item = values.require(slot)
+        field_descriptor = descriptors[slot]
+        if isinstance(field_descriptor, Form):
+            item = _scalar_value(
+                field_descriptor.codec,
+                item,
+                location="form",
+                wire_name=field_descriptor.name or slot.diagnostic_name,
+                operation_id=operation_id,
+            )
+        flat_values[wire_names[slot]] = item
+    return flat_values
+
+
+def json_body_document[T](
+    compiled: CompiledContract[T],
+    values: OperationValues,
+    *,
+    models: ModelAdapterRegistry,
+) -> object:
+    """The JSON document an operation would send, before a protocol envelope wraps it.
+
+    The envelope stage needs the payload while it is still a structure, and it must be the
+    same structure the preparer would have encoded — so it is built here once and handed back
+    to the preparer as the body document, rather than assembled a second time.
+    """
+
+    layout = compile_layout(compiled).body
+    if not isinstance(layout.descriptor, JsonBody):
+        raise PlanError("a protocol envelope requires a JSON request body")
+    if not any(values.contains(slot) for slot in layout.slots):
+        return None
+    value = _body_value(
+        layout, values, compiled.descriptors, compiled.wire_names, compiled.contract.operation_id
+    )
+    return _to_json_value(value, models=models)
+
+
 def _body(
     layout: BodyLayout,
     values: OperationValues,
@@ -724,25 +777,8 @@ def _body(
         if not has_document_override:
             raise PlanError("body projection document is missing from the attempt")
         value = document_override
-    elif layout.flat:
-        flat_values: dict[str, object] = {}
-        for slot in body_slots:
-            if not values.contains(slot):
-                continue
-            item = values.require(slot)
-            field_descriptor = descriptors[slot]
-            if isinstance(field_descriptor, Form):
-                item = _scalar_value(
-                    field_descriptor.codec,
-                    item,
-                    location="form",
-                    wire_name=field_descriptor.name or slot.diagnostic_name,
-                    operation_id=operation_id,
-                )
-            flat_values[wire_names[slot]] = item
-        value = flat_values
     else:
-        value = values.require(body_slots[0])
+        value = _body_value(layout, values, descriptors, wire_names, operation_id)
     if isinstance(descriptor, JsonBody):
         semantic = (
             _to_json_value(value, models=models)

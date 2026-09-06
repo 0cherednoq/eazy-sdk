@@ -924,6 +924,7 @@ def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() ->
         "post",
         "put",
         "request",
+        "rpc",  # phase 49: an envelope operation, not a second family of decorators
         "trace",
     }
     assert eazy_sdk.api is api

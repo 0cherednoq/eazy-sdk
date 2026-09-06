@@ -176,11 +176,8 @@ def _render_protocol(ir: AsyncAPIIR) -> str:
     else:
         lines.extend(
             [
-                "from eazy_sdk.websocket import (",
-                "    ControlEvent,",
-                "    ControlKind,",
-                "    JsonEventProtocol,",
-                ")",
+                "from eazy_sdk.protocols import ControlKind",
+                "from eazy_sdk.websocket import ControlEvent, JsonEventProtocol",
                 "",
             ]
         )

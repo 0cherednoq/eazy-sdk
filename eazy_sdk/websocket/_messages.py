@@ -23,6 +23,7 @@ from eazy_sdk.crypto import (
 from eazy_sdk.crypto import (
     thaw_value as thaw_value,
 )
+from eazy_sdk.protocols import ChannelKey, CorrelationKey
 
 _DIAGNOSTIC_SALT = token_bytes(32)
 
@@ -43,24 +44,6 @@ class FrameKind(Enum):
     PING = "ping"
     PONG = "pong"
     CLOSE = "close"
-
-
-@dataclass(frozen=True, slots=True)
-class CorrelationKey:
-    value: str
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("correlation key cannot be empty")
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelKey:
-    value: str
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("channel key cannot be empty")
 
 
 @dataclass(frozen=True, slots=True)

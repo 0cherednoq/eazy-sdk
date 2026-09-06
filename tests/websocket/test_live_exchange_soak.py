@@ -15,19 +15,21 @@ from time import monotonic
 import pytest
 
 from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
-from eazy_sdk.websocket import (
-    AsyncWsClient,
+from eazy_sdk.protocols import (
     ChannelKey,
-    CloseDisposition,
     ControlKind,
     CorrelationKey,
+    InboundMessageKind,
+    ProtocolMessage,
+)
+from eazy_sdk.websocket import (
+    AsyncWsClient,
+    CloseDisposition,
     FrameKind,
     FrozenValue,
     InboundFrame,
-    InboundMessageKind,
     JsonTextCodec,
     ProtocolEnvelopeError,
-    ProtocolMessage,
     WsClientConfig,
     WsSessionState,
     freeze_value,
@@ -80,12 +82,15 @@ class ExchangeProtocol:
         decoded = self.codec.decode(frame)
         if not isinstance(decoded, ParsedValue):
             return decoded
-        raw = thaw_value(decoded.value)
+        return self.read(decoded.value)
+
+    def read(self, envelope: FrozenValue) -> ParseAttempt[ProtocolMessage]:
+        raw = thaw_value(envelope)
         if not isinstance(raw, dict):
             return Malformed(ProtocolEnvelopeError("exchange envelope must be an object"))
         discriminator = self._discriminator(raw)
         return ParsedValue(
-            ProtocolMessage(InboundMessageKind.MESSAGE, discriminator, decoded.value)
+            ProtocolMessage(InboundMessageKind.MESSAGE, discriminator, envelope)
         )
 
     def classify_close(self, code: int | None) -> CloseDisposition:

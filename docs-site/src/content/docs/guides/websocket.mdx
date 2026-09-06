@@ -4,7 +4,7 @@ description: Generate or author a typed async WebSocket SDK and run it through Z
 sources:
   - eazy_sdk.websocket
   - eazy_sdk_asyncapi.generate_package
-api_fingerprint: "sha256:dc80da79d3683afb248fd6ab389b0a3447b23755762841cb82c5dd71b9506a6d"
+api_fingerprint: "sha256:e81a1461a7a77161911dbfab724b8fcffaf151166b2a41ce7675076d7fb8315e"
 ---
 
 This guide is for SDK implementers who need typed one-shot calls or subscriptions over `ws` or
@@ -55,8 +55,13 @@ present, the package exports `crypto_registry(profiles)`; application code suppl
 
 ## Author a GraphQL-WS client
 
-`GraphqlTransportWsProtocol` implements the `graphql-transport-ws` envelopes. Configure
-`connection_init` as protocol auth and require `connection_ack` before application operations:
+`GraphqlTransportWsProtocol` implements the `graphql-transport-ws` envelopes. Само понятие
+конверта — `Envelope`, `ProtocolMessage`, `CorrelationKey`, `ChannelKey`, `ControlKind` — живёт
+в `eazy_sdk.protocols` и не является WebSocket-специфичным: тот же конверт описывает HTTP-сервис,
+у которого имя метода лежит в теле (см. {doc}`Протоколы и конверты </guides/protocols>`).
+`WsProtocol` — это `Envelope` плюс то, что есть только у соединения: фреймы, коды закрытия,
+восстановление и отмена. Configure `connection_init` as protocol auth and require
+`connection_ack` before application operations:
 
 ```python
 from eazy_sdk.websocket import (

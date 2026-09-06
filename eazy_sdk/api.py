@@ -35,6 +35,7 @@ from eazy_sdk.identity import (
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import SolverRequirement
+from eazy_sdk.protocols import Envelope
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 from eazy_sdk.response import Error, Html, Json, ResponseEnvelope, Responses, Success
@@ -70,6 +71,7 @@ SERVICE_ATTRIBUTES = (
     "signed",
     "crypto",
     "wire",
+    "protocol",
     "allow",
 )
 """Class attributes a router (or a service mixin in its MRO) may declare."""
@@ -87,6 +89,8 @@ class _ServiceDefaults:
     signing: tuple[RequestSignature, ...] = ()
     crypto: PayloadCrypto | None = None
     wire: Wire | None = None
+    protocol: Envelope | None = None
+    """The application-level envelope this service speaks, if it speaks one."""
     errors: tuple[Error[Any], ...] = ()
     allow: tuple[object, ...] | None = None
     signed: bool = False
@@ -101,6 +105,7 @@ class _ServiceDefaults:
             signing=other.signing or self.signing,
             crypto=self.crypto if other.crypto is None else other.crypto,
             wire=other.wire.over(self.wire) if other.wire is not None else self.wire,
+            protocol=self.protocol if other.protocol is None else other.protocol,
             errors=(*self.errors, *other.errors),
             allow=self.allow if other.allow is None else other.allow,
             signed=self.signed or other.signed,
@@ -332,8 +337,22 @@ class _OperationDescriptorBase[TApi, **P, T]:
                 f"operation {self.declaration.operation_id!r} carries no signature, and its "
                 "service requires every operation to be signed"
             )
+        envelope = defaults.protocol
+        addressing: dict[str, object] = {}
+        if self.declaration.discriminator is not None:
+            if envelope is None:
+                raise TypeError(
+                    f"operation {self.declaration.operation_id!r} is declared with @api.rpc, "
+                    "and its service declares no protocol envelope"
+                )
+            addressing = {
+                "path": getattr(envelope, "path", "/"),
+                "method": getattr(envelope, "method", "POST"),
+                "envelope": envelope,
+            }
         return replace(
             self.declaration,
+            **cast(Any, addressing),
             base_url=defaults.base_url,
             responses=responses,
             security=cast(Any, security),
@@ -683,9 +702,11 @@ class _OperationDecorator[T]:
         raw_response: bool,
         inherit_errors: bool,
         singular_response: bool,
+        discriminator: str | None = None,
     ) -> None:
         self.method = method.upper()
         self.path = path
+        self.discriminator = discriminator
         self.operation_id = operation_id
         self.responses = responses
         self.security = security
@@ -794,6 +815,7 @@ class _OperationDecorator[T]:
             tags=self.tags,
             idempotent=self.idempotent,
             raw_response=self.raw_response,
+            discriminator=self.discriminator,
         )
         descriptor_type = (
             _AsyncOperationDescriptor
@@ -999,10 +1021,16 @@ def _is_optional_call_options(annotation: object | None) -> bool:
 
 def _validate_api_class(cls: type[object], *, asynchronous: bool) -> None:
     operation_ids: set[str] = set()
+    envelope = _service_defaults_of(cls).protocol
     for name in dir(cls):
         descriptor = inspect.getattr_static(cls, name)
         if not isinstance(descriptor, _OperationDescriptorBase):
             continue
+        if descriptor.declaration.discriminator is not None and envelope is None:
+            raise TypeError(
+                f"operation {descriptor.declaration.operation_id!r} is declared with @api.rpc, "
+                "and its service declares no protocol envelope"
+            )
         if asynchronous != isinstance(descriptor, _AsyncOperationDescriptor):
             kind = "async" if asynchronous else "sync"
             raise TypeError(f"{kind} API operation {name!r} has the wrong function kind")
@@ -1027,6 +1055,27 @@ class _ApiNamespace:
     post = _Verb("POST")
     put = _Verb("PUT")
     trace = _Verb("TRACE")
+
+    def rpc(
+        self,
+        discriminator: str,
+        *,
+        responses: Responses[T],
+        **kwargs: Unpack[_OperationOptions],
+    ) -> _OperationDecorator[T]:
+        """One operation of a service whose method name travels in the body, not the path.
+
+        Not a second family of decorators: every other argument is the one ``api.post`` takes
+        and means the same thing. The URL is not repeated here because it belongs to the
+        service's envelope, declared once as the router's ``protocol`` attribute.
+        """
+
+        decorator = cast(
+            _OperationDecorator[T],
+            _Verb("POST")("/", responses=responses, **kwargs),
+        )
+        decorator.discriminator = discriminator
+        return decorator
 
     @overload
     def request(

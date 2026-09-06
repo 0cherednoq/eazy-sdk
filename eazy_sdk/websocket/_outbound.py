@@ -19,6 +19,7 @@ from eazy_sdk.crypto import (
     WebSocketEncrypted,
 )
 from eazy_sdk.crypto._compiler import CompiledPayloadCrypto
+from eazy_sdk.protocols import ChannelKey, CorrelationKey
 
 from ._crypto import (
     apply_ws_crypto_metadata,
@@ -33,8 +34,6 @@ from ._decisions import (
     write_admitted,
 )
 from ._messages import (
-    ChannelKey,
-    CorrelationKey,
     FrozenValue,
     PreparedMessage,
     WsOperationKind,

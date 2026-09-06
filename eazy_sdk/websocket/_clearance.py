@@ -17,11 +17,10 @@ from eazy_sdk.crypto import (
 )
 from eazy_sdk.crypto._compiler import CompiledPayloadCrypto, compile_payload_crypto
 from eazy_sdk.crypto._inputs import resolve_crypto_inputs
+from eazy_sdk.protocols import ChannelKey, CorrelationKey
 
 from ._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
     FrozenValue,
     MessageReservedOutput,
 )

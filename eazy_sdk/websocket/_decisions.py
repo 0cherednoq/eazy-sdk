@@ -10,12 +10,17 @@ from zapros.websocket import Message
 
 from eazy_sdk.crypto import WebSocketCryptoContext, WebSocketEncrypted
 from eazy_sdk.crypto._compiler import CompiledPayloadCrypto
+from eazy_sdk.protocols import (
+    ChannelKey,
+    ControlKind,
+    CorrelationKey,
+    InboundMessageKind,
+    ProtocolMessage,
+)
 
 from ._crypto import protect_ws_frame
 from ._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
     FrozenValue,
     PreparedMessage,
 )
@@ -29,7 +34,6 @@ from .protection import (
     apply_outbound_frame_transforms,
     protection_snapshot,
 )
-from .protocols import ControlKind, InboundMessageKind, ProtocolMessage
 
 
 class FailureState(Enum):

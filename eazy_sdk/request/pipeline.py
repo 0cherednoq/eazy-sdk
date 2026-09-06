@@ -14,17 +14,6 @@ do is leave a stage out, and then it simply does not run.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Protocol
-
-
-class RequestEnvelope(Protocol):
-    """The protocol envelope an operation may declare, wrapped around its document.
-
-    It sits between the projection and payload crypto because an envelope is part of what
-    the server reads and therefore part of what a signature covers.
-    """
-
-    def wrap(self, document: object, contract: object) -> object: ...
 
 
 class RequestStage(Enum):
@@ -34,7 +23,11 @@ class RequestStage(Enum):
     """Public schema becomes wire schema, if the operation declares a projection."""
 
     ENVELOPE = "envelope"
-    """The protocol envelope wraps the document, if the operation declares one."""
+    """The service's protocol envelope wraps the document — see :mod:`eazy_sdk.protocols`.
+
+    It sits between the projection and payload crypto because an envelope is part of what the
+    server reads, and therefore part of what a signature covers.
+    """
 
     DOCUMENT_CRYPTO = "document-crypto"
     """Named fields are encrypted while the body is still a structure."""
@@ -65,4 +58,4 @@ if set(REQUEST_PIPELINE) != set(RequestStage):  # pragma: no cover - guards the 
     raise AssertionError("every declared stage has a place in the pipeline")
 
 
-__all__ = ["REQUEST_PIPELINE", "RequestEnvelope", "RequestStage"]
+__all__ = ["REQUEST_PIPELINE", "RequestStage"]

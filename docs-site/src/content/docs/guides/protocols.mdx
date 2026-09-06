@@ -1,0 +1,115 @@
+---
+title: Протоколы и конверты
+description: Сервис, у которого имя метода лежит в теле, описывается так же, как REST.
+sources:
+  - eazy_sdk.protocols.JsonRpc
+  - eazy_sdk.protocols.Envelope
+  - eazy_sdk.protocols.rpc_result
+draft: false
+api_fingerprint: "sha256:6c1e22fdb8e6a3fccf20e40d6a1f94c03b2361ac1353e43c48d1edc53457e228"
+---
+
+Конверт — это обрамление, которое протокол прикладного уровня надевает на полезную нагрузку:
+`{"jsonrpc", "id", "method", "params"}` у JSON-RPC, `{"event", "data"}` у самодельного шлюза,
+`{"query", "variables"}` у GraphQL. Ни одно из этих понятий не является свойством транспорта,
+поэтому они живут в `eazy_sdk.protocols`, а WebSocket и HTTP пользуются одной базой.
+
+| Понятие | JSON-RPC | JSON-event | graphql-transport-ws |
+|---|---|---|---|
+| discriminator | `method` | `event`/`type` | `type` |
+| correlation | `id` | настраиваемое поле | `id` |
+| payload | `params` / `result` / `error` | `data` | `payload` |
+
+## Объявление на сервисе
+
+Конверт — свойство сервиса, а не операции, поэтому он объявляется атрибутом роутера (или общего
+миксина сервиса) и наследуется по MRO. URL в операции не повторяется: его знает конверт.
+
+```python
+from typing import Annotated
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.protocols import JsonRpc
+from eazy_sdk.request import JsonField
+from eazy_sdk.response import Responses
+
+
+class BillingService:
+    base_url = "https://rpc.shop.com"
+    protocol = JsonRpc(path="/endpoint")
+
+
+class BillingApi(BillingService, AsyncApi):
+    @api.rpc("account.charge", responses=CHARGE_RESPONSES)
+    async def charge(
+        self,
+        *,
+        account: Annotated[str, JsonField()],
+        amount: Annotated[int, JsonField()],
+    ) -> Receipt:
+        raise NotImplementedError
+```
+
+`api.rpc` — не второе семейство декораторов, а ещё один член того же `api`: `responses`, `wire`,
+`signing`, `security`, `crypto` и `errors` означают ровно то же, что у `api.post`. Публичная
+поверхность вызова тоже не отличается от REST: `await sdk.billing.charge(account="a-1",
+amount=1000)`.
+
+`@api.rpc` в роутере без объявленного конверта — ошибка объявления, а не рантайма: она поднимается
+при создании класса. Обратное разрешено: REST-операция рядом с RPC-сервисом (health-check,
+например) уходит по своему пути и без конверта.
+
+## Конверт — стадия конвейера
+
+Конверт встроен в конвейер представления между проекцией и payload-crypto
+(см. {doc}`Представление запроса </guides/requests/representation>`):
+
+```
+структура ─(проекция)→ wire-структура ─(конверт)→ {"jsonrpc","id","method","params"}
+          ─(кодирование)→ байты ─(шифрование)→ байты на проводе ─(подпись)→ заголовки
+```
+
+Отсюда сразу два ответа, которые иначе пришлось бы искать в коде: подписывается **конверт
+целиком**, потому что подпись всегда последняя и видит уходящие байты; шифруется тоже конверт,
+если объявлен `Wire(encrypted=…)`. Если сервису нужно шифровать только `params`, это объявляется
+проекцией, а не протоколом.
+
+## `id` при повторе
+
+`id` фиксируется в состоянии попытки один раз и по умолчанию **переиспользуется** при повторе:
+повтор той же попытки должен быть распознаваем сервером как дубликат, симметрично
+`Idempotency-Key`. Сервис, отвергающий повторный `id`, объявляет это явно:
+
+```python
+protocol = JsonRpc(path="/endpoint", id_on_retry="regenerate")
+```
+
+Ответ, пришедший с чужим `id`, — `MalformedResponseError`, а не тихий успех.
+
+## Ошибки: тот же путь, что у REST
+
+JSON-RPC отвечает `200 OK` с телом `{"error": {...}}`. Второй модели ошибок для этого не
+появляется: `Responses` уже выбирает случай по `condition`, а хелперы просто заполняют его.
+
+```python
+from eazy_sdk.protocols import rpc_error, rpc_error_default, rpc_result
+
+CHARGE_RESPONSES = Responses(
+    success=(rpc_result(Receipt),),
+    errors=(rpc_error(-32001, InsufficientFunds),),
+    fallback=rpc_error_default(RpcFault),
+)
+```
+
+`rpc_result` — обычный `Success`, `rpc_error` — обычный `Error` с типизированной моделью тела
+ошибки. `rpc_error_default` ставится в `fallback=`, а не в `errors`: как случай он совпал бы с тем
+же телом, что и случай с кодом, а два совпавших случая — это неоднозначность, а не значение по
+умолчанию.
+
+## Batch — явная не-цель
+
+Пакетный вызов (один запрос, массив из N вызовов) в SDK не входит, и это решение, а не
+недоделка. Он ломает соответствие «операция → один ответ», на котором стоят `Responses` и
+типизация результата; ломает повтор, потому что часть вызовов может успеть, а часть нет; и ломает
+подпись, потому что конверт становится общим для нескольких операций. Если batch понадобится, его
+форма — явная композиция со своим типом результата, а не прозрачная группировка одиночных вызовов.

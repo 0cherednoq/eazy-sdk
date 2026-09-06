@@ -15,6 +15,7 @@ from eazy_sdk.core.kernel import (
     arbitrate_cases,
 )
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+from eazy_sdk.protocols import ProtocolMessage
 
 from ._messages import FrozenValue, freeze_value, thaw_value
 from .errors import (
@@ -23,7 +24,6 @@ from .errors import (
     RemoteMessageError,
     UnexpectedMessageError,
 )
-from .protocols import ProtocolMessage
 
 
 @dataclass(frozen=True, slots=True)

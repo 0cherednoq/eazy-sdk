@@ -89,10 +89,14 @@ class AttemptState:
     redirected: bool = False
     retries: int = 0
     budgets: AttemptBudgets = field(default_factory=AttemptBudgets)
+    correlation: str | None = None
+    """The envelope correlation this attempt sends; carried over unless the protocol says no."""
 
     @classmethod
-    def initial(cls, url: str, budgets: AttemptBudgets) -> AttemptState:
-        return cls(number=1, kind="initial", url=url, budgets=budgets)
+    def initial(
+        cls, url: str, budgets: AttemptBudgets, *, correlation: str | None = None
+    ) -> AttemptState:
+        return cls(number=1, kind="initial", url=url, budgets=budgets, correlation=correlation)
 
     def next(self, kind: str, **changes: Any) -> AttemptState:
         """The successor attempt: one higher, a new reason, everything else carried over."""

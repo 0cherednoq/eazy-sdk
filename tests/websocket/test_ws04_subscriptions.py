@@ -5,11 +5,11 @@ import asyncio
 import pytest
 from zapros.websocket import CloseMessage, TextMessage
 
+from eazy_sdk.protocols import ControlKind
 from eazy_sdk.websocket import (
     AsyncWsApi,
     AsyncWsClient,
     ControlEvent,
-    ControlKind,
     DeliveryUnknownError,
     Event,
     JsonEventProtocol,

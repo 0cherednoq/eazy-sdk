@@ -96,6 +96,22 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 документов объявляются на корне, а бэкенд, не способный выполнить контракт операции, отвергается
 при компиляции, а не молча меняет байты.
 
+Понятие конверта уехало из транспорта: `Envelope`, `ProtocolMessage`, `CorrelationKey`,
+`ChannelKey`, `ControlKind` и `InboundMessageKind` живут в `eazy_sdk.protocols` и описывают
+протокол прикладного уровня, а не WebSocket. `WsProtocol` — это `Envelope` плюс то, что есть
+только у соединения. Подробности — {doc}`Протоколы и конверты </guides/protocols>`.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.websocket.CorrelationKey` | `eazy_sdk.protocols.CorrelationKey` | Вместе с `ChannelKey`. |
+| `eazy_sdk.websocket.ProtocolMessage` | `eazy_sdk.protocols.ProtocolMessage` | Вместе с `ControlKind` и `InboundMessageKind`. |
+
+Новое без замены: `eazy_sdk.protocols.JsonRpc` и `@api.rpc("method")` — сервис, у которого имя
+метода лежит в теле, описывается так же, как REST; `rpc_result`, `rpc_error(code, model)` и
+`rpc_error_default(model)` строят обычные `Success`/`Error`, второй модели ошибок не появляется.
+Реализация `WsProtocol` получает метод `read(envelope)` — прежняя логика `inspect(frame)` после
+декодирования кадра.
+
 Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
 другому клиенту и/или адресу при сборке (`bindings=(...)`).
 

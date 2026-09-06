@@ -10,6 +10,7 @@ from dataclasses import field as dataclass_field
 from typing import Protocol
 
 from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
+from eazy_sdk.protocols import ProtocolMessage
 from eazy_sdk.request.wire import DEFAULT_JSON_POLICY, JsonPolicy, dump_json
 
 from ._messages import (
@@ -22,7 +23,6 @@ from ._messages import (
     freeze_value,
     thaw_value,
 )
-from .protocols import ProtocolMessage
 
 
 class SecretBytes:

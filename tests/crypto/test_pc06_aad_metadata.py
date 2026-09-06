@@ -42,6 +42,7 @@ from eazy_sdk.crypto._compiler import compile_payload_crypto, encrypt_bytes
 from eazy_sdk.crypto._inputs import resolve_crypto_inputs
 from eazy_sdk.dependencies import DependencyContext, DependencyRegistry, RequestDependency
 from eazy_sdk.models import default_model_adapters
+from eazy_sdk.protocols import InboundMessageKind, ProtocolMessage
 from eazy_sdk.request import (
     JsonBody,
     SigningKeyRequirement,
@@ -51,7 +52,6 @@ from eazy_sdk.request import (
     method,
 )
 from eazy_sdk.response import Json, Responses
-from eazy_sdk.websocket import InboundMessageKind, ProtocolMessage
 from eazy_sdk.websocket._crypto import (
     apply_ws_crypto_metadata,
     protect_ws_document,

@@ -14,24 +14,26 @@ from zapros.websocket import (
 )
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParsedValue
-from eazy_sdk.websocket import (
+from eazy_sdk.protocols import (
     ChannelKey,
+    ControlKind,
+    CorrelationKey,
+    InboundMessageKind,
+    ProtocolMessage,
+)
+from eazy_sdk.websocket import (
     CloseDisposition,
     ConnectionGeneration,
     ControlEvent,
-    ControlKind,
-    CorrelationKey,
     EncodedFrame,
     FrameKind,
     FrameLimits,
     FrameTooLargeError,
     FrozenArray,
     FrozenObject,
-    InboundMessageKind,
     JsonEventProtocol,
     JsonTextCodec,
     ProtocolConfigurationError,
-    ProtocolMessage,
     frame_from_zapros,
     frame_to_zapros,
     freeze_value,

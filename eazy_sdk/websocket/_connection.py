@@ -20,6 +20,7 @@ from eazy_sdk.crypto import (
     CryptoStage,
     WebSocketEncrypted,
 )
+from eazy_sdk.protocols import ControlKind, InboundMessageKind, ProtocolMessage
 
 from ._crypto import (
     unprotect_ws_frame,
@@ -63,9 +64,6 @@ from .protection import (
 )
 from .protocols import (
     CloseDisposition,
-    ControlKind,
-    InboundMessageKind,
-    ProtocolMessage,
 )
 from .schemas import (
     selected_value,

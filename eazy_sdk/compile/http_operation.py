@@ -9,7 +9,7 @@ from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
 from eazy_sdk.protection.advanced import SolverRequirement
-from eazy_sdk.request.pipeline import RequestEnvelope
+from eazy_sdk.protocols import Envelope
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 from eazy_sdk.response import Responses
@@ -46,8 +46,10 @@ class _OperationDeclaration[T]:
     signing: tuple[RequestSignature, ...] = ()
     protections: tuple[SolverRequirement[Any, Any], ...] = ()
     wire: Wire = EMPTY_WIRE
-    envelope: RequestEnvelope | None = None
-    """The protocol envelope stage of the request pipeline, when the operation has one."""
+    envelope: Envelope | None = None
+    """The service's protocol envelope, resolved over the MRO when the operation declares one."""
+    discriminator: str | None = None
+    """What the envelope calls this operation — a JSON-RPC method name, say."""
     scope: RequestScope = field(default_factory=RequestScope)
     tags: tuple[str, ...] = ()
     idempotent: bool | None = None

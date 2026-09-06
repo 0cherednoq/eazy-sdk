@@ -1,4 +1,9 @@
-"""Pure WebSocket protocol contracts and an explicit JSON event protocol."""
+"""The connection half of a WebSocket protocol, over the transport-neutral envelope.
+
+Framing itself — discriminator, payload, correlation — is not a property of WebSocket and lives
+in :mod:`eazy_sdk.protocols`. What stays here is what only a connection has: frames, close codes,
+recovery and cancellation.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +12,16 @@ from enum import Enum
 from typing import Protocol, cast
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.protocols import (
+    ChannelKey,
+    ControlKind,
+    CorrelationKey,
+    Envelope,
+    InboundMessageKind,
+    ProtocolMessage,
+)
 
 from ._messages import (
-    ChannelKey,
-    CorrelationKey,
     FrameKind,
     FrozenValue,
     InboundFrame,
@@ -21,51 +32,17 @@ from .codecs import JsonTextCodec, WsCodec
 from .errors import ProtocolConfigurationError, ProtocolEnvelopeError
 
 
-class InboundMessageKind(Enum):
-    MESSAGE = "message"
-    REPLY = "reply"
-    EVENT = "event"
-    CONTROL = "control"
-
-
-class ControlKind(Enum):
-    READY = "ready"
-    PING = "ping"
-    PONG = "pong"
-    CLOSE = "close"
-    COMPLETE = "complete"
-
-
 class CloseDisposition(Enum):
     NORMAL = "normal"
     RECONNECT = "reconnect"
     FATAL = "fatal"
 
 
-@dataclass(frozen=True, slots=True)
-class ProtocolMessage:
-    kind: InboundMessageKind
-    discriminator: str | None
-    payload: FrozenValue
-    correlation: CorrelationKey | None = None
-    channel: ChannelKey | None = None
-    control: ControlKind | None = None
-    terminal_error: Exception | None = None
-    envelope: FrozenValue | None = field(default=None, repr=False)
+class WsProtocol(Envelope, Protocol):
+    """An envelope plus the connection concerns only WebSocket has."""
 
-
-class WsProtocol(Protocol):
     @property
     def codec(self) -> WsCodec: ...
-
-    def build_outbound(
-        self,
-        discriminator: str,
-        payload: FrozenValue,
-        *,
-        correlation: CorrelationKey | None = None,
-        channel: ChannelKey | None = None,
-    ) -> FrozenValue: ...
 
     def inspect(self, frame: InboundFrame) -> ParseAttempt[ProtocolMessage]: ...
 
@@ -167,7 +144,10 @@ class JsonEventProtocol:
         decoded = self.codec.decode(frame)
         if not isinstance(decoded, ParsedValue):
             return decoded
-        raw = thaw_value(decoded.value)
+        return self.read(decoded.value)
+
+    def read(self, envelope: FrozenValue) -> ParseAttempt[ProtocolMessage]:
+        raw = thaw_value(envelope)
         if not isinstance(raw, dict):
             return Malformed(ProtocolEnvelopeError("JSON event envelope must be an object"))
         discriminator = raw.get(self.event_field)
@@ -201,7 +181,7 @@ class JsonEventProtocol:
                 correlation,
                 channel,
                 control,
-                envelope=decoded.value,
+                envelope=envelope,
             )
         )
 

@@ -20,9 +20,9 @@ from eazy_sdk.crypto._compiler import (
     encrypt_bytes,
     encrypt_document,
 )
+from eazy_sdk.protocols import ProtocolMessage
 
 from ._messages import EncodedFrame, FrameKind, FrozenValue, InboundFrame
-from .protocols import ProtocolMessage
 
 
 async def protect_ws_document(

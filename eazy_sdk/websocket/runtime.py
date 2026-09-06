@@ -18,13 +18,12 @@ from eazy_sdk.crypto import (
     WebSocketEncrypted,
 )
 from eazy_sdk.crypto._compiler import CompiledPayloadCrypto, compile_payload_crypto
+from eazy_sdk.protocols import ChannelKey, CorrelationKey
 
 from ._clearance import _ProtectionMixin
 from ._connection import _ConnectionMixin
 from ._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
 )
 from ._outbound import _EmitMixin
 from ._reconnect import _ReconnectMixin

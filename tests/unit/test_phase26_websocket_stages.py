@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from zapros.websocket import TextMessage
 
+from eazy_sdk.protocols import (
+    ChannelKey,
+    ControlKind,
+    CorrelationKey,
+    InboundMessageKind,
+    ProtocolMessage,
+)
 from eazy_sdk.websocket._decisions import (
     ConnectAction,
     DisconnectAction,
@@ -20,9 +27,7 @@ from eazy_sdk.websocket._decisions import (
     write_admitted,
 )
 from eazy_sdk.websocket._messages import (
-    ChannelKey,
     ConnectionGeneration,
-    CorrelationKey,
     PreparedMessage,
     freeze_value,
 )
@@ -31,11 +36,6 @@ from eazy_sdk.websocket.policies import (
     NeverResubscribe,
     RecoverBySequence,
     ResubscribeFromStart,
-)
-from eazy_sdk.websocket.protocols import (
-    ControlKind,
-    InboundMessageKind,
-    ProtocolMessage,
 )
 
 

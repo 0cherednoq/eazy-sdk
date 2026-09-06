@@ -5,10 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
+from eazy_sdk.protocols import (
+    ChannelKey,
+    ControlKind,
+    CorrelationKey,
+    InboundMessageKind,
+    ProtocolMessage,
+)
 
 from ._messages import (
-    ChannelKey,
-    CorrelationKey,
     FrameKind,
     FrozenValue,
     InboundFrame,
@@ -19,9 +24,6 @@ from .codecs import JsonTextCodec, WsCodec
 from .errors import GraphqlOperationError, ProtocolEnvelopeError
 from .protocols import (
     CloseDisposition,
-    ControlKind,
-    InboundMessageKind,
-    ProtocolMessage,
 )
 
 
@@ -70,7 +72,10 @@ class GraphqlTransportWsProtocol:
         decoded = self.codec.decode(frame)
         if not isinstance(decoded, ParsedValue):
             return decoded
-        raw = thaw_value(decoded.value)
+        return self.read(decoded.value)
+
+    def read(self, envelope: FrozenValue) -> ParseAttempt[ProtocolMessage]:
+        raw = thaw_value(envelope)
         if not isinstance(raw, dict):
             return Malformed(ProtocolEnvelopeError("GraphQL message must be an object"))
         discriminator = raw.get("type")
@@ -86,7 +91,7 @@ class GraphqlTransportWsProtocol:
                     discriminator,
                     payload,
                     control=ControlKind.READY,
-                    envelope=decoded.value,
+                    envelope=envelope,
                 )
             )
         if discriminator in {"ping", "pong"}:
@@ -96,7 +101,7 @@ class GraphqlTransportWsProtocol:
                     discriminator,
                     payload,
                     control=(ControlKind.PING if discriminator == "ping" else ControlKind.PONG),
-                    envelope=decoded.value,
+                    envelope=envelope,
                 )
             )
         operation_id = raw.get("id")
@@ -113,7 +118,7 @@ class GraphqlTransportWsProtocol:
                     payload,
                     correlation=correlation,
                     control=ControlKind.COMPLETE,
-                    envelope=decoded.value,
+                    envelope=envelope,
                 )
             )
         if "payload" not in raw:
@@ -128,7 +133,7 @@ class GraphqlTransportWsProtocol:
                 payload,
                 correlation=correlation,
                 terminal_error=terminal_error,
-                envelope=decoded.value,
+                envelope=envelope,
             )
         )
 

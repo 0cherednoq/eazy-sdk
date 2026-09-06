@@ -51,6 +51,8 @@ from eazy_sdk.crypto import (
     HttpCryptoContext,
     HttpEncrypted,
     PayloadCrypto,
+    freeze_value,
+    thaw_value,
 )
 from eazy_sdk.crypto._compiler import (
     CompiledPayloadCrypto,
@@ -114,6 +116,7 @@ from eazy_sdk.protection.advanced import (
     _inspect_signals,
     _private_bindings_patch,
 )
+from eazy_sdk.protocols import CorrelationKey
 from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimiter
 from eazy_sdk.request import (
     JsonBody,
@@ -128,6 +131,7 @@ from eazy_sdk.request.prepared import (
     HttpProtocol,
     PreparedRequest,
     RequestPreparer,
+    json_body_document,
 )
 from eazy_sdk.request.signatures import reserve_outputs, sign_prepared
 from eazy_sdk.response import (
@@ -1117,7 +1121,9 @@ class _AttemptRun[T]:
             self.mandatory_results = await self.core._acquire_mandatory_protections(
                 self.compiled, self.values, self.options, mandatory
             )
-        state = AttemptState.initial(self._initial_url(), self._budgets())
+        state = AttemptState.initial(
+            self._initial_url(), self._budgets(), correlation=self._new_correlation()
+        )
         while state.number <= state.budgets.hard_limit:
             self.core._observe("start_attempt", self._trace(state))
             self.dependencies.attempt.clear()
@@ -1175,7 +1181,29 @@ class _AttemptRun[T]:
             )
         if decision.reaction is not None:
             await self._solve(decision.reaction, decision.state, attempt)
-        return decision.state
+        return self._recorrelate(decision.state)
+
+    def _new_correlation(self) -> str | None:
+        """A fresh envelope correlation, when the operation's service speaks an envelope."""
+
+        envelope = self.contract.envelope
+        if envelope is None:
+            return None
+        generator = getattr(envelope, "new_correlation", None)
+        return None if generator is None else cast(str, generator())
+
+    def _recorrelate(self, state: AttemptState) -> AttemptState:
+        """Reuse the correlation on a repeat, unless the protocol asks for a new one.
+
+        Reusing it is the default because a repeat of the same call should be recognisable to
+        the server as a duplicate, the way an idempotency key is; a service that rejects a
+        repeated id declares ``id_on_retry="regenerate"`` and gets a fresh one per attempt.
+        """
+
+        envelope = self.contract.envelope
+        if envelope is None or getattr(envelope, "id_on_retry", "reuse") != "regenerate":
+            return state
+        return replace(state, correlation=self._new_correlation())
 
     async def _prepare(self, state: AttemptState) -> _PreparedAttempt:
         selected = _resolve_http_crypto(self.contract, self.core.runtime.crypto, state.url)
@@ -1534,6 +1562,7 @@ class _AttemptRun[T]:
             self.compiled.contract.operation_id,
             state.number,
             serialization=self.core.serialization,
+            correlation=state.correlation,
         )
 
     async def _after_response(
@@ -1717,8 +1746,24 @@ class _RequestBuild:
         ).document
 
     def _wrap(self) -> None:
-        envelope = self.run_context.compiled.contract.envelope
-        self.document = envelope.wrap(self.document, self.run_context.compiled.contract)
+        contract = self.run_context.compiled.contract
+        envelope = contract.envelope
+        assert envelope is not None and contract.discriminator is not None
+        payload = self.document
+        if payload is _NO_BODY_DOCUMENT_OVERRIDE:
+            payload = json_body_document(
+                self.run_context.compiled,
+                self.values,
+                models=self.run_context.core.serialization.models,
+            )
+        correlation = (
+            CorrelationKey(self.state.correlation) if self.state.correlation else None
+        )
+        self.document = thaw_value(
+            envelope.build_outbound(
+                contract.discriminator, freeze_value(payload), correlation=correlation
+            )
+        )
 
     async def _encrypt_document(self) -> None:
         run = self.run_context
@@ -2410,6 +2455,7 @@ def _response_context(
     attempt: int,
     *,
     serialization: Serialization,
+    correlation: str | None = None,
 ) -> ResponseContext[Any]:
     content = prepared.body.content if hasattr(prepared.body, "content") else b""
     return ResponseContext(
@@ -2418,7 +2464,7 @@ def _response_context(
         PreparedRequestSummary(
             prepared.method.decode("ascii"), prepared.target.decode("ascii"), len(content)
         ),
-        OperationInfo(operation_id),
+        OperationInfo(operation_id, correlation),
         serialization,
     )
 
