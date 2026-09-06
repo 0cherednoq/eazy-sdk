@@ -10,25 +10,27 @@ api_fingerprint: "sha256:57cc49a702463f8a149b91c9dbfafbc8fb6b8bdb6c7e5112ccc1d43
 и OAuth-style token endpoints.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, op
 from eazy_sdk.request import Form
 
-class LoginRequest(TypedDict):
-    email: Annotated[str, Form()]
-    password: Annotated[str, Form()]
-    remember: NotRequired[Annotated[bool, Form()]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[Session]):
+    __http__ = Http.post("/login", operation_id="login")
+
+    email: Form[str]
+    password: Form[str]
+    remember: Form[Omittable[bool]] = UNSET
 
 class AsyncAuthApi(AsyncApi):
-    @api.post("/login", operation_id="login", responses=RESPONSES)
-    async def login(self, **request: Unpack[LoginRequest]) -> Session:
-        raise NotImplementedError
+    login = op(Login)
 ```
 
 Запрос: `POST /login`, `Content-Type: application/x-www-form-urlencoded`, body
-`email=ada%40example.test&password=secret`. Отсутствующее optional поле `remember` не попадает в body.
+`email=ada%40example.test&password=secret`. Поле `remember`, оставшееся `UNSET`, в body не попадает.
 
 Для полной Pydantic-модели используйте `FormBody()`. Не смешивайте `FormBody()` и отдельные
-`Form()` fields. Порядок полей при необходимости задаётся через `wire=Wire(order=FieldOrder(body=(...)))`.
+`Form()` fields. Порядок полей при необходимости задаётся через `wire=Wire(order=FieldOrder(body=(...)))`
+в `__http__`.
 Пример ответа: status `200`, JSON `{"access_token":"..."}`.

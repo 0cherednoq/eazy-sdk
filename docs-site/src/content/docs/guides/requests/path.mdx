@@ -6,31 +6,31 @@ sources:
 api_fingerprint: "sha256:d23df2adf4b0fb285729788cd46d25363fe4500badded62707c91f3f39333d3c"
 ---
 
-Path parameter заменяет placeholder в URL. Тип и имя хранятся в operation `TypedDict`, а
-`Unpack` показывает их как keyword arguments публичного метода.
+Path parameter заменяет placeholder в URL. Поле операции объявляет его тип, а имя поля —
+это имя placeholder'а.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import Path
+from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
 
-class GetUserRequest(TypedDict):
-    user_id: Annotated[int, Path()]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetUser(HttpOperation[User]):
+    __http__ = Http.get("/users/{user_id}", operation_id="getUser")
+
+    user_id: Path[int]
 
 class UsersApi(SyncApi):
-    @api.get("/users/{user_id}", operation_id="getUser", responses=RESPONSES)
-    def get_user(self, **request: Unpack[GetUserRequest]) -> User:
-        raise NotImplementedError
+    get_user = op(GetUser)
 
 user = UsersApi(client).get_user(user_id=42)
 ```
 
-Вызов отправит `GET /users/42`. При `Path("id")` wire-имя может отличаться от имени Python
-аргумента, но должно совпадать с `{id}` в шаблоне.
+Вызов отправит `GET /users/42`. Если placeholder называется иначе, чем поле, задайте имя маркером:
+`user: Annotated[int, markers.Path("id")]` для `{id}` в шаблоне.
 
-Eazy SDK отклоняет API-класс при импорте, если placeholder отсутствует в request-`TypedDict`, `Path` marker
-не имеет placeholder или один placeholder описан несколько раз. Optional path parameters не
+Eazy SDK отклоняет класс роутера при импорте, если placeholder не объявлен полем, `Path`-маркер не
+имеет placeholder'а или один placeholder описан несколько раз. Optional path parameters не
 поддерживаются: URL всегда должен быть однозначным.
 
 Пример ответа: status `200`, `Content-Type: application/json`, body `{"id":42,"name":"Ada"}`.

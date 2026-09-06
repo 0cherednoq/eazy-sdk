@@ -11,19 +11,21 @@ api_fingerprint: "sha256:1c1493b3925e6875898c5327c62ca81ed79ab0f3bd433fed49cecac
 собственных part headers передайте `MultipartPart`.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import MultipartPart, Part
+from eazy_sdk import UNSET, Http, HttpOperation, Omittable, SyncApi, op
+from eazy_sdk.request import MultipartPart, Part, markers
 
-class UploadFileRequest(TypedDict):
-    document: Annotated[MultipartPart, Part("document")]
-    label: NotRequired[Annotated[str, Part()]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UploadFile(HttpOperation[Upload]):
+    __http__ = Http.post("/files", operation_id="uploadFile")
+
+    document: Annotated[MultipartPart, markers.Part("document")]
+    label: Part[Omittable[str]] = UNSET
 
 class FilesApi(SyncApi):
-    @api.post("/files", operation_id="uploadFile", responses=RESPONSES)
-    def upload(self, **request: Unpack[UploadFileRequest]) -> Upload:
-        raise NotImplementedError
+    upload = op(UploadFile)
 
 result = FilesApi(client).upload(
     document=MultipartPart(

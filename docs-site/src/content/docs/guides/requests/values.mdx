@@ -1,0 +1,99 @@
+---
+title: Запрос как значение
+description: request() строит запрос, evolve() меняет одно поле, send() отправляет — без I/O между ними.
+sources:
+  - eazy_sdk.api
+  - eazy_sdk.models
+api_fingerprint: "sha256:86815e62603f0954d23a7f26a9eb1879ce9c047221e7432f96db2e33ff377b31"
+---
+
+Операция — это класс, поэтому её вызов раскладывается на две части: построить значение и
+отправить его. Между ними ничего не происходит — значение можно положить в очередь, сравнить,
+изменить одно поле и отправить снова.
+
+```python
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation, Query, SyncApi, op
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListItems(HttpOperation[Page]):
+    __http__ = Http.get("/items")
+
+    page: Query[int] = 1
+    per_page: Query[int] = 20
+
+class CatalogApi(SyncApi):
+    list_items = op(ListItems)
+
+catalog = CatalogApi(client)
+
+request = catalog.list_items.request(per_page=50)   # ничего не отправлено
+page = catalog.list_items.send(request)             # ровно те же байты, что и прямой вызов
+```
+
+`request(...)` — это конструктор класса операции: он применяет значения по умолчанию и отвергает
+неизвестное поле, как обычный Python-конструктор. `send(...)` отправляет значение; байты
+совпадают с `catalog.list_items(per_page=50)` до последнего заголовка.
+
+## Пагинация без абстракции
+
+`evolve` копирует значение через ту же библиотеку моделей, которой объявлен класс:
+`dataclasses.replace`, `model_copy`, `msgspec.structs.replace`. Цикл по страницам не требует
+отдельного помощника:
+
+```python
+request = catalog.list_items.request(per_page=50)
+while True:
+    page = catalog.list_items.send(request)
+    handle(page.items)
+    if page.next_page is None:
+        break
+    request = catalog.list_items.evolve(request, page=page.next_page)
+```
+
+Исходное значение не меняется: `evolve` возвращает копию. Опечатка в имени поля читается
+одинаково на всех библиотеках:
+
+```text
+ModelAdapterError: ListItems has no field 'pgae'; fields: page, per_page
+```
+
+## Очередь запросов
+
+Значения можно накапливать и отправлять позже — это обычный список:
+
+```python
+pending = [catalog.list_items.request(page=number) for number in (1, 2, 3)]
+for item in pending:
+    handle(catalog.list_items.send(item))
+```
+
+Значение принадлежит своей операции: чужой класс `send` не примет.
+
+```text
+TypeError: send() expects ListItems, got SearchItems
+```
+
+## Параметры вызова
+
+`send` принимает `options=` — таймаут, retry-бюджет и прочие параметры одного вызова:
+
+```python
+from eazy_sdk.policies import CallOptions
+
+catalog.list_items.send(request, options=CallOptions(timeout=5))
+```
+
+У операции, объявленной декоратором, `options` остаётся параметром самого вызова:
+`sdk.list_items(page=1, options=CallOptions(timeout=5))`. У класса такого параметра нет —
+конструктор описывает только поля запроса, и это единственное отличие двух форм.
+
+## С метаданными ответа
+
+`send_with_response` возвращает `ResponseEnvelope`, как и `with_response` у прямого вызова:
+
+```python
+envelope = catalog.list_items.send_with_response(request)
+print(envelope.status_code, envelope.headers.get("x-request-id"))
+```

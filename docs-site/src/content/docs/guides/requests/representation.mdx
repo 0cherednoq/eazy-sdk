@@ -15,7 +15,7 @@ api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e35377
 |---|---|---|---|
 | 1 | модель ↔ структура | библиотека моделей | `Serialization(models=…)` на корне |
 | 2 | структура ↔ байты | кодек формата и JSON-бэкенд | кодек — маркер тела операции, бэкенд — `Serialization(json=…)`; парсеры документов — `Serialization(documents=(…,))` |
-| 3 | public schema ↔ wire schema | проекция | `Wire(projection=…)` на операции |
+| 3 | public schema ↔ wire schema | проекция | `projection=BodyProjection(…)` в `__http__` |
 | 4 | байты ↔ байты на проводе | шифрование, порядок, точность | `Wire(encrypted=…, order=…, exact=…)` |
 
 Правило, которое их разделяет: **всё, что влияет на байты, — контракт; всё, что не влияет, —
@@ -44,21 +44,30 @@ api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e35377
 ## Wire на операции
 
 ```python
-from typing import Annotated, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
 from eazy_sdk.request import FieldOrder, JsonPolicy, QueryCodec, Wire
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePayment(HttpOperation[Payment]):
+    __http__ = Http.post(
+        "/v1/payments",
+        wire=Wire(
+            order=FieldOrder(body=("order_id", "amount")),
+            query=QueryCodec(space="plus"),
+        ),
+    )
+
+    order_id: JsonField[str]
+    amount: JsonField[int]
 
 
 class PaymentsApi(AsyncApi):
     wire = Wire(encoding=JsonPolicy(ensure_ascii=True))
 
-    @api.post("/v1/payments", responses=PAYMENT_RESPONSES, wire=Wire(
-        order=FieldOrder(body=("order_id", "amount")),
-        query=QueryCodec(space="plus"),
-    ))
-    async def create(self, **request: Unpack[CreatePayment]) -> Payment:
-        raise NotImplementedError
+    create = op(CreatePayment)
 ```
 
 Каждое поле `Wire` со значением `None` означает «наследовать»: операция выше объявляет только

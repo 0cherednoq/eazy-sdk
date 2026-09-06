@@ -1,86 +1,100 @@
 ---
 title: JSON body
-description: Используйте TypedDict для плоского JSON и модель только для вложенного документа.
+description: Поля операции — это поля JSON-объекта; модель нужна только для вложенного документа.
 sources:
   - eazy_sdk.request.JsonBody
-api_fingerprint: "sha256:c183373834ecd4cea65f25c5e65ae87a17e9bc9d390396538c61077654232949"
+  - eazy_sdk.request.BodyProjection
+api_fingerprint: "sha256:3666ca4d8c34407bd109ecb15242c0df9a0c9d2f1dcaa7070781a95d12be6e18"
 ---
 
-Плоский JSON object можно объявить прямыми keyword-only `JsonField` параметрами или через
-`Unpack[TypedDict]`. Runtime проверяет поля и типы значений до provider calls и сети, а IDE
-показывает точные именованные аргументы без wrapper-словаря.
+Плоский JSON object объявляется полями операции с маркером `JsonField`. Runtime проверяет поля и
+типы значений до provider calls и сети, а IDE показывает точные именованные аргументы без
+wrapper-словаря.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass, field
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import JsonField
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, JsonField, Omittable, op
 
-class CreateUser(TypedDict):
-    name: Annotated[str, JsonField()]
-    tags: Annotated[list[str], JsonField()]
-    note: NotRequired[Annotated[str, JsonField()]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateUser(HttpOperation[User]):
+    __http__ = Http.post("/users", operation_id="createUser")
+
+    name: JsonField[str]
+    tags: JsonField[list[str]] = field(default_factory=list)
+    note: JsonField[Omittable[str]] = UNSET
 
 class AsyncUsersApi(AsyncApi):
-    @api.post("/users", operation_id="createUser", responses=RESPONSES)
-    async def create(self, **request: Unpack[CreateUser]) -> User:
-        raise NotImplementedError
+    create = op(CreateUser)
 
-user = await AsyncUsersApi(client).create(
-    name="Ada",
-    tags=["admin"],
-)
+user = await AsyncUsersApi(client).create(name="Ada", tags=["admin"])
 ```
 
-Запрос содержит `Content-Type: application/json` и body
-`{"name":"Ada","tags":["admin"]}`. Отсутствующий `NotRequired` key не попадает в body;
-явно переданный `None` остаётся JSON `null`, если тип поля допускает `None`.
+Запрос содержит `Content-Type: application/json` и body `{"name":"Ada","tags":["admin"]}`. Поле,
+оставшееся `UNSET`, в body не попадает; явно переданный `None` остаётся JSON `null`, если тип поля
+допускает `None`. `default_factory` работает как в любом dataclass: каждый вызов получает свой
+список.
+
+Имя на проводе принадлежит модели. У dataclass его задаёт маркер
+(`Annotated[str, markers.JsonField("q")]`), у Pydantic — `serialization_alias`, у msgspec —
+`msgspec.field(name=...)`. Объявлять его в двух местах сразу — ошибка объявления.
 
 Для вложенного документа или model-owned validation используйте dataclass, Pydantic v2 или
-msgspec и передавайте его одним параметром с `JsonBody()`. Этот marker выбирает placement, но не
+msgspec и передавайте его одним полем с `markers.JsonBody()`. Этот marker выбирает placement, но не
 переопределяет aliases/default/exclusion policy такой модели.
 
 Готовые определения для всех трёх model libraries и пример собственного `ModelAdapter` находятся
 в {doc}`руководстве по сериализации моделей </api-reference/models-codecs>`.
 
-Не смешивайте root body с `JsonField` в одной операции. Когда caller-visible kwargs и wire JSON
-имеют разную структуру, объявляйте `BodyProjection`; managed CAPTCHA/CSRF поля размещайте через
-`FromProtection` в её private target schema. Пример ответа: status `201`, JSON
+Не смешивайте root body с `JsonField` в одной операции. Пример ответа: status `201`, JSON
 `{"id":42,"name":"Ada"}`.
 
+## Когда wire-структура другая
+
+Если внешний API ждёт вложенный документ, а вызывающему удобнее плоские поля, объявите
+`BodyProjection` в `__http__`. Источник — сама операция, поэтому поля объявлены один раз:
+
 ```python
-from eazy_sdk.request import BodyProjection, JsonBody
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation, op
+from eazy_sdk.request import BodyProjection, markers
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterUser(HttpOperation[Account]):
+    __http__ = Http.post(
+        "/register",
+        projection=BodyProjection(
+            target=RegisterUserWire,
+            using=register_to_wire,
+            encoding=markers.JsonBody(),
+        ),
+    )
+
+    login: str
+    email: str
+    first_name: str
+    last_name: str
 
 def register_to_wire(source: RegisterUser) -> RegisterUserWire:
     return {
-        "account": {"login": source["login"], "email": source["email"]},
-        "profile": {
-            "first_name": source["first_name"],
-            "last_name": source["last_name"],
-        },
+        "account": {"login": source.login, "email": source.email},
+        "profile": {"first_name": source.first_name, "last_name": source.last_name},
         "client": make_client_wire(),
     }
-
-REGISTER_BODY = BodyProjection(
-    RegisterUser,
-    RegisterUserWire,
-    register_to_wire,
-    JsonBody(),
-)
 ```
 
-Метод с `body=REGISTER_BODY` может принять `**request: Unpack[RegisterUser]` или совпадающие
-keyword-only поля `RegisterUser`. Caller передаёт их напрямую, без `body=` или wrapper dict.
-`make_client_wire()` вызывается заново на каждой attempt; значения из mutable client/session state
-добавляйте auth/protection writers после projection.
+Поля без маркера — это источник проекции: вызывающий передаёт их напрямую, без `body=` или
+wrapper dict. `make_client_wire()` вызывается заново на каждой attempt; значения из mutable
+client/session state добавляйте auth/protection writers после projection, а managed CAPTCHA/CSRF
+поля размещайте через `FromProtection` в private target schema.
 
 Для projection действуют три разные состояния:
 
-- отсутствующий `NotRequired` key не передаётся mapper-у, поэтому mapper может применить свой
-  default;
-- явно переданный `None` остаётся присутствующим key со значением `None`;
-- отсутствующий required key вызывает `OperationBindingError` до mapper, providers и network.
+- поле, оставшееся `UNSET`, не передаётся mapper-у, поэтому mapper может применить свой default;
+- явно переданный `None` остаётся значением `None`;
+- отсутствующее обязательное поле — это `TypeError` конструктора операции, до mapper, providers и
+  сети.
 
-`TypedDict` не объявляет runtime defaults. Для `Unpack` используйте `source.get("field", default)`
-или default private target model. В direct signature обычный Python default материализуется и
-передаётся mapper-у. На каждой attempt mapper получает новую глубокую копию public values.
+Если mapper-у нужны значения зависимостей, объявите их в `requires=` и добавьте второй параметр:
+`using(source, injected)` получает разрешённые значения этой attempt.

@@ -10,22 +10,25 @@ Header marker связывает Python-аргумент с request header. Ук
 отличается от имени аргумента.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import Header
+from eazy_sdk import UNSET, Http, HttpOperation, Omittable, SyncApi, op
+from eazy_sdk.request import markers
 
-class GetReportRequest(TypedDict):
-    locale: Annotated[str, Header("Accept-Language")]
-    request_id: NotRequired[Annotated[str, Header("X-Request-ID")]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetReport(HttpOperation[Report]):
+    __http__ = Http.get("/reports", operation_id="getReport")
+
+    locale: Annotated[str, markers.Header("Accept-Language")] = "en"
+    request_id: Annotated[Omittable[str], markers.Header("X-Request-ID")] = UNSET
 
 class ReportsApi(SyncApi):
-    @api.get("/reports", operation_id="getReport", responses=RESPONSES)
-    def report(self, **request: Unpack[GetReportRequest]) -> Report:
-        raise NotImplementedError
+    report = op(GetReport)
 ```
 
-`report(locale="ru")` отправит `Accept-Language: ru` и пропустит optional `X-Request-ID`.
+`report(locale="ru")` отправит `Accept-Language: ru` и пропустит `X-Request-ID`: `UNSET` не
+уходит на провод.
 Header names сравниваются без учёта регистра, но Eazy SDK сохраняет объявленное wire-имя и порядок
 там, где transport поддерживает exact mode.
 

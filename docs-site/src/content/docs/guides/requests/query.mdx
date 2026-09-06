@@ -6,33 +6,36 @@ sources:
 api_fingerprint: "sha256:29e5a5e65785078b161fa666aa876d34223ff161de1418998fda23ca87e43402"
 ---
 
-Query parameters объявляются полями единого request-`TypedDict`. Отсутствующее optional поле не
-попадает в URL.
+Query parameters — это поля операции. Значение по умолчанию отправляется как обычное значение;
+поле, которое иногда не нужно отправлять вовсе, объявляется `Omittable[T] = UNSET`.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Query
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Query, op
 
-class SearchUsersRequest(TypedDict):
-    q: Annotated[str, Query()]
-    limit: NotRequired[Annotated[int, Query()]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SearchUsers(HttpOperation[list[User]]):
+    __http__ = Http.get("/users", operation_id="searchUsers")
+
+    q: Query[str]
+    limit: Query[Omittable[int]] = UNSET
 
 class AsyncUsersApi(AsyncApi):
-    @api.get("/users", operation_id="searchUsers", responses=RESPONSES)
-    async def search(self, **request: Unpack[SearchUsersRequest]) -> list[User]:
-        raise NotImplementedError
+    search = op(SearchUsers)
 
 users = await AsyncUsersApi(client).search(q="ada", limit=10)
 ```
 
-Вызов отправит `GET /users?q=ada&limit=10`. `search(q="ada")` отправит только `q`.
+Вызов отправит `GET /users?q=ada&limit=10`. `search(q="ada")` отправит только `q`: `UNSET` не
+уходит на провод. Явный `None` — это другое: он отправится как пустое значение, если тип поля
+допускает `None`.
 
-Переименуйте wire-параметр через `Query("page-size")`. Параметры `style`, `explode` и
-`allow_reserved` нужны для OpenAPI-compatible сериализации сложных значений. Для API, которое
-чувствительно к порядку query, задайте `wire=Wire(order=FieldOrder(query=(...)))` в
-декораторе; правило percent-кодирования — `wire=Wire(query=QueryCodec(space="plus"))`.
+Переименуйте wire-параметр маркером: `Annotated[int, markers.Query("page-size")]`. Параметры
+`style`, `explode` и `allow_reserved` нужны для OpenAPI-compatible сериализации сложных значений.
+Для API, которое чувствительно к порядку query, задайте
+`wire=Wire(order=FieldOrder(query=(...)))` в `__http__`; правило percent-кодирования —
+`wire=Wire(query=QueryCodec(space="plus"))`.
 
 Пример ответа: status `200`, `Content-Type: application/json`, body
 `[{"id":42,"name":"Ada"}]`.

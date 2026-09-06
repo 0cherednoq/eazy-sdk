@@ -9,22 +9,21 @@ api_fingerprint: "sha256:435570d4e766c05a3a7098d3afed40f5ab6dd855e4df4774a184148
 `BytesBody` отправляет готовое буферизованное тело без JSON/form кодирования.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import BytesBody, Path
+from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
+from eazy_sdk.request import markers
 
-class PutObjectRequest(TypedDict):
-    name: Annotated[str, Path()]
-    payload: Annotated[
-        bytes,
-        BytesBody(content_type="application/octet-stream"),
-    ]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PutObject(HttpOperation[Upload]):
+    __http__ = Http.put("/objects/{name}", operation_id="putObject")
+
+    name: Path[str]
+    payload: Annotated[bytes, markers.BytesBody(content_type="application/octet-stream")]
 
 class ObjectsApi(SyncApi):
-    @api.put("/objects/{name}", operation_id="putObject", responses=RESPONSES)
-    def put_object(self, **request: Unpack[PutObjectRequest]) -> Upload:
-        raise NotImplementedError
+    put_object = op(PutObject)
 
 result = ObjectsApi(client).put_object(name="x", payload=b"abc")
 ```

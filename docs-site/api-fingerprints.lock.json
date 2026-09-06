@@ -213,12 +213,12 @@
     }
   },
   "getting-started/quickstart.mdx": {
-    "fingerprint": "sha256:72b38e8676c19f8dd1999ce7ad5a0f70b58eef9357e2565b7a49f0ea2c045541",
+    "fingerprint": "sha256:e8789ecc4109dd1eaf2b1deaa2b48839fc17adbf8d9486d46dfafad7754b5d35",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
-      "eazy_sdk.request": "sha256:9af5b6b61e2ce76cea796f35386e69aad3919a5aaf84bc028ae4ce1055b62673",
-      "eazy_sdk.response": "sha256:bb5a23b0415f161cb00d41700bbe33d1367cb020adddbae6d903e207f1a19ba7"
+      "eazy_sdk.request": "sha256:573c0d4fcbc188bbfef759defb2e7e179662df0d151e9e61b3d4c22d1eec4d9a",
+      "eazy_sdk.response": "sha256:f42141430b152565aa79dbc78f5ae71b310fb2aa0209a4eeacc55915a586abad"
     }
   },
   "guides/dependencies.mdx": {
@@ -331,8 +331,9 @@
     }
   },
   "guides/requests/json.mdx": {
-    "fingerprint": "sha256:c183373834ecd4cea65f25c5e65ae87a17e9bc9d390396538c61077654232949",
+    "fingerprint": "sha256:3666ca4d8c34407bd109ecb15242c0df9a0c9d2f1dcaa7070781a95d12be6e18",
     "symbols": {
+      "eazy_sdk.request.BodyProjection": "sha256:e5842b286ea1ae096d80f88a7ea8c3bb8a25f12fa80c3fd38bacf3364a2ad0c2",
       "eazy_sdk.request.JsonBody": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
@@ -360,6 +361,13 @@
     "symbols": {
       "eazy_sdk.request.Wire": "sha256:65156e82586dc751eddc264d668ea8606893036dd4b4fb08c60162a3d0e81cd6",
       "eazy_sdk.serialization.Serialization": "sha256:4d9e1b84881398c9258807686e24141a421925796033581ba016b24ab4f5aa01"
+    }
+  },
+  "guides/requests/values.mdx": {
+    "fingerprint": "sha256:86815e62603f0954d23a7f26a9eb1879ce9c047221e7432f96db2e33ff377b31",
+    "symbols": {
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
+      "eazy_sdk.models": "sha256:09807aaca77730f5c586faef4ac34326dc86996ebd827381ef0c5b72294386f8"
     }
   },
   "guides/responses/errors.mdx": {

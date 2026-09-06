@@ -1,30 +1,101 @@
 ---
 title: Запросы
-description: Явные параметры API-метода для каждой части HTTP request.
+description: Операция — это класс, и каждое его поле занимает одно явное место в HTTP request.
 freshness: false
 ---
 
-Каждый request parameter занимает одно явное место в HTTP request. Hand-written SDK объявляет
-keyword-only параметры прямо; generated/reusable SDK раскрывает `TypedDict` через
-`**request: Unpack[OperationRequest]`. Eazy SDK проверяет placements при создании API-класса, до
-middleware и сети.
+Операция объявляется классом: поля класса — это поля запроса, а `__http__` говорит, каким
+методом и по какому пути они уходят. Каждое поле занимает ровно одно место в HTTP request,
+и это место называет маркер. Eazy SDK проверяет размещения при создании класса роутера — до
+middleware и до сети.
 
-| Часть запроса | Marker | Руководство |
-|---|---|---|
-| URL placeholder | `Annotated[T, Path()]` | {doc}`Path </guides/requests/path>` |
-| Query parameter | `Annotated[T, Query()]` | {doc}`Query </guides/requests/query>` |
-| Header | `Annotated[T, Header()]` | {doc}`Headers </guides/requests/headers>` |
-| Cookie | `Annotated[T, Cookie()]` | {doc}`Cookies </guides/requests/cookies>` |
-| JSON document | `Annotated[TypedDict | Model, JsonBody()]` | {doc}`JSON body </guides/requests/json>` |
-| Form field | `Annotated[T, Form()]` | {doc}`Form body </guides/requests/form>` |
-| Multipart part | `Annotated[T, Part()]` | {doc}`Multipart </guides/requests/multipart>` |
-| Готовые bytes | `Annotated[bytes, BytesBody()]` | {doc}`Bytes </guides/requests/bytes>` |
-| Представление на проводе | `wire=Wire(...)` | {doc}`Представление запроса </guides/requests/representation>` |
+## Операция как класс
 
-Выберите один стиль на operation: direct keyword-only параметры с обычными Python defaults или
-единый `Unpack[TypedDict]`. Pydantic/dataclass/msgspec нужны для вложенного document или
-model-owned validation/serialization policy. Оба request-стиля сохраняют точную IDE и
-strict-type-checker сигнатуру.
+```python
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation, JsonField, Path, Query, SyncApi, op
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateOrder(HttpOperation[Order]):
+    __http__ = Http.post("/customers/{customer_id}/orders")
+
+    customer_id: Path[str]
+    dry_run: Query[bool] = False
+    item: JsonField[str]
+    quantity: JsonField[int] = 1
+
+class OrdersApi(SyncApi):
+    create_order = op(CreateOrder)
+```
+
+Класс может быть dataclass, Pydantic-моделью или msgspec-структурой — важно только, что он
+frozen: запрос является значением. `HttpOperation[Order]` называет тип результата, а
+`op(CreateOrder)` публикует операцию на роутере, сохраняя сигнатуру конструктора:
+`orders.create_order(customer_id="c-1", item="keyboard")` проверяется type checker'ом по именам и
+типам полей, вместе со значениями по умолчанию.
+
+Короткая форма — декоратор; он синтезирует такой же frozen-класс, доступный как
+`OrdersApi.create_order.Operation`:
+
+```python
+from typing import Annotated
+
+from eazy_sdk import SyncApi, api
+from eazy_sdk.request import markers
+
+class OrdersApi(SyncApi):
+    @api.post("/customers/{customer_id}/orders")
+    def create_order(
+        self,
+        *,
+        customer_id: Annotated[str, markers.Path()],
+        dry_run: Annotated[bool, markers.Query()] = False,
+        item: Annotated[str, markers.JsonField()],
+        quantity: Annotated[int, markers.JsonField()] = 1,
+    ) -> Order:
+        raise NotImplementedError
+```
+
+## Короткая форма маркеров
+
+`Query[int]` — это `Annotated[int, markers.Query()]`; обе записи дают одну и ту же аннотацию.
+Короткая форма читается в объявлении класса, длинная нужна там, где у маркера есть аргументы —
+имя на проводе, кодек, `explode`:
+
+| Часть запроса | Короткая форма | Полная форма | Руководство |
+|---|---|---|---|
+| URL placeholder | `Path[T]` | `Annotated[T, markers.Path()]` | {doc}`Path </guides/requests/path>` |
+| Query parameter | `Query[T]` | `Annotated[T, markers.Query("perPage")]` | {doc}`Query </guides/requests/query>` |
+| Header | `Header[T]` | `Annotated[T, markers.Header("X-Trace")]` | {doc}`Headers </guides/requests/headers>` |
+| Cookie | `Cookie[T]` | `Annotated[T, markers.Cookie()]` | {doc}`Cookies </guides/requests/cookies>` |
+| Поле JSON-объекта | `JsonField[T]` | `Annotated[T, markers.JsonField("q")]` | {doc}`JSON body </guides/requests/json>` |
+| JSON-документ целиком | `JsonBody[T]` | `Annotated[Model, markers.JsonBody()]` | {doc}`JSON body </guides/requests/json>` |
+| Form field | `Form[T]` | `Annotated[T, markers.Form()]` | {doc}`Form body </guides/requests/form>` |
+| Multipart part | `Part[T]` | `Annotated[T, markers.Part()]` | {doc}`Multipart </guides/requests/multipart>` |
+| Готовые bytes | — | `Annotated[bytes, markers.BytesBody()]` | {doc}`Bytes </guides/requests/bytes>` |
+| Представление на проводе | — | `wire=Wire(...)` в `__http__` | {doc}`Представление запроса </guides/requests/representation>` |
+
+Имя на проводе принадлежит модели: `markers.Query("perPage")` у dataclass, `serialization_alias`
+у Pydantic, `msgspec.field(name=...)` у msgspec. Объявлять его дважды — ошибка объявления.
+
+## Необязательное поле
+
+Значение по умолчанию — обычный Python default. Если поле нужно не отправлять вовсе, объявите его
+`Omittable[T] = UNSET`: `UNSET` не уходит на провод, а `None` уходит как `null`.
+
+```python
+from eazy_sdk import UNSET, Omittable, Query
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListOrders(HttpOperation[list[Order]]):
+    __http__ = Http.get("/orders")
+
+    page: Query[int] = 1
+    since: Query[Omittable[str]] = UNSET
+```
 
 Один параметр нельзя разместить дважды. Placeholder path должен иметь ровно один `Path` marker.
-`options` зарезервирован для `CallOptions | None`, должен быть keyword-only и не попадает в HTTP.
+`options` — параметр вызова, а не поле: у декорированной операции он объявляется в сигнатуре, у
+класса передаётся через `send(request, options=...)` (см. {doc}`Запрос как значение
+</guides/requests/values>`).
