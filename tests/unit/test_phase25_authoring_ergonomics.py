@@ -13,7 +13,6 @@ from eazy_sdk import (
     AsyncRoot,
     Client,
     Identity,
-    PreparationIncompleteError,
     PreparedCall,
     PrepareOptions,
     SyncApi,
@@ -34,6 +33,7 @@ from eazy_sdk.handlers import (
     HandlerProfile,
     RedirectControl,
 )
+from eazy_sdk.preparation import PreparationIncompleteError
 from eazy_sdk.protection.advanced import (
     SolveContext,
     SolverBindings,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol, cast, get_args, get_origin
+from typing import Any, Protocol, cast, get_args, get_origin, runtime_checkable
 
 from eazy_sdk.codecs import BodyCodec
 from eazy_sdk.core.errors import (
@@ -36,7 +36,6 @@ from eazy_sdk.core.kernel import (
     SourcePointer,
     ValueSlot,
 )
-from eazy_sdk.core.ports import CryptoProfile
 from eazy_sdk.dependencies import Inject
 from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.request import BodyProjection, Cookie, Header, Query
@@ -55,6 +54,28 @@ from eazy_sdk.request.signatures import (
 )
 
 from .input import InputField, _validate_query_cardinality
+
+
+@runtime_checkable
+class CryptoProfile(Protocol):
+    """Structural view of a payload-crypto profile, implemented by ``crypto.PayloadCrypto``.
+
+    The compiler reads a crypto profile but must not depend on the crypto package, which
+    depends on the compiler in turn. A structural protocol declared here is the whole of
+    that dependency: it lives with its only reader instead of in a layer of its own.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def outbound(self) -> Any | None: ...
+
+    @property
+    def inbound(self) -> Any | None: ...
+
+    @property
+    def inputs(self) -> tuple[Any, ...]: ...
 
 
 class EndpointLike(Protocol):

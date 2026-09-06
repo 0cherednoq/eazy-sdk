@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
 
-from ._artifacts import (
+from ._messages import (
     ChannelKey,
     CorrelationKey,
     FrameKind,

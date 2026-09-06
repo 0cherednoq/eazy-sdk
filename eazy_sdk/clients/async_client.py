@@ -13,7 +13,7 @@ from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
 from eazy_sdk.serialization import Serialization
 
-from ._core import _UNSET, _ClientCore, _raw_call
+from ._shared import _UNSET, _ClientCore, _raw_call
 from .base import CallOptions
 from .executor import envelope
 

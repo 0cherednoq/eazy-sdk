@@ -13,7 +13,7 @@ from zapros.websocket import (
     TextMessage,
 )
 
-from ._artifacts import EncodedFrame, FrameKind, InboundFrame
+from ._messages import EncodedFrame, FrameKind, InboundFrame
 from .errors import FrameTooLargeError, FrameTypeError
 
 

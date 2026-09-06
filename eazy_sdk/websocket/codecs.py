@@ -8,7 +8,7 @@ from typing import Protocol
 
 from eazy_sdk.core.kernel import Malformed, NoMatch, ParseAttempt, ParsedValue
 
-from ._artifacts import EncodedFrame, FrameKind, FrozenValue, InboundFrame, freeze_value, thaw_value
+from ._messages import EncodedFrame, FrameKind, FrozenValue, InboundFrame, freeze_value, thaw_value
 from .errors import FrameTooLargeError
 
 

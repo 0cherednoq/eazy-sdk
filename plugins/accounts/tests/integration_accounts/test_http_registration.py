@@ -30,12 +30,12 @@ from eazy_sdk import (
     Identity,
     Resilience,
     RetryPolicy,
-    UnsafeReplayError,
     api,
 )
 from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_cookie
 from eazy_sdk.auth.cookies import HttpCookieSession, parse_session_cookie
 from eazy_sdk.auth.session import MemorySessionStore, SessionKey, SessionLifecycleConfig
+from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.request import (
     JsonBody,
     SigningKey,

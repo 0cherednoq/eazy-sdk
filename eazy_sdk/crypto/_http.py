@@ -16,7 +16,7 @@ from eazy_sdk.request.prepared import (
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.normalized import cast_headers
 
-from ._runtime import (
+from ._compiler import (
     CompiledPayloadCrypto,
     decrypt_bytes,
     decrypt_document,

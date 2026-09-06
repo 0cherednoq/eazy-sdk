@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk import AsyncApi, Identity, PlanError, Security, api
+from eazy_sdk import AsyncApi, Identity, Security, api
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions, ClientConfig
@@ -19,6 +19,7 @@ from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.core import (
     RequestScope,
 )
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.ext import ParsedValue
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportError
 from eazy_sdk.protection.advanced import (

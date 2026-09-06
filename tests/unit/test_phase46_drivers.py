@@ -81,15 +81,15 @@ def test_a_synchronous_call_outside_a_loop_creates_none() -> None:
 
 
 def test_the_runner_and_its_conflict_error_are_gone() -> None:
-    from eazy_sdk.clients import _core
+    from eazy_sdk.clients import _shared
 
-    assert not hasattr(_core, "_SyncRunner")
-    assert not hasattr(_core, "_close_runner")
+    assert not hasattr(_shared, "_SyncRunner")
+    assert not hasattr(_shared, "_close_runner")
     import eazy_sdk.clients as clients
 
     assert not hasattr(clients, "EventLoopConflictError")
     assert "SynchronousSuspensionError" in clients.__all__
-    for module in (_core, sys.modules["eazy_sdk.clients.sync_client"]):
+    for module in (_shared, sys.modules["eazy_sdk.clients.sync_client"]):
         source = pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")
         assert "asyncio.Runner" not in source
         assert "_loop" not in source, "no private asyncio attribute is read"

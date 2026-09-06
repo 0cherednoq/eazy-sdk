@@ -26,7 +26,7 @@ from eazy_sdk.crypto import (
     payload_crypto,
     websocket_encrypted,
 )
-from eazy_sdk.crypto._runtime import compile_payload_crypto
+from eazy_sdk.crypto._compiler import compile_payload_crypto
 from eazy_sdk.models import default_model_adapters
 from eazy_sdk.websocket import (
     AsyncWsApi,

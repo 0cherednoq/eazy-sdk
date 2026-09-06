@@ -25,11 +25,11 @@ from eazy_sdk.crypto import (
     WebSocketCryptoContext,
     WebSocketEncrypted,
 )
-from eazy_sdk.crypto._runtime import CompiledPayloadCrypto
+from eazy_sdk.crypto._compiler import CompiledPayloadCrypto
 from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 
-from ._artifacts import (
+from ._messages import (
     ChannelKey,
     ConnectionGeneration,
     CorrelationKey,

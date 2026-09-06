@@ -8,13 +8,17 @@ from typing import Any
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
-from eazy_sdk.core.ports import CryptoProfile
 from eazy_sdk.protection.advanced import SolverRequirement
 from eazy_sdk.request import BodyProjection, WireOptions
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.response import Responses
 
-from .http_compiler import CompiledContract, HttpCompilerRegistry, compile_endpoint
+from .http_compiler import (
+    CompiledContract,
+    CryptoProfile,
+    HttpCompilerRegistry,
+    compile_endpoint,
+)
 from .input import InputField, MethodInputSchema
 
 

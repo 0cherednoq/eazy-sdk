@@ -15,7 +15,7 @@ from zapros import BaseHandler, Request, Response
 import eazy_sdk
 from eazy_sdk import Client, Json, Path, SyncApi, api
 from eazy_sdk.clients import AttemptLimitError, RedirectLimitError
-from eazy_sdk.clients._core import _ClientCore
+from eazy_sdk.clients._shared import _ClientCore
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.sync_client import _SyncClientCore
 from eazy_sdk.core.errors import ConfigurationError, EazySdkError, PlanError

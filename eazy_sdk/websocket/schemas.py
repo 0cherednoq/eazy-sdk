@@ -16,7 +16,7 @@ from eazy_sdk.core.kernel import (
 )
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 
-from ._artifacts import FrozenValue, freeze_value, thaw_value
+from ._messages import FrozenValue, freeze_value, thaw_value
 from .errors import (
     AmbiguousMessageError,
     MalformedMessageError,

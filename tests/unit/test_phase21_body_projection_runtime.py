@@ -10,9 +10,10 @@ import msgspec
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, OperationBindingError, Resilience, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Resilience, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
+from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import BodyProjection, JsonBody
 from eazy_sdk.response import Json, Responses, Success

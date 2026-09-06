@@ -30,7 +30,7 @@ from eazy_sdk.crypto import (
     payload_crypto,
     thaw_value,
 )
-from eazy_sdk.crypto._runtime import (
+from eazy_sdk.crypto._compiler import (
     compile_payload_crypto,
     decrypt_document,
     encrypt_bytes,

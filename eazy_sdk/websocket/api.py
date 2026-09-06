@@ -9,7 +9,7 @@ from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overloa
 
 from eazy_sdk.crypto import PayloadCrypto, WebSocketEncrypted
 
-from ._artifacts import WsOperationKind
+from ._messages import WsOperationKind
 from .policies import (
     NeverReplay,
     NeverResubscribe,

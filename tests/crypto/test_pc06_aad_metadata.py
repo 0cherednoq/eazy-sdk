@@ -38,8 +38,8 @@ from eazy_sdk.crypto import (
     websocket_crypto_field,
     websocket_encrypted,
 )
+from eazy_sdk.crypto._compiler import compile_payload_crypto, encrypt_bytes
 from eazy_sdk.crypto._inputs import resolve_crypto_inputs
-from eazy_sdk.crypto._runtime import compile_payload_crypto, encrypt_bytes
 from eazy_sdk.dependencies import DependencyContext, DependencyRegistry, RequestDependency
 from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request import (
@@ -51,13 +51,13 @@ from eazy_sdk.request import (
 )
 from eazy_sdk.response import Json, Responses
 from eazy_sdk.websocket import InboundMessageKind, ProtocolMessage
-from eazy_sdk.websocket._artifacts import MessageReservedOutput
-from eazy_sdk.websocket._client_state import _validate_websocket_crypto
 from eazy_sdk.websocket._crypto import (
     apply_ws_crypto_metadata,
     protect_ws_document,
     unprotect_ws_message,
 )
+from eazy_sdk.websocket._messages import MessageReservedOutput
+from eazy_sdk.websocket._state import _validate_websocket_crypto
 from tests._support.zapros_clients import client_from_httpx
 
 TENANT_DEPENDENCY = cast(

@@ -1,47 +1,22 @@
-"""Eazy SDK public surface for the compiled prepared-request runtime."""
+"""Eazy SDK: declare an API, compose it into an SDK, hand it a client.
+
+What lives here is what an SDK author needs in the first hour: the declaration surface, the
+composition surface, the request markers and the response contract. Everything else stays
+importable from the module that owns it — ``eazy_sdk.models``, ``eazy_sdk.codecs``,
+``eazy_sdk.crypto``, ``eazy_sdk.protection.advanced``, ``eazy_sdk.core.errors`` — because a
+second name in the root is duplication, not convenience.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from eazy_sdk.api import AsyncApi, SyncApi, api, api_group
-from eazy_sdk.clients import (
-    AttemptLimitError,
-    ClientConfig,
-    Hooks,
-    RedirectLimitError,
-    Resilience,
-    RetryPolicy,
-    Security,
-    UnsafeReplayError,
-)
-from eazy_sdk.codecs import BodyCodec, DelimitedScalarCodec, ScalarCodec
-from eazy_sdk.core.errors import (
-    BindingError,
-    GraphError,
-    OperationBindingError,
-    PatchError,
-    PlanError,
-)
+from eazy_sdk.clients import ClientConfig, Hooks, Resilience, RetryPolicy, Security
 from eazy_sdk.dependencies import Inject
-from eazy_sdk.handlers import CapabilityMismatchError, HandlerProfile, TransportError
+from eazy_sdk.handlers import HandlerProfile, TransportError
 from eazy_sdk.identity import Identity
-from eazy_sdk.middleware import MiddlewareProtocolError
-from eazy_sdk.models import (
-    AmbiguousModelAdapterError,
-    ModelAdapter,
-    ModelAdapterError,
-    ModelAdapterRegistry,
-    ModelField,
-    UnsupportedModelTypeError,
-    default_model_adapters,
-)
-from eazy_sdk.preparation import (
-    PreparationIncompleteError,
-    PreparedCall,
-    PreparedValue,
-    PrepareOptions,
-)
+from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.request import (
     BodyProjection,
     Cookie,
@@ -52,14 +27,11 @@ from eazy_sdk.request import (
     Query,
 )
 from eazy_sdk.response import (
-    AmbiguousResponseError,
     Bytes,
     Error,
     Html,
     Json,
-    MalformedResponseError,
     ResponseEnvelope,
-    ResponseExtractor,
     Responses,
     Success,
     Text,
@@ -85,25 +57,17 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "AmbiguousModelAdapterError",
-    "AmbiguousResponseError",
     "AsyncApi",
     "AsyncClient",
     "AsyncRoot",
-    "AttemptLimitError",
     "Binding",
-    "BindingError",
-    "BodyCodec",
     "BodyProjection",
     "Bytes",
-    "CapabilityMismatchError",
     "Client",
     "ClientConfig",
     "Cookie",
-    "DelimitedScalarCodec",
     "Error",
     "FormBody",
-    "GraphError",
     "HandlerProfile",
     "Header",
     "Hooks",
@@ -112,28 +76,14 @@ __all__ = [
     "Inject",
     "Json",
     "JsonBody",
-    "MalformedResponseError",
-    "MiddlewareProtocolError",
-    "ModelAdapter",
-    "ModelAdapterError",
-    "ModelAdapterRegistry",
-    "ModelField",
-    "OperationBindingError",
-    "PatchError",
     "Path",
-    "PlanError",
-    "PreparationIncompleteError",
     "PrepareOptions",
     "PreparedCall",
-    "PreparedValue",
     "Query",
-    "RedirectLimitError",
     "Resilience",
     "ResponseEnvelope",
-    "ResponseExtractor",
     "Responses",
     "RetryPolicy",
-    "ScalarCodec",
     "Security",
     "Serialization",
     "Success",
@@ -142,10 +92,7 @@ __all__ = [
     "Text",
     "TransportError",
     "UnexpectedResponseError",
-    "UnsafeReplayError",
-    "UnsupportedModelTypeError",
     "api",
     "api_group",
     "bind",
-    "default_model_adapters",
 ]

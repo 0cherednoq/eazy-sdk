@@ -16,7 +16,6 @@ from eazy_sdk import (
     Identity,
     Resilience,
     RetryPolicy,
-    UnsafeReplayError,
     api,
     api_group,
 )
@@ -35,6 +34,7 @@ from eazy_sdk.auth import (
     session_cookie,
     session_scheme,
 )
+from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.exceptions import HeaderValidationError
 from eazy_sdk.request import (
     JsonBody,
@@ -901,20 +901,20 @@ def test_public_clients_accept_zapros_handlers_without_catch_all_options() -> No
 
 
 def test_public_namespace_exposes_one_client_path_and_hides_runtime_records() -> None:
+    import importlib
     import importlib.util
 
     import eazy_sdk
     import eazy_sdk.clients as clients_api
     import eazy_sdk.codegen as codegen_api
 
-    assert {
-        "Client",
-        "AsyncClient",
-        "HandlerProfile",
-        "ModelAdapter",
-        "BodyCodec",
-        "api",
-    } <= set(eazy_sdk.__all__)
+    assert {"Client", "AsyncClient", "HandlerProfile", "api"} <= set(eazy_sdk.__all__)
+    # Phase 47: what an author needs in the first hour lives in the root; the rest keeps its
+    # own module, so there is one name for one thing.
+    assert len(eazy_sdk.__all__) <= 40
+    for moved, module in (("ModelAdapter", "eazy_sdk.models"), ("BodyCodec", "eazy_sdk.codecs")):
+        assert moved not in eazy_sdk.__all__
+        assert hasattr(importlib.import_module(module), moved)
     verbs = {
         "delete",
         "get",

@@ -85,9 +85,6 @@ from .kernel import (
     CompilerRegistry as CompilerRegistry,
 )
 from .kernel import (
-    CustomScope as CustomScope,
-)
-from .kernel import (
     Malformed as Malformed,
 )
 from .kernel import (
@@ -98,9 +95,6 @@ from .kernel import (
 )
 from .kernel import (
     OperationIdentity as OperationIdentity,
-)
-from .kernel import (
-    OperationMetadata as OperationMetadata,
 )
 from .kernel import (
     OperationShape as OperationShape,
@@ -121,9 +115,6 @@ from .kernel import (
     PythonTypeValidator as PythonTypeValidator,
 )
 from .kernel import (
-    Remove as Remove,
-)
-from .kernel import (
     ReplaceAll as ReplaceAll,
 )
 from .kernel import (
@@ -136,9 +127,6 @@ from .kernel import (
     SourcePointer as SourcePointer,
 )
 from .kernel import (
-    StagedEffect as StagedEffect,
-)
-from .kernel import (
     ValuePatch as ValuePatch,
 )
 from .kernel import (
@@ -146,7 +134,4 @@ from .kernel import (
 )
 from .kernel import (
     apply_patch_atomic as apply_patch_atomic,
-)
-from .ports import (
-    CryptoProfile as CryptoProfile,
 )

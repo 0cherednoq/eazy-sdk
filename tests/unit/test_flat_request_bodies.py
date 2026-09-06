@@ -4,7 +4,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 import pytest
 
-from eazy_sdk import OperationBindingError, SyncApi, api
+from eazy_sdk import SyncApi, api
 from eazy_sdk.compile import (
     CompiledContract,
 )
@@ -14,6 +14,7 @@ from eazy_sdk.core import (
     ValuePatch,
     apply_patch_atomic,
 )
+from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.request import (
     DelimitedScalarCodec,
     Form,

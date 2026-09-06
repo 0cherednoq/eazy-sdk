@@ -94,7 +94,9 @@ def test_clients_do_not_import_accounts_and_extraction_keeps_pydantic_lazy() -> 
 def test_compiler_depends_on_the_crypto_port_not_the_crypto_package() -> None:
     assert _violations("compile/http_compiler.py", ("eazy_sdk.crypto",)) == []
     assert _violations("compile/http_operation.py", ("eazy_sdk.crypto",)) == []
-    from eazy_sdk.core.ports import CryptoProfile
+    # The port lives with its only reader, not in a layer that exists to break an import.
+    assert not (ROOT / "eazy_sdk" / "core" / "ports.py").exists()
+    from eazy_sdk.compile.http_compiler import CryptoProfile
     from eazy_sdk.crypto import PayloadCrypto
 
     port_members = {"name", "outbound", "inbound", "inputs"}

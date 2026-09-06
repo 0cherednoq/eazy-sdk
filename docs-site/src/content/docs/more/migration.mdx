@@ -38,6 +38,22 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
 | `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
 
+Корень `eazy_sdk` экспортирует 38 имён вместо 55: то, что нужно автору SDK в первый час. Всё
+остальное импортируется из своего модуля — это не сокрытие, а отказ от второго имени для одной
+вещи.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.ModelAdapter` | `eazy_sdk.models.ModelAdapter` | Вместе с `ModelAdapterRegistry`, `ModelField`, `default_model_adapters` и ошибками адаптеров. |
+| `eazy_sdk.BodyCodec` | `eazy_sdk.codecs.BodyCodec` | Вместе с `ScalarCodec` и `DelimitedScalarCodec`. |
+| `eazy_sdk.PlanError` | `eazy_sdk.core.errors.PlanError` | Вместе с `BindingError`, `GraphError`, `PatchError`, `OperationBindingError`. |
+| `eazy_sdk.UnsafeReplayError` | `eazy_sdk.clients.UnsafeReplayError` | Вместе с `AttemptLimitError` и `RedirectLimitError`. |
+| `eazy_sdk.CapabilityMismatchError` | `eazy_sdk.handlers.CapabilityMismatchError` | |
+| `eazy_sdk.MiddlewareProtocolError` | `eazy_sdk.middleware.MiddlewareProtocolError` | |
+| `eazy_sdk.PreparationIncompleteError` | `eazy_sdk.preparation.PreparationIncompleteError` | Вместе с `PreparedValue`. |
+| `eazy_sdk.ResponseExtractor` | `eazy_sdk.response.ResponseExtractor` | Вместе с `AmbiguousResponseError` и `MalformedResponseError`. |
+| `eazy_sdk.core.ports.CryptoProfile` | `eazy_sdk.compile.http_compiler.CryptoProfile` | Порт переехал к единственному читателю; слоя ради разрыва импорта больше нет. |
+
 Синхронный клиент больше не создаёт event loop: тот же конвейер шагается на вызывающем потоке.
 `Client` теперь можно вызывать из кода, где loop уже работает; взамен колбэк, который сам уходит
 в сеть через `await`, поднимает `SynchronousSuspensionError` вместо того, чтобы молча крутиться в

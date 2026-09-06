@@ -3,8 +3,8 @@ title: Request API
 description: Маркеры размещения, тела и wire options.
 sources:
   - eazy_sdk.request
-  - eazy_sdk.OperationBindingError
-api_fingerprint: "sha256:3ae3eee0108f12cc49ee1d8eb41fbc0b06e5651555251a6f67673ebb020f9b23"
+  - eazy_sdk.core.errors.OperationBindingError
+api_fingerprint: "sha256:cf3fbe2441403a2703724ec0cb1d52ad4a519111cf8093325d19d7ee12a11de2"
 ---
 
 Маркеры используются либо в явных keyword-only параметрах метода, либо в полях operation
@@ -85,7 +85,8 @@ wire schema и одним из перечисленных encodings; смеши�
 
 ## Ошибки binding и projection
 
-Public binding, projection и preparation failures используют один `OperationBindingError`.
+Public binding, projection и preparation failures используют один
+`eazy_sdk.core.errors.OperationBindingError`.
 Tooling читает поля ошибки напрямую, не разбирает message:
 
 | Поле | Значение |

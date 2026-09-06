@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import cast
 
-from ._artifacts import ConnectionGeneration, FrozenValue, freeze_value
+from ._messages import ConnectionGeneration, FrozenValue, freeze_value
 from .errors import RecoveryGapError, SubscriptionOverflowError
 from .policies import (
     OverflowPolicy,

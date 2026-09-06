@@ -2,14 +2,7 @@ from __future__ import annotations
 
 from zapros.websocket import TextMessage
 
-from eazy_sdk.websocket._artifacts import (
-    ChannelKey,
-    ConnectionGeneration,
-    CorrelationKey,
-    PreparedMessage,
-    freeze_value,
-)
-from eazy_sdk.websocket._runtime_stages import (
+from eazy_sdk.websocket._decisions import (
     ConnectAction,
     DisconnectAction,
     FailureState,
@@ -25,6 +18,13 @@ from eazy_sdk.websocket._runtime_stages import (
     recovery_decision,
     route_reader_message,
     write_admitted,
+)
+from eazy_sdk.websocket._messages import (
+    ChannelKey,
+    ConnectionGeneration,
+    CorrelationKey,
+    PreparedMessage,
+    freeze_value,
 )
 from eazy_sdk.websocket.codecs import JsonTextCodec
 from eazy_sdk.websocket.policies import (

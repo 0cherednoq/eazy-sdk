@@ -9,7 +9,7 @@ import pytest
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
 from eazy_sdk import AsyncClient, Client, Inject, SyncApi, api
-from eazy_sdk.clients._core import _UNSET, _raw_call
+from eazy_sdk.clients._shared import _UNSET, _raw_call
 from eazy_sdk.compile import (
     CompiledContract,
     InputField,

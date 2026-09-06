@@ -9,16 +9,16 @@ from enum import Enum
 from zapros.websocket import Message
 
 from eazy_sdk.crypto import WebSocketCryptoContext, WebSocketEncrypted
-from eazy_sdk.crypto._runtime import CompiledPayloadCrypto
+from eazy_sdk.crypto._compiler import CompiledPayloadCrypto
 
-from ._artifacts import (
+from ._crypto import protect_ws_frame
+from ._messages import (
     ChannelKey,
     ConnectionGeneration,
     CorrelationKey,
     FrozenValue,
     PreparedMessage,
 )
-from ._crypto import protect_ws_frame
 from .codecs import WsCodec
 from .frames import frame_to_zapros
 from .policies import NeverResubscribe, ResubscribePolicy

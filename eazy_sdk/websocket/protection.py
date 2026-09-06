@@ -12,7 +12,7 @@ from typing import Protocol
 
 from eazy_sdk.core.kernel import Malformed, ParseAttempt, ParsedValue
 
-from ._artifacts import (
+from ._messages import (
     EncodedFrame,
     FrozenValue,
     InboundFrame,

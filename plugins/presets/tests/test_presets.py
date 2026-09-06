@@ -11,11 +11,12 @@ from eazy_sdk_presets import cloudflare, host, json_field, operation, recaptcha
 from eazy_sdk_presets import header as preset_header
 from zapros import AsyncBaseHandler, Request, Response
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, PlanError, Resilience, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Resilience, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
 from eazy_sdk.clients.sync_client import _SyncClientCore
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.ext import (
     OperationIdentity,
     ScopeContext,

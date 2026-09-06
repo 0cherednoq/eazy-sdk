@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import types
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Any, Protocol, Self, Union, cast, get_args, get_origin, is_typeddict
@@ -39,7 +39,7 @@ class PythonTypeValidator[T]:
     annotation: object
 
     def __call__(self, value: object) -> T:
-        validate_annotation(value, self.annotation)
+        _validate_annotation(value, self.annotation)
         return value  # type: ignore[return-value]
 
 
@@ -193,23 +193,12 @@ class ReplaceAll[T]:
     conflict: PatchConflict = PatchConflict.ERROR
 
 
-@dataclass(frozen=True, slots=True)
-class Remove:
-    slot: ValueSlot[Any]
-    conflict: PatchConflict = PatchConflict.ERROR
-
-
-type PatchOperation = Set[Any] | Append[Any] | ReplaceAll[Any] | Remove
+type PatchOperation = Set[Any] | Append[Any] | ReplaceAll[Any]
 
 
 @dataclass(frozen=True, slots=True)
 class ValuePatch:
     operations: tuple[PatchOperation, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class StagedEffect:
-    commit: Callable[[], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,12 +211,6 @@ class SourcePointer:
 class OperationIdentity:
     operation_id: str
     source: SourcePointer | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class OperationMetadata:
-    tags: tuple[str, ...] = ()
-    attributes: tuple[tuple[str, object], ...] = ()
 
 
 @dataclass(slots=True)
@@ -244,19 +227,6 @@ class OperationCallState[TPlan]:
 
 class Scope[TContext](Protocol):
     def matches(self, context: TContext) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True)
-class CustomScope[TContext]:
-    predicate: Callable[[TContext], bool]
-    diagnostic_name: str
-
-    def __post_init__(self) -> None:
-        if not self.diagnostic_name:
-            raise ValueError("custom scope requires a diagnostic name")
-
-    def matches(self, context: TContext) -> bool:
-        return self.predicate(context)
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,13 +418,8 @@ def _cycle_path[TNode: GraphNode](
     return ["unknown"]
 
 
-def apply_patch_atomic(
-    values: OperationValues,
-    patch: ValuePatch,
-    *,
-    staged_effects: tuple[StagedEffect, ...] = (),
-) -> OperationValues:
-    """Validate a complete patch before committing values or persistent effects."""
+def apply_patch_atomic(values: OperationValues, patch: ValuePatch) -> OperationValues:
+    """Validate a complete patch before committing any value."""
     candidate = list(values._values)
     writes: dict[int, PatchConflict] = {}
     for operation in patch.operations:
@@ -471,11 +436,7 @@ def apply_patch_atomic(
             and candidate[index] is not _MISSING
         ):
             continue
-        if isinstance(operation, Remove):
-            if slot.required:
-                raise PatchError(f"cannot remove required slot: {slot.diagnostic_name}")
-            candidate[index] = _MISSING
-        elif isinstance(operation, Append):
+        if isinstance(operation, Append):
             if slot.cardinality is not SlotCardinality.MANY:
                 raise PatchError(f"append requires a multi-value slot: {slot.diagnostic_name}")
             item = slot.validator(operation.value)
@@ -492,13 +453,10 @@ def apply_patch_atomic(
             candidate[index] = tuple(slot.validator(item) for item in operation.values)
         else:
             candidate[index] = slot.validator(operation.value)
-    result = OperationValues(values.shape, tuple(candidate))
-    for effect in staged_effects:
-        effect.commit()
-    return result
+    return OperationValues(values.shape, tuple(candidate))
 
 
-def validate_annotation(value: object, annotation: object) -> None:
+def _validate_annotation(value: object, annotation: object) -> None:
     if annotation in {Any, object}:
         return
     origin = get_origin(annotation)
@@ -512,13 +470,13 @@ def validate_annotation(value: object, annotation: object) -> None:
             raise TypeError(f"expected {annotation!r}, got {type(value).__name__}")
         if isinstance(value, Mapping) and len(args) == 2:
             for key, item in value.items():
-                validate_annotation(key, args[0])
-                validate_annotation(item, args[1])
+                _validate_annotation(key, args[0])
+                _validate_annotation(item, args[1])
         elif (
             isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray) and args
         ):
             for item in value:
-                validate_annotation(item, args[0])
+                _validate_annotation(item, args[0])
         return
     if is_typeddict(annotation):
         from eazy_sdk.models import ModelAdapterError, default_model_adapters
@@ -535,7 +493,7 @@ def validate_annotation(value: object, annotation: object) -> None:
             )
         for field in fields:
             if field.name in value:
-                validate_annotation(value[field.name], field.annotation)
+                _validate_annotation(value[field.name], field.annotation)
             elif field.required:
                 raise ModelAdapterError(
                     f"missing required field {typed_dict.__name__}.{field.name}"
@@ -569,7 +527,7 @@ def _validation_error_path(error: Exception) -> str | None:
 
 def _matches(value: object, annotation: object) -> bool:
     try:
-        validate_annotation(value, annotation)
+        _validate_annotation(value, annotation)
     except (TypeError, ValueError):
         return False
     return True

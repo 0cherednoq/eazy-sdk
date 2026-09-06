@@ -1,6 +1,6 @@
 """Async WebSocket protocol and runtime API."""
 
-from ._artifacts import (
+from ._messages import (
     ChannelKey,
     ConnectionGeneration,
     CorrelationKey,

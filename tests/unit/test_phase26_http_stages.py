@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk.clients._http_stages import (
+from eazy_sdk.clients._decisions import (
     AuthRefreshTransition,
     ReactionTransition,
     RedirectTransition,

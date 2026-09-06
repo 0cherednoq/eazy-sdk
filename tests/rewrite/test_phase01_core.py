@@ -23,14 +23,12 @@ from eazy_sdk.core import (
     PlanNode,
     PlanNodeKind,
     PythonTypeValidator,
-    Remove,
     ReplaceAll,
     RequestLocation,
     RequestScope,
     ScopeContext,
     Set,
     SlotCardinality,
-    StagedEffect,
     ValuePatch,
     ValueSlot,
     WriterConflictError,
@@ -107,30 +105,17 @@ def test_patch_replacement_and_groups_keep_shape_position() -> None:
     ]
 
 
-def test_patch_batch_and_effects_are_atomic() -> None:
+def test_a_rejected_patch_commits_none_of_its_writes() -> None:
     first: ValueSlot[int] = slot("first", int)
     single: ValueSlot[str] = slot("single", str)
     shape = OperationShape((first, single))
     original = OperationValues.from_bound(
         shape, BoundArguments((Bind(first, 1), Bind(single, "x")))
     )
-    committed: list[str] = []
     with pytest.raises(PatchError, match="append requires"):
-        apply_patch_atomic(
-            original,
-            ValuePatch((Set(first, 2), Append(single, "bad"))),
-            staged_effects=(StagedEffect(lambda: committed.append("committed")),),
-        )
+        apply_patch_atomic(original, ValuePatch((Set(first, 2), Append(single, "bad"))))
     assert original.require(first) == 1
-    assert committed == []
-    with pytest.raises(PatchError, match="cannot remove required"):
-        required: ValueSlot[str] = slot("required", str, required=True)
-        apply_patch_atomic(
-            OperationValues.from_bound(
-                OperationShape((required,)), BoundArguments((Bind(required, "x"),))
-            ),
-            ValuePatch((Remove(required),)),
-        )
+    assert original.require(single) == "x"
 
 
 def test_plan_graph_detects_conflicts_back_edges_and_full_cycles() -> None:

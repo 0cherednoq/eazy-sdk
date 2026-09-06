@@ -13,7 +13,7 @@ from eazy_sdk.crypto import (
     WebSocketCryptoContext,
     WebSocketEncrypted,
 )
-from eazy_sdk.crypto._runtime import (
+from eazy_sdk.crypto._compiler import (
     CompiledPayloadCrypto,
     decrypt_bytes,
     decrypt_document,
@@ -21,7 +21,7 @@ from eazy_sdk.crypto._runtime import (
     encrypt_document,
 )
 
-from ._artifacts import EncodedFrame, FrameKind, FrozenValue, InboundFrame
+from ._messages import EncodedFrame, FrameKind, FrozenValue, InboundFrame
 from .protocols import ProtocolMessage
 
 

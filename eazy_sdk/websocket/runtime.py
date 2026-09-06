@@ -17,18 +17,18 @@ from eazy_sdk.crypto import (
     PayloadCrypto,
     WebSocketEncrypted,
 )
-from eazy_sdk.crypto._runtime import CompiledPayloadCrypto, compile_payload_crypto
+from eazy_sdk.crypto._compiler import CompiledPayloadCrypto, compile_payload_crypto
 
-from ._artifacts import (
+from ._clearance import _ProtectionMixin
+from ._connection import _ConnectionMixin
+from ._messages import (
     ChannelKey,
     ConnectionGeneration,
     CorrelationKey,
 )
-from ._client_connection import _ConnectionMixin
-from ._client_emit import _EmitMixin
-from ._client_protection import _ProtectionMixin
-from ._client_reconnect import _ReconnectMixin
-from ._client_state import (
+from ._outbound import _EmitMixin
+from ._reconnect import _ReconnectMixin
+from ._state import (
     MessageHandler,
     WsCallOptions,
     WsClientConfig,

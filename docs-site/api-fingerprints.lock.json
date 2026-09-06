@@ -75,9 +75,9 @@
     }
   },
   "api-reference/request.mdx": {
-    "fingerprint": "sha256:3ae3eee0108f12cc49ee1d8eb41fbc0b06e5651555251a6f67673ebb020f9b23",
+    "fingerprint": "sha256:cf3fbe2441403a2703724ec0cb1d52ad4a519111cf8093325d19d7ee12a11de2",
     "symbols": {
-      "eazy_sdk.OperationBindingError": "sha256:521998615f5e60e0afd5737fc41a23502a4bcf2d2793d0ceb4ada21601eb720b",
+      "eazy_sdk.core.errors.OperationBindingError": "sha256:521998615f5e60e0afd5737fc41a23502a4bcf2d2793d0ceb4ada21601eb720b",
       "eazy_sdk.request": "sha256:76475eb24ef1d6c01fe9f934d0de921ec1102704ef57fbfdba94c263eea22120"
     }
   },

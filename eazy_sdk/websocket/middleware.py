@@ -9,7 +9,7 @@ from dataclasses import field as dataclass_field
 from enum import Enum
 from typing import Protocol
 
-from ._artifacts import PreparedMessage, freeze_value, thaw_value
+from ._messages import PreparedMessage, freeze_value, thaw_value
 
 
 class WsDirection(Enum):

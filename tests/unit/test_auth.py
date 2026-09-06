@@ -7,7 +7,7 @@ from typing import Annotated, Any
 import httpx
 import pytest
 
-from eazy_sdk import Identity, PlanError, SyncApi, api
+from eazy_sdk import Identity, SyncApi, api
 from eazy_sdk.auth import (
     ApiKeyScheme,
     Auth,
@@ -20,6 +20,7 @@ from eazy_sdk.auth import (
 )
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.request import Header
 from eazy_sdk.response import NormalizedResponse, Responses
 from tests._support.zapros_clients import client_from_httpx
