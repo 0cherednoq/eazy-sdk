@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
-from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -150,8 +150,37 @@ from ._http_stages import (
     build_request_document,
     decide_response,
 )
+from .attempts import (
+    AttemptBudgets,
+    AttemptState,
+    AuthRefreshPolicy,
+    Continue,
+    ProtectionPolicy,
+    RedirectPolicy,
+    ResponseRetryPolicy,
+    Stop,
+    TransportFailure,
+    TransportRetryPolicy,
+)
+from .attempts import Fail as AttemptFail
 
 _operation_stack: ContextVar[tuple[str, ...]] = ContextVar("eazy_sdk_operation_stack", default=())
+
+
+@contextmanager
+def _operation_frame(operation_id: str) -> Iterator[None]:
+    """Guard one operation against re-entering itself through its own auth lifecycle."""
+
+    stack = _operation_stack.get()
+    if operation_id in stack:
+        from eazy_sdk.auth.session_runtime import ResolutionCycleError
+
+        raise ResolutionCycleError("operation cycle: " + " -> ".join((*stack, operation_id)))
+    token = _operation_stack.set((*stack, operation_id))
+    try:
+        yield
+    finally:
+        _operation_stack.reset(token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,11 +640,49 @@ class ExecutionCore:
 
         selected = cast(CallOptions, options)
         contract = call.declaration
-        arguments = call.arguments
+        compiled, initial_crypto, before_policies, challenge_policies = self._compile_call(contract)
+        initial_compiled_crypto = _compile_http_crypto(
+            compiled,
+            initial_crypto,
+            self.serialization.models,
+            allow_async=self.runtime.allow_async_crypto,
+        )
+        mandatory = self._preflight(contract, compiled, before_policies, challenge_policies)
+        registrations = (*self.runtime.middleware, *selected.middleware)
+
+        async def terminal(current: CallMiddlewareContext[T]) -> ExecutionResult[T]:
+            rebound = bind_plan(cast(Any, compiled.plan), current.arguments)
+            with _operation_frame(compiled.contract.operation_id):
+                return await self._attempts(
+                    compiled,
+                    rebound,
+                    selected,
+                    registrations,
+                    before_policies,
+                    challenge_policies,
+                    mandatory,
+                    contract,
+                    initial_crypto,
+                    initial_compiled_crypto,
+                )
+
+        context = CallMiddlewareContext[T](
+            compiled.plan.operation, _normalize_arguments(compiled, call.arguments)
+        )
+        return await self._through_middleware(contract, registrations, context, terminal)
+
+    def _compile_call[T](
+        self, contract: _OperationDeclaration[T]
+    ) -> tuple[
+        Any,
+        tuple[PayloadCrypto, HttpEncrypted] | None,
+        tuple[_CompiledBeforeCallPolicy, ...],
+        tuple[_CompiledChallengePolicy, ...],
+    ]:
         initial_url = _contract_url(_service_base_url(contract, self.runtime), contract.path)
         initial_crypto = _resolve_http_crypto(contract, self.runtime.crypto, initial_url)
         scope_context = _scope_context(contract, _service_base_url(contract, self.runtime))
-        before_call_policies = tuple(
+        before_policies = tuple(
             _compile_before_call_policy(policy)
             for policy in self.runtime.before_call_policies
             if policy.scope.matches(scope_context)
@@ -625,29 +692,22 @@ class ExecutionCore:
             for policy in self.runtime.challenge_policies
             if policy.scope.matches(scope_context)
         )
-        compiled_contract = (
-            replace(
-                contract,
-                crypto=initial_crypto[0],
-                crypto_wire=initial_crypto[1],
-            )
+        declared = (
+            replace(contract, crypto=initial_crypto[0], crypto_wire=initial_crypto[1])
             if initial_crypto is not None
             else contract
         )
         try:
             compiled: Any = compile_endpoint(
-                compiled_contract,
-                scope=compiled_contract.scope,
-                requirements=wire_requirements(compiled_contract),
+                declared,
+                scope=declared.scope,
+                requirements=wire_requirements(declared),
                 fingerprint_context=(
                     *self.serialization.models.fingerprint_components(),
-                    *_protection_fingerprint_components(
-                        before_call_policies,
-                        challenge_policies,
-                    ),
+                    *_protection_fingerprint_components(before_policies, challenge_policies),
                 ),
                 private_bindings=(
-                    tuple(item.apply for item in before_call_policies)
+                    tuple(item.apply for item in before_policies)
                     + tuple(item.apply for item in challenge_policies)
                 ),
             )
@@ -655,13 +715,17 @@ class ExecutionCore:
             if "private" not in str(exc):
                 raise
             raise ProtectionConfigurationError(str(exc)) from exc
-        initial_compiled_crypto = _compile_http_crypto(
-            compiled,
-            initial_crypto,
-            self.serialization.models,
-            allow_async=self.runtime.allow_async_crypto,
-        )
-        # Preflight deliberately precedes binding-side effects and every provider.
+        return compiled, initial_crypto, before_policies, challenge_policies
+
+    def _preflight[T](
+        self,
+        contract: _OperationDeclaration[T],
+        compiled: Any,
+        before_policies: tuple[_CompiledBeforeCallPolicy, ...],
+        challenge_policies: tuple[_CompiledChallengePolicy, ...],
+    ) -> _MandatoryPreparation | None:
+        """Capability and solver checks precede binding side effects and every provider."""
+
         validate_profile(compiled.plan.requirements, self.runtime.handler_profile)
         mandatory = _validate_mandatory_protections(
             contract,
@@ -670,61 +734,30 @@ class ExecutionCore:
             self.runtime.solver_bindings,
             self.serialization.models,
         )
-        for challenge_policy_item in challenge_policies:
-            if self.runtime.solver_bindings.get(challenge_policy_item.solver) is None:
-                raise MissingSolverError(
-                    f"missing solver: {challenge_policy_item.solver.name}"
-                )
-        for before_policy_item in before_call_policies:
-            if (
-                before_policy_item.solver is not None
-                and self.runtime.solver_bindings.get(before_policy_item.solver) is None
-            ):
-                raise MissingSolverError(
-                    f"missing solver: {before_policy_item.solver.name}"
-                )
-        context = CallMiddlewareContext[T](
-            compiled.plan.operation, _normalize_arguments(compiled, arguments)
+        requirements = (
+            *(policy.solver for policy in challenge_policies),
+            *(policy.solver for policy in before_policies if policy.solver is not None),
         )
-        registrations = (*self.runtime.middleware, *selected.middleware)
-        call_chain = tuple(
+        for requirement in requirements:
+            if self.runtime.solver_bindings.get(requirement) is None:
+                raise MissingSolverError(f"missing solver: {requirement.name}")
+        return mandatory
+
+    async def _through_middleware[T](
+        self,
+        contract: _OperationDeclaration[T],
+        registrations: tuple[object, ...],
+        context: CallMiddlewareContext[T],
+        terminal: Callable[[CallMiddlewareContext[T]], Awaitable[ExecutionResult[T]]],
+    ) -> ExecutionResult[T]:
+        scope = _scope_context(contract, _service_base_url(contract, self.runtime))
+        chain = tuple(
             item
             for item in registrations
-            if isinstance(item, CallMiddlewareRegistration)
-            and item.scope.matches(
-                _scope_context(contract, _service_base_url(contract, self.runtime))
-            )
+            if isinstance(item, CallMiddlewareRegistration) and item.scope.matches(scope)
         )
-
-        async def terminal(current: CallMiddlewareContext[T]) -> ExecutionResult[T]:
-            rebound = bind_plan(cast(Any, compiled.plan), current.arguments)
-            operation_id = compiled.contract.operation_id
-            stack = _operation_stack.get()
-            if operation_id in stack:
-                from eazy_sdk.auth.session_runtime import ResolutionCycleError
-
-                raise ResolutionCycleError(
-                    "operation cycle: " + " -> ".join((*stack, operation_id))
-                )
-            token = _operation_stack.set((*stack, operation_id))
-            try:
-                return await self._attempts(
-                    compiled,
-                    rebound,
-                    selected,
-                    registrations,
-                    before_call_policies,
-                    challenge_policies,
-                    mandatory,
-                    contract,
-                    initial_crypto,
-                    initial_compiled_crypto,
-                )
-            finally:
-                _operation_stack.reset(token)
-
         callback: Callable[[CallMiddlewareContext[T]], Awaitable[Any]] = terminal
-        for registration in reversed(call_chain):
+        for registration in reversed(chain):
             following = callback
 
             async def invoke(
@@ -754,498 +787,19 @@ class ExecutionCore:
         initial_crypto: tuple[PayloadCrypto, HttpEncrypted] | None,
         initial_compiled_crypto: CompiledPayloadCrypto | None,
     ) -> ExecutionResult[T]:
-        values = bound
-        initial_url = _contract_url(
-            _service_base_url(compiled.contract, self.runtime), compiled.contract.path
+        run: _AttemptRun[T] = _AttemptRun(
+            self,
+            compiled,
+            bound,
+            options,
+            registrations,
+            before_call_policies,
+            challenge_policies,
+            contract,
+            initial_crypto,
+            initial_compiled_crypto,
         )
-        mandatory_results = (
-            await self._acquire_mandatory_protections(
-                compiled,
-                values,
-                options,
-                mandatory,
-            )
-            if mandatory is not None
-            else {}
-        )
-        dependencies = _DependencyCaches()
-        # Each policy replays only on its own budget; the hard limit is their sum.
-        replay_remaining = {item.identity: item.replay.max_replays for item in challenge_policies}
-        call_states: dict[str, _ManagedProtectionState] = {}
-        applied_shared: dict[str, tuple[_ProtectionCacheKey, _ManagedProtectionState]] = {}
-        hard_attempt_limit = options.max_attempts + sum(replay_remaining.values())
-        transport_remaining = options.transport_retries
-        retry_number = 0
-        auth_remaining = options.auth_retries
-        redirect_remaining = options.max_redirects
-        next_url: str | None = None
-        redirect_method: str | None = None
-        redirect_omit_body = False
-        attempt_kind = "initial"
-        for number in range(1, hard_attempt_limit + 1):
-            self._observe("start_attempt", {"number": number, "kind": attempt_kind})
-            dependencies.attempt.clear()
-            attempt_values = values
-            current_url = next_url or initial_url
-            selected_crypto = _resolve_http_crypto(contract, self.runtime.crypto, current_url)
-            compiled_crypto = (
-                initial_compiled_crypto
-                if selected_crypto == initial_crypto
-                else _compile_http_crypto(
-                    compiled,
-                    selected_crypto,
-                    self.serialization.models,
-                    allow_async=self.runtime.allow_async_crypto,
-                )
-            )
-            dependency_patch = await _resolve_requirements(
-                _lower_requirements(
-                    (*compiled.contract.requires, *compiled.contract.inject),
-                    compiled,
-                    self.identity.dependencies,
-                ),
-                self.identity.dependencies,
-                operation_id=compiled.contract.operation_id,
-                attempt=number,
-                caches=dependencies,
-            )
-            crypto_values = CryptoValues()
-            crypto_aad: tuple[tuple[str, FrozenValue], ...] = ()
-            if compiled_crypto is not None and compiled_crypto.profile.inputs:
-                crypto_values, crypto_aad = await resolve_crypto_inputs(
-                    compiled_crypto.profile.inputs,
-                    self.identity.dependencies,
-                    operation_id=compiled.contract.operation_id,
-                    attempt=number,
-                )
-            auth_executions, auth_patch = await resolve_security(
-                compiled.contract.security,
-                self.identity.auth,
-                cast(Any, compiled),
-                graph=self.resolution_graph,
-            )
-            scope = _scope_context(
-                compiled.contract,
-                _service_base_url(compiled.contract, self.runtime),
-                current_url,
-            )
-            attempts = tuple(
-                item
-                for item in registrations
-                if isinstance(item, AttemptMiddlewareRegistration) and item.scope.matches(scope)
-            )
-            patches = [dependency_patch, auth_patch]
-            for registration in attempts:
-                contribute = getattr(registration.implementation, "contribute", None)
-                if contribute is not None:
-                    patch = await _maybe_await(
-                        contribute(AttemptRequestContext(compiled.plan.operation, number))
-                    )
-                    if patch is not None:
-                        patches.append(patch)
-            attempt_values = apply_patch_atomic(
-                attempt_values,
-                ValuePatch(tuple(op for patch in patches for op in patch.operations)),
-            )
-            # Managed protection state is applied only after every public write of
-            # this attempt is known, so the transport identity it is checked against
-            # (User-Agent, proxy, impersonation) is the one the request will carry.
-            attempt_identity = _transport_identity(
-                self.runtime,
-                _slot_headers(compiled, attempt_values),
-            )
-            attempt_fingerprint = attempt_identity.fingerprint()
-            for before_policy_item in before_call_policies:
-                state, shared = await self._before_call_state(
-                    before_policy_item,
-                    compiled,
-                    attempt_values,
-                    options,
-                    number,
-                    call_states,
-                    attempt_identity,
-                )
-                attempt_values = _apply_managed_state(
-                    compiled,
-                    attempt_values,
-                    before_policy_item.apply,
-                    state,
-                    policy=before_policy_item.identity,
-                )
-                if shared is not None:
-                    applied_shared[before_policy_item.identity] = shared
-            for challenge_policy_item in challenge_policies:
-                local = call_states.get(challenge_policy_item.identity)
-                if local is not None and not _identity_matches(local, attempt_fingerprint):
-                    call_states.pop(challenge_policy_item.identity, None)
-                    local = None
-                shared = _find_shared_state(
-                    self.runtime,
-                    challenge_policy_item,
-                    attempt_fingerprint,
-                )
-                selected_state = local or (shared[1] if shared is not None else None)
-                if selected_state is None:
-                    continue
-                attempt_values = _apply_managed_state(
-                    compiled,
-                    attempt_values,
-                    challenge_policy_item.apply,
-                    selected_state,
-                    policy=challenge_policy_item.identity,
-                )
-                if shared is not None and (local is None or local is shared[1]):
-                    applied_shared[challenge_policy_item.identity] = shared
-                if challenge_policy_item.persistence.mode in {
-                    ProtectionPersistenceMode.PER_MATCH,
-                    ProtectionPersistenceMode.PER_ATTEMPT,
-                }:
-                    call_states.pop(challenge_policy_item.identity, None)
-            if self.runtime.limiter is not None:
-                decision = await _maybe_await(
-                    self.runtime.limiter.reserve(
-                        RateLimitContext(
-                            compiled.plan.operation,
-                            compiled.contract.method,
-                            urlsplit(current_url).netloc,
-                            number,
-                            attempt_kind,
-                        )
-                    )
-                )
-                if decision.delay > 0:
-                    await asyncio.sleep(decision.delay)
-                self._observe("rate_limit", number)
-            signature_plan = compiled.signature_plan
-            crypto_outputs: list[CryptoOutputValue[object]] = []
-            body_document_override = build_request_document(
-                RequestDocumentStageInput(
-                    compiled,
-                    attempt_values,
-                    self.serialization.models,
-                    mandatory_results,
-                )
-            ).document
-            if (
-                compiled_crypto is not None
-                and compiled_crypto.outbound_fields
-                and not redirect_omit_body
-            ):
-                if body_document_override is _NO_BODY_DOCUMENT_OVERRIDE:
-                    body_slot = compiled.body_slot
-                    if body_slot is None:
-                        raise CryptoConfigurationError(
-                            "outbound field crypto requires a semantic JSON request body"
-                        )
-                    body_document_override = self.serialization.models.dump(
-                        attempt_values.require(body_slot)
-                    )
-                if body_document_override is _NO_BODY_DOCUMENT_OVERRIDE:
-                    raise CryptoConfigurationError(
-                        "outbound field crypto requires a semantic JSON request body"
-                    )
-                context = _http_crypto_context(
-                    compiled_crypto,
-                    selected_crypto,
-                    compiled.contract.operation_id,
-                    redirect_method or compiled.contract.method,
-                    current_url,
-                    number,
-                    CryptoDirection.OUTBOUND,
-                    CryptoStage.DOCUMENT,
-                    values=crypto_values,
-                    aad=crypto_aad,
-                )
-                body_document_override = await prepare_http_document(
-                    body_document_override,
-                    compiled_crypto,
-                    context=context,
-                    outputs=crypto_outputs,
-                )
-            try:
-                unsigned = RequestPreparer(
-                    _service_base_url(compiled.contract, self.runtime),
-                    self.serialization.profile,
-                    self.serialization.models,
-                ).prepare(
-                    compiled,
-                    attempt_values,
-                    reserved_outputs=reserve_outputs(signature_plan),
-                    url_override=next_url,
-                    method_override=redirect_method,
-                    omit_body=redirect_omit_body,
-                    body_document_override=body_document_override,
-                )
-            except BindingError:
-                raise OperationBindingError(
-                    code="preparation_failed",
-                    operation_id=compiled.contract.operation_id,
-                    field=None,
-                    phase="prepare",
-                    detail="request values could not be prepared",
-                ) from None
-            if (
-                compiled_crypto is not None
-                and compiled_crypto.profile.outbound is not None
-                and (
-                    compiled_crypto.profile.outbound.encoded is not None
-                    or (selected_crypto is not None and selected_crypto[1].metadata)
-                )
-                and not redirect_omit_body
-            ):
-                assert selected_crypto is not None
-                unsigned = await protect_http_request(
-                    unsigned,
-                    compiled_crypto,
-                    selected_crypto[1],
-                    context=_http_crypto_context(
-                        compiled_crypto,
-                        selected_crypto,
-                        compiled.contract.operation_id,
-                        redirect_method or compiled.contract.method,
-                        current_url,
-                        number,
-                        CryptoDirection.OUTBOUND,
-                        CryptoStage.ENCODED,
-                        values=crypto_values,
-                        aad=crypto_aad,
-                    ),
-                    outputs=crypto_outputs,
-                )
-            if signature_plan.signatures:
-                if self.identity.key_provider is None:
-                    raise ValueError("signing key provider is not configured")
-                prepared = sign_prepared(unsigned, signature_plan, self.identity.key_provider)
-                if isinstance(prepared.body, BufferedBody):
-                    media_type = (
-                        prepared.body.content_type.decode("ascii")
-                        if prepared.body.content_type is not None
-                        else None
-                    )
-                    prepared = replace(
-                        prepared,
-                        body_input=ExactBodyInput(prepared.body.content, media_type),
-                    )
-            else:
-                prepared = unsigned.finalize()
-            self._observe(
-                "prepared",
-                PreparedRequestSummary(
-                    prepared.method.decode("ascii"),
-                    prepared.target.partition(b"?")[0].decode("ascii"),
-                    len(prepared.body.content) if hasattr(prepared.body, "content") else 0,
-                ),
-            )
-            for registration in attempts:
-                before_emit = getattr(registration.implementation, "before_emit", None)
-                if before_emit is not None:
-                    decision = before_emit(
-                        PreparedAttemptContext(compiled.plan.operation, number, prepared)
-                    )
-                    if isinstance(decision, Fail):
-                        raise decision.error
-            try:
-                response = cast(
-                    NormalizedResponse[Any],
-                    await _maybe_await(self.runtime.send(prepared, options=options.emit_options())),
-                )
-                self._observe("emit", number)
-            except TransportError as error:
-                proposed = None
-                for registration in attempts:
-                    hook = getattr(registration.implementation, "on_transport_error", None)
-                    if hook is not None:
-                        decision = await _maybe_await(
-                            hook(
-                                AttemptTransportErrorContext(compiled.plan.operation, number, error)
-                            )
-                        )
-                        if isinstance(decision, Fail):
-                            raise decision.error from None
-                        if isinstance(decision, ProposeAction):
-                            proposed = decision.action
-                if transport_remaining > 0 or proposed is not None:
-                    if not compiled.contract.is_idempotent:
-                        if options.retry.retries:
-                            from eazy_sdk.clients.base import UnsafeReplayError
-
-                            raise UnsafeReplayError(
-                                "retry policy requires an idempotent operation"
-                            ) from error
-                        raise
-                    if transport_remaining > 0:
-                        transport_remaining -= 1
-                        retry_number += 1
-                        await options.retry.wait(retry_number)
-                    attempt_kind = "transport-retry"
-                    continue
-                raise
-            if compiled_crypto is not None and compiled_crypto.profile.inbound is not None:
-                assert selected_crypto is not None
-                response = await unprotect_http_response(
-                    response,
-                    compiled_crypto,
-                    selected_crypto[1],
-                    context=_http_crypto_context(
-                        compiled_crypto,
-                        selected_crypto,
-                        compiled.contract.operation_id,
-                        redirect_method or compiled.contract.method,
-                        current_url,
-                        number,
-                        CryptoDirection.INBOUND,
-                        CryptoStage.ENCODED,
-                        clear_content_type=selected_crypto[1].clear_content_type,
-                        outer_content_type=response.content_type,
-                        values=crypto_values,
-                        aad=crypto_aad,
-                    ),
-                )
-            response_context = _response_context(
-                response,
-                prepared,
-                compiled.contract.operation_id,
-                number,
-                models=self.serialization.models,
-            )
-            proposed_response: object | None = None
-            for registration in attempts:
-                after = getattr(registration.implementation, "after_response", None)
-                if after is not None:
-                    decision = await _maybe_await(
-                        after(
-                            AttemptResponseContext(
-                                compiled.plan.operation,
-                                number,
-                                cast(ResponseContext[object], response_context),
-                            )
-                        )
-                    )
-                    if isinstance(decision, Fail):
-                        raise decision.error
-                    if isinstance(decision, ReplaceResponse):
-                        response = decision.response
-                        response_context = _response_context(
-                            response,
-                            prepared,
-                            compiled.contract.operation_id,
-                            number,
-                            models=self.serialization.models,
-                        )
-                    if isinstance(decision, ProposeAction):
-                        proposed_response = decision.action
-            signal = _inspect_signals(
-                cast(Any, tuple(policy.signal for policy in challenge_policies)),
-                cast(ResponseContext[object], response_context),
-                scope,
-            )
-            if isinstance(signal, MalformedSignal):
-                raise ChallengeParseError(
-                    _policy_identity(challenge_policies, signal.signal),
-                    number,
-                ) from signal.cause
-            if isinstance(signal, AmbiguousSignal):
-                raise AmbiguousChallengeError(
-                    tuple(_policy_identity(challenge_policies, item) for item in signal.signals),
-                    number,
-                )
-            outcome = (
-                compiled.contract.responses.inspect(response_context)
-                if isinstance(compiled.contract.responses, Responses)
-                else None
-            )
-            response_decision = decide_response(
-                ResponseDecisionInput(
-                    response=cast(NormalizedResponse[object], response),
-                    proposed=proposed_response,
-                    signal=signal,
-                    outcome=outcome,
-                    idempotent=compiled.contract.is_idempotent,
-                    attempt=number,
-                    hard_attempt_limit=hard_attempt_limit,
-                    transport_remaining=transport_remaining,
-                    retry_statuses=options.retry.retry_statuses,
-                    redirect_remaining=redirect_remaining,
-                    auth_remaining=auth_remaining,
-                    auth_refreshable=_has_refreshable_security(
-                        auth_executions,
-                        self.identity.auth,
-                    ),
-                    current_url=current_url,
-                    effective_method=redirect_method or compiled.contract.method,
-                    raw_response=compiled.contract.raw_response,
-                )
-            )
-            if isinstance(response_decision, RetryTransition):
-                if response_decision.patch is not None:
-                    values = apply_patch_atomic(values, response_decision.patch)
-                if response_decision.consumes_transport:
-                    transport_remaining -= 1
-                    retry_number += 1
-                    await options.retry.wait(retry_number)
-                attempt_kind = response_decision.kind
-                continue
-            if isinstance(response_decision, RedirectTransition):
-                redirect_remaining -= 1
-                next_url = response_decision.url
-                if response_decision.method is not None:
-                    redirect_method = response_decision.method
-                if response_decision.omit_body:
-                    redirect_omit_body = True
-                attempt_kind = "redirect"
-                continue
-            if isinstance(response_decision, ReactionTransition):
-                signal_match = response_decision.match
-                matched_policy = next(
-                    item for item in challenge_policies if item.signal is signal_match.signal
-                )
-                _ensure_replay_allowed(
-                    cast(Any, compiled),
-                    attempt_values,
-                    prepared.body,
-                    matched_policy.replay,
-                    origin_may_have_executed=True,
-                    remaining=replay_remaining[matched_policy.identity],
-                )
-                replay_remaining[matched_policy.identity] -= 1
-                state, shared = await self._challenge_state(
-                    matched_policy,
-                    signal_match.value,
-                    cast(ResponseContext[object], response_context),
-                    compiled,
-                    attempt_values,
-                    options,
-                    number,
-                    call_states,
-                    applied_shared.get(matched_policy.identity),
-                    attempt_identity,
-                    _prepared_headers(prepared),
-                )
-                call_states[matched_policy.identity] = state
-                if shared is not None:
-                    applied_shared[matched_policy.identity] = shared
-                attempt_kind = "reaction"
-                continue
-            if isinstance(response_decision, AuthRefreshTransition):
-                await _refresh_security(
-                    auth_executions,
-                    self.identity.auth,
-                    self.resolution_graph,
-                )
-                auth_remaining -= 1
-                attempt_kind = "auth-refresh"
-                continue
-            if isinstance(response_decision, TerminalResponse):
-                return ExecutionResult(
-                    cast(T, response_decision.value),
-                    cast(NormalizedResponse[Any], response_decision.response),
-                )
-            assert isinstance(response_decision, RejectedResponse)
-            response_decision.outcome.unwrap()
-            raise AssertionError("terminal response outcome unexpectedly returned")
-        from eazy_sdk.clients.base import AttemptLimitError
-
-        raise AttemptLimitError("hard attempt budget exhausted")
+        return await run.execute(mandatory)
 
     async def _before_call_state(
         self,
@@ -1275,37 +829,10 @@ class ExecutionCore:
         if policy.solver is not None:
             solver = self.runtime.solver_bindings.get(policy.solver)
             assert solver is not None
-        key = _protection_cache_key(
-            self.runtime,
-            policy,
-            solver,
-            policy.challenge,
+        key = _protection_cache_key(self.runtime, policy, solver, policy.challenge)
+        acquire = self._before_call_acquirer(
+            policy, compiled, values, options, attempt, identity, solver
         )
-
-        async def acquire() -> object:
-            if policy.acquire is not None:
-                acquired = await self.execute(policy.acquire.call({}), options=options)
-                solution = acquired.value
-            else:
-                assert solver is not None and policy.challenge is not None
-                try:
-                    solution = await solver.solve(
-                        policy.challenge,
-                        _solve_context(
-                            self.runtime,
-                            options,
-                            compiled.plan.operation,
-                            None,
-                            attempt,
-                            identity,
-                            _slot_headers(compiled, values),
-                            self.serialization,
-                        ),
-                    )
-                except Exception as exc:
-                    raise ChallengeSolveError(policy.identity, attempt) from exc
-            return solution
-
         if _is_shared(mode):
             state, committed_key = await self._shared_state(
                 key,
@@ -1331,6 +858,42 @@ class ExecutionCore:
         if mode is ProtectionPersistenceMode.PER_CALL:
             call_states[policy.identity] = state
         return state, None
+
+    def _before_call_acquirer(
+        self,
+        policy: _CompiledBeforeCallPolicy,
+        compiled: Any,
+        values: OperationValues,
+        options: Any,
+        attempt: int,
+        identity: TransportIdentity,
+        solver: ChallengeSolver[Any, Any] | None,
+    ) -> Callable[[], Awaitable[object]]:
+        """Either the declared acquire operation, or the policy's own solver."""
+
+        async def acquire() -> object:
+            if policy.acquire is not None:
+                acquired = await self.execute(policy.acquire.call({}), options=options)
+                return acquired.value
+            assert solver is not None and policy.challenge is not None
+            try:
+                return await solver.solve(
+                    policy.challenge,
+                    _solve_context(
+                        self.runtime,
+                        options,
+                        compiled.plan.operation,
+                        None,
+                        attempt,
+                        identity,
+                        _slot_headers(compiled, values),
+                        self.serialization,
+                    ),
+                )
+            except Exception as exc:
+                raise ChallengeSolveError(policy.identity, attempt) from exc
+
+        return acquire
 
     async def _challenge_state(
         self,
@@ -1483,6 +1046,673 @@ class ExecutionCore:
     def _observe(self, phase: str, value: object | None = None) -> None:
         if self.identity.observer is not None:
             self.identity.observer(phase, value)
+
+@dataclass(slots=True)
+class _PreparedAttempt:
+    """Everything one prepared attempt carries into its response phase."""
+
+    request: Any
+    values: OperationValues
+    auth_executions: tuple[Any, ...]
+    scope: Any
+    middleware: tuple[Any, ...]
+    identity: TransportIdentity
+    selected_crypto: tuple[PayloadCrypto, HttpEncrypted] | None
+    compiled_crypto: CompiledPayloadCrypto | None
+    crypto_values: CryptoValues
+    crypto_aad: tuple[tuple[str, FrozenValue], ...]
+
+
+class _AttemptRun[T]:
+    """One logical call: its per-call caches, and the attempts the policies allow.
+
+    ``execute`` is the coordinator: prepare, send, classify, ask the owning policy. Every
+    attempt is prepared and signed again from the call's values, so invariant 10 holds by
+    construction rather than by care.
+    """
+
+    def __init__(
+        self,
+        core: ExecutionCore,
+        compiled: Any,
+        bound: OperationValues,
+        options: Any,
+        registrations: tuple[object, ...],
+        before_call_policies: tuple[_CompiledBeforeCallPolicy, ...],
+        challenge_policies: tuple[_CompiledChallengePolicy, ...],
+        contract: _OperationDeclaration[T],
+        initial_crypto: tuple[PayloadCrypto, HttpEncrypted] | None,
+        initial_compiled_crypto: CompiledPayloadCrypto | None,
+    ) -> None:
+        self.core = core
+        self.compiled = compiled
+        self.values = bound
+        self.options = options
+        self.registrations = registrations
+        self.before_call_policies = before_call_policies
+        self.challenge_policies = challenge_policies
+        self.contract = contract
+        self.initial_crypto = initial_crypto
+        self.initial_compiled_crypto = initial_compiled_crypto
+        self.dependencies = _DependencyCaches()
+        self.call_states: dict[str, _ManagedProtectionState] = {}
+        self.applied_shared: dict[str, tuple[_ProtectionCacheKey, _ManagedProtectionState]] = {}
+        self.mandatory_results: dict[int, object] = {}
+        self.transport_retry = TransportRetryPolicy()
+        self.response_retry = ResponseRetryPolicy()
+        self.redirect = RedirectPolicy()
+        self.auth_refresh = AuthRefreshPolicy()
+        self.protection = ProtectionPolicy()
+
+    async def execute(self, mandatory: _MandatoryPreparation | None) -> ExecutionResult[T]:
+        if mandatory is not None:
+            self.mandatory_results = await self.core._acquire_mandatory_protections(
+                self.compiled, self.values, self.options, mandatory
+            )
+        state = AttemptState.initial(self._initial_url(), self._budgets())
+        while state.number <= state.budgets.hard_limit:
+            self.core._observe("start_attempt", self._trace(state))
+            self.dependencies.attempt.clear()
+            attempt = await self._prepare(state)
+            decision = await self._attempt(state, attempt)
+            if isinstance(decision, Stop):
+                return decision.result
+            if isinstance(decision, AttemptFail):
+                raise decision.error
+            state = await self._commit(decision, attempt)
+        from eazy_sdk.clients.base import AttemptLimitError
+
+        raise AttemptLimitError("hard attempt budget exhausted")
+
+    def _initial_url(self) -> str:
+        return _contract_url(
+            _service_base_url(self.compiled.contract, self.core.runtime),
+            self.compiled.contract.path,
+        )
+
+    def _budgets(self) -> AttemptBudgets:
+        return AttemptBudgets.of(
+            max_attempts=self.options.max_attempts,
+            transport_retries=self.options.transport_retries,
+            auth_retries=self.options.auth_retries,
+            max_redirects=self.options.max_redirects,
+            replays={item.identity: item.replay.max_replays for item in self.challenge_policies},
+        )
+
+    @staticmethod
+    def _trace(state: AttemptState) -> dict[str, object]:
+        budgets = state.budgets
+        return {
+            "number": state.number,
+            "kind": state.kind,
+            "reason": state.reason,
+            "budgets": {
+                "transport": budgets.transport,
+                "auth": budgets.auth,
+                "redirect": budgets.redirect,
+                "replays": dict(budgets.replays),
+            },
+        }
+
+    async def _commit(self, decision: Continue, attempt: _PreparedAttempt) -> AttemptState:
+        """Run the one effect the deciding policy asked for, then adopt its state."""
+
+        if decision.patch is not None:
+            self.values = apply_patch_atomic(self.values, decision.patch)
+        if decision.wait_attempt is not None:
+            await self.options.retry.wait(decision.wait_attempt)
+        if decision.refresh_auth:
+            await _refresh_security(
+                attempt.auth_executions, self.core.identity.auth, self.core.resolution_graph
+            )
+        if decision.reaction is not None:
+            await self._solve(decision.reaction, decision.state, attempt)
+        return decision.state
+
+    async def _prepare(self, state: AttemptState) -> _PreparedAttempt:
+        selected = _resolve_http_crypto(self.contract, self.core.runtime.crypto, state.url)
+        compiled_crypto = (
+            self.initial_compiled_crypto
+            if selected == self.initial_crypto
+            else _compile_http_crypto(
+                self.compiled,
+                selected,
+                self.core.serialization.models,
+                allow_async=self.core.runtime.allow_async_crypto,
+            )
+        )
+        values, auth_executions, crypto_values, crypto_aad = await self._resolved_values(
+            state, compiled_crypto
+        )
+        scope = _scope_context(
+            self.compiled.contract,
+            _service_base_url(self.compiled.contract, self.core.runtime),
+            state.url,
+        )
+        middleware = tuple(
+            item
+            for item in self.registrations
+            if isinstance(item, AttemptMiddlewareRegistration) and item.scope.matches(scope)
+        )
+        values = await self._contributed(values, middleware, state)
+        # Managed protection state is applied only after every public write of this attempt
+        # is known, so the transport identity it is checked against (User-Agent, proxy,
+        # impersonation) is the one the request will carry.
+        identity = _transport_identity(self.core.runtime, _slot_headers(self.compiled, values))
+        values = await self._managed_values(state, values, identity)
+        await self._rate_limit(state)
+        request = await self._build_request(
+            state, values, selected, compiled_crypto, crypto_values, crypto_aad
+        )
+        attempt = _PreparedAttempt(
+            request,
+            values,
+            auth_executions,
+            scope,
+            middleware,
+            identity,
+            selected,
+            compiled_crypto,
+            crypto_values,
+            crypto_aad,
+        )
+        self._before_emit(state, attempt)
+        return attempt
+
+    async def _resolved_values(
+        self, state: AttemptState, compiled_crypto: CompiledPayloadCrypto | None
+    ) -> tuple[OperationValues, tuple[Any, ...], CryptoValues, tuple[tuple[str, FrozenValue], ...]]:
+        contract = self.compiled.contract
+        dependency_patch = await _resolve_requirements(
+            _lower_requirements(
+                (*contract.requires, *contract.inject),
+                self.compiled,
+                self.core.identity.dependencies,
+            ),
+            self.core.identity.dependencies,
+            operation_id=contract.operation_id,
+            attempt=state.number,
+            caches=self.dependencies,
+        )
+        crypto_values = CryptoValues()
+        crypto_aad: tuple[tuple[str, FrozenValue], ...] = ()
+        if compiled_crypto is not None and compiled_crypto.profile.inputs:
+            crypto_values, crypto_aad = await resolve_crypto_inputs(
+                compiled_crypto.profile.inputs,
+                self.core.identity.dependencies,
+                operation_id=contract.operation_id,
+                attempt=state.number,
+            )
+        auth_executions, auth_patch = await resolve_security(
+            contract.security,
+            self.core.identity.auth,
+            cast(Any, self.compiled),
+            graph=self.core.resolution_graph,
+        )
+        values = apply_patch_atomic(
+            self.values,
+            ValuePatch((*dependency_patch.operations, *auth_patch.operations)),
+        )
+        return values, auth_executions, crypto_values, crypto_aad
+
+    async def _contributed(
+        self, values: OperationValues, middleware: tuple[Any, ...], state: AttemptState
+    ) -> OperationValues:
+        operations: list[Any] = []
+        for registration in middleware:
+            contribute = getattr(registration.implementation, "contribute", None)
+            if contribute is None:
+                continue
+            patch = await _maybe_await(
+                contribute(AttemptRequestContext(self.compiled.plan.operation, state.number))
+            )
+            if patch is not None:
+                operations.extend(patch.operations)
+        if not operations:
+            return values
+        return apply_patch_atomic(values, ValuePatch(tuple(operations)))
+
+    async def _managed_values(
+        self, state: AttemptState, values: OperationValues, identity: TransportIdentity
+    ) -> OperationValues:
+        for policy in self.before_call_policies:
+            managed, shared = await self.core._before_call_state(
+                policy,
+                self.compiled,
+                values,
+                self.options,
+                state.number,
+                self.call_states,
+                identity,
+            )
+            values = _apply_managed_state(
+                self.compiled, values, policy.apply, managed, policy=policy.identity
+            )
+            if shared is not None:
+                self.applied_shared[policy.identity] = shared
+        fingerprint = identity.fingerprint()
+        for challenge in self.challenge_policies:
+            local = self.call_states.get(challenge.identity)
+            if local is not None and not _identity_matches(local, fingerprint):
+                self.call_states.pop(challenge.identity, None)
+                local = None
+            shared = _find_shared_state(self.core.runtime, challenge, fingerprint)
+            selected = local or (shared[1] if shared is not None else None)
+            if selected is None:
+                continue
+            values = _apply_managed_state(
+                self.compiled, values, challenge.apply, selected, policy=challenge.identity
+            )
+            if shared is not None and (local is None or local is shared[1]):
+                self.applied_shared[challenge.identity] = shared
+            if challenge.persistence.mode in {
+                ProtectionPersistenceMode.PER_MATCH,
+                ProtectionPersistenceMode.PER_ATTEMPT,
+            }:
+                self.call_states.pop(challenge.identity, None)
+        return values
+
+    async def _rate_limit(self, state: AttemptState) -> None:
+        limiter = self.core.runtime.limiter
+        if limiter is None:
+            return
+        decision = await _maybe_await(
+            limiter.reserve(
+                RateLimitContext(
+                    self.compiled.plan.operation,
+                    self.compiled.contract.method,
+                    urlsplit(state.url).netloc,
+                    state.number,
+                    state.kind,
+                )
+            )
+        )
+        if decision.delay > 0:
+            await asyncio.sleep(decision.delay)
+        self.core._observe("rate_limit", state.number)
+
+    async def _body_document(
+        self,
+        state: AttemptState,
+        values: OperationValues,
+        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+        compiled_crypto: CompiledPayloadCrypto | None,
+        crypto_values: CryptoValues,
+        crypto_aad: tuple[tuple[str, FrozenValue], ...],
+        outputs: list[CryptoOutputValue[object]],
+    ) -> object:
+        document = build_request_document(
+            RequestDocumentStageInput(
+                self.compiled, values, self.core.serialization.models, self.mandatory_results
+            )
+        ).document
+        if compiled_crypto is None or not compiled_crypto.outbound_fields or state.omit_body:
+            return document
+        if document is _NO_BODY_DOCUMENT_OVERRIDE:
+            body_slot = self.compiled.body_slot
+            if body_slot is None:
+                raise CryptoConfigurationError(
+                    "outbound field crypto requires a semantic JSON request body"
+                )
+            document = self.core.serialization.models.dump(values.require(body_slot))
+        if document is _NO_BODY_DOCUMENT_OVERRIDE:
+            raise CryptoConfigurationError(
+                "outbound field crypto requires a semantic JSON request body"
+            )
+        return await prepare_http_document(
+            document,
+            compiled_crypto,
+            context=self._crypto_context(
+                state,
+                selected,
+                compiled_crypto,
+                CryptoDirection.OUTBOUND,
+                CryptoStage.DOCUMENT,
+                crypto_values,
+                crypto_aad,
+            ),
+            outputs=outputs,
+        )
+
+    def _crypto_context(
+        self,
+        state: AttemptState,
+        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+        compiled_crypto: CompiledPayloadCrypto,
+        direction: CryptoDirection,
+        stage: CryptoStage,
+        crypto_values: CryptoValues,
+        crypto_aad: tuple[tuple[str, FrozenValue], ...],
+        **extra: Any,
+    ) -> Any:
+        return _http_crypto_context(
+            compiled_crypto,
+            selected,
+            self.compiled.contract.operation_id,
+            state.effective_method(self.compiled.contract.method),
+            state.url,
+            state.number,
+            direction,
+            stage,
+            values=crypto_values,
+            aad=crypto_aad,
+            **extra,
+        )
+
+    async def _build_request(
+        self,
+        state: AttemptState,
+        values: OperationValues,
+        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+        compiled_crypto: CompiledPayloadCrypto | None,
+        crypto_values: CryptoValues,
+        crypto_aad: tuple[tuple[str, FrozenValue], ...],
+    ) -> Any:
+        outputs: list[CryptoOutputValue[object]] = []
+        document = await self._body_document(
+            state, values, selected, compiled_crypto, crypto_values, crypto_aad, outputs
+        )
+        signature_plan = self.compiled.signature_plan
+        try:
+            unsigned = RequestPreparer(
+                _service_base_url(self.compiled.contract, self.core.runtime),
+                self.core.serialization.profile,
+                self.core.serialization.models,
+            ).prepare(
+                self.compiled,
+                values,
+                reserved_outputs=reserve_outputs(signature_plan),
+                url_override=state.url if state.redirected else None,
+                method_override=state.method,
+                omit_body=state.omit_body,
+                body_document_override=document,
+            )
+        except BindingError:
+            raise OperationBindingError(
+                code="preparation_failed",
+                operation_id=self.compiled.contract.operation_id,
+                field=None,
+                phase="prepare",
+                detail="request values could not be prepared",
+            ) from None
+        if self._encodes_body(selected, compiled_crypto, state):
+            assert selected is not None and compiled_crypto is not None
+            unsigned = await protect_http_request(
+                unsigned,
+                compiled_crypto,
+                selected[1],
+                context=self._crypto_context(
+                    state,
+                    selected,
+                    compiled_crypto,
+                    CryptoDirection.OUTBOUND,
+                    CryptoStage.ENCODED,
+                    crypto_values,
+                    crypto_aad,
+                ),
+                outputs=outputs,
+            )
+        prepared = self._sign(unsigned, signature_plan)
+        self.core._observe(
+            "prepared",
+            PreparedRequestSummary(
+                prepared.method.decode("ascii"),
+                prepared.target.partition(b"?")[0].decode("ascii"),
+                len(prepared.body.content) if hasattr(prepared.body, "content") else 0,
+            ),
+        )
+        return prepared
+
+    @staticmethod
+    def _encodes_body(
+        selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+        compiled_crypto: CompiledPayloadCrypto | None,
+        state: AttemptState,
+    ) -> bool:
+        if compiled_crypto is None or compiled_crypto.profile.outbound is None or state.omit_body:
+            return False
+        return compiled_crypto.profile.outbound.encoded is not None or (
+            selected is not None and bool(selected[1].metadata)
+        )
+
+    def _sign(self, unsigned: Any, signature_plan: Any) -> Any:
+        if not signature_plan.signatures:
+            return unsigned.finalize()
+        if self.core.identity.key_provider is None:
+            raise ValueError("signing key provider is not configured")
+        prepared = sign_prepared(unsigned, signature_plan, self.core.identity.key_provider)
+        if not isinstance(prepared.body, BufferedBody):
+            return prepared
+        media_type = (
+            prepared.body.content_type.decode("ascii")
+            if prepared.body.content_type is not None
+            else None
+        )
+        return replace(prepared, body_input=ExactBodyInput(prepared.body.content, media_type))
+
+    def _before_emit(self, state: AttemptState, attempt: _PreparedAttempt) -> None:
+        for registration in attempt.middleware:
+            before_emit = getattr(registration.implementation, "before_emit", None)
+            if before_emit is None:
+                continue
+            decision = before_emit(
+                PreparedAttemptContext(
+                    self.compiled.plan.operation, state.number, attempt.request
+                )
+            )
+            if isinstance(decision, Fail):
+                raise decision.error
+
+    async def _attempt(
+        self, state: AttemptState, attempt: _PreparedAttempt
+    ) -> Continue | Stop[ExecutionResult[T]] | AttemptFail:
+        try:
+            response = cast(
+                NormalizedResponse[Any],
+                await _maybe_await(
+                    self.core.runtime.send(attempt.request, options=self.options.emit_options())
+                ),
+            )
+            self.core._observe("emit", state.number)
+        except TransportError as error:
+            failure = await self._transport_failure(state, attempt, error)
+            return self.transport_retry.decide(state, failure)
+        return await self._respond(state, attempt, response)
+
+    async def _transport_failure(
+        self, state: AttemptState, attempt: _PreparedAttempt, error: TransportError
+    ) -> TransportFailure:
+        proposed: object | None = None
+        for registration in attempt.middleware:
+            hook = getattr(registration.implementation, "on_transport_error", None)
+            if hook is None:
+                continue
+            decision = await _maybe_await(
+                hook(
+                    AttemptTransportErrorContext(
+                        self.compiled.plan.operation, state.number, error
+                    )
+                )
+            )
+            if isinstance(decision, Fail):
+                raise decision.error from None
+            if isinstance(decision, ProposeAction):
+                proposed = decision.action
+        return TransportFailure(
+            error,
+            proposed,
+            idempotent=self.compiled.contract.is_idempotent,
+            retries_configured=bool(self.options.retry.retries),
+        )
+
+    async def _respond(
+        self, state: AttemptState, attempt: _PreparedAttempt, response: NormalizedResponse[Any]
+    ) -> Continue | Stop[ExecutionResult[T]] | AttemptFail:
+        if attempt.compiled_crypto is not None and attempt.compiled_crypto.profile.inbound:
+            assert attempt.selected_crypto is not None
+            response = await unprotect_http_response(
+                response,
+                attempt.compiled_crypto,
+                attempt.selected_crypto[1],
+                context=self._crypto_context(
+                    state,
+                    attempt.selected_crypto,
+                    attempt.compiled_crypto,
+                    CryptoDirection.INBOUND,
+                    CryptoStage.ENCODED,
+                    attempt.crypto_values,
+                    attempt.crypto_aad,
+                    clear_content_type=attempt.selected_crypto[1].clear_content_type,
+                    outer_content_type=response.content_type,
+                ),
+            )
+        context = self._response_context(state, attempt, response)
+        response, context, proposed = await self._after_response(state, attempt, response, context)
+        signal = self._signal(state, context, attempt.scope)
+        decision = decide_response(
+            ResponseDecisionInput(
+                response=cast(NormalizedResponse[object], response),
+                proposed=proposed,
+                signal=signal,
+                outcome=(
+                    self.compiled.contract.responses.inspect(context)
+                    if isinstance(self.compiled.contract.responses, Responses)
+                    else None
+                ),
+                idempotent=self.compiled.contract.is_idempotent,
+                attempt=state.number,
+                hard_attempt_limit=state.budgets.hard_limit,
+                transport_remaining=state.budgets.transport,
+                retry_statuses=self.options.retry.retry_statuses,
+                redirect_remaining=state.budgets.redirect,
+                auth_remaining=state.budgets.auth,
+                auth_refreshable=_has_refreshable_security(
+                    attempt.auth_executions, self.core.identity.auth
+                ),
+                current_url=state.url,
+                effective_method=state.effective_method(self.compiled.contract.method),
+                raw_response=self.compiled.contract.raw_response,
+            )
+        )
+        return self._route(state, attempt, decision, context)
+
+    def _response_context(
+        self, state: AttemptState, attempt: _PreparedAttempt, response: NormalizedResponse[Any]
+    ) -> Any:
+        return _response_context(
+            response,
+            attempt.request,
+            self.compiled.contract.operation_id,
+            state.number,
+            models=self.core.serialization.models,
+        )
+
+    async def _after_response(
+        self,
+        state: AttemptState,
+        attempt: _PreparedAttempt,
+        response: NormalizedResponse[Any],
+        context: Any,
+    ) -> tuple[NormalizedResponse[Any], Any, object | None]:
+        proposed: object | None = None
+        for registration in attempt.middleware:
+            after = getattr(registration.implementation, "after_response", None)
+            if after is None:
+                continue
+            decision = await _maybe_await(
+                after(
+                    AttemptResponseContext(
+                        self.compiled.plan.operation,
+                        state.number,
+                        cast(ResponseContext[object], context),
+                    )
+                )
+            )
+            if isinstance(decision, Fail):
+                raise decision.error
+            if isinstance(decision, ReplaceResponse):
+                response = decision.response
+                context = self._response_context(state, attempt, response)
+            if isinstance(decision, ProposeAction):
+                proposed = decision.action
+        return response, context, proposed
+
+    def _signal(self, state: AttemptState, context: Any, scope: Any) -> Any:
+        signal = _inspect_signals(
+            cast(Any, tuple(policy.signal for policy in self.challenge_policies)),
+            cast(ResponseContext[object], context),
+            scope,
+        )
+        if isinstance(signal, MalformedSignal):
+            raise ChallengeParseError(
+                _policy_identity(self.challenge_policies, signal.signal), state.number
+            ) from signal.cause
+        if isinstance(signal, AmbiguousSignal):
+            raise AmbiguousChallengeError(
+                tuple(_policy_identity(self.challenge_policies, item) for item in signal.signals),
+                state.number,
+            )
+        return signal
+
+    def _route(
+        self, state: AttemptState, attempt: _PreparedAttempt, decision: Any, context: Any
+    ) -> Continue | Stop[ExecutionResult[T]] | AttemptFail:
+        if isinstance(decision, RetryTransition):
+            return self.response_retry.decide(
+                state,
+                decision.kind,
+                patch=decision.patch,
+                consumes_transport=decision.consumes_transport,
+            )
+        if isinstance(decision, RedirectTransition):
+            return self.redirect.decide(state, decision.url, decision.method, decision.omit_body)
+        if isinstance(decision, ReactionTransition):
+            return self._reaction(state, attempt, decision.match, context)
+        if isinstance(decision, AuthRefreshTransition):
+            return self.auth_refresh.decide(state)
+        if isinstance(decision, TerminalResponse):
+            return Stop(
+                ExecutionResult(
+                    cast(T, decision.value), cast(NormalizedResponse[Any], decision.response)
+                )
+            )
+        assert isinstance(decision, RejectedResponse)
+        decision.outcome.unwrap()
+        raise AssertionError("terminal response outcome unexpectedly returned")
+
+    def _reaction(
+        self, state: AttemptState, attempt: _PreparedAttempt, match: Any, context: Any
+    ) -> Continue | Stop[ExecutionResult[T]] | AttemptFail:
+        policy = next(item for item in self.challenge_policies if item.signal is match.signal)
+        _ensure_replay_allowed(
+            cast(Any, self.compiled),
+            attempt.values,
+            attempt.request.body,
+            policy.replay,
+            origin_may_have_executed=True,
+            remaining=state.budgets.replays[policy.identity],
+        )
+        self.pending_context = context
+        return self.protection.decide(state, policy.identity, match)
+
+    async def _solve(self, match: Any, state: AttemptState, attempt: _PreparedAttempt) -> None:
+        policy = next(item for item in self.challenge_policies if item.signal is match.signal)
+        managed, shared = await self.core._challenge_state(
+            policy,
+            match.value,
+            cast(ResponseContext[object], self.pending_context),
+            self.compiled,
+            attempt.values,
+            self.options,
+            state.number - 1,
+            self.call_states,
+            self.applied_shared.get(policy.identity),
+            attempt.identity,
+            _prepared_headers(attempt.request),
+        )
+        self.call_states[policy.identity] = managed
+        if shared is not None:
+            self.applied_shared[policy.identity] = shared
 
 
 def _protection_identities(
@@ -1879,52 +2109,44 @@ def _resolve_http_crypto(
     return profile, selected_wire
 
 
-def _compile_http_crypto(
-    compiled: Any,
-    selected: tuple[PayloadCrypto, HttpEncrypted] | None,
-    models: ModelAdapterRegistry,
-    *,
-    allow_async: bool,
-) -> CompiledPayloadCrypto | None:
-    if selected is None:
-        return None
-    profile, wire = selected
-    if any(
-        item.scope is CryptoInputScope.CONNECTION for item in profile.inputs
-    ):
-        raise CryptoConfigurationError(
-            "HTTP crypto accepts only operation-scoped inputs"
-        )
-    validate_crypto_runtime(profile, allow_async=allow_async)
+
+def _validate_crypto_body(compiled: Any, profile: PayloadCrypto) -> None:
+    """The document crypto encrypts must be one semantic JSON body it can replay."""
+
     root_body = next((field for field in compiled.input_fields if field.is_root_body), None)
-    projected_json = (
-        compiled.body_projection is not None
-        and isinstance(compiled.body_projection.encoding, JsonBody)
+    projected_json = compiled.body_projection is not None and isinstance(
+        compiled.body_projection.encoding, JsonBody
     )
+    if profile.outbound is None:
+        return
     if (
-        profile.outbound is not None
-        and profile.outbound.fields
+        profile.outbound.fields
         and not projected_json
         and (root_body is None or not isinstance(root_body.placement, JsonBody))
     ):
         raise CryptoConfigurationError(
             "outbound field crypto requires one semantic JsonBody document"
         )
-    if profile.outbound is not None and profile.outbound.encoded is not None:
-        conflicts = {
-            name.casefold()
-            for name in compiled.header_slots
-            if name.casefold() in {"content-type", "content-length"}
-        }
-        if conflicts:
-            raise CryptoConfigurationError(
-                "crypto wire binding owns HTTP representation headers: "
-                + ", ".join(sorted(conflicts))
-            )
-        if root_body is not None and isinstance(root_body.placement, ReplayableStreamBody):
-            raise CryptoStreamingUnsupportedError(
-                "whole-payload crypto does not support ReplayableStreamBody"
-            )
+    if profile.outbound.encoded is None:
+        return
+    conflicts = {
+        name.casefold()
+        for name in compiled.header_slots
+        if name.casefold() in {"content-type", "content-length"}
+    }
+    if conflicts:
+        raise CryptoConfigurationError(
+            "crypto wire binding owns HTTP representation headers: " + ", ".join(sorted(conflicts))
+        )
+    if root_body is not None and isinstance(root_body.placement, ReplayableStreamBody):
+        raise CryptoStreamingUnsupportedError(
+            "whole-payload crypto does not support ReplayableStreamBody"
+        )
+
+
+def _validate_crypto_metadata(compiled: Any, profile: PayloadCrypto, wire: HttpEncrypted) -> None:
+    """Crypto metadata owns its headers, and binds exactly the outputs it declares."""
+
     metadata_headers = {item.name.casefold() for item in wire.metadata}
     header_conflicts = metadata_headers & {name.casefold() for name in compiled.header_slots}
     if header_conflicts:
@@ -1944,27 +2166,43 @@ def _compile_http_crypto(
             "crypto metadata headers conflict with signing outputs: "
             + ", ".join(sorted(signature_conflicts))
         )
-    declared_outputs: list[object] = []
+    declared: list[object] = []
     if profile.outbound is not None:
         for item in profile.outbound.fields:
-            declared_outputs.extend(item.outputs)
+            declared.extend(item.outputs)
         if profile.outbound.encoded is not None:
-            declared_outputs.extend(profile.outbound.encoded.outputs)
-    bound_outputs = {id(item.output) for item in wire.metadata}
-    inbound_metadata: list[object] = []
+            declared.extend(profile.outbound.encoded.outputs)
     if profile.inbound is not None:
         for inbound_field in profile.inbound.fields:
-            inbound_metadata.extend(inbound_field.metadata)
+            declared.extend(inbound_field.metadata)
         if profile.inbound.encoded is not None:
-            inbound_metadata.extend(profile.inbound.encoded.metadata)
-    required_outputs = {
-        id(item) for item in (*declared_outputs, *inbound_metadata)
-    }
-    if required_outputs != bound_outputs:
+            declared.extend(profile.inbound.encoded.metadata)
+    if {id(item) for item in declared} != {id(item.output) for item in wire.metadata}:
         raise CryptoConfigurationError(
             "HTTP crypto metadata bindings must exactly match declared output writes and reads"
         )
-    inbound_models = _http_inbound_models(compiled.contract)
+
+
+def _compile_http_crypto(
+    compiled: Any,
+    selected: tuple[PayloadCrypto, HttpEncrypted] | None,
+    models: ModelAdapterRegistry,
+    *,
+    allow_async: bool,
+) -> CompiledPayloadCrypto | None:
+    if selected is None:
+        return None
+    profile, wire = selected
+    if any(
+        item.scope is CryptoInputScope.CONNECTION for item in profile.inputs
+    ):
+        raise CryptoConfigurationError(
+            "HTTP crypto accepts only operation-scoped inputs"
+        )
+    validate_crypto_runtime(profile, allow_async=allow_async)
+    _validate_crypto_body(compiled, profile)
+    _validate_crypto_metadata(compiled, profile, wire)
+    root_body = next((field for field in compiled.input_fields if field.is_root_body), None)
     compiled_profile = compile_payload_crypto(
         profile,
         models,
@@ -1973,7 +2211,7 @@ def _compile_http_crypto(
             if compiled.body_projection is not None
             else root_body.annotation if root_body is not None else None
         ),
-        inbound_models=inbound_models,
+        inbound_models=_http_inbound_models(compiled.contract),
     )
     _validate_projection_writer_graph(compiled, compiled_profile)
     return compiled_profile
