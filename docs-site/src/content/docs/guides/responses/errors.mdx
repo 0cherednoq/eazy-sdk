@@ -4,7 +4,7 @@ description: Ожидаемые ответы API как типизированн
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
-api_fingerprint: "sha256:53d579670450ab073f122424e635aefaa4b328c1530abfaf7558bd31b38f32d2"
+api_fingerprint: "sha256:4fa1f9d745be55f23aadf2f018f4e6b24a38f26548f7a805c6b14a26adee8b96"
 ---
 
 ## Неправильный пароль
@@ -82,9 +82,12 @@ api_fingerprint: "sha256:53d579670450ab073f122424e635aefaa4b328c1530abfaf7558bd3
 ## Контракт
 
 ```python
+from dataclasses import dataclass
+
 from pydantic import BaseModel
 
-from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+from eazy_sdk import Http, HttpOperation, JsonField, op
+from eazy_sdk.response import ApiError
 
 class LoginProblem(BaseModel):
     code: str
@@ -96,25 +99,38 @@ class InvalidPasswordError(ApiError[LoginProblem]):
 class UserNotFoundError(ApiError[LoginProblem]):
     pass
 
-responses = Responses(
-    success=(Success(200, Json(UserSession)),),
-    errors=(
-        Error(401, Json(LoginProblem), exception=InvalidPasswordError),
-        Error(404, Json(LoginProblem), exception=UserNotFoundError),
-    ),
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[UserSession]):
+    __http__ = Http.post(
+        "/auth/login",
+        errors={401: InvalidPasswordError, 404: UserNotFoundError},
+    )
+
+    username: JsonField[str]
+    password: JsonField[str]
+```
+
+Модель ошибки объявлена один раз — в `ApiError[LoginProblem]`, — поэтому в `errors=` достаточно
+самого класса исключения. Ключ — статус (`404`), диапазон (`"5xx"`) или `DEFAULT` — последний
+только в `fallback=`, потому что «на всё остальное» это не такой же случай, как `404`.
+
+Если исключение приложения не должно наследовать библиотечный класс, объявите пару
+«модель, фабрика»:
+
+```python
+class Refused(Exception):
+    def __init__(self, problem: LoginProblem, context: object) -> None:
+        self.problem = problem
+        super().__init__(problem.message)
+
+__http__ = Http.post("/auth/login", errors={403: (LoginProblem, Refused)})
 ```
 
 ## Обработка
 
 ```python
-request: LoginRequest = {
-    "username": "ada@example.test",
-    "password": "wrong",
-}
-
 try:
-    session = await sdk.auth.login(request=request)
+    session = await sdk.auth.login(username="ada@example.test", password="wrong")
 except InvalidPasswordError as exc:
     print(exc.error.message)
 except UserNotFoundError as exc:
@@ -124,6 +140,33 @@ except UserNotFoundError as exc:
 `ApiError` хранит typed payload в `.error` и response context в `.context`. Не используйте status
 code branching после обычного вызова: documented error case уже выбрал точный exception type.
 
-Ответ с неизвестным status/media type даёт `UnexpectedResponseError`. Валидный case с malformed
+Свойство `.summary` доступно всегда и возвращает `ErrorSummary` — operation_id, статус, media
+type, номер попытки, метод и редактированный target. Именно она переживает `pickle`: в очередь
+задач или в отчёт об ошибке уезжает сводка, а не тело ответа с его заголовками.
+
+## Ошибки, общие для сервиса и хоста
+
+Ошибки — единственная часть контракта ответа, которая складывается: сервис объявляет `errors`, и
+они добавляются к объявленным операцией. При совпадении статуса выигрывает случай, объявленный
+ближе к операции.
+
+```python
+class ShopApi(SyncApi):
+    errors = ({429: RateLimited},)
+
+    login = op(Login)
+```
+
+Клиент может объявить то же самое по адресу — для ошибок, которыми хост отвечает независимо от
+того, какой SDK с ним говорит:
+
+```python
+config = ClientConfig(errors={"api.shop.example": {503: AccessBlocked}})
+```
+
+Это самый внешний слой: операция важнее сервиса, сервис важнее клиента.
+
+Ответ с неизвестным status/media type даёт `UnexpectedResponseError`; если тело пришло документной
+медиа, а все кандидаты — структурные модели, сообщение это называет. Валидный case с malformed
 payload даёт `MalformedResponseError`. Эти ошибки означают нарушение контракта upstream и не
 смешиваются с ожидаемыми `401`/`404`.

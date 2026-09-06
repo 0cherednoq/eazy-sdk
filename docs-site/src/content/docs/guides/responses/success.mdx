@@ -1,31 +1,28 @@
 ---
 title: Успешный ответ
-description: Разбор JSON-ответа в dataclass, Pydantic, msgspec или собственную модель.
+description: Тип результата объявляет успешный случай; success= нужен, только когда случаев несколько.
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
-api_fingerprint: "sha256:acb0324358d8d6c6917452388c3062b8d7c720dfe10aa3add319307a0132d1da"
+api_fingerprint: "sha256:4fa1f9d745be55f23aadf2f018f4e6b24a38f26548f7a805c6b14a26adee8b96"
 ---
 
-Обычный API-метод возвращает parsed value. `.with_response(...)` выполняет ту же операцию и
-добавляет HTTP metadata, не меняя parser или response case.
+Тип результата операции — это и есть успешный случай. `HttpOperation[User]` означает «`200`,
+JSON, модель `User`»; ничего дополнительно объявлять не нужно.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import Path
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
 
-RESPONSES = Responses(success=(Success(200, Json(User)),))
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetUser(HttpOperation[User]):
+    __http__ = Http.get("/users/{user_id}")
 
-class GetUserRequest(TypedDict):
-    user_id: Annotated[int, Path()]
+    user_id: Path[int]
 
 class UsersApi(SyncApi):
-    @api.get("/users/{user_id}", responses=RESPONSES)
-    def get_user(self, **request: Unpack[GetUserRequest]) -> User:
-        raise NotImplementedError
+    get_user = op(GetUser)
 
 users = UsersApi(client)
 user = users.get_user(user_id=42)
@@ -37,13 +34,95 @@ print(envelope.headers.get("x-request-id"))
 print(envelope.response.raw_response)
 ```
 
-Request: `GET /users/42`. Response: status `200`, header
-`Content-Type: application/json`, JSON `{"id":42,"name":"Ada"}`. Обычный вызов возвращает
-`User`; envelope дополнительно сохраняет HTTP metadata.
+Request: `GET /users/42`. Response: status `200`, header `Content-Type: application/json`, JSON
+`{"id":42,"name":"Ada"}`. Обычный вызов возвращает `User`; `.with_response(...)` выполняет ту же
+операцию и добавляет HTTP metadata, не меняя parser или response case.
 
-`Json(User)` проверяет content type и создаёт модель через настроенный `ModelAdapterRegistry`.
-Поддерживаются dataclass, Pydantic v2, msgspec и зарегистрированные custom adapters. Примеры
-находятся в {doc}`руководстве по сериализации моделей </api-reference/models-codecs>`.
+Модель создаётся через настроенный `ModelAdapterRegistry`: dataclass, Pydantic v2, msgspec и
+зарегистрированные custom adapters. Примеры — в {doc}`руководстве по сериализации моделей
+</api-reference/models-codecs>`.
 
-Для `204` используйте `Empty()`, для текста `Text()`, для бинарного ответа `Bytes()`. Несколько
-успешных status описываются несколькими `Success(...)` cases внутри одного `Responses`.
+## Семья выводится из модели
+
+Какой экстрактор читает ответ, решает модель, а не декларация: модель, поля которой несут
+CSS/XPath-селекторы, читается документным бэкендом, любая другая — как JSON.
+
+```python
+@dataclass(frozen=True, slots=True)
+class CatalogPage:
+    title: Annotated[str, CSS("h1::text")]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCatalogue(HttpOperation[CatalogPage]):   # Html, потому что есть селекторы
+    __http__ = Http.get("/catalogue/page-{page}.html")
+
+    page: Path[int]
+```
+
+`str` означает текстовый ответ, `bytes` — бинарный, `None` — пустое тело. `Json(...)`, `Html(...)`,
+`Text()`, `Bytes()`, `Empty()` пишут явно, когда нужно задать медиа-тип, статус или условие.
+
+## Несколько успешных случаев
+
+`success=` нужен там, где успешных ответов больше одного или у ответа особый статус:
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateOrder(HttpOperation[Order]):
+    __http__ = Http.post(
+        "/orders",
+        success={201: Order, 202: Accepted},
+    )
+
+    item: JsonField[str]
+```
+
+Значение по ключу — модель, представление или их список: один статус может документировать
+несколько форм, а различает их `when=`. Если два случая подошли к одному ответу, выигрывает более
+конкретный: точный статус важнее диапазона `"4xx"`, диапазон важнее `DEFAULT`, явная медиа важнее
+`*/*`, случай с `when=` важнее случая без него, а объявление операции важнее объявления её сервиса
+и клиента. Настоящая ничья — два одинаково конкретных случая — остаётся `AmbiguousResponseError`:
+её разрешает автор, а не библиотека.
+
+## Конверт сервиса
+
+Многие API кладут полезную нагрузку внутрь конверта. Указатель на неё объявляется один раз на
+сервисе — как JSON-указатель RFC 6901:
+
+```python
+class ShopApi(SyncApi):
+    unwrap = "/data"
+
+    get_order = op(GetOrder)
+    get_catalogue = op(GetCatalogue)
+```
+
+Ответ `{"data": {"id": "o-1", "total": 500}, "meta": {...}}` разбирается в `Order`, и ни одна
+операция про конверт не знает. Указатель применяется только к случаям, построенным из «голой»
+модели: явный `Json(Order)` остаётся тем, что написано. Если пути в документе нет — это
+`MalformedResponseError`, а не «поле пропало».
+
+Сервис, объявивший `protocol` (конверт протокола, см. {doc}`протоколы </guides/protocols>`),
+`unwrap` объявлять не может: конверт уже выбирает полезную нагрузку.
+
+## Одно объявление на много операций
+
+Успешные случаи задают тип результата, поэтому от сервиса они не наследуются. Повтор убирается не
+вторым механизмом наследования, а обычной функцией: `Json(...)` — значение, и его собирает
+фабрика.
+
+```python
+def wrapped[T](model: type[T]) -> Json[T]:
+    return Json(model, unwrap="/data")
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetOrder(HttpOperation[Order]):
+    __http__ = Http.get("/orders/{order_id}", success=wrapped(Order))
+
+    order_id: Path[str]
+```
+
+Так же устроены и штатные хелперы: `rpc_result(Model)` из {doc}`протоколов </guides/protocols>` —
+это ровно `Success(200, Json(Model, extractor=RESULT_EXTRACTOR))`, собранный функцией. Отдельного
+«декодера по умолчанию» на роутере нет намеренно: он делал бы форму ответа невидимой в месте, где
+объявлен возвращаемый тип.

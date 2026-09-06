@@ -40,19 +40,32 @@ required field — `ExtractionError` с полным model path и selector.
 
 ## HTML response
 
-Тот же schema подключается к response cases:
+Тот же schema — это тип результата операции: объявлять семью ответа не нужно, её называет модель.
 
 ```python
-from eazy_sdk.response import Html, Responses, Success
+from dataclasses import dataclass
 
-CATALOG_RESPONSES = Responses(
-    success=(Success(200, Html(Catalog)),),
-)
+from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCatalogue(HttpOperation[Catalog]):
+    __http__ = Http.get("/catalogue/page-{page}.html")
+
+    page: Path[int]
+
+class BooksApi(SyncApi):
+    catalogue = op(GetCatalogue)
 ```
 
-`Html(Model)` выполняет extractor → primitive tree → `ModelAdapter`. Для нестандартного формата
-реализуйте `ResponseExtractor`; старый `Parsed(...)` остаётся явным parser escape hatch для
-протоколов, которые не выражаются extractor schema.
+`Catalog` несёт CSS-селекторы, поэтому ответ читает документный бэкенд: extractor → primitive tree
+→ `ModelAdapter`. Модель без селекторов на том же месте читалась бы как JSON. Явный `Html(Model)`
+нужен там, где задан особый медиа-тип или статус; для нестандартного формата реализуйте
+`ResponseExtractor`, а `Parsed(...)` остаётся явным parser escape hatch для протоколов, которые не
+выражаются extractor schema.
+
+Документная модель, у которой нет ни одного обязательного поля, подошла бы к любой странице —
+включая страницу ошибки, стоящую рядом в том же наборе случаев. Такая операция отвергается при
+компиляции: добавьте обязательное поле-селектор или условие `when=`.
 
 ## Парсер выбирается на корне
 
@@ -62,7 +75,7 @@ CATALOG_RESPONSES = Responses(
 ```python
 from eazy_sdk.serialization import Serialization
 
-store = Store(client, serialization=Serialization(html=ParselBackend()))
+store = Store(client, serialization=Serialization(documents=(ParselBackend(),)))
 ```
 
 По умолчанию используется parsel, который читает и CSS, и XPath. Бэкенды не взаимозаменяемы по
