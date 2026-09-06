@@ -4122,29 +4122,125 @@ per-package pass over `websocket`, `crypto`, `request` and `protection.advanced`
 
 ### State
 
-Active (50.1). An operation becomes a frozen model class published with `op(...)`; the
-decorator synthesizes the same class. Plan: `50-declarative-operations.md`; design:
-`eazy-sdk-declarative-operations.md`.
+Active (50.2). Step 50.1 is complete: an operation is a frozen model class published with
+`op(...)`, and the decorator synthesizes exactly that class, so defaults, `default_factory` and
+the request-as-a-value are available on one execution path. Plan:
+`50-declarative-operations.md`; design: `eazy-sdk-declarative-operations.md`.
 
 ### Delivered
 
 - **50.1.1** `scripts/surface_count.py` walks the modules an SDK author imports from and counts
   the distinct objects behind their `__all__` names; `tests/unit/test_surface_count.py` (1 test).
+- **50.1.2** `eazy_sdk/request/markers.py` re-exports the placement descriptors; the private
+  `eazy_sdk/request/short.py` defines the short `Annotated` aliases (`Query[int]`, `Path[str]`,
+  `Header[...]`, `Cookie[...]`, `JsonField[...]`, ...); `eazy_sdk.request` exports both. The
+  compiler, the executor and the codegen import descriptors from `request.descriptors` /
+  `request.params`, never through an alias.
+- **50.1.3** `eazy_sdk/sentinels.py`: `type Omittable[T] = T | Unset` plus a Pydantic core schema
+  for `Unset`, so `UNSET` is the one way to leave a field out on all three model libraries.
+- **50.1.4** `eazy_sdk/operation.py`: `HttpOperation[T]`, the frozen `_HttpSpec`, the
+  `_HttpOptions` TypedDict and the `Http` verb constructors (`request`/`get`/`post`/`put`/
+  `patch`/`delete`/`head`/`options`/`trace`); `eazy_sdk/response/_mapping.py` normalizes
+  `success=` / `errors=` / `fallback=` into `Responses`, with `representation()` choosing the
+  family from the model and `is_document_model` (`eazy_sdk/models/documents.py`) separating
+  `Html` from `Json`.
+- **50.1.5** `eazy_sdk/compile/input.py` is one entry point, `inspect_operation_input`, reading an
+  operation class through the model registry: `flatten_annotation` finds markers inside unions and
+  aliases, `InputField.omittable` carries `Omittable`, and the wire name comes from the model
+  (msgspec `rename`, Pydantic serialization alias, dataclass marker name). Diagnostics D-02, D-03,
+  D-04, D-09, D-10, D-11, D-12 are raised verbatim.
+- **50.1.6, 50.1.7, 50.1.10** `eazy_sdk/api.py`: one `_OperationDescriptor[P, T]` with `__get__`
+  overloads by owner (`_BoundSyncOperation` / `_BoundAsyncOperation`, each with `__call__`,
+  `with_response`, `prepare`, `send`, `send_with_response`, `request`, `evolve`); `op()` publishes
+  an operation class (D-01); `_OperationDecorator` synthesizes the same class with
+  `dataclasses.make_dataclass(frozen=True, slots=True, kw_only=True)` (D-13), turning a `None`
+  default into `Omittable[...] = UNSET`; `BodyProjection` moved from `Wire` to the operation
+  declaration, with `source=None` meaning "the operation instance" and a two-argument `using`
+  receiving the resolved `Injected` values.
+- **50.1.8** `tests/unit/test_phase50_typing.py` (4 tests): positive and negative fixtures checked
+  by `mypy --strict` and `basedpyright` — the constructor signature, `assert_type` on the return
+  types of `__call__` / `with_response` / `prepare` / `request`, and `UNSET` rejected where
+  `Omittable` was not declared.
+- **50.1.9** ~60 test modules and every example migrated to operation classes and the
+  `success=` / `errors=` mapping form; `tests/unit/test_phase50_operations.py` (31 tests) covers
+  I1-I5 and D-01...D-13, `tests/rewrite/test_phase50_golden.py` (4 tests) compares whole
+  `PreparedCall`s (decorator = class, dataclass = Pydantic = msgspec, `UNSET` = omitted), and
+  `tests/unit/test_phase50_absence.py` (2 tests) proves there is no second execution path and that
+  the removed names stay removed.
+- **50.1.11** `plugins/openapi/eazy_sdk_openapi/generator.py` emits frozen operation classes
+  (`<Pascal>Request(HttpOperation[...])` with `__http__` and short markers) published with
+  `op(...)`; `eazy_sdk.codegen` exports the aliases, `markers`, `Http`, `HttpOperation`,
+  `Omittable`, `UNSET` and `op`; snapshots regenerated, generated-code hash
+  `c08f33283b03085fdca603aeced269b87ff80b933e667137dd557f06a6c94770`.
 
 ### Surface baseline
 
 `uv run python scripts/surface_count.py --total` on master before any phase-50 edit: **436**.
-Gate for the phase: the number after 50.4.6 is ≤ 436.
+After 50.1: **456**. Gate for the phase: the number after 50.4.6 is <= 436; Appendix B names the
+candidates (websocket internals under an underscore, `JsonResponse`, and `Text`/`Bytes` out of the
+root if the budget is still exceeded).
 
 ### Decisions recorded
 
-(§10 of the plan, English; appended as the phase proceeds.)
+Plan §10: items 1-10 were taken by the plan, items 11-22 while executing 50.1.
+
+1. `op()` takes no `name=`: `operation_id` already lives in `__http__`.
+2. `Inject` stays in `__http__` and is not a field: a dependency value is computed per attempt and
+   is not part of the request value.
+3. `unwrap` applies only to success cases built from a bare model; errors use an explicit
+   `Json(Model, unwrap="error")`.
+4. Per-call `options` for an `op()` operation go through `send()`; a `ParamSpec` constructor cannot
+   carry an extra parameter without losing signature precision.
+5. `RpcOperation` / `Rpc` are exported from `eazy_sdk.protocols` and the WebSocket operations from
+   `eazy_sdk.websocket`, not from the root, because of the 40-name root budget.
+6. `Responses`, `Success` and `Error` leave the root for `eazy_sdk.response`, staying public.
+7. A `None` default in the decorator becomes `UNSET` in the synthesized class, so the decorator
+   keeps sending nothing where it sends nothing today.
+8. `ClientConfig.errors` is keyed by the exact host, with no paths or methods.
+9. Layer ranking uses a `precedence` field on the case, not the position in the tuple.
+10. `ModelField.default_factory` is not added; `evolve` goes through the libraries' own functions.
+11. `op()` is defined in `eazy_sdk/api.py`, not in `operation.py`: the descriptor lives in
+    `api.py`, and splitting the two would create an import cycle.
+12. `inspect_operation_input` takes no `accepts_options`: the parameter from plan §4.4 contradicted
+    the single execution path required by I2.
+13. D-01 is raised by `op()` at router class creation, not at the first `resolve_for`, so a wrong
+    class fails at import time.
+14. An explicit `BodyProjection.source=` keeps the mapping semantics (`using` receives a dict);
+    only `source=None` passes the operation instance.
+15. Requiredness of a projection source field is checked through `omittable`, not `required`.
+16. A missing required field and an unknown field are the model constructor's own `TypeError`, not
+    a library diagnostic; the phase-23 tests were rewritten to expect it.
+17. A bare `success=Json(status=201, when=...)` keeps its own `status` and `when` and only takes
+    the model from the return type.
+18. Generic aliases (`list[Model]`, unions) are accepted as a JSON model in `success=`.
+19. Codegen emits explicit `Success(...)` / `Error(...)` tuples in `success=` / `errors=` /
+    `fallback=` rather than the short mapping form, because a generated status set is not always
+    expressible as a mapping.
+20. The root gains `JsonField` and loses `Text` and `Bytes` (Appendix B named them as the next
+    candidates); the root `__all__` is 39 names, cap 40.
+21. Service-level errors reach an operation as a copy with `precedence=1`
+    (`replace(case, precedence=1)`), so operation cases win a tie.
+22. A codegen-synthesized class is named `<Pascal>Request` -- the former TypedDict name -- because
+    it is already unique in the generated module and referenced by the snapshots.
 
 ### Commands run
 
 | Command / gate | Result |
 |---|---|
+| `uv run pytest -q` | PASS: 1149 passed, 11 skipped. |
+| `uv run mypy` | PASS: no issues found in 325 source files. |
+| `uv run ruff check .` / `uv run ruff format --check .` | PASS. |
+| `uv run python scripts/absence_audit.py` | PASS. |
+| `uv run python scripts/update_openapi_snapshots.py` + `uv run pytest tests/plugins` | PASS: snapshots regenerated, generated SDK imports and type-checks. |
+| `uv run python scripts/docs_freshness.py update` + `check` | PASS: 63 pages fresh. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 78 pages. |
+| strict Sphinx (`-W --keep-going -b dirhtml -c docs-site`) | PASS: build succeeded. |
+| `uv build` | PASS: wheel and sdist. |
+| `uv run python scripts/extras_smoke.py` | PASS: 14 extras. |
+| `uv run python scripts/package_audit.py` | FAIL: `dependency 'pyrefly' has no entry in DISTRIBUTION_IMPORTS`. Pre-existing and not caused by phase 50: the stray `pyrefly>=0.60.0` runtime dependency sits in an uncommitted `pyproject.toml` edit owned by the repository owner; the audit passes once it is removed. |
+| `uv run python scripts/surface_count.py --total` | 456 (baseline 436; the gate applies after 50.4.6). |
 
 ### Remaining work / blockers
 
-50.1.2 onwards.
+50.2 onwards (response mapping and error layers), then 50.3 (the request as a value) and 50.4
+(other protocols, documentation, the name budget and the phase close).

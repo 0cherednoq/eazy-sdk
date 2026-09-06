@@ -1,8 +1,8 @@
 {
   "api-reference/api-methods.mdx": {
-    "fingerprint": "sha256:72c4a463486b9696906138b852ea0be1e36a9df8a1b9e63f1e03a234bb6cf358",
+    "fingerprint": "sha256:50c4178c3bb810f58ba1336cf2d1acf52efb16876bc36f2f5e4111948aa06238",
     "symbols": {
-      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.preparation": "sha256:80a154bd73dd05bbb384a0d958e758af09511dfec03521cdc4607e17fdf6ea81"
     }
   },
@@ -28,9 +28,9 @@
     }
   },
   "api-reference/dependencies.mdx": {
-    "fingerprint": "sha256:695374a7a669ef3bd8020e0a0d20d516e4f99386ea49ae5f1adfff7560be06a1",
+    "fingerprint": "sha256:2ac8cc949d12120c8b00ac9aaba682aaf59fd2a1ac37ee1b9e59235e068d1fd3",
     "symbols": {
-      "eazy_sdk.dependencies": "sha256:38eec4adc9e85f772d5f54672428702651da1b1e107a00c9033ce5305c5a1ac2"
+      "eazy_sdk.dependencies": "sha256:b77c6aec40af8ffce48137a48bc9e81c607e6f3c24eccd195ef32aa3445f939a"
     }
   },
   "api-reference/extensions.mdx": {
@@ -75,10 +75,10 @@
     }
   },
   "api-reference/request.mdx": {
-    "fingerprint": "sha256:2238212a0ce0dd5e35b9e48968a06efef205703d4d3585526470ce15bbb1c7d6",
+    "fingerprint": "sha256:c673004d84aa93f66d5f1a341948715773e53d5d0fb8bd96614ce95607f55ae1",
     "symbols": {
       "eazy_sdk.core.errors.OperationBindingError": "sha256:521998615f5e60e0afd5737fc41a23502a4bcf2d2793d0ceb4ada21601eb720b",
-      "eazy_sdk.request": "sha256:84a2509b9507ea1c1ac891ecc997994f3724562c5ff504540f6aab888ba92ff3"
+      "eazy_sdk.request": "sha256:9af5b6b61e2ce76cea796f35386e69aad3919a5aaf84bc028ae4ce1055b62673"
     }
   },
   "api-reference/response.mdx": {
@@ -213,18 +213,18 @@
     }
   },
   "getting-started/quickstart.mdx": {
-    "fingerprint": "sha256:d9dc843ceebf27faae709ea83c344677789c89fe0b8d37d14b072dd5324c1ad7",
+    "fingerprint": "sha256:23bffb2d859a3ed46b065ca4fdbcd465b9f1fee69943cad2b848a1357caa44f6",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
-      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
-      "eazy_sdk.request": "sha256:84a2509b9507ea1c1ac891ecc997994f3724562c5ff504540f6aab888ba92ff3",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
+      "eazy_sdk.request": "sha256:9af5b6b61e2ce76cea796f35386e69aad3919a5aaf84bc028ae4ce1055b62673",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
   },
   "guides/dependencies.mdx": {
-    "fingerprint": "sha256:695374a7a669ef3bd8020e0a0d20d516e4f99386ea49ae5f1adfff7560be06a1",
+    "fingerprint": "sha256:2ac8cc949d12120c8b00ac9aaba682aaf59fd2a1ac37ee1b9e59235e068d1fd3",
     "symbols": {
-      "eazy_sdk.dependencies": "sha256:38eec4adc9e85f772d5f54672428702651da1b1e107a00c9033ce5305c5a1ac2"
+      "eazy_sdk.dependencies": "sha256:b77c6aec40af8ffce48137a48bc9e81c607e6f3c24eccd195ef32aa3445f939a"
     }
   },
   "guides/middleware.mdx": {
@@ -307,65 +307,65 @@
     }
   },
   "guides/requests/bytes.mdx": {
-    "fingerprint": "sha256:c5c5f233a02cc676978fade4d5f68b3d7f88fd6a567dba72d59a89be38fbda92",
+    "fingerprint": "sha256:435570d4e766c05a3a7098d3afed40f5ab6dd855e4df4774a184148f34579bae",
     "symbols": {
-      "eazy_sdk.request.BytesBody": "sha256:d5352720fe1e65a86fcaa6494e0b4b2ad516f177d16a00c958dad565b9c3ed7a"
+      "eazy_sdk.request.BytesBody": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/cookies.mdx": {
-    "fingerprint": "sha256:7722abb33cd2e2a4a44c732d41db6fca914fb7cf359fc8732cdbd0953ff88a3d",
+    "fingerprint": "sha256:c62589ab60cc9142859cfaf9e300fb99137c0dacf6758c427fecfa4f886025d2",
     "symbols": {
-      "eazy_sdk.request.Cookie": "sha256:66b0c91557d3d597dc5992e85c298738bc9af7d7e0b7c10d3879138e52d5e039"
+      "eazy_sdk.request.Cookie": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/form.mdx": {
-    "fingerprint": "sha256:ac40df2d4a387117ef39b9b69054e44e9ca538a5292e5e039a4f665c378966d2",
+    "fingerprint": "sha256:57cc49a702463f8a149b91c9dbfafbc8fb6b8bdb6c7e5112ccc1d43813aab03e",
     "symbols": {
-      "eazy_sdk.request.Form": "sha256:5939b8659bbd052531b892f282b0ae2b9ee9cc77a92bbaab260149e008b88702"
+      "eazy_sdk.request.Form": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/headers.mdx": {
-    "fingerprint": "sha256:77f17543665ac81c2c7f6b36f4c2772bf8a1ad0e527b53201ddb1685f594149a",
+    "fingerprint": "sha256:60acafc05c61fd84c97beb09b8b3174ff44e65d19f415b9469d02afae778c506",
     "symbols": {
-      "eazy_sdk.request.Header": "sha256:b66cdd5add342e0013b4d7081424c24b43125c203bf43fddf8e55a30b0bf045b"
+      "eazy_sdk.request.Header": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/json.mdx": {
-    "fingerprint": "sha256:c9640cc7895c54b4a30e14130c61760861dbfeb5b9af2efac93f661b0f868656",
+    "fingerprint": "sha256:c183373834ecd4cea65f25c5e65ae87a17e9bc9d390396538c61077654232949",
     "symbols": {
-      "eazy_sdk.request.JsonBody": "sha256:9430a7dcd3f6d5812c7fa3105aa8c39a31af460df9ab95f61bbb50677040a18f"
+      "eazy_sdk.request.JsonBody": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/multipart.mdx": {
-    "fingerprint": "sha256:5a4f248febfa17cfcc7b8f235ca599dd498e5297a8e2d541d5fce58d52fe6764",
+    "fingerprint": "sha256:1c1493b3925e6875898c5327c62ca81ed79ab0f3bd433fed49cecac6e4dd0695",
     "symbols": {
       "eazy_sdk.request.MultipartPart": "sha256:05e93fab3206bba8e45d3133374c2719db01ab80ce03304c2770ca2f4fd1b129",
-      "eazy_sdk.request.Part": "sha256:04cf9effa4d214bb8e8d7d6916267085d0ef9b5ed3b2d97e2649f16c8d0439bf"
+      "eazy_sdk.request.Part": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/path.mdx": {
-    "fingerprint": "sha256:2be2f3f4ff8860477f738b409779be7f6ae90dc7f85bdc56f394d862e098b40a",
+    "fingerprint": "sha256:d23df2adf4b0fb285729788cd46d25363fe4500badded62707c91f3f39333d3c",
     "symbols": {
-      "eazy_sdk.request.Path": "sha256:bf8091f15113b38d44c89ffa5ce458df9fb2f1b9cac66bc51f2b073c00c7fa97"
+      "eazy_sdk.request.Path": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/query.mdx": {
-    "fingerprint": "sha256:f453ddb8b315ae83f77db1f77f4d89684e12c859dc2c96c50accc7ed11ae8928",
+    "fingerprint": "sha256:29e5a5e65785078b161fa666aa876d34223ff161de1418998fda23ca87e43402",
     "symbols": {
-      "eazy_sdk.request.Query": "sha256:6c43f4352b72cfdee54b541a676e99b54c53ae80404b759eb2709d2b76f8c226"
+      "eazy_sdk.request.Query": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guides/requests/representation.mdx": {
-    "fingerprint": "sha256:f4e6a8f05b35c8d021bd3f477f8b3813ce97a4f93550e50aca1bafb147af44ed",
+    "fingerprint": "sha256:863256a3ee1a8c4f39e8d14569da1f98672cf967f227bc1a7bff0154063a5f34",
     "symbols": {
-      "eazy_sdk.request.Wire": "sha256:2a6ef2618c58af220033af2070fbc2fb19dea9279fce997e69f66c0cbd82c45b",
+      "eazy_sdk.request.Wire": "sha256:65156e82586dc751eddc264d668ea8606893036dd4b4fb08c60162a3d0e81cd6",
       "eazy_sdk.serialization.Serialization": "sha256:c3ef2836781794552a9932f5df3fe0a2c3441832cdcaf81acdd75c9d3a7286cd"
     }
   },
   "guides/responses/errors.mdx": {
-    "fingerprint": "sha256:acb0324358d8d6c6917452388c3062b8d7c720dfe10aa3add319307a0132d1da",
+    "fingerprint": "sha256:3e70e355cafc2a07c4bb72791e15044704786fc0785bf583ee6ccd13480e92f4",
     "symbols": {
-      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
   },
@@ -380,9 +380,9 @@
     }
   },
   "guides/responses/success.mdx": {
-    "fingerprint": "sha256:acb0324358d8d6c6917452388c3062b8d7c720dfe10aa3add319307a0132d1da",
+    "fingerprint": "sha256:3e70e355cafc2a07c4bb72791e15044704786fc0785bf583ee6ccd13480e92f4",
     "symbols": {
-      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.response": "sha256:b5c5c27645ba1887f4a9d4e1190bfe5803ebd4458dcb6c26901bb594856c1316"
     }
   },
@@ -416,10 +416,10 @@
     }
   },
   "more/examples/store-sdk.mdx": {
-    "fingerprint": "sha256:35381ad235e00bee963db7c99a8eeb6f0d0c953be27c22b537c385d2c1941077",
+    "fingerprint": "sha256:3fa5bc23241e48c9dad9de526a7c86162eb7a8f45a7d5fb1d3d275ea9c17a289",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
-      "eazy_sdk.api": "sha256:256cb9f1c47b823dd7f382e0462241dbb2b3b2a2ebad57824d1ced9f6d540792",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.auth.BearerScheme": "sha256:8d94956efc1a0d40a7b0c866c6717d0156a188e56a48ae2823d76fbf3f6729ec",
       "eazy_sdk.crypto": "sha256:5efa612d255e1cf27c6da78dce2b1a637b615eeb5bc44c668b1f84ada1214854",
       "eazy_sdk.request.hmac_sha256": "sha256:8513032e1d4d557b9ec68448d1a06bd01c1811bda927a10f7b49d396b2eed46d",
