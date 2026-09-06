@@ -138,11 +138,13 @@ from eazy_sdk.response import (
     ResponseEnvelope,
     Responses,
 )
+from eazy_sdk.response._mapping import error_cases
 from eazy_sdk.response.cases import (
     AttemptIdentity,
     OperationInfo,
     PreparedRequestSummary,
     PreparedResponseExtractor,
+    Success,
 )
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
@@ -474,6 +476,8 @@ class ExecutionRuntime:
     middleware: tuple[object, ...] = ()
     limiter: RateLimiter | None = None
     crypto: CryptoRegistry = field(default_factory=CryptoRegistry)
+    errors: Mapping[str, Any] = field(default_factory=dict)
+    """Host-scoped error cases from ``ClientConfig.errors``, keyed by exact host."""
     allow_async_crypto: bool = True
     _protection_state: dict[_ProtectionCacheKey, _ManagedProtectionState] = field(
         default_factory=dict, init=False, repr=False
@@ -577,6 +581,7 @@ class ExecutionCore:
         self.identity = identity if identity is not None else _IdentityScope()
         self.serialization = serialization if serialization is not None else Serialization()
         self.resolution_graph = resolution_graph
+        self._client_error_contracts: dict[tuple[int, str], Any] = {}
 
     async def prepare[T](
         self,
@@ -685,6 +690,7 @@ class ExecutionCore:
     ]:
         initial_url = _contract_url(_service_base_url(contract, self.runtime), contract.path)
         initial_crypto = _resolve_http_crypto(contract, self.runtime.crypto, initial_url)
+        contract = self._with_client_errors(contract, initial_url)
         scope_context = _scope_context(contract, _service_base_url(contract, self.runtime))
         before_policies = tuple(
             _compile_before_call_policy(policy)
@@ -724,6 +730,44 @@ class ExecutionCore:
                 raise
             raise ProtectionConfigurationError(str(exc)) from exc
         return compiled, initial_crypto, before_policies, challenge_policies
+
+    def _with_client_errors[T](
+        self, contract: _OperationDeclaration[T], url: str
+    ) -> _OperationDeclaration[T]:
+        """The outermost error layer: what a host answers with, whichever SDK is speaking.
+
+        The cases are appended behind the operation's own and its service's, carrying
+        ``precedence=2`` so a tie is decided by the layer nearest the operation.
+        """
+
+        declared = self.runtime.errors
+        if not declared or not isinstance(contract.responses, Responses):
+            return contract
+        host = (urlsplit(url).hostname or "").lower()
+        entry = declared.get(host)
+        if entry is None:
+            return contract
+        key = (id(contract), host)
+        cached = self._client_error_contracts.get(key)
+        if cached is not None:
+            return cast(_OperationDeclaration[T], cached)
+        responses = cast(Responses[T], contract.responses)
+        host_errors = tuple(
+            replace(case, precedence=2)
+            for case in error_cases(
+                entry, models=self.serialization.models, operation_id=contract.operation_id
+            )
+        )
+        extended = replace(
+            contract,
+            responses=Responses(
+                success=cast(tuple[Success[T], ...], responses.success),
+                errors=(*responses.errors, *host_errors),
+                fallback=responses.fallback,
+            ),
+        )
+        self._client_error_contracts[key] = extended
+        return extended
 
     def _preflight[T](
         self,

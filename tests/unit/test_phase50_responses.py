@@ -18,7 +18,7 @@ import pytest
 from eazy_sdk_html import CSS, Scope
 from pydantic import BaseModel
 
-from eazy_sdk import Client, Http, HttpOperation, Path, SyncApi, api, op
+from eazy_sdk import Client, ClientConfig, Http, HttpOperation, Path, SyncApi, api, op
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.models import default_model_adapters
@@ -33,6 +33,7 @@ from eazy_sdk.response import (
     Json,
     MalformedResponseError,
     Responses,
+    UnexpectedResponseError,
 )
 from eazy_sdk.response._mapping import representation
 from eazy_sdk.response.cases import resolve_json_pointer
@@ -516,3 +517,60 @@ def test_pickled_apierror_carries_no_body_or_headers() -> None:
     assert b"secret-body" not in payload
     assert b"secret-header" not in payload
     assert isinstance(pickle.loads(payload).context, ErrorSummary)
+
+
+# --- 50.2.6 the client layer: what a host answers with --------------------------------
+
+
+def _host_client(host: str, handler: Callable[[httpx.Request], httpx.Response]) -> Client:
+    raw = httpx.Client(transport=httpx.MockTransport(handler), headers={}, cookies={})
+    return Client(
+        base_url=f"https://{host}",
+        handler=HttpxHandler(raw, owns_client=True),
+        config=ClientConfig(errors={"books.example": {404: BetaFailed}}),
+    )
+
+
+class PlainApi(SyncApi):
+    @api.get("/thing")
+    def get(self) -> Alpha:
+        raise NotImplementedError
+
+
+def test_client_errors_apply_by_host() -> None:
+    """An operation that documents no 404 still raises the client's case for that host."""
+
+    with _host_client("books.example", _echo(404)) as client, pytest.raises(BetaFailed):
+        PlainApi(client).get()
+
+
+def test_client_errors_lose_to_service_and_operation() -> None:
+    """The client layer is the outermost: the operation and its service both win a tie."""
+
+    class Service(SyncApi):
+        errors = ({404: AlphaFailed},)
+
+        @api.get("/thing")
+        def from_service(self) -> Alpha:
+            raise NotImplementedError
+
+        @api.get("/thing", errors={404: AlphaFailed}, inherit_errors=False)
+        def from_operation(self) -> Alpha:
+            raise NotImplementedError
+
+    with _host_client("books.example", _echo(404)) as client:
+        service = Service(client)
+        with pytest.raises(AlphaFailed):
+            service.from_service()
+        with pytest.raises(AlphaFailed):
+            service.from_operation()
+
+
+def test_client_errors_ignore_other_hosts() -> None:
+    """The key is the exact host: another address gets the undocumented response instead."""
+
+    with (
+        _host_client("papers.example", _echo(404)) as client,
+        pytest.raises(UnexpectedResponseError),
+    ):
+        PlainApi(client).get()

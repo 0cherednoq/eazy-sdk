@@ -10,6 +10,7 @@ profiles are contract, declared on the operation or the router.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -22,6 +23,7 @@ from eazy_sdk.protection.advanced import (
     ProtectionConfigurationError,
 )
 from eazy_sdk.ratelimit_runtime import RateLimiter
+from eazy_sdk.response._mapping import ErrorsSpec
 
 from .base import CallOptions, RetryPolicy
 from .executor import ExecutionRuntime
@@ -113,6 +115,22 @@ class ClientConfig:
     security: Security = field(default_factory=Security)
     hooks: Hooks = field(default_factory=Hooks)
     crypto: CryptoRegistry | None = None
+    errors: Mapping[str, ErrorsSpec] = field(default_factory=dict)
+    """Error cases a host answers with, whichever SDK is speaking to it:
+    ``{"books.example": {429: RateLimited, 503: AccessBlocked}}``.
+
+    The key is the exact host, without a port and case-insensitive. These cases are the
+    outermost layer: an operation and its service both win a tie against them.
+    """
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.errors, Mapping):
+            raise TypeError("ClientConfig.errors maps a host to its error cases")
+        for host in self.errors:
+            if not isinstance(host, str) or not host or ":" in host:
+                raise TypeError(
+                    f"ClientConfig.errors key {host!r} must be a host without a port"
+                )
 
     @property
     def bundle(self) -> ProtectionBundle:
@@ -151,6 +169,7 @@ def _runtime_from_boundary(
         middleware=config.hooks.middleware,
         limiter=config.resilience.rate_limiter,
         crypto=config.crypto or CryptoRegistry(),
+        errors=config.errors,
         allow_async_crypto=allow_async_crypto,
     )
 
