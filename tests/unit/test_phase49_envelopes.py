@@ -13,16 +13,18 @@ second decorator family, no second error path).
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import hmac
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, AsyncClient, Identity, api
+from eazy_sdk import AsyncApi, AsyncClient, Identity, api, op
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.core.kernel import Malformed, ParsedValue
 from eazy_sdk.crypto import encrypt_encoded, encrypt_outbound, http_encrypted, payload_crypto
 from eazy_sdk.crypto.core import CryptoContext
@@ -35,6 +37,8 @@ from eazy_sdk.protocols import (
     InboundMessageKind,
     JsonRpc,
     ProtocolMessage,
+    Rpc,
+    RpcOperation,
     rpc_error,
     rpc_error_default,
     rpc_result,
@@ -48,7 +52,7 @@ from eazy_sdk.request import (
     header_output,
     hmac_sha256,
 )
-from eazy_sdk.request.markers import JsonField
+from eazy_sdk.request.markers import JsonField, Query
 from eazy_sdk.request.pipeline import REQUEST_PIPELINE, RequestStage
 from eazy_sdk.response import Json, MalformedResponseError, Responses
 from eazy_sdk.response.cases import ApiError
@@ -405,3 +409,74 @@ def test_the_json_rpc_envelope_is_a_pure_function_with_no_transport() -> None:
 
     assert ChannelKey("c").value == "c"
     assert ControlKind.PING.value == "ping"
+
+
+# --- phase 50.4.1: the RPC operation as a class ---------------------------------------
+
+
+@dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+class Charge(RpcOperation[Receipt]):
+    __http__ = Rpc.method(
+        "account.charge",
+        operation_id="charge",
+        errors={-32001: Fault},
+        fallback=Fault,
+    )
+
+    account: Annotated[str, JsonField()]
+    amount: Annotated[int, JsonField()]
+
+
+class ClassBillingApi(BillingService, AsyncApi):
+    charge = op(Charge)
+
+
+@pytest.mark.asyncio
+async def test_rpc_operation_class_lowers_to_envelope_cases() -> None:
+    """``Rpc.method`` builds the cases phase 49 already executes, from the class itself."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        sent = json.loads(request.content)
+        if sent["params"] == {"account": "acc-1", "amount": 1}:
+            return _reply(request, result={"reference": "rcp-1"})
+        return _reply(request, error={"code": -32001, "message": "no funds"})
+
+    async with _client(handler) as client:
+        sdk = ClassBillingApi(client)
+        assert (await sdk.charge(account="acc-1", amount=1)).reference == "rcp-1"
+        with pytest.raises(ApiError) as failure:
+            await sdk.charge(account="acc-2", amount=2)
+    assert cast(Fault, failure.value.error).code == -32001
+
+    declaration = ClassBillingApi.charge.declaration
+    assert declaration.method == "POST"
+    assert declaration.discriminator == "account.charge"
+
+
+def test_rpc_operation_rejects_path_placement() -> None:
+    """D-20: an RPC operation has no URL of its own to place a field in."""
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Broken(RpcOperation[Receipt]):
+        __http__ = Rpc.method("account.charge", operation_id="GetBalance")
+
+        x: Annotated[str, Query()]
+
+    with pytest.raises(PlanError) as failure:
+
+        class BrokenApi(BillingService, AsyncApi):
+            balance = op(Broken)
+
+        BrokenApi.balance.declaration  # noqa: B018 - the declaration is read on access
+
+    assert str(failure.value) == (
+        "RPC operation GetBalance cannot place 'x' in query; the envelope owns the URL"
+    )
+
+
+def test_api_rpc_decorator_synthesizes_rpc_class() -> None:
+    """The decorator is the short form: what it writes is an ``RpcOperation`` subclass."""
+
+    operation_type = BillingApi.charge.Operation
+    assert issubclass(operation_type, RpcOperation)
+    assert BillingApi.charge.declaration.discriminator == "account.charge"

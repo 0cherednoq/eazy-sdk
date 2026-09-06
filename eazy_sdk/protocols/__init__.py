@@ -18,6 +18,7 @@ from .jsonrpc import (
     rpc_error_default,
     rpc_result,
 )
+from .operation import Rpc, RpcOperation
 
 __all__ = [
     "ChannelKey",
@@ -28,7 +29,9 @@ __all__ = [
     "InboundMessageKind",
     "JsonRpc",
     "ProtocolMessage",
+    "Rpc",
     "RpcEnvelopeError",
+    "RpcOperation",
     "has_rpc_result",
     "rpc_error",
     "rpc_error_code",

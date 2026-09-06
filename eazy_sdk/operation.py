@@ -85,6 +85,8 @@ class _HttpSpec:
     raw_response: bool = False
     discriminator: str | None = None
     """What the service envelope calls this operation; only ``Rpc`` fills it."""
+    envelope_cases: bool = False
+    """``Rpc``: the outcome is read out of the envelope, and ``errors`` is keyed by its codes."""
 
     def __post_init__(self) -> None:
         if _METHOD_TOKEN.fullmatch(self.method) is None:
@@ -164,7 +166,10 @@ def generic_argument(operation_type: type[object], base: type[object]) -> object
 
     for cls in operation_type.__mro__:
         for orig in getattr(cls, "__orig_bases__", ()):
-            if get_origin(orig) is base:
+            origin = get_origin(orig)
+            # ``RpcOperation[T]`` is an ``HttpOperation[T]``: a subclass of the base carries
+            # the same argument, so the search does not stop at an exact match.
+            if origin is base or (isinstance(origin, type) and issubclass(origin, base)):
                 arguments = get_args(orig)
                 if arguments and arguments[0] is not Any:
                     return cast(object, arguments[0])

@@ -28,8 +28,9 @@ from urllib.parse import urlsplit
 
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.compile.http_operation import _OperationDeclaration
-from eazy_sdk.compile.input import inspect_operation_input
+from eazy_sdk.compile.input import MethodInputSchema, inspect_operation_input
 from eazy_sdk.core.errors import PlanError
+from eazy_sdk.core.http import RequestLocation
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.crypto import PayloadCrypto
 from eazy_sdk.identity import (
@@ -50,6 +51,7 @@ from eazy_sdk.operation import (
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protocols import Envelope
+from eazy_sdk.protocols.operation import Rpc, RpcOperation, rpc_responses
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import Wire
 from eazy_sdk.response import ResponseEnvelope, Responses, Success
@@ -435,15 +437,30 @@ class _OperationDescriptor[**P, T]:
             models=models,
             projection=spec.projection,
         )
-        responses = normalize_responses(
-            result_type=result_type,
-            success=spec.success,
-            errors=spec.errors,
-            fallback=spec.fallback,
-            models=models,
-            unwrap=unwrap,
-            operation_id=operation_id,
-        )
+        if spec.envelope_cases:
+            _validate_envelope_placements(input_schema, operation_id)
+        if spec.envelope_cases and spec.success is None:
+            # The short form: the result type is the payload, and ``errors`` is keyed by the
+            # protocol's codes. An operation that names its own cases keeps them.
+            success_cases, error_cases_, fallback_case = rpc_responses(
+                result_type=result_type,
+                errors=spec.errors,
+                fallback=spec.fallback,
+                operation_id=operation_id,
+            )
+            responses = Responses(
+                success=success_cases, errors=error_cases_, fallback=fallback_case
+            )
+        else:
+            responses = normalize_responses(
+                result_type=result_type,
+                success=spec.success,
+                errors=spec.errors,
+                fallback=spec.fallback,
+                models=models,
+                unwrap=unwrap,
+                operation_id=operation_id,
+            )
         scope = RequestScope(
             path_prefixes=(spec.path,),
             methods=frozenset({spec.method}),
@@ -621,6 +638,18 @@ class _OperationDescriptor[**P, T]:
         if isinstance(instance, SyncApi):
             return _BoundSyncOperation(self, instance)
         raise TypeError("an operation is bound through a SyncApi or AsyncApi router")
+
+
+def _validate_envelope_placements(schema: MethodInputSchema, operation_id: str) -> None:
+    """D-20: an RPC operation has no URL of its own, so it cannot place a field in one."""
+
+    for field in schema.fields:
+        if field.location in (RequestLocation.PATH, RequestLocation.QUERY):
+            place = "path" if field.location is RequestLocation.PATH else "query"
+            raise PlanError(
+                f"RPC operation {operation_id} cannot place {field.python_name!r} in {place}; "
+                "the envelope owns the URL"
+            )
 
 
 def op[**P, T](operation: Callable[P, HttpOperation[T]], /) -> _OperationDescriptor[P, T]:
@@ -938,10 +967,11 @@ class _OperationDecorator:
         _validate_options(signature, hints, self_parameter, operation_id)
         fields = _synthesized_fields(parameters[1:], hints, operation_id=operation_id)
         spec = replace(self.spec, operation_id=operation_id)
+        base: Any = RpcOperation if spec.envelope_cases else HttpOperation
         operation_type = dataclasses.make_dataclass(
             declaration.__name__,
             fields,
-            bases=(HttpOperation[result_type],),  # type: ignore[valid-type]
+            bases=(base[result_type],),
             frozen=True,
             slots=True,
             kw_only=True,
@@ -1095,8 +1125,7 @@ class _ApiNamespace:
         service's envelope, declared once as the router's ``protocol`` attribute.
         """
 
-        spec = Http.request("POST", "/", **options)
-        return _OperationDecorator(replace(spec, discriminator=discriminator))
+        return _OperationDecorator(Rpc.method(discriminator, **options))
 
     def request(
         self, method: str, path: str, /, **options: Unpack[_HttpOptions]
