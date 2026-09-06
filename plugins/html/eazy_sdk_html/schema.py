@@ -75,6 +75,22 @@ class ExtractionSchema:
     model: type[object]
     fields: tuple[ExtractionField, ...]
 
+    @property
+    def has_required_field(self) -> bool:
+        """Whether the model can fail to extract, and so tell one document from another.
+
+        A model whose fields are all optional — or all lists, which may legitimately come
+        back empty — extracts successfully from any page at all, including an error page.
+        Such a model cannot be a response case on its own.
+        """
+
+        return any(
+            not field.optional
+            and not field.many
+            and (field.selector is not None or field.scope is not None)
+            for field in self.fields
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ParselBackend:

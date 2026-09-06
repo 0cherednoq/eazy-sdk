@@ -14,16 +14,34 @@ from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
 import httpx
+import msgspec
 import pytest
 from eazy_sdk_html import CSS, Scope
 from pydantic import BaseModel
 
-from eazy_sdk import Client, ClientConfig, Http, HttpOperation, Path, SyncApi, api, op
+from eazy_sdk import (
+    Client,
+    ClientConfig,
+    Http,
+    HttpOperation,
+    JsonField,
+    Path,
+    SyncApi,
+    api,
+    op,
+)
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.models import default_model_adapters
 from eazy_sdk.models.documents import is_document_model
 from eazy_sdk.protocols import JsonRpc
+from eazy_sdk.request import (
+    SigningKeyRequirement,
+    canonical_json,
+    header_output,
+    hmac_sha256,
+    markers,
+)
 from eazy_sdk.response import (
     DEFAULT,
     AmbiguousResponseError,
@@ -37,6 +55,7 @@ from eazy_sdk.response import (
 )
 from eazy_sdk.response._mapping import representation
 from eazy_sdk.response.cases import resolve_json_pointer
+from eazy_sdk.serialization import BackendCapabilityError
 
 BASE = "https://books.example"
 
@@ -574,3 +593,132 @@ def test_client_errors_ignore_other_hosts() -> None:
         pytest.raises(UnexpectedResponseError),
     ):
         PlainApi(client).get()
+
+
+# --- 50.2.7 what the response diagnostics say ----------------------------------------
+
+
+class Catalog(BaseModel):
+    """A structural model pointed at an HTML page: the commonest wrong declaration."""
+
+    title: str
+
+
+def test_unexpected_document_response_hints_selectors() -> None:
+    """The message names the reason: an HTML body and a model with no selectors."""
+
+    def serve(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=b"<html><h1>Fiction</h1></html>", headers={"content-type": "text/html"}
+        )
+
+    class Service(SyncApi):
+        @api.get("/catalogue")
+        def get(self) -> Catalog:
+            raise NotImplementedError
+
+    with _mock_client(serve) as client, pytest.raises(UnexpectedResponseError) as failure:
+        Service(client).get()
+    assert (
+        "the response is a document but none of the attempted models (Catalog) "
+        "carries CSS or XPath metadata" in str(failure.value)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class BlockPage:
+    """Everything optional: this model extracts from a catalogue and an error page alike."""
+
+    heading: Annotated[str | None, CSS("h1::text")] = None
+
+
+def test_html_model_without_required_field_rejected() -> None:
+    """D-18: a document model with nothing required matches every page, error pages too."""
+
+    class Service(SyncApi):
+        @api.get("/catalogue")
+        def get(self) -> BlockPage:
+            raise NotImplementedError
+
+    with (
+        _mock_client(_echo(200, "text/html")) as client,
+        pytest.raises(BackendCapabilityError) as failure,
+    ):
+        Service(client).get()
+    assert "Html model BlockPage matches any document; add a required selector field or when=" in (
+        str(failure.value)
+    )
+
+
+# --- 50.2.8 signature pointers name fields the body has -------------------------------
+
+SIGNING_KEY = SigningKeyRequirement("phase50")
+
+
+def test_signature_pointer_validated_against_wire_names() -> None:
+    """D-19: a pointer into a flat JSON body must name one of its fields."""
+
+    class Service(SyncApi):
+        @api.post(
+            "/orders",
+            operation_id="CreateOrder",
+            signing=hmac_sha256(
+                key=SIGNING_KEY,
+                base=canonical_json(include=("/Data",)),
+                output=header_output("X-Sig"),
+            ),
+        )
+        def create(
+            self, *, data: JsonField[str], meta: JsonField[str] = "", token: JsonField[str] = ""
+        ) -> None:
+            raise NotImplementedError
+
+    with pytest.raises(PlanError) as failure:
+        cast(Any, Service.create).resolve().compile()
+    assert str(failure.value) == (
+        "signature pointer '/Data' is not a field of the request body of 'CreateOrder'; "
+        "available: /data, /meta, /token"
+    )
+
+
+class Renaming(msgspec.Struct, frozen=True, kw_only=True):
+    """The model owns the wire name: ``payload`` is sent as ``data``."""
+
+    payload: str = msgspec.field(name="data")
+
+
+def test_signature_pointer_uses_model_rename() -> None:
+    """The names it checks are the wire names, not the Python ones the model renamed."""
+
+    class Service(SyncApi):
+        @api.post(
+            "/orders",
+            operation_id="CreateOrder",
+            signing=hmac_sha256(
+                key=SIGNING_KEY,
+                base=canonical_json(include=("/data",)),
+                output=header_output("X-Sig"),
+            ),
+        )
+        def create(self, *, body: Annotated[Renaming, markers.JsonBody()]) -> None:
+            raise NotImplementedError
+
+        @api.post(
+            "/orders",
+            operation_id="CreateOrderPython",
+            signing=hmac_sha256(
+                key=SIGNING_KEY,
+                base=canonical_json(include=("/payload",)),
+                output=header_output("X-Sig"),
+            ),
+        )
+        def create_by_python_name(self, *, body: Annotated[Renaming, markers.JsonBody()]) -> None:
+            raise NotImplementedError
+
+    cast(Any, Service.create).resolve().compile()
+    with pytest.raises(PlanError) as failure:
+        cast(Any, Service.create_by_python_name).resolve().compile()
+    assert str(failure.value) == (
+        "signature pointer '/payload' is not a field of the request body of "
+        "'CreateOrderPython'; available: /data"
+    )

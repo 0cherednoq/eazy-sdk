@@ -562,7 +562,9 @@ def test_body_signature_output_must_select_a_declared_target_field() -> None:
             raise NotImplementedError
 
     descriptor = cast(Any, InvalidTargetApi.send)
-    with pytest.raises(PlanError, match="target field is not declared"):
+    # Phase 50.2.8 gave every body shape the same diagnostic: D-19 names the pointer, the
+    # operation and the fields it could have meant.
+    with pytest.raises(PlanError, match="signature pointer '/signatures/missing' is not a field"):
         descriptor.resolve().compile()
 
 

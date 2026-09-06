@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, get_args, get_origin, runtime_checkable
 
@@ -49,6 +49,8 @@ from eazy_sdk.request.descriptors import (
 )
 from eazy_sdk.request.params import Cookie, Header, Query
 from eazy_sdk.request.signatures import (
+    DeclarativeSignature,
+    JsonProjection,
     SignaturePlan,
     _body_output_path,
     compile_signatures,
@@ -597,10 +599,13 @@ def _finish_writer_pass(
             )
     signature_plan = compile_signatures(tuple(getattr(layout.contract, "signing", ())))
     body_signature_paths = (
-        _compile_body_signature_paths(layout.body_projection, signature_plan, models)
+        _compile_body_signature_paths(
+            layout.body_projection, signature_plan, models, layout.contract.operation_id
+        )
         if layout.body_projection is not None
         else ()
     )
+    _validate_signature_pointers(layout, signature_plan, models, wire_names)
     _validate_body_writer_paths(private_wire_writers, body_signature_paths)
     _validate_managed_body_writer_paths(
         private_body_writers,
@@ -1080,6 +1085,7 @@ def _compile_body_signature_paths(
     projection: BodyProjection[object, object],
     signature_plan: SignaturePlan,
     models: ModelAdapterRegistry,
+    operation_id: str = "",
 ) -> tuple[tuple[str, ...], ...]:
     outputs = tuple(
         output
@@ -1097,7 +1103,7 @@ def _compile_body_signature_paths(
     if isinstance(projection.encoding, FormBody) and any(len(path) != 1 for path in paths):
         raise PlanError("form body signature outputs must select one top-level target field")
     for path in paths:
-        _validate_wire_target_path(projection.target, path, models)
+        _validate_wire_target_path(projection.target, path, models, operation_id)
     _validate_overlapping_paths(paths, "body signature output")
     return paths
 
@@ -1106,6 +1112,7 @@ def _validate_wire_target_path(
     target: object,
     path: tuple[str, ...],
     models: ModelAdapterRegistry,
+    operation_id: str = "",
 ) -> None:
     current = target
     for component in path:
@@ -1117,10 +1124,87 @@ def _validate_wire_target_path(
             ) from None
         selected = next((field for field in fields if field.wire_name == component), None)
         if selected is None:
-            raise PlanError(
-                f"body signature output target field is not declared: {'.'.join(path)!r}"
-            )
+            raise _unknown_pointer(path, tuple(field.wire_name for field in fields), operation_id)
         current = selected.annotation
+
+
+def _validate_signature_pointers(
+    layout: _InputLayoutPass,
+    signature_plan: SignaturePlan,
+    models: ModelAdapterRegistry,
+    wire_names: Mapping[ValueSlot[object], str],
+) -> None:
+    """A signature that reads or writes a body field must name a field the body has.
+
+    A projection validates its own target model; a flat body of ``JsonField`` parameters and a
+    root body model are validated here, against the wire names the request will actually send.
+    """
+
+    pointers = [
+        _body_output_path(output)
+        for signature in signature_plan.signatures
+        for output in signature.outputs
+        if output.location is RequestLocation.BODY
+    ]
+    pointers.extend(
+        _pointer_tokens(pointer)
+        for signature in signature_plan.signatures
+        if isinstance(signature, DeclarativeSignature)
+        for pointer in _read_pointers(signature.base)
+    )
+    if not pointers:
+        return
+    operation_id = layout.contract.operation_id
+    root = next((field for field in layout.input_fields if field.is_root_body), None)
+    if root is not None:
+        try:
+            models.fields(_writer_model_type(root.annotation))
+        except (ModelAdapterError, TypeError):
+            # A plain mapping body declares no fields, so there is nothing to check it against.
+            return
+        for path in pointers:
+            _validate_wire_target_path(root.annotation, path, models, operation_id)
+        return
+    if layout.body_projection is not None:
+        return
+    available = tuple(
+        wire_names[slot] for slot in layout.body_field_slots.values() if slot in wire_names
+    )
+    for path in pointers:
+        if len(path) != 1 or path[0] not in available:
+            raise _unknown_pointer(path, available, operation_id)
+
+
+def _unknown_pointer(
+    path: tuple[str, ...], available: Sequence[str | None], operation_id: str
+) -> PlanError:
+    """D-19: the pointer, the operation, and every name it could have meant."""
+
+    names = ", ".join(f"/{name}" for name in available if name)
+    return PlanError(
+        f"signature pointer '/{'/'.join(path)}' is not a field of the request body "
+        f"of {operation_id!r}; available: {names}"
+    )
+
+
+def _read_pointers(component: object) -> tuple[str, ...]:
+    """The JSON pointers a signature base reads, walking joins to their leaves."""
+
+    if isinstance(component, JsonProjection):
+        return tuple(component.include or ())
+    return tuple(
+        pointer
+        for part in getattr(component, "parts", ())
+        for pointer in _read_pointers(part)
+    )
+
+
+def _pointer_tokens(pointer: str) -> tuple[str, ...]:
+    if not pointer.startswith("/") or pointer == "/":
+        raise PlanError(f"signature pointer {pointer!r} must select a body field")
+    return tuple(
+        token.replace("~1", "/").replace("~0", "~") for token in pointer[1:].split("/")
+    )
 
 
 def _validate_body_writer_paths(

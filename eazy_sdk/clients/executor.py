@@ -141,6 +141,7 @@ from eazy_sdk.response import (
 from eazy_sdk.response._mapping import error_cases
 from eazy_sdk.response.cases import (
     AttemptIdentity,
+    HtmlExtractor,
     OperationInfo,
     PreparedRequestSummary,
     PreparedResponseExtractor,
@@ -2149,6 +2150,10 @@ def _validate_serialization(
             continue
         try:
             extractor.prepare(model, serialization)
+            if isinstance(extractor, HtmlExtractor) and case.condition is None:
+                # A document case with nothing required would swallow every page it is
+                # offered, including the error page of the case beside it.
+                extractor.check_discriminating(model, serialization)
         except BackendCapabilityError as exc:
             raise BackendCapabilityError(f"operation {contract.operation_id!r}: {exc}") from exc
 

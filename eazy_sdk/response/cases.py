@@ -251,6 +251,23 @@ class HtmlExtractor:
         except Exception as exc:
             raise BackendCapabilityError(str(exc)) from exc
 
+    def check_discriminating(self, model: type[object], serialization: Serialization) -> None:
+        """A document model with nothing required matches any page, error pages included."""
+
+        from eazy_sdk_html import compile_extraction_schema
+
+        try:
+            schema = compile_extraction_schema(
+                model, models=serialization.models, backend=serialization.html
+            )
+        except Exception as exc:
+            raise BackendCapabilityError(str(exc)) from exc
+        if not schema.has_required_field:
+            raise BackendCapabilityError(
+                f"Html model {model.__name__} matches any document; "
+                "add a required selector field or when="
+            )
+
     def bind(self, response: ResponseContext[object]) -> BoundResponseExtractor:
         return _BoundHtmlExtractor(response, self)
 
@@ -469,6 +486,8 @@ class ErrorOutcome[T]:
 class UnexpectedOutcome:
     attempted_models: tuple[str, ...]
     context: ResponseContext[object]
+    hint: str = ""
+    """What the response looked like, when that explains why nothing matched."""
 
     def unwrap(self) -> None:
         raise UnexpectedResponseError(self)
@@ -495,7 +514,20 @@ class AmbiguousResponseOutcome:
 
 
 class UnexpectedResponseError(EazySdkError):
-    pass
+    def __str__(self) -> str:
+        outcome = self.args[0] if self.args else None
+        if not isinstance(outcome, UnexpectedOutcome):
+            return super().__str__()
+        response = outcome.context.response
+        parts = [
+            f"{outcome.context.operation.operation_id} received an undocumented response: "
+            f"{response.status_code} {response.content_type or 'without a media type'}"
+        ]
+        if outcome.attempted_models:
+            parts.append(f"attempted models: {', '.join(outcome.attempted_models)}")
+        if outcome.hint:
+            parts.append(outcome.hint)
+        return "; ".join(parts)
 
 
 class MalformedResponseError(EazySdkError):
@@ -586,10 +618,20 @@ class Responses[T]:
         if not candidates and self.fallback is not None:
             candidates = [self.fallback]
         if not candidates:
-            return UnexpectedOutcome((), context)
+            # Nothing was even attempted, so the hint reads the cases the status alone
+            # selects: a JSON model declared for a page that came back as HTML.
+            by_status = [
+                model
+                for case in self.cases
+                if _status_matches(case.status, context.response.status_code)
+                for model in (getattr(case.response, "model", None),)
+                if isinstance(model, type)
+            ]
+            return UnexpectedOutcome((), context, _forgotten_selectors_hint(by_status, context))
         matches: list[tuple[ResponseCase[object], object]] = []
         malformed: list[tuple[ResponseCase[object], Malformed]] = []
         attempted: list[str] = []
+        attempted_types: list[type[object]] = []
         parser_sessions: dict[int, BoundResponseParser] = {}
         extractor_sessions: dict[int, BoundResponseExtractor] = {}
         for case in candidates:
@@ -613,6 +655,7 @@ class Responses[T]:
                 )
                 continue
             attempted.append(model.__name__)
+            attempted_types.append(model)
             decoder: ResponseParser | ResponseExtractor
             if isinstance(representation, Json | Html | Extracted):
                 extractor = representation.extractor
@@ -669,7 +712,9 @@ class Responses[T]:
                 context,
             )
         assert isinstance(arbitration, NoCaseMatch)
-        return UnexpectedOutcome(tuple(attempted), context)
+        return UnexpectedOutcome(
+            tuple(attempted), context, _forgotten_selectors_hint(attempted_types, context)
+        )
 
 
 def JsonResponse[T](model: type[T]) -> Json[T]:
@@ -686,6 +731,29 @@ def _representation_result_type(
     if isinstance(representation, Empty):
         return type(None)
     return representation.model
+
+
+DOCUMENT_MEDIA_TYPES = ("text/html", "application/xhtml+xml")
+"""Media types a document backend reads; anything ``*/xml`` counts too."""
+
+
+def _forgotten_selectors_hint(
+    attempted: list[type[object]], context: ResponseContext[object]
+) -> str:
+    """The commonest reason nothing matched an HTML page: the model has no selectors."""
+
+    media = (context.response.content_type or "").split(";", 1)[0].strip().lower()
+    if not attempted or not (media in DOCUMENT_MEDIA_TYPES or media.endswith("xml")):
+        return ""
+    from eazy_sdk.models.documents import is_document_model
+
+    if any(is_document_model(model, context.models) for model in attempted):
+        return ""
+    names = ", ".join(model.__name__ for model in attempted)
+    return (
+        f"the response is a document but none of the attempted models ({names}) "
+        "carries CSS or XPath metadata"
+    )
 
 
 def _most_specific[TValue](
