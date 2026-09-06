@@ -14,15 +14,11 @@ from eazy_sdk.protocols import InboundMessageKind, ProtocolMessage
 from eazy_sdk.websocket import (
     AsyncWsApi,
     AsyncWsClient,
-    ConnectionGeneration,
     CustomMessageSignature,
-    EncodedFrame,
     ErrorReply,
     Event,
     ExactFrameTransform,
-    FrameKind,
     HmacSha256MessageSignature,
-    InboundFrame,
     JsonEventProtocol,
     JsonPayload,
     MalformedMessageError,
@@ -30,7 +26,6 @@ from eazy_sdk.websocket import (
     Messages,
     Nonce,
     PerMessageAuth,
-    PreparedMessage,
     RemoteMessageError,
     ReplayWithDeduplication,
     Replies,
@@ -42,6 +37,13 @@ from eazy_sdk.websocket import (
     freeze_value,
     thaw_value,
     ws,
+)
+from eazy_sdk.websocket._messages import (
+    ConnectionGeneration,
+    EncodedFrame,
+    FrameKind,
+    InboundFrame,
+    PreparedMessage,
 )
 from tests.websocket._support import FakeConnector, LiveFakeWebSocket, assert_no_task_leaks
 

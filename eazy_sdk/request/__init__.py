@@ -57,7 +57,6 @@ from .wire import (
     FieldOrder,
     JsonPolicy,
     QueryCodec,
-    TransportProtocol,
     Wire,
 )
 
@@ -91,7 +90,6 @@ __all__ = [
     "ScalarEncodeContext",
     "SigningKey",
     "SigningKeyRequirement",
-    "TransportProtocol",
     "Wire",
     "body_digest",
     "body_output",

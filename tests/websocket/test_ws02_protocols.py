@@ -23,22 +23,18 @@ from eazy_sdk.protocols import (
 )
 from eazy_sdk.websocket import (
     CloseDisposition,
-    ConnectionGeneration,
     ControlEvent,
-    EncodedFrame,
-    FrameKind,
-    FrameLimits,
     FrameTooLargeError,
     FrozenArray,
     FrozenObject,
     JsonEventProtocol,
     JsonTextCodec,
     ProtocolConfigurationError,
-    frame_from_zapros,
-    frame_to_zapros,
     freeze_value,
     thaw_value,
 )
+from eazy_sdk.websocket._messages import ConnectionGeneration, EncodedFrame, FrameKind
+from eazy_sdk.websocket.frames import FrameLimits, frame_from_zapros, frame_to_zapros
 from tests.websocket._support import FakeWebSocket
 
 ROOT = Path(__file__).parents[2]

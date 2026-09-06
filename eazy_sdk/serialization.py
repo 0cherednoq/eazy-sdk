@@ -140,5 +140,4 @@ __all__ = [
     "DocumentNode",
     "SelectorMarker",
     "Serialization",
-    "accepts_media",
 ]

@@ -25,9 +25,7 @@ from eazy_sdk.protocols import (
 from eazy_sdk.websocket import (
     AsyncWsClient,
     CloseDisposition,
-    FrameKind,
     FrozenValue,
-    InboundFrame,
     JsonTextCodec,
     ProtocolEnvelopeError,
     WsClientConfig,
@@ -35,6 +33,7 @@ from eazy_sdk.websocket import (
     freeze_value,
     thaw_value,
 )
+from eazy_sdk.websocket._messages import FrameKind, InboundFrame
 from tests.websocket._support import assert_no_task_leaks
 
 pytestmark = [

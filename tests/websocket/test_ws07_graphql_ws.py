@@ -18,10 +18,10 @@ from eazy_sdk.websocket import (
     ResubscribeFromStart,
     SubscriptionDisconnectedError,
     WsClientConfig,
-    frame_from_zapros,
     freeze_value,
     thaw_value,
 )
+from eazy_sdk.websocket.frames import frame_from_zapros
 from tests.websocket._support import FakeConnector, LiveFakeWebSocket, assert_no_task_leaks
 
 

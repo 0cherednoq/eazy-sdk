@@ -31,10 +31,7 @@ from eazy_sdk.models import default_model_adapters
 from eazy_sdk.websocket import (
     AsyncWsApi,
     AsyncWsClient,
-    EncodedFrame,
     Event,
-    FrameKind,
-    InboundFrame,
     JsonEventProtocol,
     JsonPayload,
     Message,
@@ -46,6 +43,7 @@ from eazy_sdk.websocket import (
     ws,
 )
 from eazy_sdk.websocket._crypto import unprotect_ws_frame
+from eazy_sdk.websocket._messages import EncodedFrame, FrameKind, InboundFrame
 from tests.websocket._support import FakeConnector, LiveFakeWebSocket, assert_no_task_leaks
 
 

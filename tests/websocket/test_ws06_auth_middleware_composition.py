@@ -12,19 +12,15 @@ from zapros.websocket import TextMessage
 import eazy_sdk.websocket.middleware as websocket_middleware
 from eazy_sdk.websocket import (
     AsyncWsClient,
-    ConnectionMiddlewareApplication,
     DynamicPerMessageAuth,
     HmacSha256MessageSignature,
     JsonEventProtocol,
-    MessageMiddlewareApplication,
     ProtocolAuth,
     ReconnectPolicy,
     ResubscribeFromStart,
-    RuntimeComposition,
     SecretBytes,
     SecretText,
     StaticUpgradeAuth,
-    SubscriptionMiddlewareApplication,
     WsClientConfig,
     WsContinue,
     WsDirection,
@@ -33,6 +29,12 @@ from eazy_sdk.websocket import (
     WsOutput,
     WsReject,
     WsScope,
+)
+from eazy_sdk.websocket.composition import RuntimeComposition
+from eazy_sdk.websocket.middleware import (
+    ConnectionMiddlewareApplication,
+    MessageMiddlewareApplication,
+    SubscriptionMiddlewareApplication,
 )
 from tests.websocket._support import FakeConnector, LiveFakeWebSocket, assert_no_task_leaks
 

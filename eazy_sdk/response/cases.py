@@ -728,10 +728,6 @@ class Responses[T]:
         )
 
 
-def JsonResponse[T](model: type[T]) -> Json[T]:
-    return Json(model)
-
-
 def _representation_result_type(
     representation: ResponseRepresentation[object],
 ) -> object | None:

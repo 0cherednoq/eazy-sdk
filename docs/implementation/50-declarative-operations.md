@@ -1300,3 +1300,16 @@ Docs-гейты обязательны с 50.4; на шагах 50.1–50.3 до
     `adaptix_models(models, retort=..., types=..., names=...)`, убирая `"dataclass"` из реестра.
     Оба свойства из плана выполняются: неоднозначности нет, а тип не из `types` обслуживается
     как раньше.
+36. **50.4.6 выполнен до 50.4.4** (2026-09-07): бюджет имён двигает имена между модулями, и
+    писать документацию до этого значило бы переписывать её дважды.
+37. **Список имён, уведённых из публичной поверхности** (2026-09-07), к 464 → 436:
+    из `eazy_sdk.websocket` — плумбинг кадров и логических сообщений (`ConnectionGeneration`,
+    `EncodedFrame`, `FrameKind`, `InboundFrame`, `LogicalMessage`, `MessageReservedOutput`,
+    `PreparedMessage`, `WsOperationKind`), граница zapros (`FrameLimits`, `frame_from_zapros`,
+    `frame_to_zapros`), результаты компиляции middleware (`*MiddlewareApplication`), скомпилированный
+    конвейер защиты (`ProtectionSnapshot`, `protection_snapshot`, `compile_message_transforms`,
+    `apply_*_transforms`) и `RuntimeComposition`; из `eazy_sdk.response` — `JsonResponse` (удалён:
+    дублировал `Json`), `HtmlExtractor`, `JsonExtractor`; из `eazy_sdk.request` —
+    `TransportProtocol`; из `eazy_sdk.serialization` — `accepts_media`; из `eazy_sdk.crypto` —
+    `ResolvedCrypto`. Имена остаются импортируемыми из своих модулей (`eazy_sdk.websocket._messages`
+    и т. д.); тесты переписаны на эти пути, ни одно ожидание не ослаблено.
