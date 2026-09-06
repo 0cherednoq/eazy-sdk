@@ -4117,3 +4117,34 @@ None. Phases 42-49 of the 0.3.0 architecture refactor are complete. Two items st
 recorded rather than pending: the a3 plan's metric 4.5 (<=300 public names, currently 435, needs a
 per-package pass over `websocket`, `crypto`, `request` and `protection.advanced`), and
 `PartialOutcome` for GraphQL-over-HTTP.
+
+## Phase 50 — declarative operations (2026-09-06)
+
+### State
+
+Active (50.1). An operation becomes a frozen model class published with `op(...)`; the
+decorator synthesizes the same class. Plan: `50-declarative-operations.md`; design:
+`eazy-sdk-declarative-operations.md`.
+
+### Delivered
+
+- **50.1.1** `scripts/surface_count.py` walks the modules an SDK author imports from and counts
+  the distinct objects behind their `__all__` names; `tests/unit/test_surface_count.py` (1 test).
+
+### Surface baseline
+
+`uv run python scripts/surface_count.py --total` on master before any phase-50 edit: **436**.
+Gate for the phase: the number after 50.4.6 is ≤ 436.
+
+### Decisions recorded
+
+(§10 of the plan, English; appended as the phase proceeds.)
+
+### Commands run
+
+| Command / gate | Result |
+|---|---|
+
+### Remaining work / blockers
+
+50.1.2 onwards.
