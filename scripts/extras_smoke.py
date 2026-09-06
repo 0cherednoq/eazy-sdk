@@ -83,6 +83,10 @@ CHECKS: dict[str, tuple[str, str]] = {
         "eazy-sdk-xml=={version}",
         "import eazy_sdk_xml",
     ),
+    "adaptix": (
+        "eazy-sdk-adaptix=={version}",
+        "import eazy_sdk_adaptix",
+    ),
 }
 
 

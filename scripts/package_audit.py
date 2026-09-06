@@ -31,6 +31,7 @@ PACKAGES = {
         "plugins/sqlmodel/pyproject.toml",
     ),
     "eazy_sdk_xml": ("eazy_sdk_xml/py.typed", "plugins/xml/pyproject.toml"),
+    "eazy_sdk_adaptix": ("eazy_sdk_adaptix/py.typed", "plugins/adaptix/pyproject.toml"),
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +61,8 @@ DISTRIBUTION_IMPORTS = {
     "eazy-sdk-openapi": ("eazy_sdk_openapi",),
     "eazy-sdk-asyncapi": ("eazy_sdk_asyncapi",),
     "eazy-sdk-xml": ("eazy_sdk_xml",),
+    "eazy-sdk-adaptix": ("eazy_sdk_adaptix",),
+    "adaptix": ("adaptix",),
 }
 
 FORBIDDEN_CORE = (
