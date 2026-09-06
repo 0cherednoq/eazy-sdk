@@ -10,6 +10,7 @@ from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
 from eazy_sdk.protection.advanced import SolverRequirement
 from eazy_sdk.protocols import Envelope
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 from eazy_sdk.response import Responses
@@ -38,6 +39,10 @@ class _OperationDeclaration[T]:
     input_schema: MethodInputSchema
     result_type: object
     responses: Responses[T] | object
+    operation_type: type[object] | None = None
+    """The operation class the fields were read from; ``None`` for a raw client call."""
+    projection: BodyProjection[Any, Any] | None = None
+    """The body projection, when the operation declares one."""
     base_url: str = ""
     """Service address declared by the router; empty means the client's own ``base_url``."""
     security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None

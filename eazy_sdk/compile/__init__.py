@@ -22,5 +22,5 @@ from .input import (
     MethodInputSchema as MethodInputSchema,
 )
 from .input import (
-    inspect_method_input as inspect_method_input,
+    inspect_operation_input as inspect_operation_input,
 )

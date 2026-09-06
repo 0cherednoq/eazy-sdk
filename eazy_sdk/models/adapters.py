@@ -81,6 +81,14 @@ class ModelAdapter(Protocol):
         registry: ModelAdapterRegistry,
     ) -> T: ...
 
+    def frozen(self, annotation: object) -> bool | None:
+        """Whether instances are immutable; ``None`` when the library has no such notion."""
+        ...
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        """A copy of ``value`` with ``changes`` applied, through the library's own function."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class ModelAdapterRegistry:
@@ -144,6 +152,22 @@ class ModelAdapterRegistry:
         adapter: str | None = None,
     ) -> T:
         return cast(T, self._load(annotation, value, adapter=adapter))
+
+    def evolve[T](self, value: T, /, **changes: object) -> T:
+        """A copy of a model value with some fields replaced.
+
+        The field names are checked here, once for every library, so a typo reads the same
+        whichever model class the operation is.
+        """
+
+        selected = self.adapter_for_value(value)
+        names = [field.name for field in selected.fields(type(value))]
+        unknown = [name for name in changes if name not in names]
+        if unknown:
+            raise ModelAdapterError(
+                f"{type(value).__name__} has no field {unknown[0]!r}; fields: {', '.join(names)}"
+            )
+        return cast(T, selected.evolve(value, changes))
 
     def _select(
         self,
@@ -339,6 +363,13 @@ class DataclassModelAdapter:
                 )
         return annotation(**kwargs)
 
+    def frozen(self, annotation: object) -> bool | None:
+        params = getattr(annotation, "__dataclass_params__", None)
+        return bool(params.frozen) if params is not None else None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        return dataclasses.replace(cast(Any, value), **changes)
+
 
 @dataclass(frozen=True, slots=True)
 class PydanticModelAdapter:
@@ -405,6 +436,15 @@ class PydanticModelAdapter:
     ) -> T:
         return cast(T, cast(Any, annotation).model_validate(value))
 
+    def frozen(self, annotation: object) -> bool | None:
+        config = getattr(annotation, "model_config", None)
+        return bool(config.get("frozen", False)) if isinstance(config, Mapping) else None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        # ``model_copy`` does not validate, which matches the dataclass and msgspec
+        # constructors: an operation value is built, not parsed.
+        return cast(Any, value).model_copy(update=dict(changes))
+
 
 @dataclass(frozen=True, slots=True)
 class MsgspecModelAdapter:
@@ -460,6 +500,15 @@ class MsgspecModelAdapter:
         import msgspec
 
         return msgspec.convert(value, type=annotation, strict=False)
+
+    def frozen(self, annotation: object) -> bool | None:
+        config = getattr(annotation, "__struct_config__", None)
+        return bool(config.frozen) if config is not None else None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        import msgspec
+
+        return msgspec.structs.replace(cast(Any, value), **changes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -535,6 +584,14 @@ class TypedDictModelAdapter:
                     f"missing required field {annotation.__name__}.{field.name}"
                 )
         return cast(T, result)
+
+    def frozen(self, annotation: object) -> bool | None:
+        return None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        if not isinstance(value, Mapping):
+            raise ModelAdapterError("TypedDict adapter evolves mappings only")
+        return {**value, **changes}
 
 
 def _adapter_fingerprint(adapter: ModelAdapter) -> str:
