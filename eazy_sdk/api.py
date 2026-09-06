@@ -23,6 +23,7 @@ from typing import (
     get_args,
     get_type_hints,
     overload,
+    runtime_checkable,
 )
 from urllib.parse import urlsplit
 
@@ -652,11 +653,36 @@ def _validate_envelope_placements(schema: MethodInputSchema, operation_id: str) 
             )
 
 
-def op[**P, T](operation: Callable[P, HttpOperation[T]], /) -> _OperationDescriptor[P, T]:
+@runtime_checkable
+class _PublishesItself[TDescriptor](Protocol):
+    """A non-HTTP operation class publishes its own router member.
+
+    This is the whole of what the HTTP side knows about the other protocols: ask the class
+    what it becomes on a router, and it answers with its own descriptor.
+    """
+
+    @classmethod
+    def __publish__(cls) -> TDescriptor: ...
+
+
+@overload
+def op[TDescriptor](operation: type[_PublishesItself[TDescriptor]], /) -> TDescriptor: ...
+
+
+@overload
+def op[**P, T](operation: Callable[P, HttpOperation[T]], /) -> _OperationDescriptor[P, T]: ...
+
+
+def op(operation: Any, /) -> Any:
     """Publish an operation class on a router with the constructor's own signature."""
 
     if not isinstance(operation, type):
         raise TypeError(f"op() expects an operation class, got {operation!r}")
+    publish = getattr(operation, "__publish__", None)
+    if callable(publish):
+        # A protocol that is not HTTP publishes itself: the HTTP side never learns its
+        # package exists, which is the layering the WS boundary test enforces.
+        return publish()
     if not issubclass(operation, HttpOperation):
         raise TypeError(
             "op() expects a subclass of HttpOperation, RpcOperation, WsCall, WsSubscribe "
@@ -668,7 +694,7 @@ def op[**P, T](operation: Callable[P, HttpOperation[T]], /) -> _OperationDescrip
             f"operation class {operation.__name__} has no __http__; assign Http.get(...) "
             "or another verb"
         )
-    return _OperationDescriptor(cast(type[HttpOperation[T]], operation), spec)
+    return _OperationDescriptor(operation, spec)
 
 
 class _ApiBase:

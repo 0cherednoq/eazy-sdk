@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overload
 
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.crypto import PayloadCrypto, WebSocketEncrypted
 
 from ._messages import WsOperationKind
@@ -68,8 +69,9 @@ class _BoundWsOperation[**P, T]:
         self._api = api
         self.__name__ = descriptor.__name__
         self.__doc__ = descriptor.__doc__
+        parameters = tuple(descriptor.signature.parameters.values())
         self.__signature__ = descriptor.signature.replace(
-            parameters=tuple(descriptor.signature.parameters.values())[1:]
+            parameters=parameters[1:] if descriptor.self_parameter is not None else parameters
         )
 
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
@@ -83,22 +85,41 @@ class _BoundWsOperation[**P, T]:
 
 
 class _WsOperationDescriptor[TApi, **P, T]:
+    """One WebSocket operation on a router, written as a class or as a decorated method.
+
+    Both forms end here with the same declaration: ``operation_type`` is the class the
+    fields were read from, and for a decorated method it is the class the decorator wrote.
+    """
+
     def __init__(
         self,
-        function: Callable[..., object],
+        function: Callable[..., object] | None,
         declaration: _WsOperationDeclaration,
         crypto: object,
         encrypted: object,
+        *,
+        operation_type: type[object] | None = None,
+        models: object = None,
     ) -> None:
         self.function = function
         self.declaration = declaration
         self.crypto = crypto
         self.encrypted = encrypted
-        self.signature = inspect.signature(function)
-        self.self_parameter = next(iter(self.signature.parameters))
-        self.__name__ = function.__name__
-        self.__qualname__ = function.__qualname__
-        self.__doc__ = function.__doc__
+        self.operation_type = operation_type
+        self.models = models
+        if function is not None:
+            self.signature = inspect.signature(function)
+            self.self_parameter: str | None = next(iter(self.signature.parameters))
+            self.__name__ = function.__name__
+            self.__qualname__ = function.__qualname__
+            self.__doc__ = function.__doc__
+        else:
+            owner = cast(type[object], operation_type)
+            self.signature = inspect.signature(owner)
+            self.self_parameter = None
+            self.__name__ = owner.__name__
+            self.__qualname__ = owner.__qualname__
+            self.__doc__ = owner.__doc__
         self.__signature__ = self.signature
 
     def resolve(self, defaults: WsApiDefaults) -> _WsOperationDeclaration:
@@ -130,12 +151,29 @@ class _WsOperationDescriptor[TApi, **P, T]:
             raise TypeError("WebSocket operation must be bound to AsyncWsApi")
         return _BoundWsOperation(cast(Any, self), instance)
 
+    def __set_name__(self, owner: type[object], name: str) -> None:
+        """D-22: a WebSocket operation belongs to an ``AsyncWsApi`` and to nothing else."""
+
+        if not issubclass(owner, AsyncWsApi):
+            raise PlanError(
+                f"WebSocket operation {self.__name__} is published on {owner.__name__}; "
+                "WebSocket operations belong to AsyncWsApi"
+            )
+
     def bind(
         self,
         api: object,
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> tuple[dict[str, object], WsCallOptions | None]:
+        if self.self_parameter is None:
+            options = kwargs.pop("options", None)
+            if options is not None and not isinstance(options, WsCallOptions):
+                raise TypeError("options must be WsCallOptions or None")
+            # The class constructor applies its own defaults and refuses what it does not
+            # declare, so the payload is exactly what the operation says it is.
+            request = cast(type[Any], self.operation_type)(*args, **kwargs)
+            return self.values_of(request), options
         bound = self.signature.bind(api, *args, **kwargs)
         bound.apply_defaults()
         bound.arguments.pop(self.self_parameter)
@@ -143,6 +181,18 @@ class _WsOperationDescriptor[TApi, **P, T]:
         if options is not None and not isinstance(options, WsCallOptions):
             raise TypeError("options must be WsCallOptions or None")
         return dict(bound.arguments), options
+
+    def values_of(self, request: object) -> dict[str, object]:
+        """The payload fields of a request value, by their Python names."""
+
+        from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+
+        models = self.models if isinstance(self.models, ModelAdapterRegistry) else None
+        registry = models or default_model_adapters()
+        owner = cast(type[object], self.operation_type)
+        return {
+            field.name: getattr(request, field.name) for field in registry.fields(owner)
+        }
 
 
 class AsyncWsApi:
@@ -154,6 +204,15 @@ class AsyncWsApi:
         for name in dir(cls):
             descriptor = inspect.getattr_static(cls, name)
             if not isinstance(descriptor, _WsOperationDescriptor):
+                # D-23: an HTTP or RPC operation has a URL and a status line; a WebSocket
+                # router has neither, so it cannot carry one.
+                if getattr(descriptor, "spec", None) is not None and hasattr(
+                    descriptor, "operation_type"
+                ):
+                    raise PlanError(
+                        f"HTTP operation {name} is published on {cls.__name__}; "
+                        "an AsyncWsApi carries WebSocket operations"
+                    )
                 continue
             operation_id = descriptor.declaration.operation_id
             if operation_id in operation_ids:

@@ -60,6 +60,7 @@ from .middleware import (
     WsReject,
     WsScope,
 )
+from .operation import Ws, WsCall, WsSend, WsSubscribe
 from .policies import (
     NeverReplay,
     NeverResubscribe,
@@ -191,7 +192,9 @@ __all__ = [
     "Timestamp",
     "UnexpectedMessageError",
     "WebSocketError",
+    "Ws",
     "WsApiDefaults",
+    "WsCall",
     "WsCallOptions",
     "WsCallTimeoutError",
     "WsClientClosedError",
@@ -209,7 +212,9 @@ __all__ = [
     "WsReject",
     "WsReplayPolicy",
     "WsScope",
+    "WsSend",
     "WsSessionState",
+    "WsSubscribe",
     "apply_inbound_frame_transforms",
     "apply_inbound_message_transforms",
     "apply_outbound_frame_transforms",
