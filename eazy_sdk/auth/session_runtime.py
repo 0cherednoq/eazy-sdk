@@ -98,6 +98,12 @@ class AuthFlowContext[TSdk]:
         return tuple(self._responses)
 
 
+def unbound_sdk(_graph: ResolutionGraph) -> Any:
+    """Placeholder factory replaced by the identity that owns this session."""
+
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class SessionAuth[TCredentials, TSession, TSdk]:
     scheme: AuthScheme[TSession]
@@ -136,6 +142,10 @@ class SessionProvider[TCredentials, TSession, TSdk]:
         )
 
     def bind_sdk_factory(self, factory: Callable[[ResolutionGraph], object]) -> None:
+        """Adopt the identity's scoped SDK, unless this session declared its own."""
+
+        if self.config.sdk_factory is not unbound_sdk:
+            return
         self._sdk_factory = cast(Callable[[ResolutionGraph], TSdk], factory)
 
     @property
@@ -490,7 +500,7 @@ def _build_session_auth[TCredentials, TSession](
     config = SessionAuth(
         scheme=selected_scheme,
         key=key,
-        sdk_factory=lambda _graph: None,
+        sdk_factory=unbound_sdk,
         store=selected_store,
         validate=schema.is_valid,
         credentials=credentials,
@@ -638,7 +648,7 @@ def session_cookie[TCredentials, TResult](
     config = SessionAuth(
         scheme=scheme,
         key=SessionKey(f"cookie:{identity or 'client'}"),
-        sdk_factory=lambda _graph: None,
+        sdk_factory=unbound_sdk,
         store=store or MemorySessionStore[HttpCookieSession](),
         validate=lambda value: value.is_active(clock()),
         credentials=credentials,

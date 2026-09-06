@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pytest_httpserver import HTTPServer
 
-from eazy_sdk import AsyncApi, SyncApi, api
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.auth import (
     ApiKeyScheme,
     Auth,
@@ -43,12 +43,15 @@ class _HarnessOperation:
     sync_api: type[SyncApi]
 
     async def run_async(
-        self, client: Any, options: CallOptions | None
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
     ) -> NormalizedResponse[object]:
-        return await self.async_api(client).call(options=options)  # type: ignore[attr-defined,no-any-return]
+        bound = self.async_api(client, identity=identity)
+        return await bound.call(options=options)  # type: ignore[attr-defined,no-any-return]
 
-    def run_sync(self, client: Any, options: CallOptions | None) -> NormalizedResponse[object]:
-        return self.sync_api(client).call(options=options)  # type: ignore[attr-defined,no-any-return]
+    def run_sync(
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
+    ) -> NormalizedResponse[object]:
+        return self.sync_api(client, identity=identity).call(options=options)  # type: ignore[attr-defined,no-any-return]
 
 
 def _operation(

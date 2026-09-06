@@ -12,6 +12,7 @@ from eazy_sdk import (
     AsyncApi,
     AsyncRoot,
     Client,
+    Identity,
     PreparationIncompleteError,
     PreparedCall,
     PrepareOptions,
@@ -20,7 +21,7 @@ from eazy_sdk import (
     api,
     api_group,
 )
-from eazy_sdk.auth import BearerScheme
+from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
@@ -344,13 +345,9 @@ def test_pure_prepare_reports_managed_requirements_and_full_mode_redacts_them() 
         scheme,
         StaticAuthProvider(scheme, "token", AuthProviderIdentity("phase25")),
     )
-    runtime = ExecutionRuntime(
-        CAPABILITIES,
-        lambda *args, **kwargs: None,
-        "https://api.test",
-        auth=providers,
-    )
-    operation: Any = SecuredApi(_SyncClientCore(runtime)).secured
+    runtime = ExecutionRuntime(CAPABILITIES, lambda *args, **kwargs: None, "https://api.test")
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    operation: Any = SecuredApi(_SyncClientCore(runtime), identity=identity).secured
 
     with pytest.raises(PreparationIncompleteError) as captured:
         operation.prepare()

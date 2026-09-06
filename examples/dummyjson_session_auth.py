@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Annotated, Self, TypedDict, Unpack
 
 import httpx
@@ -22,6 +22,7 @@ from eazy_sdk import (
     Binding,
     ClientConfig,
     HandlerProfile,
+    Identity,
     api,
     api_group,
 )
@@ -156,20 +157,23 @@ class DummyJsonSdk(AsyncRoot):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> Self:
+        if identity is not None:
+            raise ValueError("identity cannot be combined with credentials or session")
         auth = DUMMYJSON_SESSION.configure(
             credentials=credentials,
             session=session,
             service=DummyJsonLoginService(),
         )
-        config = replace(config or ClientConfig(timeout=20), auth=auth)
         return super().from_handler(
             handler=handler,
             base_url=base_url,
-            config=config,
+            config=config or ClientConfig(timeout=20),
             owns_handler=owns_handler,
             profile=profile,
             bindings=bindings,
+            identity=Identity(auth=(auth,)),
         )
 
 

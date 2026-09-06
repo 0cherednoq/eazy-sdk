@@ -6,9 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from eazy_sdk.auth import Auth
 from eazy_sdk.crypto import CryptoRegistry
-from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.middleware import MiddlewareRegistration
 from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
@@ -21,7 +19,7 @@ from eazy_sdk.ratelimit_runtime import RateLimiter
 from eazy_sdk.request import WireProfile
 
 from .base import CallOptions, RetryPolicy
-from .executor import ExecutionRuntime, KeyProvider, Observer
+from .executor import ExecutionRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,13 +31,9 @@ class ClientConfig:
     the retry policy. ``with_protection()`` returns a copy with more guards installed.
     """
 
-    auth: Auth | None = None
-    dependencies: DependencyRegistry | None = None
     protection: ProtectionBundle | None = None
     middleware: tuple[MiddlewareRegistration, ...] = ()
     rate_limiter: RateLimiter | None = None
-    key_provider: KeyProvider | None = None
-    observer: Observer | None = None
     models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
     profile: WireProfile | None = None
     retry: RetryPolicy = field(default_factory=RetryPolicy.none)
@@ -114,14 +108,10 @@ def _runtime_from_boundary(
     allow_async_crypto: bool,
     protection_session_owner: object | None = None,
 ) -> ExecutionRuntime:
-    from eazy_sdk.auth.core import AuthProviders
-    from eazy_sdk.dependencies import DependencyRegistry
     return ExecutionRuntime(
         handler_profile=profile,
         send=send,
         base_url=base_url,
-        dependencies=config.dependencies or DependencyRegistry(),
-        auth=(config.auth._runtime_providers() if config.auth is not None else AuthProviders()),
         operation_protections=config.bundle.operation_protections,
         before_call_policies=config.bundle.before_call_policies,
         challenge_policies=config.bundle.challenge_policies,
@@ -129,8 +119,6 @@ def _runtime_from_boundary(
         protection_session_owner=protection_session_owner,
         middleware=config.middleware,
         limiter=config.rate_limiter,
-        key_provider=config.key_provider,
-        observer=config.observer,
         models=config.models,
         profile=config.profile,
         crypto=config.crypto or CryptoRegistry(),

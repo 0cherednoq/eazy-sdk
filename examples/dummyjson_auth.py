@@ -7,7 +7,7 @@ from typing import Annotated, TypedDict, Unpack
 
 from pydantic import BaseModel, Field, SecretStr
 
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Identity, SyncApi, api
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import JsonField
@@ -96,13 +96,13 @@ def login(credentials: LoginCredentials) -> LoginSession:
 
 
 def current_user(session: LoginSession) -> CurrentUser:
-    auth = USER_BEARER.static(session.access_token.get_secret_value())
+    identity = Identity(auth=(USER_BEARER.static(session.access_token.get_secret_value()),))
     with Client(
         base_url=BASE_URL,
         handler=HttpxHandler(),
-        config=ClientConfig(auth=auth, timeout=20),
+        config=ClientConfig(timeout=20),
     ) as client:
-        return DummyJsonUsersApi(client).me()
+        return DummyJsonUsersApi(client, identity=identity).me()
 
 
 def main() -> None:

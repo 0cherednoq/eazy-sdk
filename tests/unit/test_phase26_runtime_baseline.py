@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, cast
 
-from eazy_sdk import AsyncApi, SyncApi, api
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.clients.async_client import _AsyncClientCore
 from eazy_sdk.clients.executor import ExecutionRuntime
@@ -82,24 +82,12 @@ def test_http_transition_trace_and_fingerprint_are_frozen_before_stage_extractio
 
     options = CallOptions(max_attempts=2, transport_retries=1)
     sync_api = TraceApi(
-        _SyncClientCore(
-            ExecutionRuntime(
-                CAPABILITIES,
-                sync_send,
-                "https://api.test",
-                observer=_observer(sync_trace),
-            )
-        )
+        _SyncClientCore(ExecutionRuntime(CAPABILITIES, sync_send, "https://api.test")),
+        identity=Identity(observer=_observer(sync_trace)),
     )
     async_api = AsyncTraceApi(
-        _AsyncClientCore(
-            ExecutionRuntime(
-                CAPABILITIES,
-                async_send,
-                "https://api.test",
-                observer=_observer(async_trace),
-            )
-        )
+        _AsyncClientCore(ExecutionRuntime(CAPABILITIES, async_send, "https://api.test")),
+        identity=Identity(observer=_observer(async_trace)),
     )
 
     assert sync_api.trace(options=options) == {"ok": True}

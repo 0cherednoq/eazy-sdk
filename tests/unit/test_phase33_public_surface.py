@@ -194,9 +194,10 @@ def test_client_config_groups_protection_into_one_bundle() -> None:
     assert ClientConfig().bundle == ProtectionBundle()
     assert not ClientConfig().bundle
     parameters = inspect.signature(ClientConfig).parameters
-    assert {"protection", "guards", "retry", "auth", "timeout"} <= set(parameters)
+    assert {"protection", "guards", "retry", "timeout"} <= set(parameters)
     for removed in ("operation_protections", "before_call_policies", "challenge_policies",
-                    "solver_bindings", "challenge_solvers", "operation_protection_solvers"):
+                    "solver_bindings", "challenge_solvers", "operation_protection_solvers",
+                    "auth", "key_provider", "dependencies", "observer"):
         assert removed not in parameters
     with pytest.raises(TypeError, match="ProtectionBundle"):
         ClientConfig(protection=object())  # type: ignore[arg-type]

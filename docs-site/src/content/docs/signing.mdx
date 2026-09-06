@@ -11,13 +11,13 @@ api_fingerprint: "sha256:d5b2d146f4a67efeaaaf7f15220db08a5f21a39a7e3cb34b2376c46
 ---
 
 Создайте `RequestSignature` из typed компонентов и передайте его в `signing=` decorator или в
-атрибут `signing` роутера. Key provider задаётся через `ClientConfig`; secret не входит в
-operation arguments.
+атрибут `signing` роутера. Ключи приходят из `Identity(key_provider=…)`: алгоритм — контракт API,
+ключ — секрет вызывающей стороны. Secret не входит в operation arguments.
 
 ```python
 from typing import Annotated, TypedDict, Unpack
 
-from eazy_sdk import AsyncApi, ClientConfig, api
+from eazy_sdk import AsyncApi, Identity, api
 from eazy_sdk.request import (
     JsonField,
     SigningKey,
@@ -59,7 +59,7 @@ def load_signing_key(requirement: SigningKeyRequirement) -> SigningKey:
         return SigningKey("replace-with-secret")
     raise LookupError(requirement.name)
 
-config = ClientConfig(key_provider=load_signing_key)
+identity = Identity(key_provider=load_signing_key)
 ```
 
 Eazy SDK сначала сериализует точные bytes, затем считает digest и добавляет signature header.

@@ -7,7 +7,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.crypto import (
     CryptoConfigurationError,
     CryptoContext,
@@ -153,6 +153,10 @@ class SigningCollisionApi(AsyncApi):
         raise AssertionError
 
 
+def _identity() -> Identity:
+    return Identity(dependencies=_dependencies())
+
+
 def _dependencies() -> DependencyRegistry:
     registry = DependencyRegistry()
     registry.register(TENANT_DEPENDENCY, TenantProvider("acme"))
@@ -179,10 +183,10 @@ async def test_http_async_resolves_typed_aad_and_binds_declared_metadata() -> No
             base_url="https://api.example",
             transport=httpx.MockTransport(handler),
         ),
-        config=ClientConfig(dependencies=_dependencies()),
     )
     try:
-        result = await AsyncMetadataApi(client).send(body=Payload(value="request"))
+        bound = AsyncMetadataApi(client, identity=_identity())
+        result = await bound.send(body=Payload(value="request"))
     finally:
         await client.aclose()
     assert result == Payload(value="response")
@@ -194,10 +198,9 @@ def test_http_sync_uses_the_same_typed_aad_and_metadata_contract() -> None:
             base_url="https://api.example",
             transport=httpx.MockTransport(_response),
         ),
-        config=ClientConfig(dependencies=_dependencies()),
     )
     try:
-        result = SyncMetadataApi(client).send(body=Payload(value="request"))
+        result = SyncMetadataApi(client, identity=_identity()).send(body=Payload(value="request"))
     finally:
         client.close()
     assert result == Payload(value="response")
@@ -217,11 +220,12 @@ async def test_http_metadata_collision_with_signing_fails_before_transport() -> 
             base_url="https://api.example",
             transport=httpx.MockTransport(handler),
         ),
-        config=ClientConfig(dependencies=_dependencies()),
     )
     try:
         with pytest.raises(CryptoConfigurationError, match="signing outputs"):
-            await SigningCollisionApi(client).send(body=Payload(value="request"))
+            await SigningCollisionApi(client, identity=_identity()).send(
+                body=Payload(value="request")
+            )
     finally:
         await client.aclose()
     assert calls == 0

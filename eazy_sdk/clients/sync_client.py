@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from eazy_sdk.auth.lifecycle import LifecycleGraph
 from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
+from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
 
@@ -52,9 +53,10 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         *,
         options: CallOptions | None = None,
         with_response: bool,
+        identity: _IdentityScope | None = None,
     ) -> T | ResponseEnvelope[T, TRaw]:
         call = declaration.call(values)
-        result = self._run(call, options)
+        result = self._run(call, options, identity)
         if with_response:
             return envelope(result)
         return cast(T, result.value)
@@ -72,7 +74,7 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         options: CallOptions | None = None,
     ) -> NormalizedResponse[TRaw]:
         call = _raw_call(method, url, params, headers, cookies, json, content)
-        return cast(NormalizedResponse[TRaw], self._run(call, options).value)
+        return cast(NormalizedResponse[TRaw], self._run(call, options, None).value)
 
     def _prepare_operation[T](
         self,
@@ -80,9 +82,12 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         values: dict[str, object],
         *,
         options: PrepareOptions,
+        identity: _IdentityScope | None = None,
     ) -> PreparedCall:
         return self._runner.run(
-            self._core.prepare(declaration.call(values), options=self._prepare_options(options))
+            self._core_for(identity).prepare(
+                declaration.call(values), options=self._prepare_options(options)
+            )
         )
 
     def close(self) -> None:
@@ -103,9 +108,10 @@ class _SyncClientCore[TRaw = object](_ClientCore[TRaw]):
         self,
         call: _OperationCall[T],
         options: CallOptions | None,
+        identity: _IdentityScope | None = None,
     ) -> Any:
         return self._runner.run(
-            self._core.execute(call, options=options or self._default_options)
+            self._core_for(identity).execute(call, options=options or self._default_options)
         )
 
 

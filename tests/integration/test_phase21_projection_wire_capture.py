@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pytest_httpserver import HTTPServer
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, Identity, api
 from eazy_sdk.crypto import (
     CryptoContext,
     FrozenValue,
@@ -115,10 +115,8 @@ async def test_projected_crypto_and_signature_match_localhost_first_hop(
     async with AsyncClient(
         base_url=httpserver.url_for("/"),
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(
-            key_provider=lambda _requirement: SigningKey(b"capture-secret")
-        ),
     ) as client:
-        await CaptureApi(client).capture(secret="visible")
+        identity = Identity(key_provider=lambda _requirement: SigningKey(b"capture-secret"))
+        await CaptureApi(client, identity=identity).capture(secret="visible")
 
     httpserver.check()

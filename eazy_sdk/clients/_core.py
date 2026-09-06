@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Coroutine, Mapping
 from dataclasses import replace
 from typing import Any
 from urllib.parse import unquote_plus, urlsplit
@@ -15,6 +15,7 @@ from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaratio
 from eazy_sdk.compile.input import InputField, MethodInputSchema
 from eazy_sdk.core.http import RequestLocation
 from eazy_sdk.core.http_plan import RequestScope
+from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PrepareOptions
 from eazy_sdk.protection.advanced import InstallableProtection
 from eazy_sdk.request import (
@@ -52,21 +53,16 @@ class _ClientCore[TRaw = object]:
         self._can_bind_sdk = bind_sdk
         self.raw = raw
 
-    def _register_sdk_factory(self, sdk_factory: Callable[[Any], object]) -> None:
-        """Register the scoped lifecycle factory without building a root of its own."""
+    def _core_for(self, identity: _IdentityScope | None) -> ExecutionCore:
+        """Execution core for one session scope; the transport runtime stays shared."""
 
-        if not callable(sdk_factory):
-            raise TypeError("SDK binding requires a callable root factory")
-        if self._can_bind_sdk:
-            self._runtime.auth.bind_sdk_factory(
-                lambda graph: sdk_factory(self._scoped(graph))
-            )
-
-    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk:
-        """Create an SDK root and register its scoped lifecycle factory."""
-
-        self._register_sdk_factory(sdk_factory)
-        return sdk_factory(self)
+        if identity is None:
+            return self._core
+        return ExecutionCore(
+            self._runtime,
+            identity=identity,
+            resolution_graph=self._resolution_graph,
+        )
 
     def _scoped(self, graph: LifecycleGraph) -> _ClientCore[TRaw]:
         raise NotImplementedError

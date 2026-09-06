@@ -140,12 +140,11 @@ descriptor связывает аргументы и передаёт вызов 
 ## 3. Вызовите login из auth service
 
 ```python
-from dataclasses import replace
 from typing import Self
 
 from zapros import AsyncBaseHandler
 
-from eazy_sdk import AsyncRoot, Binding, ClientConfig, HandlerProfile, api_group
+from eazy_sdk import AsyncRoot, Binding, ClientConfig, HandlerProfile, Identity, api_group
 from eazy_sdk.auth import AuthContext
 
 class LoginService:
@@ -176,20 +175,23 @@ class AuthSdk(AsyncRoot):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> Self:
+        if identity is not None:
+            raise ValueError("identity cannot be combined with credentials or session")
         auth = USER_SESSION.configure(
             credentials=credentials,
             session=session,
             service=LoginService(),
         )
-        config = replace(config or ClientConfig(timeout=20), auth=auth)
         return super().from_handler(
             handler=handler,
             base_url=base_url,
-            config=config,
+            config=config or ClientConfig(timeout=20),
             owns_handler=owns_handler,
             profile=profile,
             bindings=bindings,
+            identity=Identity(auth=(auth,)),
         )
 ```
 
@@ -200,10 +202,10 @@ Service преобразует `LoginCredentials` в именованные ар
 `AuthSdk` наследует `AsyncRoot`: `api_group(...)` объявляет роутеры, а `from_handler`,
 `aclose()` и `async with` уже есть в базовом классе. Override `from_handler` повторяет сигнатуру
 базовой фабрики и добавляет только lifecycle input — `credentials=` для login или `session=` для
-готовой session. `USER_SESSION.configure(...)` передаёт service в auth runtime,
-`replace(config, auth=auth)` подключает runtime к `ClientConfig` (это frozen dataclass, поэтому
-копия создаётся через `dataclasses.replace`), а конструктор корня сам регистрирует фабрику scoped
-SDK для `context.sdk`. Именно так устроен root класс, который эмитит OpenAPI-генератор.
+готовой session. `USER_SESSION.configure(...)` передаёт service в auth runtime, готовый `Auth`
+кладётся в `Identity(auth=(auth,))` — сессия принадлежит вызывающей стороне, а не транспорту, —
+а конструктор корня сам регистрирует фабрику scoped SDK для `context.sdk`. Именно так устроен root
+класс, который эмитит OpenAPI-генератор.
 
 ## 4. Создайте hand-written SDK
 

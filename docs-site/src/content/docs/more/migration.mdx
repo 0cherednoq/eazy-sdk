@@ -25,6 +25,19 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.AsyncApi.aclose` | `eazy_sdk.AsyncRoot.aclose` | То же для async. |
 | `eazy_sdk.ApiDefaults` | `eazy_sdk.SyncApi` | Дефолты роутера стали обычными атрибутами класса и наследуются по MRO. |
 
+Аутентификация уехала из транспорта в session scope. `Identity` объявляет auth-схемы, ключи
+подписи, DI и observer; он передаётся корню (`ShopSdk(client, identity=…)`) или отдельному роутеру
+(`UsersApi(client, identity=…)`). Один `Identity` обслуживает все сервисы корня — и когда они делят
+клиент, и когда у каждого свой.
+
+| Было | Стало | Комментарий |
+|---|---|---|
+| `eazy_sdk.ClientConfig.auth` | `eazy_sdk.Identity.auth` | Кортеж настроенных `Auth`; `session_auth(...)`/`SessionScheme.configure(...)` не изменились. |
+| `eazy_sdk.ClientConfig.key_provider` | `eazy_sdk.Identity.key_provider` | Алгоритм подписи — контракт API, ключ — секрет вызывающей стороны. |
+| `eazy_sdk.ClientConfig.dependencies` | `eazy_sdk.Identity.dependencies` | DI зависит от окружения вызова, а не от пула соединений. |
+| `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
+| `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
+
 Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
 другому клиенту и/или адресу при сборке (`bindings=(...)`).
 

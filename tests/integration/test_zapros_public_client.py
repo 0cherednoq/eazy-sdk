@@ -8,7 +8,7 @@ from typing import Annotated
 from eazy_sdk_html import CSS
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import Client, ClientConfig, RetryPolicy, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Identity, RetryPolicy, SyncApi, api
 from eazy_sdk.request import (
     JsonBody,
     SigningKey,
@@ -74,14 +74,11 @@ def test_retry_builds_and_signs_fresh_exact_body_through_zapros() -> None:
         return SigningKey(key)
 
     handler = RetrySigningHandler(keys)
-    config = ClientConfig(
-        key_provider=key_provider,
-        retry=RetryPolicy.safe(max_attempts=2),
-        auth_retries=0,
-    )
+    config = ClientConfig(retry=RetryPolicy.safe(max_attempts=2), auth_retries=0)
 
     with Client(base_url="https://example.test", handler=handler, config=config) as client:
-        result = SignedApi(client).send(body={"z": 1, "a": 2})
+        identity = Identity(key_provider=key_provider)
+        result = SignedApi(client, identity=identity).send(body={"z": 1, "a": 2})
 
     assert result == {"ok": True}
     assert keys == [b"secret-1", b"secret-2"]

@@ -7,8 +7,8 @@ from typing import Annotated, Any, cast
 
 import pytest
 
-from eazy_sdk import AsyncApi, SyncApi, api
-from eazy_sdk.auth import BearerScheme
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
+from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import (
     CallOptions,
@@ -26,6 +26,7 @@ from eazy_sdk.handlers import (
     RedirectControl,
     TransportError,
 )
+from eazy_sdk.identity import _identity_scope
 from eazy_sdk.middleware import (
     AttemptRequestContext,
     CallMiddlewareContext,
@@ -167,12 +168,14 @@ def execute_sync(
     values: dict[str, object] | None = None,
     *,
     options: CallOptions | None = None,
+    identity: Any = None,
 ) -> Any:
     return client._execute_operation(
         declaration,
         values or {},
         options=options,
         with_response=False,
+        identity=identity,
     )
 
 
@@ -211,14 +214,14 @@ def test_sync_and_async_clients_use_the_same_core() -> None:
     def async_observer(phase: str, value: object | None) -> None:
         async_trace.append(phase)
 
-    sync_client = _SyncClientCore(
-        ExecutionRuntime(CAPABILITIES, sync_emit, "https://api.test", observer=sync_observer)
-    )
+    sync_client = _SyncClientCore(ExecutionRuntime(CAPABILITIES, sync_emit, "https://api.test"))
     async_client = _AsyncClientCore(
-        ExecutionRuntime(CAPABILITIES, async_emit, "https://api.test", observer=async_observer)
+        ExecutionRuntime(CAPABILITIES, async_emit, "https://api.test")
     )
-    sync_value = ItemsApi(sync_client).items(page=2)
-    async_value = asyncio.run(AsyncItemsApi(async_client).items(page=2))
+    sync_value = ItemsApi(sync_client, identity=Identity(observer=sync_observer)).items(page=2)
+    async_value = asyncio.run(
+        AsyncItemsApi(async_client, identity=Identity(observer=async_observer)).items(page=2)
+    )
     assert sync_value == async_value == {"ok": True}
     assert sync_trace == async_trace == ["start_attempt", "prepared", "emit"]
 
@@ -354,13 +357,13 @@ def test_redirect_restarts_preparation_and_recomputes_scope() -> None:
                 Scoped("other"), scope=RequestScope(hosts=frozenset({"other.test"}))
             ),
         ),
-        key_provider=key_provider,
     )
     signed = dataclass_replace(contract(), signing=(signature,))
     value = execute_sync(
         _SyncClientCore(runtime),
         signed,
         options=CallOptions(max_attempts=2, max_redirects=1),
+        identity=_identity_scope(Identity(key_provider=key_provider)),
     )
     assert value == {"ok": True}
     assert targets == ["https://api.test/items", "https://other.test/final"]
@@ -451,10 +454,13 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         solver_bindings=SolverBindings(
             bind_solver(requirement, Solver())
         ),
-        key_provider=key_provider,
     )
 
-    assert execute_sync(_SyncClientCore(runtime), declaration) == {"ok": True}
+    assert execute_sync(
+        _SyncClientCore(runtime),
+        declaration,
+        identity=_identity_scope(Identity(key_provider=key_provider)),
+    ) == {"ok": True}
     assert len(requests) == 2
     assert requests[0] is not requests[1]
     assert key_calls == 2
@@ -586,11 +592,15 @@ def test_auth_rate_limit_signing_and_emit_have_fixed_order() -> None:
         CAPABILITIES,
         emit,
         "https://api.test",
-        auth=providers,
         limiter=Limiter(),
-        key_provider=key_provider,
     )
-    assert execute_sync(_SyncClientCore(runtime), signed) == {"ok": True}
+    assert execute_sync(
+        _SyncClientCore(runtime),
+        signed,
+        identity=_identity_scope(
+            Identity(auth=(Auth._bind(bearer, providers),), key_provider=key_provider)
+        ),
+    ) == {"ok": True}
     assert events == ["auth", "rate", "sign", "emit"]
 
 

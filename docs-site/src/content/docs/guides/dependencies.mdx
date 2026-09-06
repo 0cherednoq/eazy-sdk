@@ -29,21 +29,21 @@ class PaymentsApi(AsyncApi):
 query, cookie или body. Cache policies: `NONE`, `CLIENT`, `CALL`, `ATTEMPT`. Dependency patch
 проверяется атомарно до request side effects.
 
-Регистрируйте implementation на клиенте, а не в операции:
+Регистрируйте implementation в identity вызывающей стороны, а не в операции:
 
 ```python
-from eazy_sdk import ClientConfig
+from eazy_sdk import Identity
 from eazy_sdk.dependencies import DependencyRegistry
 
 dependencies = DependencyRegistry()
 dependencies.register(DEVICE_SPEC, load_device_context)
-config = ClientConfig(dependencies=dependencies)
+identity = Identity(dependencies=dependencies)
 ```
 
 | Cache policy | Повторное вычисление |
 |---|---|
 | `NONE` | Каждый resolver access |
-| `CLIENT` | Один раз на client lifetime |
+| `CLIENT` | Один раз на lifetime роутера |
 | `CALL` | Один раз на logical API call |
 | `ATTEMPT` | Для каждой retry/redirect attempt |
 

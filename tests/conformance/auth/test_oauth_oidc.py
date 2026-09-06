@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("pytest_iam", reason="install the auth-conformance dependency group")
 
-from eazy_sdk import AsyncApi, SyncApi, api
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.auth import Auth, BasicScheme, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions
@@ -37,7 +37,7 @@ class _FormOperation:
     values: dict[str, str]
 
     async def run_async(
-        self, client: Any, options: CallOptions | None
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
     ) -> NormalizedResponse[object]:
         class Api(AsyncApi):
             @api.post(
@@ -59,9 +59,11 @@ class _FormOperation:
             ) -> NormalizedResponse[object]:
                 raise NotImplementedError
 
-        return await Api(client).token(**self.values, options=options)
+        return await Api(client, identity=identity).token(**self.values, options=options)
 
-    def run_sync(self, client: Any, options: CallOptions | None) -> NormalizedResponse[object]:
+    def run_sync(
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
+    ) -> NormalizedResponse[object]:
         class Api(SyncApi):
             @api.post(
                 self.url,
@@ -82,7 +84,7 @@ class _FormOperation:
             ) -> NormalizedResponse[object]:
                 raise NotImplementedError
 
-        return Api(client).token(**self.values, options=options)
+        return Api(client, identity=identity).token(**self.values, options=options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +94,7 @@ class _GetOperation:
     security: object | None = None
 
     async def run_async(
-        self, client: Any, options: CallOptions | None
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
     ) -> NormalizedResponse[object]:
         class Api(AsyncApi):
             @api.get(
@@ -107,9 +109,11 @@ class _GetOperation:
             ) -> NormalizedResponse[object]:
                 raise NotImplementedError
 
-        return await Api(client).value(options=options)
+        return await Api(client, identity=identity).value(options=options)
 
-    def run_sync(self, client: Any, options: CallOptions | None) -> NormalizedResponse[object]:
+    def run_sync(
+        self, client: Any, options: CallOptions | None, identity: Identity | None = None
+    ) -> NormalizedResponse[object]:
         class Api(SyncApi):
             @api.get(
                 self.url,
@@ -123,7 +127,7 @@ class _GetOperation:
             ) -> NormalizedResponse[object]:
                 raise NotImplementedError
 
-        return Api(client).value(options=options)
+        return Api(client, identity=identity).value(options=options)
 
 
 def _oauth_client(iam_server: Any, *, client_id: str) -> Any:

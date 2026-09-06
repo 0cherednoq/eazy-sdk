@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from eazy_sdk.auth.lifecycle import LifecycleGraph
 from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
+from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.response import NormalizedResponse, ResponseEnvelope
 
@@ -33,9 +34,10 @@ class _AsyncClientCore[TRaw = object](_ClientCore[TRaw]):
         *,
         options: CallOptions | None = None,
         with_response: bool,
+        identity: _IdentityScope | None = None,
     ) -> T | ResponseEnvelope[T, TRaw]:
         call = declaration.call(values)
-        result = await self._run(call, options)
+        result = await self._run(call, options, identity)
         if with_response:
             return envelope(result)
         return cast(T, result.value)
@@ -53,7 +55,7 @@ class _AsyncClientCore[TRaw = object](_ClientCore[TRaw]):
         options: CallOptions | None = None,
     ) -> NormalizedResponse[TRaw]:
         call = _raw_call(method, url, params, headers, cookies, json, content)
-        return cast(NormalizedResponse[TRaw], (await self._run(call, options)).value)
+        return cast(NormalizedResponse[TRaw], (await self._run(call, options, None)).value)
 
     async def _prepare_operation[T](
         self,
@@ -61,8 +63,9 @@ class _AsyncClientCore[TRaw = object](_ClientCore[TRaw]):
         values: dict[str, object],
         *,
         options: PrepareOptions,
+        identity: _IdentityScope | None = None,
     ) -> PreparedCall:
-        return await self._core.prepare(
+        return await self._core_for(identity).prepare(
             declaration.call(values), options=self._prepare_options(options)
         )
 
@@ -87,8 +90,11 @@ class _AsyncClientCore[TRaw = object](_ClientCore[TRaw]):
         self,
         call: _OperationCall[T],
         options: CallOptions | None,
+        identity: _IdentityScope | None = None,
     ) -> Any:
-        return await self._core.execute(call, options=options or self._default_options)
+        return await self._core_for(identity).execute(
+            call, options=options or self._default_options
+        )
 
 
 __all__: list[str] = []

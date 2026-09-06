@@ -8,7 +8,7 @@ sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.crypto
   - eazy_sdk.websocket
-api_fingerprint: "sha256:0523e5fa1ff809992f0a5844cbfc119d9a194c650ee074b73dd0a5c34b25c1d4"
+api_fingerprint: "sha256:925dfe92e26a009f271a07c364f429b53a175654d80ad955b4d280a42bcb05e2"
 ---
 
 Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
@@ -212,13 +212,13 @@ class OrdersApi(AsyncApi):
 ```python
 import httpx
 
-from eazy_sdk import ClientConfig
+from eazy_sdk import Identity
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
 async with StoreSdk.from_handler(
     handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
     base_url="https://api.store.example",
-    config=ClientConfig(auth=CUSTOMER.static(access_token)),
+    identity=Identity(auth=(CUSTOMER.static(access_token),)),
 ) as sdk:
     order = await sdk.orders.create(
         body=CreateOrder(lines=[OrderLine(product_id=42, quantity=1)])
@@ -258,7 +258,7 @@ def signing_key(requirement: SigningKeyRequirement) -> SigningKey:
     raise LookupError(requirement.name)
 ```
 
-Подключите provider в `ClientConfig(key_provider=signing_key)`, а правило к операции через
+Подключите provider в `Identity(key_provider=signing_key)`, а правило к операции через
 `signing=PAYMENTS_HMAC`. Eazy SDK сначала готовит окончательное тело, затем считает подпись. При
 retry тело и подпись создаются заново.
 

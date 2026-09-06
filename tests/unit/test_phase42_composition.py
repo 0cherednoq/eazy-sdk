@@ -290,7 +290,14 @@ def test_a_root_is_not_a_router_and_exposes_no_transport() -> None:
         for name in ("request", "handler", "profile", "raw"):
             assert not hasattr(sdk, name), name
         public = {name for name in dir(sdk) if not name.startswith("_")}
-        assert public == {"books", "card", "refunds", "close", "from_handler"}
+        assert public == {
+            "books",
+            "card",
+            "refunds",
+            "close",
+            "from_handler",
+            "identity",
+        }
 
 
 def test_from_handler_owns_only_the_client_it_created_and_close_is_idempotent() -> None:

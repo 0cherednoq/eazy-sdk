@@ -23,13 +23,12 @@ class AsyncAccountApi(AsyncApi):
     async def get_account(self) -> Account:
         raise NotImplementedError
 
-auth = BEARER.static("access-v1")
+identity = Identity(auth=(BEARER.static("access-v1"),))
 client = AsyncClient(
     base_url="https://api.example.test",
     handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
-    config=ClientConfig(auth=auth),
 )
-account = await AsyncAccountApi(client).get_account()
+account = await AsyncAccountApi(client, identity=identity).get_account()
 await client.aclose()
 ```
 

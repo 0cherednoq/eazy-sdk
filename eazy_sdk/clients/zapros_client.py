@@ -116,10 +116,10 @@ class Client(_SyncClientCore[Response]):
         super().__enter__()
         return self
 
-    def _run[T](self, call: Any, options: Any) -> Any:
+    def _run[T](self, call: Any, options: Any, identity: Any = None) -> Any:
         if self._closed:
             raise RuntimeError("Eazy SDK Client is closed")
-        return super()._run(call, options)
+        return super()._run(call, options, identity)
 
     @classmethod
     def httpx(
@@ -283,10 +283,10 @@ class AsyncClient(_AsyncClientCore[Response]):
         await super().__aenter__()
         return self
 
-    async def _run[T](self, call: Any, options: Any) -> Any:
+    async def _run[T](self, call: Any, options: Any, identity: Any = None) -> Any:
         if self._closed:
             raise RuntimeError("Eazy SDK AsyncClient is closed")
-        return await super()._run(call, options)
+        return await super()._run(call, options, identity)
 
     @classmethod
     def httpx(

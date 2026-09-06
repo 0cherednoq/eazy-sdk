@@ -22,6 +22,7 @@ from eazy_sdk.core.errors import (
 )
 from eazy_sdk.dependencies import Inject
 from eazy_sdk.handlers import CapabilityMismatchError, HandlerProfile, TransportError
+from eazy_sdk.identity import Identity
 from eazy_sdk.middleware import MiddlewareProtocolError
 from eazy_sdk.models import (
     AmbiguousModelAdapterError,
@@ -102,6 +103,7 @@ __all__ = [
     "HandlerProfile",
     "Header",
     "Html",
+    "Identity",
     "Inject",
     "Json",
     "JsonBody",

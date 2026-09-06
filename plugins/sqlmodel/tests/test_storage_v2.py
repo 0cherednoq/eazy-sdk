@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID, uuid4
 
 import httpx
@@ -36,7 +36,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlmodel import SQLModel, select
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, AsyncRoot, ClientConfig, Identity, api, api_group
 from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken, session_auth
 from eazy_sdk.auth.session import SessionKey, SessionRevision, SessionRevisionError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
@@ -44,7 +44,9 @@ from eazy_sdk.request import JsonBody
 from eazy_sdk.response import Json, NormalizedResponse, Responses
 
 
-def client_from_httpx(raw: httpx.AsyncClient, *, config: ClientConfig) -> AsyncClient:
+def client_from_httpx(
+    raw: httpx.AsyncClient, *, config: ClientConfig | None = None
+) -> AsyncClient:
     return AsyncClient(
         base_url=str(raw.base_url),
         handler=AsyncHttpxHandler(raw, owns_client=True),
@@ -122,9 +124,8 @@ class SqlSessionApi(AsyncApi):
         raise NotImplementedError
 
 
-class SqlSdk:
-    def __init__(self, client: Any) -> None:
-        self.auth = SqlSessionApi(client)
+class SqlSdk(AsyncRoot):
+    auth = api_group(SqlSessionApi)
 
 
 class SqlAuthService:
@@ -513,10 +514,12 @@ async def test_session_auth_login_and_refresh_persist_through_sql_store(
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
-    client.bind_sdk(SqlSdk)
-    response = await ProtectedApi(client).account()
+    class ProtectedSdk(SqlSdk):
+        account = api_group(ProtectedApi)
+
+    sdk = ProtectedSdk(client, identity=Identity(auth=(auth,)))
+    response = await sdk.account.account()
     await client.aclose()
 
     assert response.json() == {"authorization": "Bearer access-v2"}

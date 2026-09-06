@@ -94,7 +94,7 @@ from typing import Annotated, TypedDict, Unpack
 
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk import AsyncApi, AsyncRoot, ClientConfig, api, api_group
+from eazy_sdk import AsyncApi, AsyncRoot, Identity, api, api_group
 from eazy_sdk.auth import AuthContext, session_cookie
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import JsonField
@@ -162,7 +162,7 @@ class DashboardSdk(AsyncRoot):
 async with DashboardSdk.from_handler(
     handler=AsyncHttpxHandler(),
     base_url="https://api.example.test",
-    config=ClientConfig(auth=auth),
+    identity=Identity(auth=(auth,)),
 ) as sdk:
     dashboard = await sdk.dashboard.get_dashboard()
 ```

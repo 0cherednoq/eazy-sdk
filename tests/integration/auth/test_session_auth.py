@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 import httpx
 import pytest
 from curl_cffi import requests as curl_requests
 from pytest_httpserver import HTTPServer, RequestMatcher
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, Identity, api
 from eazy_sdk.auth import (
     Auth,
     AuthScheme,
@@ -115,6 +115,7 @@ async def _protected_call[T](
     client: AsyncClient,
     security: AuthScheme[T],
     *,
+    identity: Identity | None = None,
     method: str = "GET",
     path: str = "/protected",
     options: CallOptions | None = None,
@@ -134,7 +135,7 @@ async def _protected_call[T](
         ) -> NormalizedResponse[object]:
             raise NotImplementedError
 
-    return await ProtectedApi(client).protected(options=options)
+    return await ProtectedApi(client, identity=identity).protected(options=options)
 
 
 class ScopedAuthSdk:
@@ -267,6 +268,7 @@ async def _client_with_stored_bearer(
     SessionKey,
     AuthScheme[BearerSession],
     BearerRefresher,
+    Identity,
 ]:
     client_box: list[AsyncClient] = []
     scheme = _bearer_scheme()
@@ -288,26 +290,18 @@ async def _client_with_stored_bearer(
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = _async_client(async_adapter, httpserver, scheme, providers)
+    client = _async_client(async_adapter, httpserver)
     client_box.append(client)
-    return client, store, key, scheme, refresher
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    return client, store, key, scheme, refresher, identity
 
 
-def _async_client(
-    adapter: str,
-    httpserver: HTTPServer,
-    scheme: AuthScheme[Any],
-    providers: AuthProviders,
-) -> AsyncClient:
+def _async_client(adapter: str, httpserver: HTTPServer) -> AsyncClient:
     if adapter == "httpx-async":
         raw = httpx.AsyncClient(base_url=httpserver.url_for("/"), headers={}, cookies={})
-        return client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+        return client_from_httpx(raw)
     raw_curl = curl_requests.AsyncSession()
-    return client_from_curl_cffi(
-        raw_curl,
-        base_url=httpserver.url_for("/"),
-        config=ClientConfig(auth=Auth._bind(scheme, providers)),
-    )
+    return client_from_curl_cffi(raw_curl, base_url=httpserver.url_for("/"))
 
 
 def _adapter_url(adapter: str, httpserver: HTTPServer, path: str) -> str:
@@ -372,8 +366,9 @@ async def test_concurrent_credentials_login_uses_the_same_client_and_singlefligh
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = _async_client(async_adapter, httpserver, scheme, providers)
+    client = _async_client(async_adapter, httpserver)
     client_box.append(client)
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
 
     async with client:
         responses = await asyncio.gather(
@@ -381,6 +376,7 @@ async def test_concurrent_credentials_login_uses_the_same_client_and_singlefligh
                 _protected_call(
                     client,
                     scheme,
+                    identity=identity,
                     path=_adapter_url(async_adapter, httpserver, path),
                 )
                 for path in paths
@@ -438,11 +434,12 @@ async def test_cookie_login_extracts_multiple_set_cookie_lines_and_applies_sessi
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    client = client_from_httpx(raw)
     client_box.append(client)
 
     async with client:
-        response = await _protected_call(client, scheme)
+        response = await _protected_call(client, scheme, identity=identity)
 
     assert response.status_code == 200
     assert response.json() == {"authenticated": True, "via": "cookie"}
@@ -490,11 +487,12 @@ async def test_login_extracts_session_from_response_headers_and_applies_it_to_qu
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    client = client_from_httpx(raw)
     client_box.append(client)
 
     async with client:
-        response = await _protected_call(client, scheme)
+        response = await _protected_call(client, scheme, identity=identity)
 
     assert response.status_code == 200
     assert response.json() == {"authenticated": True, "via": "query"}
@@ -537,12 +535,13 @@ async def test_passed_valid_session_skips_login_and_is_applied_to_the_request(
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    client = client_from_httpx(raw)
     client_box.append(client)
 
     async with client:
-        first = await _protected_call(client, scheme)
-        second = await _protected_call(client, scheme)
+        first = await _protected_call(client, scheme, identity=identity)
+        second = await _protected_call(client, scheme, identity=identity)
 
     assert (
         first.json()
@@ -591,12 +590,13 @@ async def test_login_http_failure_does_not_call_resource_or_replace_stored_sessi
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    client = client_from_httpx(raw)
     client_box.append(client)
 
     async with client:
         with pytest.raises(RuntimeError, match=f"login failed with {status}"):
-            await _protected_call(client, scheme)
+            await _protected_call(client, scheme, identity=identity)
 
     assert acquirer.calls == 1
     assert httpserver.get_matching_requests_count(protected_matcher) == 0
@@ -632,12 +632,13 @@ async def test_malformed_login_response_does_not_replace_an_expired_stored_sessi
     )
     providers = AuthProviders()
     providers.register(scheme, provider)
-    client = client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers)))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    client = client_from_httpx(raw)
     client_box.append(client)
 
     async with client:
         with pytest.raises(TypeError, match="missing tokens"):
-            await _protected_call(client, scheme)
+            await _protected_call(client, scheme, identity=identity)
 
     assert await store.load(key) == StoredSession(expired, SessionRevision(4))
     httpserver.check()
@@ -677,12 +678,13 @@ async def test_bearer_401_refreshes_selected_session_and_replays_a_fresh_attempt
         headers={"Authorization": "Bearer access-v2"},
     ).respond_with_json({"authenticated": True, "revision": 2})
 
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(httpserver)
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(httpserver)
 
     async with client:
         response = await _protected_call(
             client,
             scheme,
+            identity=identity,
             options=CallOptions(max_attempts=2, auth_retries=1),
         )
 
@@ -736,7 +738,7 @@ async def test_concurrent_401_responses_trigger_one_refresh_for_all_logical_call
         method="POST",
         json={"refresh_token": "refresh-v1"},
     ).respond_with_json({"access_token": "access-v2", "refresh_token": "refresh-v2"})
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(
         httpserver,
         async_adapter=async_adapter,
     )
@@ -747,6 +749,7 @@ async def test_concurrent_401_responses_trigger_one_refresh_for_all_logical_call
                 _protected_call(
                     client,
                     scheme,
+                    identity=identity,
                     path=_adapter_url(async_adapter, httpserver, path),
                     options=CallOptions(max_attempts=2, auth_retries=1),
                 )
@@ -782,12 +785,13 @@ async def test_repeated_401_exhausts_auth_budget_without_a_second_refresh(
     httpserver.expect_oneshot_request(
         "/protected", headers={"Authorization": "Bearer access-v2"}
     ).respond_with_json({"error": "revoked"}, status=401)
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(httpserver)
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(httpserver)
 
     async with client:
         response = await _protected_call(
             client,
             scheme,
+            identity=identity,
             options=CallOptions(max_attempts=3, auth_retries=1),
         )
 
@@ -808,12 +812,13 @@ async def test_non_auth_failures_do_not_refresh_or_replay(
     httpserver.expect_oneshot_request(
         "/protected", headers={"Authorization": "Bearer access-v1"}
     ).respond_with_json({"error": "terminal"}, status=status)
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(httpserver)
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(httpserver)
 
     async with client:
         response = await _protected_call(
             client,
             scheme,
+            identity=identity,
             options=CallOptions(max_attempts=2, auth_retries=1),
         )
 
@@ -834,13 +839,14 @@ async def test_refresh_failure_preserves_the_selected_session(
     httpserver.expect_oneshot_request("/session/refresh", method="POST").respond_with_json(
         {"error": "invalid_grant"}, status=400
     )
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(httpserver)
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(httpserver)
 
     async with client:
         with pytest.raises(RuntimeError, match="refresh failed with 400"):
             await _protected_call(
                 client,
                 scheme,
+                identity=identity,
                 options=CallOptions(max_attempts=2, auth_retries=1),
             )
 
@@ -859,13 +865,14 @@ async def test_unsafe_post_is_not_refreshed_or_replayed_after_401(
         method="POST",
         headers={"Authorization": "Bearer access-v1"},
     ).respond_with_json({"error": "expired"}, status=401)
-    client, store, key, scheme, refresher = await _client_with_stored_bearer(httpserver)
+    client, store, key, scheme, refresher, identity = await _client_with_stored_bearer(httpserver)
 
     async with client:
         with pytest.raises(UnsafeReplayError, match="idempotent"):
             await _protected_call(
                 client,
                 scheme,
+                identity=identity,
                 method="POST",
                 options=CallOptions(max_attempts=2, auth_retries=1),
             )

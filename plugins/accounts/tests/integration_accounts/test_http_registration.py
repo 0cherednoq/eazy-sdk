@@ -27,6 +27,7 @@ from pytest_httpserver import HTTPServer
 from eazy_sdk import (
     AsyncApi,
     ClientConfig,
+    Identity,
     RetryPolicy,
     UnsafeReplayError,
     api,
@@ -149,8 +150,8 @@ class RegistrationApi(AsyncApi):
 
 
 class RegistrationSdk:
-    def __init__(self, client: Any) -> None:
-        self.registration = RegistrationApi(client)
+    def __init__(self, client: Any, identity: Identity | None = None) -> None:
+        self.registration = RegistrationApi(client, identity=identity)
 
 
 class CredentialsCodec:
@@ -299,10 +300,8 @@ async def test_http_registration_uses_existing_executor_signing_and_session_life
             headers={},
             cookies={},
         ),
-        config=ClientConfig(
-            key_provider=lambda _requirement: SigningKey("signing-secret"),
-        ),
     )
+    signing_identity = Identity(key_provider=lambda _requirement: SigningKey("signing-secret"))
     registration_store: MemoryRegistrationStore[
         SignupCredentials,
         AccountProfile,
@@ -323,7 +322,9 @@ async def test_http_registration_uses_existing_executor_signing_and_session_life
         SignupCredentials,
         service=RegistrationService(),
         store=registration_store,
-        context_factory=lambda: HttpRegistrationContext(RegistrationSdk(client)),
+        context_factory=lambda: HttpRegistrationContext(
+            RegistrationSdk(client, signing_identity)
+        ),
         session_lifecycle=session_lifecycle,
     )
     result = await flow.create(
@@ -395,8 +396,8 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
+    cookie_identity = Identity(auth=(auth,))
     store: MemoryRegistrationStore[
         SignupCredentials,
         AccountProfile,
@@ -407,12 +408,14 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
         SignupCredentials,
         service=CookieRegistrationService(now),
         store=store,
-        context_factory=lambda: HttpRegistrationContext(RegistrationSdk(client)),
+        context_factory=lambda: HttpRegistrationContext(
+            RegistrationSdk(client, cookie_identity)
+        ),
         session_lifecycle=auth,
     )
 
     result = await flow.create(signup_draft())
-    response = await ProtectedApi(client).protected()
+    response = await ProtectedApi(client, identity=cookie_identity).protected()
     await client.aclose()
 
     assert isinstance(result, CompleteRegistration)

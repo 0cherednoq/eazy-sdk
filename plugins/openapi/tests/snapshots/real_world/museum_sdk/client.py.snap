@@ -12,6 +12,7 @@ from eazy_sdk import (
 )
 from eazy_sdk.codegen import (
     DEFAULT, ApiError, AsyncApi, AsyncClient, Binding, Bytes, BytesBody,
+    Identity,
     CallOptions, Client, ClientConfig,
     Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,
     MultipartBody, Part, Path, Query, QueryString, SyncApi,
@@ -350,6 +351,7 @@ class AsyncAPI(AsyncRoot):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> AsyncAPI:
         return super().from_handler(
             base_url=base_url,
@@ -358,6 +360,7 @@ class AsyncAPI(AsyncRoot):
             owns_handler=owns_handler,
             profile=profile,
             bindings=bindings,
+            identity=identity,
         )
 
     @classmethod
@@ -585,6 +588,7 @@ class SyncAPI(SyncRoot):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> SyncAPI:
         return super().from_handler(
             base_url=base_url,
@@ -593,6 +597,7 @@ class SyncAPI(SyncRoot):
             owns_handler=owns_handler,
             profile=profile,
             bindings=bindings,
+            identity=identity,
         )
 
     @classmethod

@@ -15,7 +15,6 @@ from typing import Any, cast, get_type_hints
 from urllib.parse import urljoin, urlsplit
 
 from eazy_sdk.auth.core import (
-    AuthProviders,
     _has_refreshable_security,
     _refresh_security,
     resolve_security,
@@ -66,12 +65,12 @@ from eazy_sdk.crypto._runtime import (
     validate_crypto_runtime,
 )
 from eazy_sdk.dependencies import (
-    DependencyRegistry,
     _DependencyCaches,
     _lower_requirements,
     _resolve_requirements,
 )
 from eazy_sdk.handlers import EmitOptions, HandlerProfile, TransportError, validate_profile
+from eazy_sdk.identity import _IdentityScope
 from eazy_sdk.middleware import (
     AttemptMiddlewareRegistration,
     AttemptRequestContext,
@@ -120,8 +119,6 @@ from eazy_sdk.ratelimit_runtime import RateLimitContext, RateLimiter
 from eazy_sdk.request import (
     JsonBody,
     ReplayableStreamBody,
-    SigningKey,
-    SigningKeyRequirement,
     WireProfile,
 )
 from eazy_sdk.request.logical import ExactBodyInput, NoBodyInput
@@ -154,10 +151,6 @@ from ._http_stages import (
     build_request_document,
     decide_response,
 )
-
-type KeyProvider = Callable[[SigningKeyRequirement], SigningKey]
-type Observer = Callable[[str, object | None], None]
-
 
 _operation_stack: ContextVar[tuple[str, ...]] = ContextVar("eazy_sdk_operation_stack", default=())
 
@@ -439,8 +432,6 @@ class ExecutionRuntime:
     handler_profile: HandlerProfile
     send: Any
     base_url: str = ""
-    dependencies: DependencyRegistry = field(default_factory=DependencyRegistry)
-    auth: AuthProviders = field(default_factory=AuthProviders)
     operation_protections: tuple[ProtectionFlow[Any], ...] = ()
     before_call_policies: tuple[BeforeCallPolicy[Any, Any], ...] = ()
     challenge_policies: tuple[ChallengePolicy[Any, Any], ...] = ()
@@ -448,8 +439,6 @@ class ExecutionRuntime:
     protection_session_owner: object | None = None
     middleware: tuple[object, ...] = ()
     limiter: RateLimiter | None = None
-    key_provider: KeyProvider | None = None
-    observer: Observer | None = None
     models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
     profile: WireProfile | None = None
     crypto: CryptoRegistry = field(default_factory=CryptoRegistry)
@@ -496,6 +485,7 @@ class _PreparedRequestCaptured(Exception):
 def _managed_preparation_requirements(
     contract: _OperationDeclaration[Any],
     runtime: ExecutionRuntime,
+    identity: _IdentityScope,
     options: Any,
 ) -> tuple[str, ...]:
     scope = _scope_context(contract, _service_base_url(contract, runtime))
@@ -547,9 +537,11 @@ class ExecutionCore:
         self,
         runtime: ExecutionRuntime,
         *,
+        identity: _IdentityScope | None = None,
         resolution_graph: LifecycleGraph | None = None,
     ) -> None:
         self.runtime = runtime
+        self.identity = identity if identity is not None else _IdentityScope()
         self.resolution_graph = resolution_graph
 
     async def prepare[T](
@@ -566,28 +558,27 @@ class ExecutionCore:
 
             call_options = CallOptions()
         runtime = self.runtime
+        identity = self.identity
         if not options.resolve_managed:
             requirements = _managed_preparation_requirements(
                 call.declaration,
                 runtime,
+                identity,
                 call_options,
             )
             if requirements:
                 raise PreparationIncompleteError(requirements)
             runtime = replace(
                 runtime,
-                dependencies=DependencyRegistry(),
-                auth=AuthProviders(),
                 operation_protections=(),
                 before_call_policies=(),
                 challenge_policies=(),
                 solver_bindings=SolverBindings(),
                 middleware=(),
                 limiter=None,
-                key_provider=None,
                 crypto=CryptoRegistry(),
-                observer=None,
             )
+            identity = _IdentityScope()
 
         def stop(request: object, *, options: object) -> None:
             from eazy_sdk.request.prepared import PreparedRequest
@@ -596,8 +587,12 @@ class ExecutionCore:
                 raise TypeError("preparation boundary received an invalid request")
             raise _PreparedRequestCaptured(request)
 
-        runtime = replace(runtime, send=stop, observer=None)
-        core = ExecutionCore(runtime, resolution_graph=self.resolution_graph)
+        runtime = replace(runtime, send=stop)
+        core = ExecutionCore(
+            runtime,
+            identity=replace(identity, observer=None),
+            resolution_graph=self.resolution_graph,
+        )
         try:
             await core.execute(call, options=call_options)
         except _PreparedRequestCaptured as captured:
@@ -805,9 +800,9 @@ class ExecutionCore:
                 _lower_requirements(
                     (*compiled.contract.requires, *compiled.contract.inject),
                     compiled,
-                    self.runtime.dependencies,
+                    self.identity.dependencies,
                 ),
-                self.runtime.dependencies,
+                self.identity.dependencies,
                 operation_id=compiled.contract.operation_id,
                 attempt=number,
                 caches=dependencies,
@@ -817,13 +812,13 @@ class ExecutionCore:
             if compiled_crypto is not None and compiled_crypto.profile.inputs:
                 crypto_values, crypto_aad = await resolve_crypto_inputs(
                     compiled_crypto.profile.inputs,
-                    self.runtime.dependencies,
+                    self.identity.dependencies,
                     operation_id=compiled.contract.operation_id,
                     attempt=number,
                 )
             auth_executions, auth_patch = await resolve_security(
                 compiled.contract.security,
-                self.runtime.auth,
+                self.identity.auth,
                 cast(Any, compiled),
                 graph=self.resolution_graph,
             )
@@ -1016,9 +1011,9 @@ class ExecutionCore:
                     outputs=crypto_outputs,
                 )
             if signature_plan.signatures:
-                if self.runtime.key_provider is None:
+                if self.identity.key_provider is None:
                     raise ValueError("signing key provider is not configured")
-                prepared = sign_prepared(unsigned, signature_plan, self.runtime.key_provider)
+                prepared = sign_prepared(unsigned, signature_plan, self.identity.key_provider)
                 if isinstance(prepared.body, BufferedBody):
                     media_type = (
                         prepared.body.content_type.decode("ascii")
@@ -1172,7 +1167,7 @@ class ExecutionCore:
                     auth_remaining=auth_remaining,
                     auth_refreshable=_has_refreshable_security(
                         auth_executions,
-                        self.runtime.auth,
+                        self.identity.auth,
                     ),
                     current_url=current_url,
                     effective_method=redirect_method or compiled.contract.method,
@@ -1232,7 +1227,7 @@ class ExecutionCore:
             if isinstance(response_decision, AuthRefreshTransition):
                 await _refresh_security(
                     auth_executions,
-                    self.runtime.auth,
+                    self.identity.auth,
                     self.resolution_graph,
                 )
                 auth_remaining -= 1
@@ -1481,8 +1476,8 @@ class ExecutionCore:
         return results
 
     def _observe(self, phase: str, value: object | None = None) -> None:
-        if self.runtime.observer is not None:
-            self.runtime.observer(phase, value)
+        if self.identity.observer is not None:
+            self.identity.observer(phase, value)
 
 
 def _protection_identities(

@@ -16,7 +16,7 @@ from typing import Annotated, TypedDict, Unpack, cast
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import ClientConfig, SyncApi, SyncRoot, api, api_group
+from eazy_sdk import Identity, SyncApi, SyncRoot, api, api_group
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.crypto import (
     CryptoContext,
@@ -208,14 +208,14 @@ def main() -> None:
         headers={},
         cookies={},
     )
-    config = ClientConfig(
-        auth=CUSTOMER.static("public-demo-token"),
+    identity = Identity(
+        auth=(CUSTOMER.static("public-demo-token"),),
         key_provider=signing_key,
     )
     with StoreSdk.from_handler(
         handler=HttpxHandler(raw_client, owns_client=True),
         base_url="https://api.store.example",
-        config=config,
+        identity=identity,
     ) as sdk:
         result = sdk.payments.create(
             body=CreatePayment(

@@ -31,6 +31,7 @@ from eazy_sdk.dependencies import (
     field,
     value,
 )
+from eazy_sdk.identity import Identity
 from eazy_sdk.protection.advanced import (
     FromProtection,
     ProtectionBundle,
@@ -107,6 +108,7 @@ __all__ = [
     "FormBody",
     "FromProtection",
     "Header",
+    "Identity",
     "Json",
     "JsonBody",
     "JsonField",

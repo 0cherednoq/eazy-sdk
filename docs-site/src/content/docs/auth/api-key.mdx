@@ -68,7 +68,7 @@ Query-вариант отправит `/weather?api_key=key_demo_123`.
 Передайте `auth` в `ClientConfig` и укажите `security=API_KEY` в декораторе операции:
 
 ```python
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import Client, Identity, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
 
 class ReportsApi(SyncApi):
@@ -79,10 +79,9 @@ class ReportsApi(SyncApi):
 client = Client(
     base_url="https://api.example",
     handler=HttpxHandler(raw, owns_client=True),
-    config=ClientConfig(auth=auth),
 )
-reports = ReportsApi(client).reports()
+reports = ReportsApi(client, identity=Identity(auth=(auth,))).reports()
 ```
 
-Не передавайте API key аргументом метода. Это credential клиента, а не часть публичной сигнатуры
-операции. Missing provider завершается до отправки HTTP request.
+Не передавайте API key аргументом метода. Это credential вызывающей стороны (identity), а не часть
+публичной сигнатуры операции. Missing provider завершается до отправки HTTP request.

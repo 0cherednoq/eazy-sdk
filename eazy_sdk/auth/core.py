@@ -160,14 +160,21 @@ class StaticAuthProvider[TSession]:
 class AuthProviders:
     def __init__(self) -> None:
         self._providers: dict[int, AuthProvider[Any]] = {}
+        self._schemes: dict[int, AuthScheme[Any]] = {}
 
     def register[T](self, scheme: AuthScheme[T], provider: AuthProvider[T]) -> None:
         if id(scheme) in self._providers:
             raise PlanError(f"auth scheme already registered: {scheme.diagnostic_name}")
         self._providers[id(scheme)] = provider
+        self._schemes[id(scheme)] = scheme
 
     def get[T](self, scheme: AuthScheme[T]) -> AuthProvider[T] | None:
         return cast(AuthProvider[T] | None, self._providers.get(id(scheme)))
+
+    def _entries(self) -> tuple[tuple[AuthScheme[Any], AuthProvider[Any]], ...]:
+        """Registered pairs, so one identity can merge several configured bindings."""
+
+        return tuple((self._schemes[key], provider) for key, provider in self._providers.items())
 
     def __bool__(self) -> bool:
         return bool(self._providers)

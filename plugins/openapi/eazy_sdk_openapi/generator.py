@@ -128,7 +128,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     ]
     if has_crypto:
         lines.extend(["from collections.abc import Mapping", ""])
-    if ir.session_auth is not None or ir.protection_flows:
+    if ir.protection_flows:
         lines.extend(["from dataclasses import replace", ""])
     lines.extend(
         [
@@ -147,6 +147,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
             ")",
             "from eazy_sdk.codegen import (",
             "    DEFAULT, ApiError, AsyncApi, AsyncClient, Binding, Bytes, BytesBody,",
+            "    Identity,",
             "    CallOptions, Client, ClientConfig,",
             "    Cookie, DependencySpec, Empty, Form, FormBody, Header, JsonBody, JsonField,",
             "    MultipartBody, Part, Path, Query, QueryString, SyncApi,",
@@ -401,11 +402,11 @@ def _api_facade(
                 "",
                 (
                     f"    def __init__(self, client: {client_type}, *, "
-                    "bindings: tuple[Binding, ...] = ()) -> None:"
+                    "bindings: tuple[Binding, ...] = (), identity: Identity | None = None) -> None:"
                 ),
-                "        super().__init__(client, bindings=bindings)",
+                "        super().__init__(client, bindings=bindings, identity=identity)",
                 "        auth_client = cast(AsyncClient, client._async_view())",
-                "        self._auth_api = auth_client.bind_sdk(AsyncAPI)",
+                "        self._auth_api = AsyncAPI(auth_client, identity=identity)",
             ]
         )
     handler_base = "AsyncBaseHandler" if asynchronous else "BaseHandler"
@@ -421,6 +422,7 @@ def _api_facade(
                 "        owns_handler: bool = True,",
                 "        profile: HandlerProfile | None = None,",
                 "        bindings: tuple[Binding, ...] = (),",
+                "        identity: Identity | None = None,",
             ]
         )
     else:
@@ -436,6 +438,7 @@ def _api_facade(
                 "        owns_handler: bool = True,",
                 "        profile: HandlerProfile | None = None,",
                 "        bindings: tuple[Binding, ...] = (),",
+                "        identity: Identity | None = None,",
             ]
         )
     lines.extend(
@@ -446,8 +449,14 @@ def _api_facade(
     if has_protections:
         lines.append("        config = _protection_config(config)")
     if session_auth is not None:
-        lines.append(
-            "        config = _session_config(config, credentials=credentials, session=session)"
+        lines.extend(
+            [
+                "        if identity is not None:",
+                "            raise ValueError(",
+                "                'identity cannot be combined with credentials or session'",
+                "            )",
+                "        identity = _session_identity(credentials=credentials, session=session)",
+            ]
         )
     lines.extend(
         [
@@ -458,6 +467,7 @@ def _api_facade(
             "            owns_handler=owns_handler,",
             "            profile=profile,",
             "            bindings=bindings,",
+            "            identity=identity,",
             "        )",
         ]
     )
@@ -543,19 +553,13 @@ def _session_service(
         [
             "",
             "",
-            "def _session_config(",
-            "    config: ClientConfig | None,",
+            "def _session_identity(",
             "    *,",
             f"    credentials: {session.credentials_model} | None,",
             f"    session: {session.session_model} | None,",
-            ") -> ClientConfig:",
+            ") -> Identity:",
             "    if (credentials is None) == (session is None):",
             "        raise ValueError('provide exactly one of credentials or session')",
-            "    base = config or ClientConfig()",
-            "    if base.auth is not None:",
-            "        raise ValueError(",
-            "            'config.auth cannot be combined with credentials or session'",
-            "        )",
             "    auth = generated_session_auth(",
             f"        {session.session_model},",
             f"        bearer_field={session.bearer_field!r},",
@@ -567,7 +571,7 @@ def _session_service(
             "        service=_GeneratedSessionService(),",
             f"        scheme={_constant(session.scheme)},",
             "    )",
-            "    return replace(base, auth=auth)",
+            "    return Identity(auth=(auth,))",
         ]
     )
     return lines

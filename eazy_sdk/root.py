@@ -25,6 +25,12 @@ from eazy_sdk.api import (
     validate_base_url,
 )
 from eazy_sdk.handlers import HandlerProfile
+from eazy_sdk.identity import (
+    Identity,
+    _identity_scope,
+    _IdentityScope,
+    bind_session_lifecycle,
+)
 
 if TYPE_CHECKING:
     from zapros import AsyncBaseHandler, BaseHandler
@@ -85,6 +91,9 @@ class _RootBase:
     _root_groups: ClassVar[dict[str, _ApiGroup[Any]]] = {}
     _root_defaults: ClassVar[_ServiceDefaults] = _ServiceDefaults()
 
+    identity: ClassVar[Identity | None] = None
+    """Session scope shared by every router of this root; the constructor overrides it."""
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         _reject_root_operations(cls)
@@ -101,23 +110,35 @@ class _RootBase:
         cls._root_groups = groups
         cls._root_defaults = _service_defaults_of(cls)
 
-    def __init__(self, client: object, *, bindings: tuple[Binding, ...] = ()) -> None:
-        self._setup(client, tuple(bindings), register=True)
+    def __init__(
+        self,
+        client: object,
+        *,
+        bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
+    ) -> None:
+        self._setup(client, tuple(bindings), identity, scope=None)
 
     def _setup(
         self,
         client: object,
         bindings: tuple[Binding, ...],
+        identity: Identity | None,
         *,
-        register: bool,
+        scope: _IdentityScope | None,
     ) -> None:
+        selected = type(self).identity if identity is None else identity
+        if selected is not None and not isinstance(selected, Identity):
+            raise TypeError("identity= accepts an Identity")
         self._default_client = client
         self._bindings = bindings
+        self._identity = selected
+        self._scope = scope if scope is not None else _identity_scope(selected)
         self._owned: tuple[Any, ...] = ()
         self._closed = False
         self._instances: dict[str, SyncApi | AsyncApi] = {}
         self._plan = _resolve_plan(type(self), client, bindings)
-        if register:
+        if scope is None:
             self._register_lifecycle()
 
     @classmethod
@@ -125,30 +146,31 @@ class _RootBase:
         cls,
         client: object,
         bindings: tuple[Binding, ...],
+        identity: Identity | None,
+        scope: _IdentityScope,
     ) -> Self:
         """Build a scoped copy for the auth lifecycle without re-registering factories."""
 
         root = cls.__new__(cls)
-        _RootBase._setup(root, client, bindings, register=False)
+        _RootBase._setup(root, client, bindings, identity, scope=scope)
         return root
 
     def _register_lifecycle(self) -> None:
-        seen: list[Any] = []
-        for client in (self._default_client, *(plan.client for plan in self._plan.values())):
-            if any(client is known for known in seen):
-                continue
-            seen.append(client)
-        for client in seen:
-            register = getattr(client, "_register_sdk_factory", None)
-            if register is None:
-                continue
-            register(_scoped_factory(type(self), self._default_client, self._bindings, client))
+        bind_session_lifecycle(
+            self._scope,
+            self._default_client,
+            _scoped_factory(type(self), self._default_client, self._bindings, self._scope),
+        )
 
     def _build_group(self, group: _ApiGroup[Any]) -> SyncApi | AsyncApi:
         cached = self._instances.get(group.name)
         if cached is None:
             plan = self._plan[group.name]
-            cached = group.api_type(cast(Any, plan.client), defaults=plan.defaults)
+            cached = group.api_type(
+                cast(Any, plan.client),
+                defaults=plan.defaults,
+                scope=self._scope,
+            )
             self._instances[group.name] = cached
         return cached
 
@@ -163,8 +185,14 @@ class SyncRoot(_RootBase):
 
     _api_kind: ClassVar[type[SyncApi | AsyncApi]] = SyncApi
 
-    def __init__(self, client: _SyncClient, *, bindings: tuple[Binding, ...] = ()) -> None:
-        super().__init__(client, bindings=bindings)
+    def __init__(
+        self,
+        client: _SyncClient,
+        *,
+        bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
+    ) -> None:
+        super().__init__(client, bindings=bindings, identity=identity)
 
     @classmethod
     def from_handler(
@@ -176,6 +204,7 @@ class SyncRoot(_RootBase):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> Self:
         """Build the default client over ``handler`` and let the root own it."""
 
@@ -188,7 +217,7 @@ class SyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(client, bindings=bindings)
+        root = cls(client, bindings=bindings, identity=identity)
         root._owned = (client,)
         return root
 
@@ -215,8 +244,14 @@ class AsyncRoot(_RootBase):
 
     _api_kind: ClassVar[type[SyncApi | AsyncApi]] = AsyncApi
 
-    def __init__(self, client: _AsyncClient, *, bindings: tuple[Binding, ...] = ()) -> None:
-        super().__init__(client, bindings=bindings)
+    def __init__(
+        self,
+        client: _AsyncClient,
+        *,
+        bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
+    ) -> None:
+        super().__init__(client, bindings=bindings, identity=identity)
 
     @classmethod
     def from_handler(
@@ -228,6 +263,7 @@ class AsyncRoot(_RootBase):
         owns_handler: bool = True,
         profile: HandlerProfile | None = None,
         bindings: tuple[Binding, ...] = (),
+        identity: Identity | None = None,
     ) -> Self:
         """Build the default client over ``handler`` and let the root own it."""
 
@@ -240,7 +276,7 @@ class AsyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(client, bindings=bindings)
+        root = cls(client, bindings=bindings, identity=identity)
         root._owned = (client,)
         return root
 
@@ -262,15 +298,10 @@ def _scoped_factory(
     root_type: type[_RootBase],
     default_client: object,
     bindings: tuple[Binding, ...],
-    original: object,
+    scope: _IdentityScope,
 ) -> Any:
     def build(scoped: object) -> object:
-        substituted = tuple(
-            replace(binding, client=scoped) if binding.client is original else binding
-            for binding in bindings
-        )
-        client = scoped if default_client is original else default_client
-        return root_type._rebuild(client, substituted)
+        return root_type._rebuild(scoped, bindings, None, scope)
 
     return build
 

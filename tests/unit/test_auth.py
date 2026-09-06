@@ -7,7 +7,7 @@ from typing import Annotated, Any
 import httpx
 import pytest
 
-from eazy_sdk import ClientConfig, PlanError, SyncApi, api
+from eazy_sdk import Identity, PlanError, SyncApi, api
 from eazy_sdk.auth import (
     ApiKeyScheme,
     Auth,
@@ -55,14 +55,17 @@ def test_auth_secrets_are_absent_from_provider_and_observer_representations() ->
         headers={},
         cookies={},
     )
-    with client_from_httpx(
-        raw,
-        config=ClientConfig(
-            auth=Auth._bind(bearer, providers),
-            observer=lambda _phase, value: observed.append(value),
-        ),
-    ) as client:
-        _call(client, any_of(all_of(bearer, query)), operation_id="auth-redaction")
+    identity = Identity(
+        auth=(Auth._bind(bearer, providers),),
+        observer=lambda _phase, value: observed.append(value),
+    )
+    with client_from_httpx(raw) as client:
+        _call(
+            client,
+            any_of(all_of(bearer, query)),
+            operation_id="auth-redaction",
+            identity=identity,
+        )
 
     diagnostic_text = repr((bearer_provider, observed))
     assert bearer_secret not in diagnostic_text
@@ -125,10 +128,9 @@ def test_static_auth_is_applied_at_the_declared_wire_destination(case: AuthCase)
         headers={},
         cookies={},
     )
-    with client_from_httpx(
-        raw, config=ClientConfig(auth=Auth._bind(case.scheme, providers))
-    ) as client:
-        response = _call(client, case.scheme, operation_id="auth")
+    identity = Identity(auth=(Auth._bind(case.scheme, providers),))
+    with client_from_httpx(raw) as client:
+        response = _call(client, case.scheme, operation_id="auth", identity=identity)
     assert response.status_code == 200
     assert len(captured) == 1
     assert captured[0].url.raw_path.decode("ascii") == case.expected_target
@@ -156,11 +158,13 @@ def test_auth_overwrites_a_user_value_in_the_same_declared_slot() -> None:
         headers={},
         cookies={},
     )
-    with client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers))) as client:
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
+    with client_from_httpx(raw) as client:
         _call(
             client,
             scheme,
             operation_id="auth-overwrite",
+            identity=identity,
             authorization="Bearer user-value",
         )
     assert captured[0].headers["authorization"] == "Bearer auth-token"
@@ -209,11 +213,12 @@ def test_invalid_static_credentials_fail_before_transport(
         StaticAuthProvider(scheme, credentials, AuthProviderIdentity("invalid")),
     )
     raw = httpx.Client(base_url="https://api.test", transport=httpx.MockTransport(handler))
+    identity = Identity(auth=(Auth._bind(scheme, providers),))
     with (
-        client_from_httpx(raw, config=ClientConfig(auth=Auth._bind(scheme, providers))) as client,
+        client_from_httpx(raw) as client,
         pytest.raises(TypeError, match=r"credential|non-empty|two strings"),
     ):
-        _call(client, scheme, operation_id="auth-invalid")
+        _call(client, scheme, operation_id="auth-invalid", identity=identity)
     assert calls == 0
 
 
@@ -222,6 +227,7 @@ def _call(
     security: object,
     *,
     operation_id: str,
+    identity: Identity | None = None,
     authorization: str | None = None,
 ) -> NormalizedResponse[object]:
     class AuthApi(SyncApi):
@@ -239,7 +245,7 @@ def _call(
         ) -> NormalizedResponse[object]:
             raise NotImplementedError
 
-    auth_api = AuthApi(client)
+    auth_api = AuthApi(client, identity=identity)
     return (
         auth_api.auth()
         if authorization is None

@@ -16,13 +16,13 @@ from eazy_sdk_openapi.cli import load_document
 from eazy_sdk_openapi.generator import generate_package
 from eazy_sdk_openapi.ir import UnsupportedOpenAPIError
 
-from eazy_sdk import Client, ClientConfig
+from eazy_sdk import Client, ClientConfig, Identity
 from eazy_sdk.auth import Auth
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.models import default_model_adapters
 
 
-def client_from_httpx(raw: httpx.Client, *, config: ClientConfig) -> Client:
+def client_from_httpx(raw: httpx.Client, *, config: ClientConfig | None = None) -> Client:
     return Client(
         base_url=str(raw.base_url),
         handler=HttpxHandler(raw, owns_client=True),
@@ -250,11 +250,9 @@ def test_generated_clients_execute_json_oauth_and_binary_responses(
             headers={},
             cookies={},
         )
-        with client_from_httpx(
-            museum_http,
-            config=ClientConfig(auth=museum_providers),
-        ) as client:
-            image = museum.SyncAPI(client).tickets.getTicketCode(ticket_id="ticket-7")
+        with client_from_httpx(museum_http) as client:
+            sdk = museum.SyncAPI(client, identity=Identity(auth=(museum_providers,)))
+            image = sdk.tickets.getTicketCode(ticket_id="ticket-7")
         assert image == b"\x89PNG\r\nfixture"
         assert museum_requests[0].url.path == "/tickets/ticket-7/qr"
         assert museum_requests[0].headers["authorization"].startswith("Basic ")

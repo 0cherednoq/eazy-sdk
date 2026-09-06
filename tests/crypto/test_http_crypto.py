@@ -13,7 +13,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, ClientConfig, Identity, SyncApi, api
 from eazy_sdk.clients import CallOptions, RetryPolicy
 from eazy_sdk.crypto import (
     CryptoConfigurationError,
@@ -561,15 +561,15 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
             headers={},
             cookies={},
         ),
-        config=ClientConfig(
-            key_provider=lambda requirement: (
-                SigningKey(b"signing-secret")
-                if requirement is key_requirement
-                else SigningKey(b"wrong")
-            )
-        ),
     )
-    result = await SignedApi(client).create(
+    identity = Identity(
+        key_provider=lambda requirement: (
+            SigningKey(b"signing-secret")
+            if requirement is key_requirement
+            else SigningKey(b"wrong")
+        )
+    )
+    result = await SignedApi(client, identity=identity).create(
         request=CreatePayment(card=Card(number="4111", cvv="123"), amount=500)
     )
     await client.aclose()

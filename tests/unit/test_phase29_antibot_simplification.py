@@ -11,7 +11,7 @@ from eazy_sdk_presets import cloudflare, host
 from zapros import AsyncBaseHandler, BaseHandler, Request, Response
 
 import eazy_sdk.protection as protection
-from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, AsyncClient, Client, ClientConfig, Identity, SyncApi, api
 from eazy_sdk.protection import (
     ChallengeApplicationError,
     ChallengeDetectionError,
@@ -150,16 +150,15 @@ async def test_custom_guard_lowers_to_existing_executor_and_applies_two_cookies(
     )
     handler = ChallengeHandler()
     events: list[str] = []
-    config = ClientConfig(observer=lambda phase, _value: events.append(phase)).with_protection(
-        guard
-    )
+    config = ClientConfig().with_protection(guard)
+    identity = Identity(observer=lambda phase, _value: events.append(phase))
 
     async with AsyncClient(
         base_url="https://phase29.test",
         handler=handler,
         config=config,
     ) as client:
-        assert await ProtectedApi(client).protected() == {"ok": True}
+        assert await ProtectedApi(client, identity=identity).protected() == {"ok": True}
 
     replay_cookie = handler.requests[1].headers.get("Cookie")
     assert replay_cookie is not None
@@ -175,9 +174,7 @@ async def test_custom_guard_lowers_to_existing_executor_and_applies_two_cookies(
 @pytest.mark.asyncio
 async def test_custom_guard_sync_and_async_traces_are_equivalent() -> None:
     def configured(solver: Solver, events: list[str]) -> ClientConfig:
-        return ClientConfig(
-            observer=lambda phase, _value: events.append(phase)
-        ).with_protection(
+        return ClientConfig().with_protection(
             challenge_guard(
                 name="phase29.trace",
                 scope=host("phase29.test"),
@@ -194,7 +191,9 @@ async def test_custom_guard_sync_and_async_traces_are_equivalent() -> None:
         handler=async_handler,
         config=configured(Solver(), async_events),
     ) as client:
-        async_result = await ProtectedApi(client).protected()
+        async_result = await ProtectedApi(
+            client, identity=Identity(observer=lambda phase, _v: async_events.append(phase))
+        ).protected()
 
     sync_events: list[str] = []
     sync_handler = SyncChallengeHandler()
@@ -205,7 +204,10 @@ async def test_custom_guard_sync_and_async_traces_are_equivalent() -> None:
             handler=sync_handler,
             config=configured(Solver(), sync_events),
         ) as client:
-            return SyncProtectedApi(client).protected()
+            return SyncProtectedApi(
+                client,
+                identity=Identity(observer=lambda phase, _v: sync_events.append(phase)),
+            ).protected()
 
     sync_result = await asyncio.to_thread(run_sync)
     assert sync_result == async_result == {"ok": True}

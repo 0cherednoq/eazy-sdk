@@ -10,8 +10,8 @@ from typing import Any, cast
 
 import pytest
 
-from eazy_sdk import AsyncApi, PlanError, api
-from eazy_sdk.auth import BearerScheme
+from eazy_sdk import AsyncApi, Identity, PlanError, api
+from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions, ClientConfig
 from eazy_sdk.clients.async_client import _AsyncClientCore
@@ -154,14 +154,12 @@ def _runtime(
     solver: Any,
     *,
     policy: Any | None = None,
-    auth: AuthProviders | None = None,
 ) -> ExecutionRuntime:
     selected = policy or _policy()
     return ExecutionRuntime(
         HandlerProfile(frozenset({HttpProtocol.HTTP_1_1})),
         emit,
         "https://kad.test",
-        auth=auth or AuthProviders(),
         challenge_policies=(selected,),
         solver_bindings=SolverBindings(
             bind_solver(selected.solver, solver)
@@ -543,8 +541,11 @@ async def test_auth_and_protection_apply_independently_to_the_same_attempts() ->
         assert b"pr_fp=fp" in cast(bytes, _header(request, b"cookie"))
         return _response(request, 200, b'{"ok":true}')
 
-    runtime = _runtime(emit, Solver(), auth=providers)
-    assert await SecuredApi(_AsyncClientCore(runtime)).protected() == {"ok": True}
+    runtime = _runtime(emit, Solver())
+    identity = Identity(auth=(Auth._bind(bearer, providers),))
+    assert await SecuredApi(_AsyncClientCore(runtime), identity=identity).protected() == {
+        "ok": True
+    }
 
 
 @pytest.mark.parametrize(

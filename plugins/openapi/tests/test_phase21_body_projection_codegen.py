@@ -126,7 +126,7 @@ def test_projection_extension_lowers_to_deterministic_ir_and_source(version: str
     source = render_client(ir, config=generation_config())
     assert source == render_client(ir, config=generation_config())
     assert hashlib.sha256(source.encode()).hexdigest() == (
-        "55b9274e1dc87725a61d5d821aa818555bf8e2b6dcc3d46516226c722208db70"
+        "a5d1bd8412f956ad87a570277879403304e7f43154d4622a7c91e4474d9328b6"
     )
     assert "class RegisterUserPublicBody(TypedDict, total=False):" in source
     assert "class _RegisterUserProjectionTarget(OpenAPIModel):" in source

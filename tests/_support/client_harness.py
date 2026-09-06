@@ -8,7 +8,7 @@ import httpx
 import requests
 from curl_cffi import requests as curl_requests
 
-from eazy_sdk import AsyncClient, Client, ClientConfig
+from eazy_sdk import AsyncClient, Client, ClientConfig, Identity
 from eazy_sdk.auth import Auth
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.response import NormalizedResponse
@@ -29,11 +29,17 @@ CLIENT_ADAPTERS: tuple[str, ...] = (
 
 class HarnessOperation(Protocol):
     async def run_async(
-        self, client: AsyncClient, options: CallOptions | None
+        self,
+        client: AsyncClient,
+        options: CallOptions | None,
+        identity: Identity | None = None,
     ) -> NormalizedResponse[object]: ...
 
     def run_sync(
-        self, client: Client, options: CallOptions | None
+        self,
+        client: Client,
+        options: CallOptions | None,
+        identity: Identity | None = None,
     ) -> NormalizedResponse[object]: ...
 
 
@@ -50,16 +56,17 @@ class ClientHarness:
         *,
         options: CallOptions | None = None,
     ) -> NormalizedResponse[object]:
-        config = ClientConfig(auth=auth)
+        config = ClientConfig()
+        identity = None if auth is None else Identity(auth=(auth,))
         if self.name == "httpx-async":
             raw_async = httpx.AsyncClient(headers={}, cookies={})
             async with client_from_httpx(raw_async, config=config) as client:
-                return await operation.run_async(client, options)
+                return await operation.run_async(client, options, identity)
         if self.name == "curl-cffi-async":
             raw_curl_async = curl_requests.AsyncSession()
             client = client_from_curl_cffi(raw_curl_async, config=config)
             async with client:
-                return await operation.run_async(client, options)
+                return await operation.run_async(client, options, identity)
 
         def run_sync() -> NormalizedResponse[object]:
             if self.name == "httpx-sync":
@@ -75,7 +82,7 @@ class ClientHarness:
                 raw = curl_requests.Session()
                 client_sync = cast(Client, client_from_curl_cffi(raw, config=config))
             with client_sync:
-                return operation.run_sync(client_sync, options)
+                return operation.run_sync(client_sync, options, identity)
 
         return await asyncio.to_thread(run_sync)
 

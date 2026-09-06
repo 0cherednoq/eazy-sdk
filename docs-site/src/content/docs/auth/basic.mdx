@@ -23,13 +23,12 @@ class AdminApi(SyncApi):
     def profile(self) -> Profile:
         raise NotImplementedError
 
-auth = BASIC.static(("ada", "correct-horse"))
+identity = Identity(auth=(BASIC.static(("ada", "correct-horse")),))
 client = Client(
     base_url="https://api.example.test",
     handler=HttpxHandler(httpx.Client(), owns_client=True),
-    config=ClientConfig(auth=auth),
 )
-profile = AdminApi(client).profile()
+profile = AdminApi(client, identity=identity).profile()
 ```
 
 :::::{grid} 1 1 2 2

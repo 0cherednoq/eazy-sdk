@@ -26,6 +26,12 @@ from eazy_sdk.compile.http_operation import _OperationDeclaration
 from eazy_sdk.compile.input import inspect_method_input
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.crypto import CryptoWire, PayloadCrypto
+from eazy_sdk.identity import (
+    Identity,
+    _identity_scope,
+    _IdentityScope,
+    bind_session_lifecycle,
+)
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protection.advanced import SolverRequirement
@@ -100,9 +106,9 @@ _NO_DEFAULTS = _ServiceDefaults()
 
 
 class _AsyncClient(Protocol):
-    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk: ...
-
     async def aclose(self) -> None: ...
+
+    def _scoped(self, graph: Any) -> Any: ...
 
     async def _execute_operation[TResult](
         self,
@@ -111,6 +117,7 @@ class _AsyncClient(Protocol):
         *,
         options: CallOptions | None,
         with_response: bool,
+        identity: _IdentityScope | None,
     ) -> TResult | ResponseEnvelope[TResult, Any]: ...
 
     async def _prepare_operation[TResult](
@@ -119,13 +126,14 @@ class _AsyncClient(Protocol):
         values: dict[str, object],
         *,
         options: PrepareOptions,
+        identity: _IdentityScope | None,
     ) -> PreparedCall: ...
 
 
 class _SyncClient(Protocol):
-    def bind_sdk[TSdk](self, sdk_factory: Callable[[Any], TSdk]) -> TSdk: ...
-
     def close(self) -> None: ...
+
+    def _scoped(self, graph: Any) -> Any: ...
 
     def _execute_operation[TResult](
         self,
@@ -134,7 +142,8 @@ class _SyncClient(Protocol):
         *,
         options: CallOptions | None,
         with_response: bool,
-    ) -> TResult | ResponseEnvelope[TResult, Any]: ...
+        identity: _IdentityScope | None,
+    ) -> PreparedCall | TResult | ResponseEnvelope[TResult, Any]: ...
 
     def _prepare_operation[TResult](
         self,
@@ -142,6 +151,7 @@ class _SyncClient(Protocol):
         values: dict[str, object],
         *,
         options: PrepareOptions,
+        identity: _IdentityScope | None,
     ) -> PreparedCall: ...
 
 
@@ -166,6 +176,7 @@ class _BoundAsyncOperation[**P, T]:
             values,
             options=options,
             with_response=False,
+            identity=self._api._scope,
         )
         return cast(T, result)
 
@@ -180,6 +191,7 @@ class _BoundAsyncOperation[**P, T]:
             values,
             options=options,
             with_response=True,
+            identity=self._api._scope,
         )
         return cast(ResponseEnvelope[T, Any], result)
 
@@ -194,6 +206,7 @@ class _BoundAsyncOperation[**P, T]:
             self._descriptor.resolve_for(self._api),
             values,
             options=options or PrepareOptions(),
+            identity=self._api._scope,
         )
 
 
@@ -218,6 +231,7 @@ class _BoundSyncOperation[**P, T]:
             values,
             options=options,
             with_response=False,
+            identity=self._api._scope,
         )
         return cast(T, result)
 
@@ -232,6 +246,7 @@ class _BoundSyncOperation[**P, T]:
             values,
             options=options,
             with_response=True,
+            identity=self._api._scope,
         )
         return cast(ResponseEnvelope[T, Any], result)
 
@@ -246,6 +261,7 @@ class _BoundSyncOperation[**P, T]:
             self._descriptor.resolve_for(self._api),
             values,
             options=options or PrepareOptions(),
+            identity=self._api._scope,
         )
 
 
@@ -391,14 +407,28 @@ class _SyncOperationDescriptor(_OperationDescriptorBase[TApi, P, T]):
 
 
 class _ApiBase:
-    """Shared router machinery: one client, one merged service declaration."""
+    """Shared router machinery: one client, one service declaration, one session scope."""
 
     _service_defaults: _ServiceDefaults = _NO_DEFAULTS
 
-    def __init__(self, client: object, *, defaults: _ServiceDefaults | None = None) -> None:
+    def __init__(
+        self,
+        client: object,
+        *,
+        identity: Identity | None = None,
+        defaults: _ServiceDefaults | None = None,
+        scope: _IdentityScope | None = None,
+    ) -> None:
+        if identity is not None and scope is not None:
+            raise TypeError("a router receives its session scope from one owner only")
         self._client = cast(Any, client)
         self._defaults = type(self)._service_defaults if defaults is None else defaults
+        self._scope = scope if scope is not None else _identity_scope(identity)
         self._resolved: dict[object, _OperationDeclaration[Any]] = {}
+        if scope is None and identity is not None:
+            bind_session_lifecycle(self._scope, client, lambda scoped: type(self)(
+                scoped, defaults=self._defaults, scope=self._scope
+            ))
 
 
 class AsyncApi(_ApiBase):
@@ -416,8 +446,15 @@ class AsyncApi(_ApiBase):
         _reject_nested_groups(cls)
         cls._service_defaults = _service_defaults_of(cls)
 
-    def __init__(self, client: _AsyncClient, *, defaults: _ServiceDefaults | None = None) -> None:
-        super().__init__(client, defaults=defaults)
+    def __init__(
+        self,
+        client: _AsyncClient,
+        *,
+        identity: Identity | None = None,
+        defaults: _ServiceDefaults | None = None,
+        scope: _IdentityScope | None = None,
+    ) -> None:
+        super().__init__(client, identity=identity, defaults=defaults, scope=scope)
 
 
 class SyncApi(_ApiBase):
@@ -435,8 +472,15 @@ class SyncApi(_ApiBase):
         _reject_nested_groups(cls)
         cls._service_defaults = _service_defaults_of(cls)
 
-    def __init__(self, client: _SyncClient, *, defaults: _ServiceDefaults | None = None) -> None:
-        super().__init__(client, defaults=defaults)
+    def __init__(
+        self,
+        client: _SyncClient,
+        *,
+        identity: Identity | None = None,
+        defaults: _ServiceDefaults | None = None,
+        scope: _IdentityScope | None = None,
+    ) -> None:
+        super().__init__(client, identity=identity, defaults=defaults, scope=scope)
 
 
 class _ApiGroup[TGroup: SyncApi | AsyncApi]:

@@ -12,7 +12,7 @@ import pytest
 from eazy_sdk_html import parse_html
 from pydantic import SecretStr
 
-from eazy_sdk import Client, ClientConfig
+from eazy_sdk import Client, Identity
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from examples.adaptix_nested_wire_body import (
     AdaptixWireDefaults,
@@ -248,14 +248,14 @@ def test_dummyjson_example_keeps_login_public_and_adds_bearer_to_me() -> None:
     with Client(
         base_url="https://dummyjson.test",
         handler=HttpxHandler(raw, owns_client=True),
-        config=ClientConfig(auth=USER_BEARER.static("access-demo")),
     ) as client:
-        session = DummyJsonAuthApi(client).login(
+        identity = Identity(auth=(USER_BEARER.static("access-demo"),))
+        session = DummyJsonAuthApi(client, identity=identity).login(
             username="emilys",
             password=SecretStr("emilyspass").get_secret_value(),
             expires_in_mins=30,
         )
-        user = DummyJsonUsersApi(client).me()
+        user = DummyJsonUsersApi(client, identity=identity).me()
 
     assert session.access_token.get_secret_value() == "access-demo"
     assert (user.username, user.first_name) == ("emilys", "Emily")

@@ -25,7 +25,7 @@ auth = session_auth(
 Автор hand-written SDK может один раз объявить ту же scheme для API defaults и lifecycle binding:
 
 ```python
-from eazy_sdk import AsyncApi, AsyncRoot, ClientConfig, api, api_group
+from eazy_sdk import AsyncApi, AsyncRoot, Identity, api, api_group
 from eazy_sdk.auth import session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.response import Json, Responses, Success
@@ -54,7 +54,7 @@ auth = USER_SESSION.configure(
 async with StoreSdk.from_handler(
     handler=AsyncHttpxHandler(),
     base_url="https://api.example.test",
-    config=ClientConfig(auth=auth),
+    identity=Identity(auth=(auth,)),
 ) as sdk:
     account = await sdk.account.get_account()
 ```

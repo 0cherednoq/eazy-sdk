@@ -382,6 +382,7 @@ async def test_generated_session_factory_hides_runtime_plumbing_and_executes(
             "owns_handler",
             "profile",
             "bindings",
+            "identity",
         }
 
         httpserver.expect_request(

@@ -11,7 +11,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
 import httpx
 import pytest
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Identity, api
 from eazy_sdk.auth import Auth, BearerScheme
 from eazy_sdk.auth.core import (
     AuthExecution,
@@ -50,6 +50,8 @@ from eazy_sdk.request import (
     method,
 )
 from eazy_sdk.response import Empty, Responses, Success
+
+SECRET_KEY_IDENTITY = Identity(key_provider=lambda _requirement: SigningKey(b"secret"))
 
 
 class PaymentSource(TypedDict):
@@ -151,12 +153,9 @@ async def test_projection_target_crypto_and_exact_signature_are_fresh_on_retry()
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=2),
-            key_provider=lambda _requirement: SigningKey(b"secret"),
-        ),
+        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=2)),
     ) as client:
-        await PaymentApi(client).pay(card_number="4111", amount=50)
+        await PaymentApi(client, identity=SECRET_KEY_IDENTITY).pay(card_number="4111", amount=50)
 
     assert cipher.attempts == [1, 2]
     assert json.loads(captures[0][0])["card"]["number"] == "attempt-1:4111"
@@ -218,12 +217,11 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(
-            max_redirects=1,
-            key_provider=lambda _requirement: SigningKey(b"secret"),
-        ),
+        config=ClientConfig(max_redirects=1),
     ) as client:
-        await RedirectApi(client).send(card_number="4111", amount=50)
+        await RedirectApi(client, identity=SECRET_KEY_IDENTITY).send(
+            card_number="4111", amount=50
+        )
 
     assert projections == [1, 2]
     assert cipher.attempts == [1, 2]
@@ -326,13 +324,10 @@ async def test_projection_crypto_and_signature_are_fresh_on_auth_replay() -> Non
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(
-            auth=auth,
-            auth_retries=1,
-            key_provider=lambda _requirement: SigningKey(b"secret"),
-        ),
+        config=ClientConfig(auth_retries=1),
     ) as client:
-        await AuthApi(client).send(card_number="4111", amount=50)
+        identity = Identity(auth=(auth,), key_provider=lambda _r: SigningKey(b"secret"))
+        await AuthApi(client, identity=identity).send(card_number="4111", amount=50)
 
     assert projections == [1, 2]
     assert cipher.attempts == [1, 2]
@@ -419,9 +414,10 @@ async def test_custom_compression_precedes_encoded_crypto_and_exact_signing() ->
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(key_provider=lambda _requirement: SigningKey(b"secret")),
     ) as client:
-        await CompressedApi(client).send(card_number="5555", amount=90)
+        await CompressedApi(client, identity=SECRET_KEY_IDENTITY).send(
+            card_number="5555", amount=90
+        )
 
     assert codec.documents == [{"card": {"number": "5555"}, "amount": 90}]
     assert len(cipher.clear_inputs) == 1
@@ -493,9 +489,8 @@ async def test_nested_body_reserved_output_uses_the_projected_target_path() -> N
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(key_provider=lambda _requirement: SigningKey(b"secret")),
     ) as client:
-        await SignedApi(client).send(payload="visible")
+        await SignedApi(client, identity=SECRET_KEY_IDENTITY).send(payload="visible")
 
     descriptor = cast(Any, SignedApi.send)
     compiled = descriptor.resolve().compile()
@@ -599,13 +594,14 @@ async def test_body_signature_output_and_encoded_crypto_fail_before_key_or_netwo
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(key_provider=key_provider),
     ) as client:
         with pytest.raises(
             CryptoConfigurationError,
             match="body signature outputs cannot run after outbound encoded crypto",
         ):
-            await InvalidApi(client).send(payload="visible")
+            await InvalidApi(client, identity=Identity(key_provider=key_provider)).send(
+                payload="visible"
+            )
 
     assert keys == 0
     assert sends == 0
@@ -659,13 +655,14 @@ async def test_body_signature_and_field_crypto_writer_collision_fails_before_sid
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(key_provider=key_provider),
     ) as client:
         with pytest.raises(
             CryptoConfigurationError,
             match="body signature and outbound crypto writers overlap",
         ):
-            await InvalidApi(client).send(payload="visible")
+            await InvalidApi(client, identity=Identity(key_provider=key_provider)).send(
+                payload="visible"
+            )
 
     assert keys == 0
     assert sends == 0
@@ -763,9 +760,8 @@ async def test_projection_rejects_prepopulated_nested_signature_output() -> None
     async with AsyncClient(
         base_url="https://api.example.test",
         handler=AsyncHttpxHandler(raw, owns_client=True),
-        config=ClientConfig(key_provider=lambda _requirement: SigningKey(b"secret")),
     ) as client:
         with pytest.raises(WriterConflictError, match=r"signatures\.value"):
-            await OccupiedApi(client).send(payload="visible")
+            await OccupiedApi(client, identity=SECRET_KEY_IDENTITY).send(payload="visible")
 
     assert sends == 0

@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:1575f0a632a1a83f28d3650cd4a11eb2456196408563a816c1c36c335ce5036b"
+api_fingerprint: "sha256:82f551b5571ffa3e868950d658bae168bd45a614536458630345dcf4a422fcb7"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
@@ -59,8 +59,12 @@ await client.aclose()
 | `Root.from_handler(..., owns_handler=False)` | root закрывает созданный client, caller сохраняет handler |
 
 `close()`/`aclose()` закрывает только те клиенты, которые корень создал сам, и безопасен при
-повторном вызове. Конструктор корня регистрирует scoped SDK factory через существующий
-`bind_sdk()` lifecycle. Scoped auth facades никогда не владеют parent resources.
+повторном вызове.
+
+Аутентификация клиенту не принадлежит: сессия, ключи подписи и DI объявляются в
+`Identity(...)` и передаются корню (`ShopSdk(client, identity=…)`) или отдельному роутеру
+(`UsersApi(client, identity=…)`). Конструктор того, кому передан `identity=`, регистрирует scoped
+SDK factory для auth-lifecycle. Scoped auth facades никогда не владеют parent resources.
 
 Root и API groups не сериализуют пользовательские вызовы: независимые calls можно выполнять
 конкурентно в пределах concurrency-контракта выбранного handler. Встроенные auth/protection caches

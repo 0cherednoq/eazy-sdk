@@ -11,12 +11,14 @@ from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from eazy_sdk import (
     AsyncApi,
+    AsyncRoot,
     ClientConfig,
+    Identity,
     RetryPolicy,
     UnsafeReplayError,
     api,
+    api_group,
 )
-from eazy_sdk.api import _ServiceDefaults
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthContext,
@@ -160,9 +162,8 @@ class UserSessionApi(AsyncApi):
         raise NotImplementedError
 
 
-class UserSessionSdk:
-    def __init__(self, client: Any) -> None:
-        self.auth = UserSessionApi(client)
+class UserSessionSdk(AsyncRoot):
+    auth = api_group(UserSessionApi)
 
 
 class UserAuthService:
@@ -187,40 +188,45 @@ class UserAuthService:
         return await context.sdk.auth.refresh(body=request)
 
 
-class RecursiveAuthApi(AsyncApi):
-    @api.post(
-        "/recursive-login",
-        operation_id="recursiveLogin",
-        responses=Responses(success=()),
-        raw_response=True,
-    )
-    async def login(self) -> NormalizedResponse[object]:
-        raise NotImplementedError
+def _recursive_sdk(scheme: object) -> type[AsyncRoot]:
+    """A root whose own login operation is protected, so the cycle must be caught."""
 
+    class RecursiveAuthApi(AsyncApi):
+        security = scheme
 
-class RecursiveAccountApi(AsyncApi):
-    @api.get(
-        "/recursive-account",
-        operation_id="recursiveAccount",
-        responses=Responses(success=()),
-        raw_response=True,
-    )
-    async def get(self) -> NormalizedResponse[object]:
-        raise NotImplementedError
+        @api.post(
+            "/recursive-login",
+            operation_id="recursiveLogin",
+            responses=Responses(success=()),
+            raw_response=True,
+        )
+        async def login(self) -> NormalizedResponse[object]:
+            raise NotImplementedError
 
+    class RecursiveAccountApi(AsyncApi):
+        security = scheme
 
-class RecursiveSdk:
-    def __init__(self, client: Any, security: object) -> None:
-        defaults = _ServiceDefaults(security=cast(Any, security))
-        self.auth = RecursiveAuthApi(client, defaults=defaults)
-        self.account = RecursiveAccountApi(client, defaults=defaults)
+        @api.get(
+            "/recursive-account",
+            operation_id="recursiveAccount",
+            responses=Responses(success=()),
+            raw_response=True,
+        )
+        async def get(self) -> NormalizedResponse[object]:
+            raise NotImplementedError
+
+    class RecursiveSdk(AsyncRoot):
+        auth = api_group(RecursiveAuthApi)
+        account = api_group(RecursiveAccountApi)
+
+    return RecursiveSdk
 
 
 class RecursiveAuthService:
     async def acquire(
         self,
         _credentials: LoginCredentials,
-        context: AuthContext[RecursiveSdk],
+        context: AuthContext[Any],
     ) -> UserSession:
         return cast(UserSession, await context.sdk.auth.login())
 
@@ -237,7 +243,8 @@ async def _protected_call(
     client: Any,
     security: object,
     *,
-    sdk: object | None = None,
+    identity: Identity | None = None,
+    sdk: type[AsyncRoot] = UserSessionSdk,
     method_name: str = "GET",
     path: str = "/account",
     signing: tuple[object, ...] = (),
@@ -256,12 +263,18 @@ async def _protected_call(
         async def account(self) -> NormalizedResponse[object]:
             raise NotImplementedError
 
-    sdk_type = type(sdk) if sdk is not None else UserSessionSdk
-    client.bind_sdk(sdk_type)
-    return await AccountApi(client).account()
+    root_type = cast(
+        "type[AsyncRoot]",
+        type("ProtectedSdk", (sdk,), {"account": api_group(AccountApi)}),
+    )
+    root = root_type(client, identity=identity)
+    result = await cast(Any, root).account.account()
+    return cast(NormalizedResponse[object], result)
 
 
-def _sync_protected_call(client: Any, security: object) -> NormalizedResponse[object]:
+def _sync_protected_call(
+    client: Any, security: object, *, identity: Identity | None = None
+) -> NormalizedResponse[object]:
     from eazy_sdk import SyncApi
 
     class AccountApi(SyncApi):
@@ -275,7 +288,9 @@ def _sync_protected_call(client: Any, security: object) -> NormalizedResponse[ob
         def account(self) -> NormalizedResponse[object]:
             raise NotImplementedError
 
-    return AccountApi(client).account()
+    return cast(
+        NormalizedResponse[object], AccountApi(client, identity=identity).account()
+    )
 
 
 async def test_session_auth_annotations_drive_login_reuse_expiry_and_refresh() -> None:
@@ -324,12 +339,13 @@ async def test_session_auth_annotations_drive_login_reuse_expiry_and_refresh() -
         headers={},
         cookies={},
     )
-    client = client_from_httpx(raw, config=ClientConfig(auth=auth))
+    identity = Identity(auth=(auth,))
+    client = client_from_httpx(raw)
 
-    first = await _protected_call(client, auth.scheme)
-    reused = await _protected_call(client, auth.scheme)
+    first = await _protected_call(client, auth.scheme, identity=identity)
+    reused = await _protected_call(client, auth.scheme, identity=identity)
     clock.now += timedelta(seconds=295)
-    refreshed = await _protected_call(client, auth.scheme)
+    refreshed = await _protected_call(client, auth.scheme, identity=identity)
     await client.aclose()
 
     assert first.json() == reused.json() == {"authorization": "Bearer access-1"}
@@ -358,14 +374,14 @@ async def test_bound_auth_sdk_propagates_the_lifecycle_graph_before_network_io()
         headers={},
         cookies={},
     )
-    client = client_from_httpx(raw, config=ClientConfig(auth=auth))
-    sdk = client.bind_sdk(lambda scoped: RecursiveSdk(scoped, auth.scheme))
+    client = client_from_httpx(raw)
+    sdk = _recursive_sdk(auth.scheme)(client, identity=Identity(auth=(auth,)))
 
     with pytest.raises(
         ResolutionCycleError,
         match=r"acquire session.*acquire session",
     ):
-        await sdk.account.get()
+        await cast(Any, sdk).account.get()
     await client.aclose()
 
     assert calls == 0
@@ -426,10 +442,12 @@ async def test_session_auth_refreshes_a_selected_session_after_401_and_replays()
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth, key_provider=key_provider),
     )
 
-    response = await _protected_call(client, auth.scheme, signing=(signature,))
+    response = await _protected_call(
+        client, auth.scheme, identity=Identity(auth=(auth,), key_provider=key_provider),
+        signing=(signature,)
+    )
     await client.aclose()
 
     assert response.json() == {"authorization": "Bearer access-2"}
@@ -472,12 +490,12 @@ async def test_session_auth_acquire_is_singleflight_on_concurrent_first_use() ->
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
 
+    identity = Identity(auth=(auth,))
     first, second = await asyncio.gather(
-        _protected_call(client, auth.scheme),
-        _protected_call(client, auth.scheme),
+        _protected_call(client, auth.scheme, identity=identity),
+        _protected_call(client, auth.scheme, identity=identity),
     )
     await client.aclose()
 
@@ -626,9 +644,8 @@ class HeaderSessionApi(AsyncApi):
         raise NotImplementedError
 
 
-class HeaderSessionSdk:
-    def __init__(self, client: Any) -> None:
-        self.auth = HeaderSessionApi(client)
+class HeaderSessionSdk(AsyncRoot):
+    auth = api_group(HeaderSessionApi)
 
 
 class HeaderAuthService:
@@ -670,9 +687,10 @@ async def test_session_token_can_come_from_an_exact_response_header() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
-    response = await _protected_call(client, auth.scheme, sdk=HeaderSessionSdk(client))
+    response = await _protected_call(
+        client, auth.scheme, identity=Identity(auth=(auth,)), sdk=HeaderSessionSdk
+    )
     await client.aclose()
 
     assert response.json() == {"authorization": "Bearer header-token"}
@@ -692,9 +710,8 @@ class CookieSessionApi(AsyncApi):
         raise NotImplementedError
 
 
-class CookieSessionSdk:
-    def __init__(self, client: Any) -> None:
-        self.auth = CookieSessionApi(client)
+class CookieSessionSdk(AsyncRoot):
+    auth = api_group(CookieSessionApi)
 
 
 class CookieAuthService:
@@ -744,11 +761,11 @@ async def test_session_cookie_captures_set_cookie_without_model_annotations() ->
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
 
-    first = await _protected_call(client, auth.scheme, sdk=CookieSessionSdk(client))
-    second = await _protected_call(client, auth.scheme, sdk=CookieSessionSdk(client))
+    identity = Identity(auth=(auth,))
+    first = await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
+    second = await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
     await client.aclose()
 
     assert first.json() == second.json() == {"cookie": "session_id=session-1"}
@@ -795,13 +812,13 @@ async def test_session_cookie_rotates_with_attributes_and_rolls_back_deletion() 
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
 
+    identity = Identity(auth=(auth,))
     with pytest.raises(SessionConfigurationError, match="active Set-Cookie"):
-        await _protected_call(client, auth.scheme, sdk=CookieSessionSdk(client))
+        await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
     with pytest.raises(SessionConfigurationError, match="active Set-Cookie"):
-        await _protected_call(client, auth.scheme, sdk=CookieSessionSdk(client))
+        await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
     await client.aclose()
 
     assert protected_cookies == ["session_id=first", "session_id=first"]
@@ -825,9 +842,8 @@ async def test_static_scheme_helper_avoids_public_provider_registry() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
-    response = await _protected_call(client, scheme)
+    response = await _protected_call(client, scheme, identity=Identity(auth=(auth,)))
     await client.aclose()
 
     assert response.json() == {"authorization": "Bearer ready-token"}
@@ -858,9 +874,8 @@ async def test_every_static_scheme_uses_the_short_binding_path(
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth),
     )
-    response = await _protected_call(client, auth.scheme)
+    response = await _protected_call(client, auth.scheme, identity=Identity(auth=(auth,)))
     await client.aclose()
 
     assert response.json() == {"value": expected[1]}
@@ -969,11 +984,8 @@ async def test_retry_policy_safe_retries_status_with_bounded_deterministic_backo
         sleep=sleep,
         random_source=lambda: 0.5,
     )
-    config = ClientConfig(
-        retry=policy,
-        auth_retries=0,
-        observer=lambda phase, value: observed.append((phase, value)),
-    )
+    config = ClientConfig(retry=policy, auth_retries=0)
+    identity = Identity(observer=lambda phase, value: observed.append((phase, value)))
     client = client_from_httpx(
         httpx.AsyncClient(
             base_url="https://api.example",
@@ -984,7 +996,7 @@ async def test_retry_policy_safe_retries_status_with_bounded_deterministic_backo
         config=config,
     )
 
-    response = await _protected_call(client, None)
+    response = await _protected_call(client, None, identity=identity)
     await client.aclose()
 
     assert response.status_code == 200
@@ -1127,9 +1139,9 @@ async def test_auth_refresh_and_response_retry_keep_independent_budgets() -> Non
             headers={},
             cookies={},
         ),
-        config=ClientConfig(auth=auth, retry=RetryPolicy.safe(max_attempts=2)),
+        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=2)),
     )
-    response = await _protected_call(client, auth.scheme)
+    response = await _protected_call(client, auth.scheme, identity=Identity(auth=(auth,)))
     await client.aclose()
 
     assert response.json() == {"attempt": 3}
@@ -1162,13 +1174,15 @@ async def test_response_retry_reprepares_and_resigns_every_attempt() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(
-            retry=RetryPolicy.safe(max_attempts=3),
-            auth_retries=0,
-            key_provider=key_provider,
-        ),
+        config=ClientConfig(retry=RetryPolicy.safe(max_attempts=3), auth_retries=0),
     )
-    response = await _protected_call(client, None, path="/signed", signing=(signature,))
+    response = await _protected_call(
+        client,
+        None,
+        identity=Identity(key_provider=key_provider),
+        path="/signed",
+        signing=(signature,),
+    )
     await client.aclose()
 
     assert response.status_code == 200

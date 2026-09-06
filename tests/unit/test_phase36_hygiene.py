@@ -156,7 +156,7 @@ def test_storage_hooks_are_observers_not_middleware() -> None:
 def test_sync_and_async_clients_share_one_core() -> None:
     assert issubclass(_SyncClientCore, _ClientCore)
     assert issubclass(_AsyncClientCore, _ClientCore)
-    shared = {"bind_sdk", "invalidate_protection", "_prepare_options"}
+    shared = {"_core_for", "invalidate_protection", "_prepare_options"}
     for name in shared:
         assert getattr(_SyncClientCore, name) is getattr(_ClientCore, name), name
         assert getattr(_AsyncClientCore, name) is getattr(_ClientCore, name), name

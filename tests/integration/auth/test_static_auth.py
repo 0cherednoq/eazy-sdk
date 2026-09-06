@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pytest_httpserver import HTTPServer
 
-from eazy_sdk import AsyncApi, ClientConfig, SyncApi, api
+from eazy_sdk import AsyncApi, Identity, SyncApi, api
 from eazy_sdk.auth import (
     ApiKeyScheme,
     Auth,
@@ -140,17 +140,19 @@ async def _execute(
     operation: _RawOperation,
     providers: Auth,
 ) -> NormalizedResponse[object]:
+    identity = Identity(auth=(providers,))
     if async_client:
         raw_async = httpx.AsyncClient(base_url=base_url, headers={}, cookies={})
-        client_async = client_from_httpx(raw_async, config=ClientConfig(auth=providers))
+        client_async = client_from_httpx(raw_async)
         async with client_async:
-            return await operation.async_api(client_async).protected()  # type: ignore[attr-defined,no-any-return]
+            bound = operation.async_api(client_async, identity=identity)
+            return await bound.protected()  # type: ignore[attr-defined,no-any-return]
 
     def execute_sync() -> NormalizedResponse[object]:
         raw_sync = httpx.Client(base_url=base_url, headers={}, cookies={})
-        client_sync = client_from_httpx(raw_sync, config=ClientConfig(auth=providers))
+        client_sync = client_from_httpx(raw_sync)
         with client_sync:
-            return operation.sync_api(client_sync).protected()  # type: ignore[attr-defined,no-any-return]
+            return operation.sync_api(client_sync, identity=identity).protected()  # type: ignore[attr-defined,no-any-return]
 
     return await asyncio.to_thread(execute_sync)
 
