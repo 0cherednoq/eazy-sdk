@@ -4122,11 +4122,13 @@ per-package pass over `websocket`, `crypto`, `request` and `protection.advanced`
 
 ### State
 
-Active (50.4). Steps 50.1-50.3 are complete: an operation is a frozen model class published with
-`op(...)` and the decorator synthesizes exactly that class; the response family, the specificity
-of a case and the layer that declared it are all read rather than declared; and a request is a
-value that can be built, copied and sent. Plan: `50-declarative-operations.md`; design:
-`eazy-sdk-declarative-operations.md`.
+Complete (2026-09-07). An operation is a frozen model class published with `op(...)`, and the
+decorator synthesizes exactly that class, so one execution path serves both and an operation
+finally has defaults, `default_factory` and a request that is a value. What comes back is read
+rather than declared: the family from the model, the case by specificity, the layer by where it
+was declared. RPC and WebSocket operations are the same classes; the adaptix plugin expresses a
+central `Retort` as a model adapter; the public surface is back at its baseline. Plan:
+`50-declarative-operations.md`; design: `eazy-sdk-declarative-operations.md` (marked implemented).
 
 ### Delivered
 
@@ -4216,13 +4218,36 @@ value that can be built, copied and sent. Plan: `50-declarative-operations.md`; 
   `Omittable`, `UNSET` and `op`; snapshots regenerated, generated-code hash
   `c08f33283b03085fdca603aeced269b87ff80b933e667137dd557f06a6c94770`.
 
+- **50.4.1** `eazy_sdk/protocols/operation.py`: `RpcOperation[T]` and `Rpc.method`, lowered by
+  `declare()` into the `rpc_result`/`rpc_error`/`rpc_error_default` cases phase 49 already
+  executes; `@api.rpc` synthesizes an `RpcOperation` subclass; D-20 refuses a URL placement
+  (3 tests in `tests/unit/test_phase49_envelopes.py`).
+- **50.4.2** `eazy_sdk/websocket/operation.py`: `WsCall[T]`, `WsSubscribe[T]`, `WsSend` and `Ws`.
+  A non-HTTP class publishes itself through `__publish__`, so `api.py` never imports the WebSocket
+  package and the boundary test stays green; D-21, D-22 and D-23 refuse a placement marker, a
+  WebSocket operation on an HTTP router and an HTTP operation on a WebSocket router
+  (4 tests in `tests/websocket/test_phase50_ws_operations.py`).
+- **50.4.3** `plugins/adaptix`: `AdaptixModelAdapter` plus `adaptix_models(...)`, which installs it
+  in place of the built-in dataclass adapter and delegates every type the retort was not told
+  about (5 tests). Registered in the workspace, `testpaths`, the package audit and the extras
+  smoke.
+- **50.4.4** The documentation rewrite: quickstart, every request and response guide, the API
+  reference, the auth pages, dependencies, protocols, XML, signing, payload-crypto, multi-service,
+  both worked examples and the two authoring references. No page mentions `Unpack[TypedDict]`,
+  `responses=` or `response=` any more. New page `guides/requests/values.mdx`.
+- **50.4.5** `more/migration.mdx` carries Appendix A in full; every row is checked by the phase-37
+  test (what "стало" names resolves, what "было" names does not).
+- **50.4.6** The public surface is back at 436, the number master carried before the phase, and
+  the root at 39 of its 40. What left is plumbing — see decision 37 for the list; every name stays
+  importable from the module that defines it.
+
 ### Surface baseline
 
 `uv run python scripts/surface_count.py --total` on master before any phase-50 edit: **436**.
-After 50.1: **456**; after 50.3: **458** (`ErrorSummary`, `accepts_media`). Gate for the
-phase: the number after 50.4.6 is <= 436; Appendix B names the
-candidates (websocket internals under an underscore, `JsonResponse`, and `Text`/`Bytes` out of the
-root if the budget is still exceeded).
+After 50.1: **456**; after 50.3: **458** (`ErrorSummary`, `accepts_media`); after 50.4.3: **464**
+(the adaptix plugin's names are outside the counted modules, but `Rpc`, `RpcOperation`, `Ws`,
+`WsCall`, `WsSubscribe` and `WsSend` are inside). After 50.4.6: **436** — the gate is met exactly,
+and `len(eazy_sdk.__all__)` is 39 of its cap of 40.
 
 ### Decisions recorded
 
@@ -4288,13 +4313,44 @@ Plan §10: items 1-10 were taken by the plan, items 11-22 while executing 50.1.
 30. `ModelAdapterRegistry.evolve` dispatches by value, so a `TypedDict` (a plain `dict` at
     runtime) is evolved through the adapter chosen by type. Operations are never `TypedDict`
     after phase 50, so the public path never meets this.
+31. `Rpc.method` takes no separate `errors=`/`fallback=`: the shared `_HttpOptions` already types
+    them, and an `int` key there is the protocol's own code. The lowering is switched on by
+    `_HttpSpec.envelope_cases` and applies only when `success=` was not given, so an operation
+    that names its own cases — the phase-49 suite — keeps them.
+32. A non-HTTP operation publishes itself: `op()` calls `cls.__publish__()`, declared by the
+    `_PublishesItself` protocol. Importing `eazy_sdk.websocket` from `api.py` would break the
+    boundary `test_http_runtime_does_not_import_websocket_boundary` guards. The consequence is
+    that `op()` over a WebSocket class is typed as returning that package's descriptor, with `P`
+    and `T` uninferable — the call itself types as `Any`.
+33. D-23 is checked in `AsyncWsApi.__init_subclass__`, not in the HTTP descriptor's
+    `__set_name__`, for the same boundary reason; the check is structural.
+34. `WsSubscribe[T]` names the message type and the call returns a `Subscription[T]`; `WsCall[T]`
+    returns `T` and `WsSend` returns `None`.
+35. The adaptix adapter stands in for the built-in dataclass adapter rather than beside it. Plan
+    §4.15 assumed `supports_type` limited to `types`, but adaptix reads every dataclass and so
+    does the built-in adapter, so the registry raised `AmbiguousModelAdapterError`. The adapter
+    answers for every dataclass, routes `types` through the retort and hands the rest to the
+    built-in implementation; `adaptix_models(...)` installs it, dropping `"dataclass"` from the
+    registry. Both properties the plan asked for hold.
+36. 50.4.6 was done before 50.4.4: the name budget moves names between modules, and writing the
+    documentation first would have meant writing it twice.
+37. The names that left the public surface, 464 to 436: from `eazy_sdk.websocket` the frame and
+    logical-message plumbing (`ConnectionGeneration`, `EncodedFrame`, `FrameKind`, `InboundFrame`,
+    `LogicalMessage`, `MessageReservedOutput`, `PreparedMessage`, `WsOperationKind`), the zapros
+    boundary (`FrameLimits`, `frame_from_zapros`, `frame_to_zapros`), the compiled middleware
+    (`*MiddlewareApplication`) and protection (`ProtectionSnapshot`, `protection_snapshot`,
+    `compile_message_transforms`, `apply_*_transforms`) pipelines, and `RuntimeComposition`; from
+    `eazy_sdk.response` `JsonResponse` (deleted — it was `Json` spelled twice), `HtmlExtractor` and
+    `JsonExtractor`; from `eazy_sdk.request` `TransportProtocol`; from `eazy_sdk.serialization`
+    `accepts_media`; from `eazy_sdk.crypto` `ResolvedCrypto`. Each stays importable from its own
+    module, and the tests that used them import them from there.
 
 ### Commands run
 
 | Command / gate | Result |
 |---|---|
-| `uv run pytest -q` | PASS: 1149 passed, 11 skipped after 50.1; 1189 passed, 11 skipped after 50.3 (175.82s). Two full runs in between were killed by the 10s per-test timeout while a test's own event loop was created (`socket.socketpair`) or inside `curl_cffi`; both reproduce without phase-50 changes and pass in isolation. |
-| `uv run mypy` | PASS: no issues found in 325 source files after 50.1; 328 after 50.3. |
+| `uv run pytest -q` | PASS: 1149 passed, 11 skipped after 50.1; 1189 after 50.3; **1211 passed, 11 skipped in 169.99s** at the phase close. Two full runs in between were killed by the 10s per-test timeout while a test's own event loop was created (`socket.socketpair`) or inside `curl_cffi`; both reproduce without phase-50 changes and pass in isolation, and `--timeout=120` runs clean. |
+| `uv run mypy` | PASS: no issues found in 325 source files after 50.1; 328 after 50.3; **333** at the phase close. |
 | `uv run ruff check .` | PASS. `ruff format --check .` reports 76 pre-existing files formatted to a narrower line length than the configured 100; the drift is on files phase 50 never touched, so files this phase writes are formatted and the rest are left alone. |
 | `uv run python scripts/absence_audit.py` | PASS. |
 | `uv run python scripts/update_openapi_snapshots.py` + `uv run pytest tests/plugins` | PASS: snapshots regenerated, generated SDK imports and type-checks. |
@@ -4303,12 +4359,16 @@ Plan §10: items 1-10 were taken by the plan, items 11-22 while executing 50.1.
 | strict Sphinx (`-W --keep-going -b dirhtml -c docs-site`) | PASS: build succeeded. |
 | `uv build` | PASS: wheel and sdist. |
 | `uv run python scripts/extras_smoke.py` | PASS: 14 extras. |
-| `uv run python scripts/package_audit.py` | FAIL: `dependency 'pyrefly' has no entry in DISTRIBUTION_IMPORTS`. Pre-existing and not caused by phase 50: the stray `pyrefly>=0.60.0` runtime dependency sits in an uncommitted `pyproject.toml` edit owned by the repository owner; the audit passes once it is removed. |
-| `uv run pytest -q tests/websocket tests/unit/test_phase49_envelopes.py tests/rewrite/test_phase04_signing.py tests/crypto` | PASS: 138 passed, 8 skipped. |
+| `uv build --all-packages --out-dir dist/ci` + `scripts/package_audit.py` | FAIL on the working tree: `dependency 'pyrefly' has no entry in DISTRIBUTION_IMPORTS`. Pre-existing and not caused by phase 50 — the stray `pyrefly>=0.60.0` runtime dependency sits in an uncommitted `pyproject.toml` edit owned by the repository owner. Rebuilt with that one line removed, the audit is **PASS**: "wheels/sdists have matching release metadata, licenses, typing markers, the Zapros boundary ... and every unconditional import is covered by a mandatory dependency"; the working tree was restored unchanged afterwards. |
+| `uv run --no-project python scripts/extras_smoke.py dist/ci-check` | PASS: 15 extras install from wheels and import cleanly, including `eazy-sdk-adaptix==0.2.0a5`. |
+| strict Sphinx at the phase close | PASS: build succeeded. |
+| `uv run pytest -q tests/websocket tests/unit/test_phase49_envelopes.py tests/rewrite/test_phase04_signing.py tests/crypto` | PASS: 138 passed, 8 skipped after 50.3; the phase-49 and websocket suites stayed green through 50.4.1 and 50.4.2 with no changed expectation. |
 | `uv run python docs-site/scripts/validate_docs.py` | PASS: 78 pages. |
 | `uv run python scripts/surface_count.py --total` | 456 after 50.1, 458 after 50.3 (baseline 436; the gate applies after 50.4.6). |
 
 ### Remaining work / blockers
 
-50.4: RPC and WebSocket operations as classes, the adaptix plugin, the documentation rewrite and
-the migration page, the name budget (458 now, <= 436 required) and the phase close.
+None for phase 50. Two items from earlier phases stay open and are recorded rather than pending:
+the a3 plan's metric 4.5 (<=300 public names, 436 now) and `PartialOutcome` for
+GraphQL-over-HTTP. The `pyrefly` runtime dependency in the working tree's `pyproject.toml` belongs
+to the repository owner and keeps `package_audit.py` red until it is removed.
