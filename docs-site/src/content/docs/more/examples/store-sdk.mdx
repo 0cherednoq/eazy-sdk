@@ -8,7 +8,7 @@ sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.crypto
   - eazy_sdk.websocket
-api_fingerprint: "sha256:3fa5bc23241e48c9dad9de526a7c86162eb7a8f45a7d5fb1d3d275ea9c17a289"
+api_fingerprint: "sha256:5765f5b234d30e4858a96a756cdb4389e48f4aa2ed481eef9471ede8e2b74c2a"
 ---
 
 Этот tutorial рассчитан на автора Python SDK. Мы пишем клиент для магазина `store.example`:
@@ -44,13 +44,11 @@ Cipher в runnable-файле использует Base64 только для д
 Начните с публичной операции. Здесь ещё нет auth, signing или middleware.
 
 ```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Path, Query
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Path, Query, op
 
 class Product(BaseModel):
     id: int
@@ -62,27 +60,25 @@ class ProductSearch(BaseModel):
     items: list[Product]
     page: int
 
-PRODUCT = Responses[Product](success=(Success(200, Json(Product)),))
-PRODUCTS = Responses[ProductSearch](success=(Success(200, Json(ProductSearch)),))
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetProduct(HttpOperation[Product]):
+    __http__ = Http.get("/v1/products/{product_id}")
 
-class GetProductRequest(TypedDict):
-    product_id: Annotated[int, Path()]
+    product_id: Path[int]
 
-class SearchProductsRequest(TypedDict):
-    query: Annotated[str, Query()]
-    page: NotRequired[Annotated[int, Query()]]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SearchProducts(HttpOperation[ProductSearch]):
+    __http__ = Http.get("/v1/products")
+
+    query: Query[str]
+    page: Query[Omittable[int]] = UNSET
 
 class CatalogApi(AsyncApi):
-    @api.get("/v1/products/{product_id}", responses=PRODUCT)
-    async def product(self, **request: Unpack[GetProductRequest]) -> Product:
-        raise NotImplementedError
-
-    @api.get("/v1/products", responses=PRODUCTS)
-    async def search(self, **request: Unpack[SearchProductsRequest]) -> ProductSearch:
-        raise NotImplementedError
+    product = op(GetProduct)
+    search = op(SearchProducts)
 ```
 
-Сигнатура метода становится пользовательским API вашего SDK. Группу можно использовать поверх
+Конструктор класса операции становится пользовательским API вашего SDK. Группу можно использовать поверх
 готового клиента; в шаге 3 она же станет `sdk.catalog` внутри root:
 
 ```python
@@ -100,13 +96,14 @@ return-аннотация сохраняет strict mypy и IDE без module-le
 пользователь мог обработать её без разбора raw JSON.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
 from pydantic import BaseModel
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import JsonBody
-from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
+from eazy_sdk.request import markers
+from eazy_sdk.response import ApiError
 
 class OrderLine(BaseModel):
     product_id: int
@@ -127,18 +124,14 @@ class StockProblem(BaseModel):
 class OutOfStock(ApiError[StockProblem]):
     pass
 
-ORDER_RESPONSES = Responses(
-    success=(Success(201, Json(Order)),),
-    errors=(Error(409, Json(StockProblem), exception=OutOfStock),),
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateOrderOperation(HttpOperation[Order]):
+    __http__ = Http.post("/v1/orders", success={201: Order}, errors={409: OutOfStock})
 
-class CreateOrderRequest(TypedDict):
-    body: Annotated[CreateOrder, JsonBody()]
+    body: Annotated[CreateOrder, markers.JsonBody()]
 
 class OrdersApi(AsyncApi):
-    @api.post("/v1/orders", responses=ORDER_RESPONSES)
-    async def create(self, **request: Unpack[CreateOrderRequest]) -> Order:
-        raise NotImplementedError
+    create = op(CreateOrderOperation)
 ```
 
 `OrdersApi` и `CatalogApi` — отдельные группы операций. Соберём их в один публичный root.
@@ -188,25 +181,28 @@ except OutOfStock as error:
 Схема доступа живёт рядом с контрактами SDK. Сам token приложение передаёт при создании клиента.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
 from eazy_sdk.auth import BearerScheme
-from eazy_sdk.request import JsonBody
+from eazy_sdk.request import markers
 
 CUSTOMER = BearerScheme("store-customer")
 
-class CreateOrderRequest(TypedDict):
-    body: Annotated[CreateOrder, JsonBody()]
-
-class OrdersApi(AsyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateOrderOperation(HttpOperation[Order]):
+    __http__ = Http.post(
         "/v1/orders",
-        responses=ORDER_RESPONSES,
+        success={201: Order},
+        errors={409: OutOfStock},
         security=CUSTOMER,
     )
-    async def create(self, **request: Unpack[CreateOrderRequest]) -> Order:
-        raise NotImplementedError
+
+    body: Annotated[CreateOrder, markers.JsonBody()]
+
+class OrdersApi(AsyncApi):
+    create = op(CreateOrderOperation)
 ```
 
 ```python
@@ -338,15 +334,16 @@ wire key автоматически.
 Если сервер принимает encrypted envelope вместо JSON, добавьте bytes cipher и wire policy:
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
 from eazy_sdk.crypto import (
     decrypt_encoded,
     encrypt_encoded,
     http_encrypted,
 )
-from eazy_sdk.request import Wire
+from eazy_sdk.request import Wire, markers
 
 PAYMENT_CRYPTO = payload_crypto(
     "store-payments-v2",
@@ -361,13 +358,11 @@ PAYMENT_CRYPTO = payload_crypto(
     ),
 )
 
-class CreatePaymentRequest(TypedDict):
-    body: Annotated[CreatePayment, JsonBody()]
-
-class PaymentsApi(AsyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentOperation(HttpOperation[PaymentResult]):
+    __http__ = Http.post(
         "/v1/payments",
-        responses=Responses(success=(Success(201, Json(PaymentResult)),)),
+        success={201: PaymentResult},
         security=CUSTOMER,
         signing=PAYMENTS_HMAC,
         crypto=PAYMENT_CRYPTO,
@@ -376,8 +371,11 @@ class PaymentsApi(AsyncApi):
             clear_content_type="application/json",
         )),
     )
-    async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
-        raise NotImplementedError
+
+    body: Annotated[CreatePayment, markers.JsonBody()]
+
+class PaymentsApi(AsyncApi):
+    create = op(CreatePaymentOperation)
 ```
 
 Добавьте группу в root: `payments = api_group(PaymentsApi)` в `StoreSdk`, после чего вызов выглядит как

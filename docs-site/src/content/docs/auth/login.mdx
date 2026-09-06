@@ -65,21 +65,15 @@ Login в Eazy SDK является обычной декорированной �
 
 ```python
 from datetime import datetime, timedelta
-from typing import Annotated, NotRequired, TypedDict, Unpack
+from typing import Annotated
 
 from pydantic import BaseModel, SecretStr
 
 from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_scheme
-from eazy_sdk.request import JsonField
 
 class LoginCredentials(BaseModel):
     email: str
     password: SecretStr
-
-class LoginRequest(TypedDict):
-    email: Annotated[str, JsonField()]
-    password: Annotated[str, JsonField()]
-    remember_me: NotRequired[Annotated[bool, JsonField()]]
 
 class UserSession(BaseModel):
     access_token: Annotated[SecretStr, Bearer()]
@@ -102,34 +96,25 @@ refresh, а `ExpiresAt()` определяет, когда session следуе�
 ## 2. Объявите login-метод
 
 ```python
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.response import Json, Responses, Success
+from dataclasses import dataclass
 
-LOGIN_RESPONSES = Responses(
-    success=(Success(200, Json(UserSession)),),
-)
-ACCOUNT_RESPONSES = Responses(
-    success=(Success(200, Json(Account)),),
-)
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, JsonField, Omittable, api, op
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/login", operation_id="login", security=None)
+
+    email: JsonField[str]
+    password: JsonField[str]
+    remember_me: JsonField[Omittable[bool]] = UNSET
 
 class AsyncAuthApi(AsyncApi):
-    @api.post(
-        "/auth/login",
-        operation_id="login",
-        responses=LOGIN_RESPONSES,
-        security=None,
-    )
-    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
-        raise NotImplementedError
+    login = op(Login)
 
 class AsyncAccountApi(AsyncApi):
     security = USER_SESSION
 
-    @api.get(
-        "/account",
-        operation_id="getAccount",
-        responses=ACCOUNT_RESPONSES,
-    )
+    @api.get("/account", operation_id="getAccount")
     async def get_account(self) -> Account:
         raise NotImplementedError
 ```
@@ -195,7 +180,7 @@ class AuthSdk(AsyncRoot):
         )
 ```
 
-Service преобразует `LoginCredentials` в именованные аргументы плоского `LoginRequest`. Runtime
+Service преобразует `LoginCredentials` в именованные аргументы операции `Login`. Runtime
 отвечает только за выполнение операции, проверку response case и сохранение полученной
 `UserSession`.
 
@@ -259,10 +244,10 @@ async with AsyncAPI.httpx(
 `examples/dummyjson_session_auth.py` в репозитории.
 
 :::{warning} Не храните пароль в HTTP-модели
-`LoginCredentials` является lifecycle input и может содержать `SecretStr`. Плоский
-  `LoginRequest` остаётся `TypedDict`, существует только для одного сетевого вызова и содержит
-  именно те поля, которые ожидает сервер.
+`LoginCredentials` является lifecycle input и может содержать `SecretStr`. Класс операции
+  `Login` существует только для одного сетевого вызова и содержит именно те поля, которые
+  ожидает сервер.
 :::
 
-Если login требует CAPTCHA или CSRF, добавьте managed поля в приватную wire-модель. Публичная
-`LoginRequest` при этом не меняется. См. {doc}`обязательную Protection </guides/protection/index>`.
+Если login требует CAPTCHA или CSRF, добавьте managed поля в приватную wire-модель. Публичные
+поля `Login` при этом не меняются. См. {doc}`обязательную Protection </guides/protection/index>`.

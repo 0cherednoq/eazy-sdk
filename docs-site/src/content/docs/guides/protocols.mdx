@@ -26,12 +26,10 @@ api_fingerprint: "sha256:6c1e22fdb8e6a3fccf20e40d6a1f94c03b2361ac1353e43c48d1edc
 миксина сервиса) и наследуется по MRO. URL в операции не повторяется: его знает конверт.
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.protocols import JsonRpc
-from eazy_sdk.request import JsonField
-from eazy_sdk.response import Responses
+from eazy_sdk import AsyncApi, JsonField, op
+from eazy_sdk.protocols import JsonRpc, Rpc, RpcOperation
 
 
 class BillingService:
@@ -39,24 +37,33 @@ class BillingService:
     protocol = JsonRpc(path="/endpoint")
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Charge(RpcOperation[Receipt]):
+    __http__ = Rpc.method(
+        "account.charge",
+        errors={-32001: InsufficientFunds},
+        fallback=RpcFault,
+    )
+
+    account: JsonField[str]
+    amount: JsonField[int]
+
+
 class BillingApi(BillingService, AsyncApi):
-    @api.rpc("account.charge", responses=CHARGE_RESPONSES)
-    async def charge(
-        self,
-        *,
-        account: Annotated[str, JsonField()],
-        amount: Annotated[int, JsonField()],
-    ) -> Receipt:
-        raise NotImplementedError
+    charge = op(Charge)
 ```
 
-`api.rpc` — не второе семейство декораторов, а ещё один член того же `api`: `responses`, `wire`,
-`signing`, `security`, `crypto` и `errors` означают ровно то же, что у `api.post`. Публичная
-поверхность вызова тоже не отличается от REST: `await sdk.billing.charge(account="a-1",
-amount=1000)`.
+`RpcOperation` — обычная операция: `wire`, `signing`, `security`, `crypto` и `errors` означают ровно
+то же, что у HTTP-операции, а `errors` здесь ключуется кодом протокола, потому что сервис отвечает
+`200` и говорит о неудаче внутри конверта. Поля размещаются в payload; `Path`/`Query` запрещены —
+URL принадлежит конверту. Публичная поверхность вызова не отличается от REST:
+`await sdk.billing.charge(account="a-1", amount=1000)`.
 
-`@api.rpc` в роутере без объявленного конверта — ошибка объявления, а не рантайма: она поднимается
-при создании класса. Обратное разрешено: REST-операция рядом с RPC-сервисом (health-check,
+Короткая форма — декоратор `@api.rpc("account.charge", errors={...})`; он синтезирует такой же
+`RpcOperation`-класс.
+
+RPC-операция в роутере без объявленного конверта — ошибка объявления, а не рантайма: она
+поднимается при создании класса. Обратное разрешено: REST-операция рядом с RPC-сервисом (health-check,
 например) уходит по своему пути и без конверта.
 
 ## Конверт — стадия конвейера
@@ -89,10 +96,12 @@ protocol = JsonRpc(path="/endpoint", id_on_retry="regenerate")
 ## Ошибки: тот же путь, что у REST
 
 JSON-RPC отвечает `200 OK` с телом `{"error": {...}}`. Второй модели ошибок для этого не
-появляется: `Responses` уже выбирает случай по `condition`, а хелперы просто заполняют его.
+появляется: `Rpc.method` раскладывает объявление в обычные случаи, которые выбираются по
+`condition`.
 
 ```python
 from eazy_sdk.protocols import rpc_error, rpc_error_default, rpc_result
+from eazy_sdk.response import Responses
 
 CHARGE_RESPONSES = Responses(
     success=(rpc_result(Receipt),),
@@ -101,9 +110,11 @@ CHARGE_RESPONSES = Responses(
 )
 ```
 
-`rpc_result` — обычный `Success`, `rpc_error` — обычный `Error` с типизированной моделью тела
-ошибки. `rpc_error_default` ставится в `fallback=`, а не в `errors`: как случай он совпал бы с тем
-же телом, что и случай с кодом, а два совпавших случая — это неоднозначность, а не значение по
+Это ровно то, во что превращается `Rpc.method("account.charge", errors={-32001: InsufficientFunds},
+fallback=RpcFault)`; писать так вручную нужно, только когда случай нестандартный. `rpc_result` —
+обычный `Success`, `rpc_error` — обычный `Error` с типизированной моделью тела ошибки.
+`rpc_error_default` ставится в `fallback=`, а не в `errors`: как случай он совпал бы с тем же
+телом, что и случай с кодом, а два совпавших случая — это неоднозначность, а не значение по
 умолчанию.
 
 ## Batch — явная не-цель

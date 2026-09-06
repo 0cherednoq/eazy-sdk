@@ -53,24 +53,18 @@ Refresh обновляет истёкшую Bearer session без повторн
 ## Объявите request и операцию
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import JsonField
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
 
-class RefreshRequest(TypedDict):
-    refresh_token: Annotated[str, JsonField()]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Refresh(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/refresh", operation_id="refresh", security=None)
+
+    refresh_token: JsonField[str]
 
 class AsyncAuthApi(AsyncApi):
-    @api.post(
-        "/auth/refresh",
-        operation_id="refresh",
-        responses=Responses(success=(Success(200, Json(UserSession)),)),
-        security=None,
-    )
-    async def refresh(self, **request: Unpack[RefreshRequest]) -> UserSession:
-        raise NotImplementedError
+    refresh = op(Refresh)
 ```
 
 ## Добавьте refresh в service

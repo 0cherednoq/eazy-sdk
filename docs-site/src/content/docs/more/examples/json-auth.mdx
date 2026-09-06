@@ -17,42 +17,40 @@ Session service получает `AuthContext`, вызывает `context.sdk.au
 replay budget.
 
 ```python
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
 from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken
-from eazy_sdk.request import JsonField
-from eazy_sdk.response import Json, Responses, Success
 
 class LoginCredentials(BaseModel):
     email: str
     password: SecretStr
-
-class LoginRequest(TypedDict):
-    email: Annotated[str, JsonField()]
-    password: Annotated[str, JsonField()]
-
-class RefreshRequest(TypedDict):
-    refresh_token: Annotated[str, JsonField()]
 
 class UserSession(BaseModel):
     access_token: Annotated[SecretStr, Bearer()]
     refresh_token: Annotated[SecretStr, RefreshToken()]
     expires_at: Annotated[datetime, ExpiresAt(timedelta(seconds=30))]
 
-SESSION_RESPONSES = Responses(success=(Success(200, Json(UserSession)),))
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/login", security=None)
+
+    email: JsonField[str]
+    password: JsonField[str]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Refresh(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/refresh", security=None)
+
+    refresh_token: JsonField[str]
 
 class AsyncAuthApi(AsyncApi):
-    @api.post("/auth/login", responses=SESSION_RESPONSES, security=None)
-    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
-        raise NotImplementedError
-
-    @api.post("/auth/refresh", responses=SESSION_RESPONSES, security=None)
-    async def refresh(self, **request: Unpack[RefreshRequest]) -> UserSession:
-        raise NotImplementedError
+    login = op(Login)
+    refresh = op(Refresh)
 
 class UserAuthService:
     async def acquire(self, credentials, context):

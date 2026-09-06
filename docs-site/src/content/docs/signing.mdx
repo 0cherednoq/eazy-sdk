@@ -17,9 +17,10 @@ api_fingerprint: "sha256:d5b2d146f4a67efeaaaf7f15220db08a5f21a39a7e3cb34b2376c46
 ```python
 from typing import Annotated, TypedDict, Unpack
 
-from eazy_sdk import AsyncApi, Identity, api
+from dataclasses import dataclass
+
+from eazy_sdk import AsyncApi, Http, HttpOperation, Identity, JsonField, op
 from eazy_sdk.request import (
-    JsonField,
     SigningKey,
     SigningKeyRequirement,
     body_digest,
@@ -29,9 +30,6 @@ from eazy_sdk.request import (
     method,
     path,
 )
-
-class PaymentRequest(TypedDict):
-    amount: Annotated[int, JsonField()]
 
 PAYMENTS_KEY = SigningKeyRequirement("payments-key")
 VENDOR_HMAC = hmac_sha256(
@@ -45,10 +43,14 @@ VENDOR_HMAC = hmac_sha256(
     output=header_output("X-Signature"),
 )
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePayment(HttpOperation[Payment]):
+    __http__ = Http.post("/payments", signing=(VENDOR_HMAC,))
+
+    amount: JsonField[int]
+
 class PaymentsApi(AsyncApi):
-    @api.post("/payments", responses=RESPONSES, signing=(VENDOR_HMAC,))
-    async def create(self, **request: Unpack[PaymentRequest]) -> Payment:
-        raise NotImplementedError
+    create = op(CreatePayment)
 ```
 
 Key provider разрешает `SigningKeyRequirement` перед первой отправкой:

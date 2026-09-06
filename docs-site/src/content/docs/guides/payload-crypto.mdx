@@ -3,7 +3,7 @@ title: Шифрование payload
 description: Подключите application-owned шифрование полей или всего payload к HTTP и WebSocket.
 sources:
   - eazy_sdk.crypto
-api_fingerprint: "sha256:2717342daecd0183655426505a548d5a65e7bda221dba900471ea3a6a21451c7"
+api_fingerprint: "sha256:1ca897fcf483baa16619a7a70467dc11ebfff0aac70248b32279f8915da8451f"
 ---
 
 Eazy SDK управляет стадиями и wire-представлением, но не предоставляет cipher, keyring или KMS
@@ -88,17 +88,16 @@ inbound:  receive -> decrypt bytes -> codec parse -> decrypt fields -> model val
 ## HTTP и Content-Type
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import AsyncApi, api
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
 from eazy_sdk.crypto import http_encrypted
-from eazy_sdk.request import JsonBody, Wire
+from eazy_sdk.request import Wire, markers
 
-class CreatePaymentRequest(TypedDict):
-    body: Annotated[CreatePayment, JsonBody()]
-
-class PaymentsApi(AsyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentOperation(HttpOperation[PaymentResult]):
+    __http__ = Http.post(
         "/v1/payments",
         crypto=PAYMENT_CRYPTO,
         wire=Wire(encrypted=http_encrypted(
@@ -107,8 +106,11 @@ class PaymentsApi(AsyncApi):
             plaintext_statuses=frozenset({400, 422}),
         )),
     )
-    async def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
-        raise NotImplementedError
+
+    body: Annotated[CreatePayment, markers.JsonBody()]
+
+class PaymentsApi(AsyncApi):
+    create = op(CreatePaymentOperation)
 ```
 
 При whole-payload encryption Eazy SDK единолично записывает финальные `Content-Type` и
@@ -185,10 +187,41 @@ envelope алгоритма.
 
 ## Scope, отключение и replay
 
-Аргумент `crypto` имеет три состояния: отсутствие наследует client scope, профиль применяет его к
-operation, а `crypto=None` явно отключает наследование. Для групп используйте `CryptoRegistry` с
+Аргумент `crypto` имеет три состояния: отсутствие наследует объявление сервиса (а если его нет —
+client scope), профиль применяет его к operation, а `crypto=None` явно отключает наследование.
+
+Если шифруется весь сервис, профиль объявляется один раз — атрибутом роутера или его миксина,
+рядом с `base_url`, и наследуется по MRO вместе с `wire`:
+
+```python
+from eazy_sdk import AsyncApi, JsonBody, api
+from eazy_sdk.crypto import http_encrypted
+from eazy_sdk.request import Wire
+
+
+class PaymentsService:
+    base_url = "https://pay.shop.com"
+    crypto = PAYMENT_CRYPTO
+    wire = Wire(encrypted=http_encrypted(content_type="application/vnd.example.encrypted+json"))
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    @api.post("/v1/payments")   # шифрование — от сервиса
+    async def create(self, *, body: JsonBody[CreatePayment]) -> PaymentResult:
+        raise NotImplementedError
+
+    @api.get("/v1/rates", crypto=None)   # публичный справочник
+    async def rates(self) -> Rates:
+        raise NotImplementedError
+```
+
+Порядок разрешения — операция, затем сервис, и только если ни один из них ничего не объявил,
+применяется client scope registry. Для групп используйте `CryptoRegistry` с
 `CryptoRule`, `http_crypto_scope(...)` или `websocket_crypto_scope(...)` и передайте registry через
 `ClientConfig.crypto`/`WsClientConfig.crypto`. Два одинаково приоритетных matching rules — ошибка.
+
+Адресный (host/path) scope у шифрования остаётся — в отличие от подписи, где его нет намеренно:
+пропущенное правило шифрования отправляет открытый текст и падает на первом же вызове, а
+пропущенное правило подписи прошло бы незамеченным.
 
 Каждый HTTP retry/redirect и каждый WebSocket replay/reconnect/resubscribe заново выполняет dump,
 шифрование и signing с новым context. Алгоритм не должен кэшировать ciphertext или nonce по

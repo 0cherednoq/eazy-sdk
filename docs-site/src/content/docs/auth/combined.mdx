@@ -23,11 +23,11 @@ USER_OR_SERVICE = any_of(BEARER, all_of(BASIC, DEVICE_KEY))
 class AsyncReportsApi(AsyncApi):
     security = USER_OR_SERVICE
 
-    @api.get("/reports", responses=REPORTS_RESPONSES)
+    @api.get("/reports")
     async def list_reports(self) -> list[Report]:
         raise NotImplementedError
 
-    @api.post("/health-check", responses=HEALTH_RESPONSES, security=None)
+    @api.post("/health-check", security=None)
     async def health_check(self) -> Health:
         raise NotImplementedError
 ```

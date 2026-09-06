@@ -28,18 +28,13 @@ auth = session_auth(
 from eazy_sdk import AsyncApi, AsyncRoot, Identity, api, api_group
 from eazy_sdk.auth import session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.response import Json, Responses, Success
 
 USER_SESSION = session_scheme(UserSession, name="user-session")
 
 class AccountApi(AsyncApi):
     security = USER_SESSION
 
-    @api.get(
-        "/account",
-        operation_id="getAccount",
-        responses=Responses(success=(Success(200, Json(Account)),)),
-    )
+    @api.get("/account", operation_id="getAccount")
     async def get_account(self) -> Account:
         raise NotImplementedError
 

@@ -11,18 +11,20 @@ Dependency подходит для device context, tenant ID и других з�
 регистрируется отдельно в `DependencyRegistry`.
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import JsonBody
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
+from eazy_sdk.request import markers
 
-class CreatePaymentRequest(TypedDict):
-    body: Annotated[Payment, JsonBody()]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePayment(HttpOperation[Receipt]):
+    __http__ = Http.post("/payments", requires=(DEVICE_SPEC,))
+
+    body: Annotated[Payment, markers.JsonBody()]
 
 class PaymentsApi(AsyncApi):
-    @api.post("/payments", responses=RESPONSES, requires=(DEVICE_SPEC,))
-    async def create(self, **request: Unpack[CreatePaymentRequest]) -> Receipt:
-        raise NotImplementedError
+    create = op(CreatePayment)
 ```
 
 `field(name)` выбирает атрибут результата, `value()` — весь результат. Target может быть header,

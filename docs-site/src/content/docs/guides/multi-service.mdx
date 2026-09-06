@@ -28,12 +28,12 @@ class PaymentsService:
     errors = PAYMENT_ERRORS
 
 class CardApi(PaymentsService, SyncApi):
-    @api.post("/v1/cards", response=Json(status=201))
+    @api.post("/v1/cards", success={201: Card})
     def register(self, *, number: Annotated[str, JsonField()]) -> Card:
         raise NotImplementedError
 
 class BooksApi(SyncApi):
-    @api.get("/books/{book_id}", response=Json())
+    @api.get("/books/{book_id}")
     def get(self, *, book_id: Annotated[int, Path()]) -> Book:
         raise NotImplementedError
 
@@ -83,6 +83,66 @@ sdk = ShopSdk(main, bindings=(bind(PaymentsService, base_url="https://stage-pay.
 Один клиент на несколько сервисов означает общую guard/protection-сессию, общий proxy и общий
 cookie jar; cookie при этом остаются домен-скоупными по RFC 6265. Если сервису нужна собственная
 транспортная политика — дайте ему свой клиент через `bind(..., client=...)`.
+
+## Контракт объявляется один раз
+
+Подпись, шифрование и представление — такие же атрибуты сервиса, как `base_url`: они объявляются
+на роутере или на общем миксине и наследуются по MRO. Повторять их в каждом декораторе не нужно.
+
+```python
+from eazy_sdk import AsyncApi, JsonField, api
+from eazy_sdk.crypto import encrypt_encoded, encrypt_outbound, payload_crypto
+from eazy_sdk.request import JsonPolicy, Wire, header_output, hmac_sha256, method
+
+ROUTER_SIGNATURE = hmac_sha256(
+    key=SIGNING_KEY, base=method(), output=header_output("X-Router"), name="router"
+)
+SERVICE_CRYPTO = payload_crypto(
+    "payments", outbound=encrypt_outbound(encoded=encrypt_encoded(using=cipher))
+)
+
+class PaymentsService:
+    base_url = "https://pay.shop.com"
+    security = PAYMENTS_TOKEN
+    signing = (ROUTER_SIGNATURE,)
+    crypto = SERVICE_CRYPTO
+    wire = Wire(encoding=JsonPolicy(ensure_ascii=True))
+    errors = PAYMENT_ERRORS
+    signed = True          # операция без подписи отвергается при компиляции
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    @api.post("/charge")
+    async def charge(self, *, account: JsonField[str]) -> Receipt:
+        raise NotImplementedError                       # подпись, crypto и wire — от сервиса
+
+    @api.post("/refund", signing=(REFUND_SIGNATURE,), crypto=None)
+    async def refund(self, *, account: JsonField[str]) -> Receipt:
+        raise NotImplementedError                       # своя подпись, шифрования нет
+```
+
+Объявление на операции не «добавляется» к сервисному, а **заменяет** его целиком: глядя на
+операцию, всегда видно, чем именно она подписана. Единственное исключение — `errors` и `wire`,
+где складывать безопасно, потому что ни то, ни другое не может тихо ослабить требование сервера.
+
+| Атрибут | Слияние по MRO | На операции |
+|---|---|---|
+| `base_url` | побеждает ближайший непустой | абсолютный URL в пути сильнее всех |
+| `security` | побеждает ближайший объявленный | `security=` заменяет, `security=None` снимает схему |
+| `signing` | побеждает ближайший непустой | `signing=` заменяет, `signing=()` снимает подпись |
+| `crypto` | побеждает ближайший объявленный | `crypto=` заменяет, `crypto=None` отключает |
+| `wire` | `Wire.over(...)` — по полям | по полям поверх сервисного |
+| `errors` | складываются | `errors=` добавляются, `inherit_errors=False` отбрасывает сервисные |
+| `protocol` | побеждает ближайший объявленный | не объявляется: берётся конвертом `@api.rpc` |
+| `allow`, `signed` | ближайший объявленный / логическое «или» | не объявляются |
+
+Снять наследование на подклассе роутера нельзя: пустое значение (`signing = ()`, `security =
+None`) читается как «не объявлено» и наследование не отменяет — отказ от сервисного правила
+выражается на операции, где он виден.
+
+Что **не** наследуется от сервиса: `responses` (успешные случаи задают тип результата, а он —
+часть сигнатуры операции; как убрать повтор, см.
+{doc}`Успешный ответ </guides/responses/success>`), `protections`, `requires`/`inject`,
+`idempotent`.
 
 ## Что объявляет роутер, что клиент
 

@@ -251,9 +251,9 @@
     }
   },
   "guides/payload-crypto.mdx": {
-    "fingerprint": "sha256:2717342daecd0183655426505a548d5a65e7bda221dba900471ea3a6a21451c7",
+    "fingerprint": "sha256:1ca897fcf483baa16619a7a70467dc11ebfff0aac70248b32279f8915da8451f",
     "symbols": {
-      "eazy_sdk.crypto": "sha256:5efa612d255e1cf27c6da78dce2b1a637b615eeb5bc44c668b1f84ada1214854"
+      "eazy_sdk.crypto": "sha256:6fc5804c353041e6d0d5a9f450efc5e8185fdacb03de5c97d5cded21fc0f3b3e"
     }
   },
   "guides/protection/cloudflare.mdx": {
@@ -424,14 +424,14 @@
     }
   },
   "more/examples/store-sdk.mdx": {
-    "fingerprint": "sha256:3fa5bc23241e48c9dad9de526a7c86162eb7a8f45a7d5fb1d3d275ea9c17a289",
+    "fingerprint": "sha256:5765f5b234d30e4858a96a756cdb4389e48f4aa2ed481eef9471ede8e2b74c2a",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.auth.BearerScheme": "sha256:8d94956efc1a0d40a7b0c866c6717d0156a188e56a48ae2823d76fbf3f6729ec",
-      "eazy_sdk.crypto": "sha256:5efa612d255e1cf27c6da78dce2b1a637b615eeb5bc44c668b1f84ada1214854",
+      "eazy_sdk.crypto": "sha256:6fc5804c353041e6d0d5a9f450efc5e8185fdacb03de5c97d5cded21fc0f3b3e",
       "eazy_sdk.request.hmac_sha256": "sha256:8513032e1d4d557b9ec68448d1a06bd01c1811bda927a10f7b49d396b2eed46d",
-      "eazy_sdk.websocket": "sha256:8de9337f0ffb542d7b1e3ac5b0b8b0f8efb27a734745db615636749122c0a8ed"
+      "eazy_sdk.websocket": "sha256:992d72e05e0bc04822db15164e4f707ae1cd0b5758706dc2f01ee29aefdd782f"
     }
   },
   "signing.mdx": {

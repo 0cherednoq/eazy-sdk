@@ -19,7 +19,7 @@ from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 BEARER = BearerScheme("user-bearer")
 
 class AsyncAccountApi(AsyncApi):
-    @api.get("/account", responses=ACCOUNT_RESPONSES, security=BEARER)
+    @api.get("/account", security=BEARER)
     async def get_account(self) -> Account:
         raise NotImplementedError
 
