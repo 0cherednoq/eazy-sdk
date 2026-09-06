@@ -16,7 +16,8 @@ from typing import Annotated, Any, cast
 import httpx
 import msgspec
 import pytest
-from eazy_sdk_html import CSS, Scope
+from eazy_sdk_html import CSS, ParselBackend, Scope, XPath
+from eazy_sdk_xml import ElementTreeBackend
 from pydantic import BaseModel
 
 from eazy_sdk import (
@@ -55,7 +56,7 @@ from eazy_sdk.response import (
 )
 from eazy_sdk.response._mapping import representation
 from eazy_sdk.response.cases import resolve_json_pointer
-from eazy_sdk.serialization import BackendCapabilityError
+from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 BASE = "https://books.example"
 
@@ -722,3 +723,86 @@ def test_signature_pointer_uses_model_rename() -> None:
         "signature pointer '/payload' is not a field of the request body of "
         "'CreateOrderPython'; available: /data"
     )
+
+
+# --- 50.2.9 several document backends, chosen by media --------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Article:
+    """One XPath both parsers speak; what each returns for it is their own convention."""
+
+    heading: Annotated[str, XPath(".//h1")]
+
+
+def _xml_or_html(request: httpx.Request) -> httpx.Response:
+    if request.url.path.endswith("/xml"):
+        return httpx.Response(
+            200, content=b"<root><h1>From XML</h1></root>", headers={"content-type": "text/xml"}
+        )
+    return httpx.Response(
+        200,
+        content=b"<html><body><h1>From HTML</h1></body></html>",
+        headers={"content-type": "text/html"},
+    )
+
+
+class Documents(SyncApi):
+    @api.get("/html")
+    def html(self) -> Article:
+        raise NotImplementedError
+
+    @api.get("/xml", success={200: Html(Article, media_type="text/xml")})
+    def xml(self) -> Article:
+        raise NotImplementedError
+
+    @api.get("/pdf")
+    def pdf(self) -> Article:
+        raise NotImplementedError
+
+
+def test_documents_backend_chosen_by_media() -> None:
+    """Two parsers on one service: the response media says which of them reads it."""
+
+    serialization = Serialization(documents=(ParselBackend(), ElementTreeBackend()))
+    with _mock_client(_xml_or_html) as client:
+        sdk = Documents(client, serialization=serialization)
+        # parsel returns the markup of the node, ElementTree its text: which parser read
+        # the response is visible in the value itself.
+        assert sdk.html().heading == "<h1>From HTML</h1>"
+        assert sdk.xml().heading == "From XML"
+
+
+def test_single_document_backend_accepts_any_media() -> None:
+    """One configured parser always reads: an SDK that declares a parser meant it."""
+
+    serialization = Serialization(documents=(ParselBackend(),))
+    with _mock_client(_xml_or_html) as client:
+        sdk = Documents(client, serialization=serialization)
+        assert sdk.xml().heading == "<h1>From XML</h1>", "parsel read the XML document too"
+
+
+def test_no_backend_for_media_is_capability_error() -> None:
+    """Nothing reads a PDF, and the message names the media and what is configured."""
+
+    def serve(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"%PDF-1.4", headers={"content-type": "text/html"})
+
+    serialization = Serialization(documents=(ElementTreeBackend(), ElementTreeBackend()))
+    with _mock_client(serve) as client:
+        sdk = Documents(client, serialization=serialization)
+        with pytest.raises(BackendCapabilityError) as failure:
+            sdk.pdf()
+    assert str(failure.value) == (
+        "no document backend accepts 'text/html' for 'pdf'; "
+        "configured: elementtree (application/xml, text/xml), "
+        "elementtree (application/xml, text/xml)"
+    )
+
+
+def test_serialization_html_keyword_is_gone() -> None:
+    """``html=`` named one parser; ``documents=`` names the ones this SDK has."""
+
+    with pytest.raises(TypeError):
+        Serialization(html=ParselBackend())  # type: ignore[call-arg]
+    assert "html" not in Serialization.__dataclass_fields__

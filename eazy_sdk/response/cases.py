@@ -244,21 +244,25 @@ class HtmlExtractor:
     def prepare(self, model: type[object], serialization: Serialization) -> None:
         from eazy_sdk_html import compile_extraction_schema
 
-        try:
-            compile_extraction_schema(
-                model, models=serialization.models, backend=serialization.html
-            )
-        except Exception as exc:
-            raise BackendCapabilityError(str(exc)) from exc
+        failures: list[Exception] = []
+        for backend in serialization.documents or (None,):
+            try:
+                compile_extraction_schema(model, models=serialization.models, backend=backend)
+            except Exception as exc:
+                failures.append(exc)
+            else:
+                return
+        raise BackendCapabilityError(str(failures[0])) from failures[0]
 
     def check_discriminating(self, model: type[object], serialization: Serialization) -> None:
         """A document model with nothing required matches any page, error pages included."""
 
         from eazy_sdk_html import compile_extraction_schema
 
+        backend = next(iter(serialization.documents), None)
         try:
             schema = compile_extraction_schema(
-                model, models=serialization.models, backend=serialization.html
+                model, models=serialization.models, backend=backend
             )
         except Exception as exc:
             raise BackendCapabilityError(str(exc)) from exc
@@ -288,11 +292,18 @@ class _BoundHtmlExtractor:
                 ) from exc
 
             serialization = self.response.serialization
+            backend = serialization.document_backend(
+                self.response.response.content_type,
+                operation_id=self.response.operation.operation_id,
+            )
             document = self.response.cached(
-                self.identity,
-                lambda: HtmlDocument(self.response.bytes, backend=serialization.html),
+                (self.identity, backend),
+                lambda: HtmlDocument(self.response.bytes, backend=backend),
             )
             return ParsedValue(document.extract(model, models=serialization.models))
+        except BackendCapabilityError:
+            # Not a malformed body: the SDK configured no parser for what came back.
+            raise
         except Exception as exc:
             return Malformed(exc)
 

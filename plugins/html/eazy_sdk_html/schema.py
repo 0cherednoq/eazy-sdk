@@ -102,6 +102,10 @@ class ParselBackend:
     def selector_languages(self) -> frozenset[str]:
         return frozenset({"css", "xpath"})
 
+    @property
+    def media_types(self) -> frozenset[str]:
+        return frozenset({"text/html", "application/xhtml+xml"})
+
     def parse(self, data: bytes | str) -> DocumentNode:
         from parsel import Selector
 

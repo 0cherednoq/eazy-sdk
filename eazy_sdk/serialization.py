@@ -57,6 +57,8 @@ class DocumentBackend(Protocol):
 
     ``selector_languages`` is the half that is not a preference: a backend that does not
     speak ``"xpath"`` makes every operation selecting by XPath a compile error.
+    ``media_types`` is the other half: an HTML parser and an XML parser can sit side by
+    side, and the response says which of them reads it.
     """
 
     @property
@@ -65,7 +67,23 @@ class DocumentBackend(Protocol):
     @property
     def selector_languages(self) -> frozenset[str]: ...
 
+    @property
+    def media_types(self) -> frozenset[str]: ...
+
     def parse(self, data: bytes | str) -> DocumentNode: ...
+
+
+def accepts_media(backend: DocumentBackend, media_type: str | None) -> bool:
+    """Whether ``backend`` reads that media type, honouring the ``+xml`` suffix rule."""
+
+    if media_type is None:
+        return True
+    media = media_type.split(";", 1)[0].strip().lower()
+    if media in backend.media_types:
+        return True
+    return media.endswith("+xml") and any(
+        declared.endswith("xml") for declared in backend.media_types
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,16 +92,46 @@ class Serialization:
 
     models: ModelAdapterRegistry = field(default_factory=default_model_adapters)
     json: JsonBackend = DEFAULT_JSON_BACKEND
-    html: DocumentBackend | None = None
-    """``None`` leaves the choice to the extraction plugin, which brings its own parser."""
+    documents: tuple[DocumentBackend, ...] = ()
+    """Empty leaves the choice to the extraction plugin; several are chosen by response media."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.models, ModelAdapterRegistry):
             raise TypeError("Serialization.models must be a ModelAdapterRegistry")
         if not isinstance(self.json, JsonBackend):
             raise TypeError("Serialization.json must implement the JsonBackend protocol")
-        if self.html is not None and not isinstance(self.html, DocumentBackend):
-            raise TypeError("Serialization.html must implement the DocumentBackend protocol")
+        if not isinstance(self.documents, tuple) or any(
+            not isinstance(item, DocumentBackend) for item in self.documents
+        ):
+            raise TypeError(
+                "Serialization.documents is a tuple of DocumentBackend implementations"
+            )
+
+    def document_backend(
+        self, media_type: str | None, *, operation_id: str
+    ) -> DocumentBackend | None:
+        """The parser that reads this response, or ``None`` to leave the plugin its default.
+
+        One configured backend always reads: an SDK that declares a parser meant it. Several
+        are told apart by the response media, which is the only thing that distinguishes an
+        HTML page from an XML document on the same service.
+        """
+
+        if not self.documents:
+            return None
+        if len(self.documents) == 1:
+            return self.documents[0]
+        for backend in self.documents:
+            if accepts_media(backend, media_type):
+                return backend
+        configured = ", ".join(
+            f"{backend.name} ({', '.join(sorted(backend.media_types))})"
+            for backend in self.documents
+        )
+        raise BackendCapabilityError(
+            f"no document backend accepts {media_type!r} for {operation_id!r}; "
+            f"configured: {configured}"
+        )
 
 
 __all__ = [
@@ -92,4 +140,5 @@ __all__ = [
     "DocumentNode",
     "SelectorMarker",
     "Serialization",
+    "accepts_media",
 ]

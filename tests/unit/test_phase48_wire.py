@@ -507,6 +507,10 @@ class CssOnly:
     def selector_languages(self) -> frozenset[str]:
         return frozenset({"css"})
 
+    @property
+    def media_types(self) -> frozenset[str]:
+        return frozenset({"text/html"})
+
     def parse(self, data: bytes | str) -> Any:
         return DEFAULT_HTML_BACKEND.parse(data)
 
@@ -536,7 +540,7 @@ async def test_a_parser_that_cannot_read_the_operation_selector_is_rejected() ->
             raise NotImplementedError
 
     async with _client(handler) as client:
-        sdk = PageApi(client, serialization=Serialization(html=CssOnly()))
+        sdk = PageApi(client, serialization=Serialization(documents=(CssOnly(),)))
         assert (await sdk.by_css()).price == "10"
         with pytest.raises(BackendCapabilityError) as failure:
             await sdk.by_xpath()

@@ -51,6 +51,12 @@ REPOSITORY = Path(__file__).resolve().parents[2]
             "429: rate_limited\n",
         ),
         (
+            "examples/request_values.py",
+            "collected: keyboard, mouse, monitor, cable, lamp\n"
+            "queued page: lamp\n"
+            "queued page: keyboard\n",
+        ),
+        (
             "examples/flat_model_wire_body.py",
             "registered: john as user-42\n",
         ),

@@ -96,6 +96,17 @@ assert_type(GetOrder(order_id="1").expand, tuple[str, ...])
 assert_type(GetOrder(order_id="1").page, Omittable[int])
 
 
+def value_proof(orders: Orders) -> None:
+    """The request is a value: built, copied and sent, all typed by the operation."""
+
+    request = orders.get_order.request(order_id="1")
+    assert_type(request, HttpOperation[Order])
+    assert_type(orders.get_order.evolve(request, expand=("items",)), HttpOperation[Order])
+    assert_type(orders.get_order.send(request), Order)
+    assert_type(orders.get_order.send_with_response(request), ResponseEnvelope[Order, Any])
+    orders.search.send(orders.search.request(term="x"))
+
+
 def sync_proof(orders: Orders) -> None:
     assert_type(orders.get_order(order_id="1"), Order)
     assert_type(orders.get_order(order_id="1", expand=("items",), page=2), Order)
@@ -143,6 +154,7 @@ def invalid(orders: Orders) -> None:
     orders.get_order(order_id="1", unknown=2)  # unknown keyword
     GetOrder(order_id="1", page="x")  # Omittable[int] does not accept str
     GetOrder(order_id="1", locale=UNSET)  # UNSET needs Omittable
+    orders.get_order.send(orders.get_order.request(order_id=1))  # wrong argument type again
 '''
 
 
@@ -177,4 +189,4 @@ def test_phase50_typing_rejects_bad_calls(checker: str) -> None:
     assert result.returncode == 1
     output = result.stdout + result.stderr
     assert "unknown" in output
-    assert output.count("negative.py") >= 4, output
+    assert output.count("negative.py") >= 5, output

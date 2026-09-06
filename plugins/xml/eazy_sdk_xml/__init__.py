@@ -90,6 +90,10 @@ class ElementTreeBackend:
     def selector_languages(self) -> frozenset[str]:
         return frozenset({"xpath"})
 
+    @property
+    def media_types(self) -> frozenset[str]:
+        return frozenset({"application/xml", "text/xml"})
+
     def parse(self, data: bytes | str) -> DocumentNode:
         text = data.decode("utf-8") if isinstance(data, bytes) else data
         try:
