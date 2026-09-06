@@ -83,12 +83,12 @@ def main() -> None:
         try:
             orders.get_order(order_id="missing")
         except OrderNotFound as error:
-            print(f"{error.context.response.status_code}: {error.error.message}")
+            print(f"{error.summary.status_code}: {error.error.message}")
 
         try:
             orders.get_order(order_id="busy")
         except RateLimited as error:
-            print(f"{error.context.response.status_code}: {error.error.code}")
+            print(f"{error.summary.status_code}: {error.error.code}")
 
 
 if __name__ == "__main__":

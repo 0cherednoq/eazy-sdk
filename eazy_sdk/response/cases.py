@@ -5,7 +5,7 @@ from __future__ import annotations
 import json as json_module
 import operator
 import typing
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property, reduce
 from http.cookies import SimpleCookie
@@ -188,20 +188,50 @@ def callable_parser[T](
 @dataclass(frozen=True, slots=True)
 class JsonExtractor:
     name: str = "json"
+    pointer: str | None = None
+    """Where the payload sits inside a service envelope, as an RFC 6901 JSON pointer."""
 
     def bind(self, response: ResponseContext[object]) -> BoundResponseExtractor:
-        return _BoundJsonExtractor(response)
+        return _BoundJsonExtractor(response, self.pointer)
 
 
 @dataclass(frozen=True, slots=True)
 class _BoundJsonExtractor:
     response: ResponseContext[object]
+    pointer: str | None = None
 
     def extract(self, model: type[object]) -> ParseAttempt[object]:
         parsed = self.response.json
         if parsed.error is not None:
             return Malformed(parsed.error)
-        return ParsedValue(parsed.value)
+        if self.pointer is None:
+            return ParsedValue(parsed.value)
+        try:
+            return ParsedValue(resolve_json_pointer(parsed.value, self.pointer))
+        except (KeyError, IndexError, TypeError) as exc:
+            return Malformed(exc)
+
+
+def resolve_json_pointer(document: object, pointer: str) -> object:
+    """The value an RFC 6901 pointer names; a missing step raises, and that is ``Malformed``."""
+
+    if not pointer:
+        return document
+    value = document
+    for token in pointer.lstrip("/").split("/"):
+        step = token.replace("~1", "/").replace("~0", "~")
+        if isinstance(value, Mapping):
+            if step not in value:
+                raise KeyError(f"{pointer} is not in the response document")
+            value = value[step]
+            continue
+        if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+            if not step.isdigit() or int(step) >= len(value):
+                raise KeyError(f"{pointer} is not in the response document")
+            value = value[int(step)]
+            continue
+        raise KeyError(f"{pointer} is not in the response document")
+    return value
 
 
 JSON_EXTRACTOR = JsonExtractor()
@@ -262,6 +292,10 @@ class Json[T]:
     when: ResponseCondition | None = None
     unwrap: str | None = None
     """A JSON pointer (RFC 6901) to the payload inside a service envelope, applied first."""
+
+    def __post_init__(self) -> None:
+        if self.unwrap is not None and self.extractor is JSON_EXTRACTOR:
+            object.__setattr__(self, "extractor", JsonExtractor(pointer=self.unwrap))
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,11 +366,57 @@ DEFAULT = DefaultStatus()
 type StatusSelector = int | StatusRange | DefaultStatus
 
 
+@dataclass(frozen=True, slots=True)
+class ErrorSummary:
+    """What survives an error leaving the call: no body, no headers, no live response.
+
+    A raised ``ApiError`` carries the whole ``ResponseContext`` while the call is still on
+    the stack. Pickling it — a task queue, a crash report, a subprocess — must not carry the
+    response body along, so what crosses that boundary is this summary instead.
+    """
+
+    operation_id: str
+    status_code: int
+    content_type: str | None
+    attempt: int
+    method: str
+    target: str
+    """The redacted target from ``PreparedRequestSummary``: no query, no credentials."""
+
+
 class ApiError[T](EazySdkError):
-    def __init__(self, error: T, context: ResponseContext[object]) -> None:
+    def __init__(self, error: T, context: ResponseContext[object] | ErrorSummary) -> None:
         self.error = error
         self.context = context
-        super().__init__(f"documented API error for {context.operation.operation_id}")
+        operation_id = (
+            context.operation_id
+            if isinstance(context, ErrorSummary)
+            else context.operation.operation_id
+        )
+        super().__init__(f"documented API error for {operation_id}")
+
+    @property
+    def summary(self) -> ErrorSummary:
+        """The error without its response: available whether or not the context is live."""
+
+        context = self.context
+        if isinstance(context, ErrorSummary):
+            return context
+        return ErrorSummary(
+            operation_id=context.operation.operation_id,
+            status_code=context.response.status_code,
+            content_type=context.response.content_type,
+            attempt=context.attempt.number,
+            method=context.request.method,
+            target=context.request.target,
+        )
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (type(self)._restore, (self.error, self.summary))
+
+    @classmethod
+    def _restore(cls, error: T, summary: ErrorSummary) -> ApiError[T]:
+        return cls(error, summary)
 
 
 type ApiErrorFactory[T] = (
@@ -569,7 +649,7 @@ class Responses[T]:
                 matches.append((case, result.value))
             elif isinstance(result, Malformed):
                 malformed.append((case, Malformed(result.cause, decoder)))
-        arbitration = arbitrate_cases(matches, malformed)
+        arbitration = arbitrate_cases(_most_specific(matches), malformed)
         if isinstance(arbitration, AmbiguousCases):
             return AmbiguousResponseOutcome(arbitration.cases, context)
         if isinstance(arbitration, SelectedCase):
@@ -606,6 +686,45 @@ def _representation_result_type(
     if isinstance(representation, Empty):
         return type(None)
     return representation.model
+
+
+def _most_specific[TValue](
+    matches: list[tuple[ResponseCase[object], TValue]],
+) -> list[tuple[ResponseCase[object], TValue]]:
+    """Two cases can both parse a body; the more specific declaration wins.
+
+    Specific means, in order: an exact status over a range over ``DEFAULT``; an explicit media
+    type over a wildcard over none at all; a ``when=`` condition over none; and the layer that
+    declared the case — the operation over its service over the client. A tie between two
+    equally specific cases stays ambiguous, because nothing in the declaration decides it.
+    """
+
+    if len(matches) < 2:
+        return matches
+    ranks = [_specificity(case) for case, _ in matches]
+    best = max(ranks)
+    return [match for match, rank in zip(matches, ranks, strict=True) if rank == best]
+
+
+def _specificity(case: ResponseCase[object]) -> tuple[int, int, int, int]:
+    return (
+        _status_rank(case.status),
+        _media_rank(case.response.media_type),
+        0 if case.condition is None else 1,
+        -case.precedence,
+    )
+
+
+def _status_rank(selector: StatusSelector) -> int:
+    if isinstance(selector, int):
+        return 2
+    return 1 if isinstance(selector, StatusRange) else 0
+
+
+def _media_rank(media_type: str | None) -> int:
+    if media_type is None:
+        return 0
+    return 1 if "*" in media_type else 2
 
 
 def _status_matches(selector: StatusSelector, status: int) -> bool:
