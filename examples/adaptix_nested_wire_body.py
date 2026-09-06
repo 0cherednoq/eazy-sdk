@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypedDict, Unpack, cast
+from typing import TypedDict, cast
 
 import httpx
 from adaptix import P
@@ -14,9 +14,8 @@ from adaptix.conversion import get_converter, link_constant, link_function
 
 from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, Responses, Success
 
 
 class RegisterUser(TypedDict):
@@ -141,19 +140,16 @@ class RegisteredUser:
     login: str
 
 
-REGISTER_RESPONSES = Responses[RegisteredUser](
-    success=(Success(201, Json(RegisteredUser)),),
-)
-
-
 class RegistrationApi(SyncApi):
     @api.post(
         "/register",
         operation_id="adaptixRegisterUser",
-        responses=REGISTER_RESPONSES,
-        wire=Wire(projection=REGISTER_BODY),
+        success={201: RegisteredUser},
+        projection=REGISTER_BODY,
     )
-    def register(self, **request: Unpack[RegisterUser]) -> RegisteredUser:
+    def register(
+        self, *, login: str, email: str, first_name: str, last_name: str
+    ) -> RegisteredUser:
         raise NotImplementedError
 
 

@@ -20,7 +20,7 @@ from eazy_sdk.core import (
 )
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.request.markers import Header, Query
-from eazy_sdk.response import Bytes, Responses, Success
+from eazy_sdk.response import Bytes, Success
 
 
 @dataclass(frozen=True)
@@ -173,7 +173,7 @@ class InjectApi(SyncApi):
     @api.get(
         "/injected",
         operation_id="phase18.inject",
-        responses=Responses[bytes](success=(Success(200, Bytes()),)),
+        success=(Success(200, Bytes()),),
         inject=(
             Inject(Header("X-Device-ID"), _device_id),
             Inject(Query("timestamp"), "1700000000"),
@@ -202,7 +202,7 @@ class CollidingInjectApi(SyncApi):
     @api.get(
         "/collision",
         operation_id="phase18.inject-collision",
-        responses=Responses[bytes](success=()),
+        success=(),
         inject=(Inject(Query("value"), "injected"),),
     )
     def collision(self, *, value: Annotated[str, Query("value")]) -> bytes:

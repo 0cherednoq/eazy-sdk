@@ -116,13 +116,27 @@ RESPONSES = Responses[Payload](success={200: Json(Payload)})
 
 
 class AsyncMetadataApi(AsyncApi):
-    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, wire=Wire(encrypted=HTTP_WIRE))
+    @api.post(
+        "/metadata",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+        crypto=HTTP_PROFILE,
+        wire=Wire(encrypted=HTTP_WIRE),
+    )
     async def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
 
 class SyncMetadataApi(SyncApi):
-    @api.post("/metadata", responses=RESPONSES, crypto=HTTP_PROFILE, wire=Wire(encrypted=HTTP_WIRE))
+    @api.post(
+        "/metadata",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+        crypto=HTTP_PROFILE,
+        wire=Wire(encrypted=HTTP_WIRE),
+    )
     def send(self, *, body: Annotated[Payload, JsonBody()]) -> Payload:
         raise AssertionError
 
@@ -133,7 +147,9 @@ SIGNING_KEY = SigningKeyRequirement("pc06-collision-test")
 class SigningCollisionApi(AsyncApi):
     @api.post(
         "/metadata",
-        responses=RESPONSES,
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
         crypto=HTTP_PROFILE,
         signing=(
             hmac_sha256(

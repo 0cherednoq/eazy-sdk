@@ -23,7 +23,7 @@ from eazy_sdk.protection import (
     solution_fields,
 )
 from eazy_sdk.protection.advanced import MalformedSignal, SignalMatch, _inspect_signals
-from eazy_sdk.response import Json, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, ResponseContext, Success
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +44,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase29.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -54,7 +54,7 @@ class SyncProtectedApi(SyncApi):
     @api.get(
         "/protected",
         operation_id="phase29.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def protected(self) -> dict[str, object]:
         raise NotImplementedError

@@ -9,15 +9,14 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import ClassVar, TypedDict, Unpack, cast
+from typing import ClassVar, TypedDict, cast
 
 import httpx
 
 from eazy_sdk import AsyncApi, AsyncClient, api
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, Responses, Success
 
 
 class RegisterUser(TypedDict):
@@ -109,19 +108,16 @@ class RegisteredUser:
     login: str
 
 
-REGISTER_RESPONSES = Responses[RegisteredUser](
-    success=(Success(201, Json(RegisteredUser)),),
-)
-
-
 class RegistrationApi(AsyncApi):
     @api.post(
         "/register",
         operation_id="registerUser",
-        responses=REGISTER_RESPONSES,
-        wire=Wire(projection=REGISTER_BODY),
+        success={201: RegisteredUser},
+        projection=REGISTER_BODY,
     )
-    async def register(self, **request: Unpack[RegisterUser]) -> RegisteredUser:
+    async def register(
+        self, *, login: str, email: str, first_name: str, last_name: str
+    ) -> RegisteredUser:
         raise NotImplementedError
 
 

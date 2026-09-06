@@ -13,7 +13,7 @@ from eazy_sdk.handlers import CONSERVATIVE_HANDLER_PROFILE, EmitOptions, Handler
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.redaction import REDACTED
 from eazy_sdk.request.markers import Header
-from eazy_sdk.response import Json, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, ResponseContext, Success
 
 BASE_URL = "https://phase37.test"
 PROXY_A = "http://user:s3cret@proxy-a.test:8080"
@@ -31,7 +31,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase37.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -41,7 +41,7 @@ class PublicUaApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase37.public-ua",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(
         self,

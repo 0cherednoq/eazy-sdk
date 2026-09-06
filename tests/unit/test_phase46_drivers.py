@@ -13,7 +13,7 @@ from typing import Annotated, Any
 import pytest
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import Client, ClientConfig, Json, Resilience, RetryPolicy, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Resilience, RetryPolicy, SyncApi, api
 from eazy_sdk.driver import SynchronousSuspensionError, driving_synchronously, run_sync, sleep
 from eazy_sdk.request.markers import Path
 
@@ -41,7 +41,7 @@ class Handler(BaseHandler):
 
 
 class Users(SyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     def get(self, *, user_id: Annotated[int, Path()]) -> dict[str, object]:
         raise NotImplementedError
 

@@ -5,7 +5,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, TypedDict, Unpack, cast
+from typing import Annotated, Any, TypedDict, cast
 
 import msgspec
 import pytest
@@ -68,56 +68,69 @@ def test_current_unplaced_unpack_failure_is_characterized() -> None:
     with pytest.raises(PlanError, match=r"input field 'login'.*no placement"):
 
         class RegistrationApi(SyncApi):
-            @api.post("/register", operation_id="registerUser", responses=RESPONSES)
-            def register(self, **request: Unpack[RegisterUser]) -> object:
+            @api.post(
+                "/register",
+                operation_id="registerUser",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+            )
+            def register(
+                self, *, login: str, email: str, first_name: str, last_name: str
+            ) -> object:
                 raise NotImplementedError
 
 
 def test_current_root_body_workaround_exposes_one_wrapper_parameter() -> None:
     class RegistrationApi(SyncApi):
-        @api.post("/register", operation_id="registerUserWrapper", responses=RESPONSES)
-        def register(self, **request: Unpack[RegistrationBody]) -> object:
+        @api.post(
+            "/register",
+            operation_id="registerUserWrapper",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+        )
+        def register(self, *, user: Annotated[RegisterUser, JsonBody()]) -> object:
             raise NotImplementedError
 
     descriptor = cast(Any, RegistrationApi.register)
     signature = descriptor.signature
 
-    assert tuple(signature.parameters) == ("self", "request")
-    assert "Unpack" in str(signature.parameters["request"].annotation)
+    assert tuple(signature.parameters) == ("self", "user")
     compiled = descriptor.resolve().compile()
     assert tuple(compiled.input_slots) == ("user",)
 
 
 def test_candidate_derives_a_stable_name_for_plain_and_generated_callables() -> None:
     projection = BodyProjection(
-        RegisterUser,
         dict[str, object],
         _to_wire,
         ProofJsonBody(),
+        source=RegisterUser,
     )
 
     assert projection.fingerprint_name.endswith(":_to_wire")
     assert BodyProjection(
-        RegisterUser,
         dict[str, object],
         _to_wire,
         ProofJsonBody(),
-        "register-v1",
+        name="register-v1",
+        source=RegisterUser,
     ).fingerprint_name == "register-v1"
 
     first_adaptix = get_converter(RegisterUser, RegisterUser)
     second_adaptix = get_converter(RegisterUser, RegisterUser)
     first_name = BodyProjection(
         RegisterUser,
-        RegisterUser,
         first_adaptix,
         ProofJsonBody(),
+        source=RegisterUser,
     ).fingerprint_name
     second_name = BodyProjection(
         RegisterUser,
-        RegisterUser,
         second_adaptix,
         ProofJsonBody(),
+        source=RegisterUser,
     ).fingerprint_name
     assert first_name == second_name
 
@@ -160,7 +173,7 @@ def _run_checker(checker: str, source: Path) -> subprocess.CompletedProcess[str]
 
 POSITIVE_TYPING = r'''# pyright: strict, reportUnknownVariableType=false
 from collections.abc import Callable
-from typing import TypedDict, Unpack, assert_type
+from typing import TypedDict, assert_type
 
 from adaptix import P
 from adaptix.conversion import get_converter, link_constant, link_function
@@ -228,25 +241,13 @@ register_to_wire = get_converter(
 )
 
 projection = BodyProjection(
-    RegisterUser,
     RegisterUserWire,
     register_to_wire,
     JsonBody(),
+    source=RegisterUser,
 )
 assert_type(register_to_wire, Callable[[RegisterUser], RegisterUserWire])
 assert_type(projection, BodyProjection[RegisterUser, RegisterUserWire])
-assert_type(projection.using, Callable[[RegisterUser], RegisterUserWire])
-assert_type(
-    projection.using(
-        {
-            "login": "john",
-            "email": "john@example.com",
-            "first_name": "John",
-            "last_name": "Smith",
-        }
-    ),
-    RegisterUserWire,
-)
 
 
 class UpdateUserBody(TypedDict):
@@ -267,17 +268,21 @@ def update_to_wire(source: UpdateUserBody) -> RegisterUserWire:
 
 
 subset_projection = BodyProjection(
-    UpdateUserBody,
     RegisterUserWire,
     update_to_wire,
     JsonBody(),
+    source=UpdateUserBody,
 )
 assert_type(subset_projection, BodyProjection[UpdateUserBody, RegisterUserWire])
 
 
 class RegisterCall:
-    def __call__(self, **request: Unpack[RegisterUser]) -> RegisterUserWire:
-        return projection.using(request)
+    def __call__(
+        self, *, login: str, email: str, first_name: str, last_name: str
+    ) -> RegisterUserWire:
+        return register_to_wire(
+            {"login": login, "email": email, "first_name": first_name, "last_name": last_name}
+        )
 
 
 register = RegisterCall()
@@ -293,8 +298,12 @@ assert_type(
 
 
 class AsyncRegisterCall:
-    async def __call__(self, **request: Unpack[RegisterUser]) -> RegisterUserWire:
-        return projection.using(request)
+    async def __call__(
+        self, *, login: str, email: str, first_name: str, last_name: str
+    ) -> RegisterUserWire:
+        return register_to_wire(
+            {"login": login, "email": email, "first_name": first_name, "last_name": last_name}
+        )
 
 
 async def call_async(register_async: AsyncRegisterCall) -> None:
@@ -309,7 +318,7 @@ async def call_async(register_async: AsyncRegisterCall) -> None:
 
 
 NEGATIVE_TYPING = r'''# pyright: strict
-from typing import TypedDict, Unpack
+from typing import TypedDict
 
 from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
@@ -339,27 +348,27 @@ def wrong_target(source: Source) -> int:
 
 
 bad_source = BodyProjection[Source, Wire](
-    Source,
     Wire,
     wrong_source,
     JsonBody(),
+    source=Source,
 )
 bad_target = BodyProjection[Source, Wire](
-    Source,
     Wire,
     wrong_target,
     JsonBody(),
+    source=Source,
 )
 
 
 class RegisterCall:
-    def __call__(self, **request: Unpack[RegisterUser]) -> Wire:
-        return {"nested": request["login"]}
+    def __call__(self, *, login: str, email: str, first_name: str, last_name: str) -> Wire:
+        return {"nested": login}
 
 
 class AsyncRegisterCall:
-    async def __call__(self, **request: Unpack[RegisterUser]) -> Wire:
-        return {"nested": request["login"]}
+    async def __call__(self, *, login: str, email: str, first_name: str, last_name: str) -> Wire:
+        return {"nested": login}
 
 
 def invalid_sync(register: RegisterCall) -> None:

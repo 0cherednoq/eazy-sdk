@@ -48,7 +48,7 @@ from eazy_sdk.protection.advanced import (
     until_rejected,
 )
 from eazy_sdk.request.prepared import HttpProtocol, PreparedRequest
-from eazy_sdk.response import Headers, Json, NormalizedResponse, Responses, Success, callable_parser
+from eazy_sdk.response import Headers, Json, NormalizedResponse, Success, callable_parser
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +113,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -123,7 +123,7 @@ class BeforeProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(
         self,
@@ -522,7 +522,7 @@ async def test_auth_and_protection_apply_independently_to_the_same_attempts() ->
             "/protected",
             operation_id="protected",
             security=bearer,
-            responses=Responses(success=(Success(200, Json(dict)),)),
+            success=(Success(200, Json(dict)),),
         )
         async def protected(self) -> dict[str, object]:
             raise NotImplementedError

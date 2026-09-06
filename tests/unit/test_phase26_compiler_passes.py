@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Unpack, cast
+from typing import Any, cast
 
 from eazy_sdk import SyncApi, api
 from eazy_sdk.compile.http_compiler import compile_endpoint
-from eazy_sdk.request import Wire
-from tests.unit.test_phase21_body_projection import PROJECTION, RESPONSES, PublicBody
+from tests.unit.test_phase21_body_projection import PROJECTION, RESPONSES
 from tests.unit.test_phase26_runtime_baseline import _contract
 
 
@@ -28,8 +27,14 @@ def test_compiler_pass_diagnostics_are_ordered_and_fingerprint_stays_frozen() ->
 
 def test_projection_flows_through_the_same_compiler_pass_sequence() -> None:
     class ProjectionApi(SyncApi):
-        @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-        def operation(self, **request: Unpack[PublicBody]) -> object:
+        @api.post(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=PROJECTION,
+        )
+        def operation(self, *, value: str) -> object:
             raise NotImplementedError
 
     compiled: Any = cast(Any, ProjectionApi.operation).resolve().compile()

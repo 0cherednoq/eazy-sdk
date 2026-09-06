@@ -17,10 +17,10 @@ class JsonBody:
 class BodyProjection[TSource, TWire]:
     """Candidate constructor binding one public source to one private wire target."""
 
-    source: type[TSource]
     target: type[TWire]
     using: Callable[[TSource], TWire]
     encoding: JsonBody
+    source: type[TSource] | None = None
     name: str | None = None
 
     @property
@@ -30,11 +30,12 @@ class BodyProjection[TSource, TWire]:
         if self.name is not None:
             return self.name
         callable_name = getattr(self.using, "__name__", type(self.using).__qualname__)
-        return (
+        source = (
             f"{self.source.__module__}.{self.source.__qualname__}"
-            f"->{self.target.__module__}.{self.target.__qualname__}"
-            f":{callable_name}"
+            if self.source is not None
+            else "operation"
         )
+        return f"{source}->{self.target.__module__}.{self.target.__qualname__}:{callable_name}"
 
 
 __all__ = ["BodyProjection", "JsonBody"]

@@ -10,7 +10,7 @@ from eazy_sdk import AsyncApi, SyncApi, TransportError, api
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.request.markers import ReplayableStreamBody
 from eazy_sdk.request.prepared import ReplayableBodyStream
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk.response import Json, Success
 from eazy_sdk.response.normalized import cast_headers
 from tests._support.http_server import LocalHttpServer
 from tests._support.zapros_clients import client_from_httpx
@@ -22,7 +22,7 @@ class StreamApi(SyncApi):
     @api.post(
         "/echo",
         operation_id="stream.sync",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def upload(
         self,
@@ -36,7 +36,7 @@ class AsyncStreamApi(AsyncApi):
     @api.post(
         "/echo",
         operation_id="stream.async",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def upload(
         self,

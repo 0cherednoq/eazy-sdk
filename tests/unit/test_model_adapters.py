@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Annotated, Any, NotRequired, TypedDict
@@ -422,6 +423,12 @@ class ClaimingAdapter:
     ) -> T:
         assert isinstance(value, dict)
         return annotation(**value)
+
+    def frozen(self, annotation: object) -> bool | None:
+        return None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        return value
 
 
 def test_ambiguous_custom_model_adapters_fail_deterministically() -> None:

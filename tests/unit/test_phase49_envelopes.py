@@ -82,7 +82,12 @@ class BillingService:
 
 
 class BillingApi(BillingService, AsyncApi):
-    @api.rpc("account.charge", responses=CHARGE)
+    @api.rpc(
+        "account.charge",
+        success=CHARGE.success,
+        errors=CHARGE.errors,
+        fallback=CHARGE.fallback,
+    )
     async def charge(
         self,
         *,
@@ -91,7 +96,7 @@ class BillingApi(BillingService, AsyncApi):
     ) -> Receipt:
         raise NotImplementedError
 
-    @api.get("/health", response=Json(dict[str, str]))
+    @api.get("/health", success=Json(dict[str, str]))
     async def health(self) -> dict[str, str]:
         raise NotImplementedError
 
@@ -185,7 +190,9 @@ async def test_the_signature_and_the_encryption_cover_the_whole_envelope() -> No
     class SealedApi(BillingService, AsyncApi):
         @api.rpc(
             "account.charge",
-            responses=CHARGE,
+            success=CHARGE.success,
+            errors=CHARGE.errors,
+            fallback=CHARGE.fallback,
             crypto=crypto,
             signing=hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Sig")),
             wire=Wire(encrypted=http_encrypted(content_type="application/sealed+json")),
@@ -223,7 +230,13 @@ async def test_the_signature_and_the_encryption_cover_the_whole_envelope() -> No
 
 class Reused(BillingService, AsyncApi):
     # A JSON-RPC call that reuses its id is safe to repeat: that is what the id is for.
-    @api.rpc("account.charge", responses=CHARGE, idempotent=True)
+    @api.rpc(
+        "account.charge",
+        success=CHARGE.success,
+        errors=CHARGE.errors,
+        fallback=CHARGE.fallback,
+        idempotent=True,
+    )
     async def charge(self, *, account: Annotated[str, JsonField()]) -> Receipt:
         raise NotImplementedError
 
@@ -234,7 +247,13 @@ class RegeneratedService:
 
 
 class Regenerated(RegeneratedService, AsyncApi):
-    @api.rpc("account.charge", responses=CHARGE, idempotent=True)
+    @api.rpc(
+        "account.charge",
+        success=CHARGE.success,
+        errors=CHARGE.errors,
+        fallback=CHARGE.fallback,
+        idempotent=True,
+    )
     async def charge(self, *, account: Annotated[str, JsonField()]) -> Receipt:
         raise NotImplementedError
 
@@ -333,7 +352,12 @@ def test_declaring_an_rpc_operation_without_a_protocol_fails_at_declaration_time
     with pytest.raises(TypeError, match="declares no protocol envelope"):
 
         class Orphan(AsyncApi):
-            @api.rpc("account.charge", responses=CHARGE)
+            @api.rpc(
+                "account.charge",
+                success=CHARGE.success,
+                errors=CHARGE.errors,
+                fallback=CHARGE.fallback,
+            )
             async def charge(self, *, account: Annotated[str, JsonField()]) -> Receipt:
                 raise NotImplementedError
 

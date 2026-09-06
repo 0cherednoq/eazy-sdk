@@ -15,7 +15,7 @@ from eazy_sdk.core.errors import PlanError
 from eazy_sdk.core.kernel import OperationIdentity
 from eazy_sdk.protection import Guard, GuardCache, GuardSolution, SolveContext, advanced, host
 from eazy_sdk.protection.advanced import ChallengeParseError
-from eazy_sdk.response import Json, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, ResponseContext, Success
 
 BASE_URL = "https://phase37c.test"
 
@@ -29,7 +29,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase37c.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError

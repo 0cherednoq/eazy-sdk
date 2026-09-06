@@ -22,14 +22,11 @@ from eazy_sdk import (
     AsyncApi,
     AsyncClient,
     AsyncRoot,
-    Bytes,
     Client,
     ClientConfig,
     Json,
     Resilience,
-    Responses,
     Security,
-    Success,
     SyncApi,
     SyncRoot,
     api,
@@ -38,7 +35,7 @@ from eazy_sdk import (
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.protection.advanced import ProtectionBundle
 from eazy_sdk.request.markers import Path, Query
-from eazy_sdk.response import ResponseContext
+from eazy_sdk.response import Bytes, ResponseContext, Success
 
 
 class Product(BaseModel):
@@ -47,11 +44,11 @@ class Product(BaseModel):
 
 
 class ProductsApi(SyncApi):
-    @api.get("/v1/products/{product_id}", response=Json())
+    @api.get("/v1/products/{product_id}")
     def product(self, *, product_id: Annotated[int, Path()]) -> Product:
         raise NotImplementedError
 
-    @api.get("/v1/products/{product_id}/image", response=Bytes())
+    @api.get("/v1/products/{product_id}/image", success=Bytes())
     def image(self, *, product_id: Annotated[int, Path()]) -> bytes:
         raise NotImplementedError
 
@@ -59,7 +56,7 @@ class ProductsApi(SyncApi):
 class AsyncProductsApi(AsyncApi):
     @api.get(
         "/v1/products",
-        responses=Responses(success=(Success(200, Json(list[Product])),)),
+        success=(Success(200, Json(list[Product])),),
     )
     async def products(self, *, q: Annotated[str, Query()] = "") -> list[Product]:
         raise NotImplementedError
@@ -89,9 +86,12 @@ def test_quickstart_needs_one_import_block_and_no_handler_assembly() -> None:
         assert store.products.image(product_id=42) == b"PNG"
         assert store.products is store.products
     assert client._closed
-    for name in ("Path", "Query", "Header", "JsonBody", "Json", "Responses", "Success",
-                 "Html", "Bytes", "Text", "Error", "Cookie", "FormBody", "BodyProjection"):
+    for name in ("Path", "Query", "Header", "JsonBody", "Json", "Http", "HttpOperation", "op",
+                 "Html", "JsonField", "UNSET", "Omittable", "Cookie", "FormBody", "BodyProjection"):
         assert name in eazy_sdk.__all__, name
+    # Phase 50: the case classes left the root for ``eazy_sdk.response`` (name budget).
+    for name in ("Responses", "Success", "Error"):
+        assert name not in eazy_sdk.__all__, name
     assert "SyncSdk" not in eazy_sdk.__all__ and "AsyncSdk" not in eazy_sdk.__all__
     assert not hasattr(eazy_sdk, "SyncSdk")
     with pytest.raises(ModuleNotFoundError):

@@ -2,26 +2,28 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path as FilePath
-from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
+from typing import Annotated, Any, cast
 
 import pytest
 
 import eazy_sdk.request as request_api
-from eazy_sdk import SyncApi, api
+from eazy_sdk import Http, HttpOperation, SyncApi, api, op
 from eazy_sdk.core import (
     PlanError,
     RequestLocation,
 )
 from eazy_sdk.request import QueryString
 from eazy_sdk.request.markers import Cookie, Form, Header, JsonBody, JsonField, Part, Path, Query
-from eazy_sdk.response import Responses
-
-RESPONSES: Responses[object] = Responses(success=())
 
 
 class MuseumApi(SyncApi):
-    @api.get("/museums/{museumId}", operation_id="museum", responses=RESPONSES)
+    @api.get(
+        "/museums/{museumId}",
+        operation_id="museum",
+        success=(),
+    )
     def museum(
         self,
         *,
@@ -35,40 +37,45 @@ class MuseumApi(SyncApi):
 
 
 class FlatBodyApi(SyncApi):
-    @api.post("/museums", operation_id="jsonField", responses=RESPONSES)
+    @api.post(
+        "/museums",
+        operation_id="jsonField",
+        success=(),
+    )
     def json_field(self, *, value: Annotated[str, JsonField()]) -> object:
         raise NotImplementedError
 
-    @api.post("/museums", operation_id="formField", responses=RESPONSES)
+    @api.post(
+        "/museums",
+        operation_id="formField",
+        success=(),
+    )
     def form_field(self, *, value: Annotated[str, Form()]) -> object:
         raise NotImplementedError
 
-    @api.post("/museums", operation_id="partField", responses=RESPONSES)
+    @api.post(
+        "/museums",
+        operation_id="partField",
+        success=(),
+    )
     def part_field(self, *, value: Annotated[str, Part()]) -> object:
         raise NotImplementedError
 
 
-class CreatePost(TypedDict):
-    owner_id: Annotated[int, Path()]
-    user_id: Annotated[int, JsonField("userId")]
-    title: Annotated[str, JsonField()]
-    body: Annotated[str, JsonField()]
-    summary: NotRequired[Annotated[str, JsonField()]]
-
-
-class MissingPlacement(TypedDict):
-    title: str
-
-
-class ReservedOptions(TypedDict):
-    options: Annotated[str, JsonField()]
-
-
 class UnpackedBodyApi(SyncApi):
-    @api.post("/users/{owner_id}/posts", operation_id="unpackedBody", responses=RESPONSES)
+    @api.post(
+        "/users/{owner_id}/posts",
+        operation_id="unpackedBody",
+        success=(),
+    )
     def create_post(
         self,
-        **request: Unpack[CreatePost],
+        *,
+        owner_id: Annotated[int, Path()],
+        user_id: Annotated[int, JsonField('userId')],
+        title: Annotated[str, JsonField()],
+        body: Annotated[str, JsonField()],
+        summary: Annotated[str | None, JsonField()] = None,
     ) -> object:
         raise NotImplementedError
 
@@ -104,7 +111,11 @@ def test_compiles_each_flat_body_field_marker(name: str) -> None:
 
 def test_compiles_root_body_from_method_annotation() -> None:
     class Api(SyncApi):
-        @api.post("/museums", operation_id="root", responses=RESPONSES)
+        @api.post(
+            "/museums",
+            operation_id="root",
+            success=(),
+        )
         def root(self, *, body: Annotated[list[str], JsonBody()]) -> object:
             raise NotImplementedError
 
@@ -160,10 +171,16 @@ def test_unpacked_typed_dict_call_binds_keyword_values_without_a_wrapper_dict() 
 
 
 def test_rejects_variadic_kwargs_without_typed_dict_unpack() -> None:
-    with pytest.raises(PlanError, match=r"must be Unpack\[TypedDict\]"):
+    """D-13: ``**request`` in a decorated function names the class form as the way out."""
+
+    with pytest.raises(PlanError, match=r"which 0\.3\.0 removed; declare an operation class"):
 
         class Api(SyncApi):
-            @api.post("/posts", operation_id="kwargs", responses=RESPONSES)
+            @api.post(
+                "/posts",
+                operation_id="kwargs",
+                success=(),
+            )
             def create(self, /, **request: object) -> object:
                 raise NotImplementedError
 
@@ -172,42 +189,54 @@ def test_rejects_unpacked_typed_dict_fields_without_placements() -> None:
     with pytest.raises(PlanError, match="no placement"):
 
         class Api(SyncApi):
-            @api.post("/posts", operation_id="missingPlacement", responses=RESPONSES)
-            def create(self, **request: Unpack[MissingPlacement]) -> object:
+            @api.post(
+                "/posts",
+                operation_id="missingPlacement",
+                success=(),
+            )
+            def create(self, *, title: str) -> object:
                 raise NotImplementedError
 
 
 def test_rejects_reserved_options_in_unpacked_typed_dict() -> None:
-    with pytest.raises(PlanError, match="reserved field 'options'"):
+    """D-09: a field named ``options`` on an operation class is reserved for CallOptions."""
 
-        class Api(SyncApi):
-            @api.post("/posts", operation_id="reservedOptions", responses=RESPONSES)
-            def create(self, **request: Unpack[ReservedOptions]) -> object:
-                raise NotImplementedError
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class ReservedOptions(HttpOperation[object]):
+        __http__ = Http.post("/posts", operation_id="reservedOptions")
+        options: Annotated[str, JsonField()]
+
+    class Api(SyncApi):
+        create = op(ReservedOptions)
+
+    with pytest.raises(PlanError, match="declares field 'options', which is reserved"):
+        Api.create.declaration  # noqa: B018 - evaluated for its diagnostics
 
 
 def test_mypy_preserves_required_and_known_unpacked_keywords(tmp_path: FilePath) -> None:
     source = tmp_path / "unpacked_api.py"
     source.write_text(
         """\
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
 from eazy_sdk import SyncApi, api
-from eazy_sdk.request.markers import JsonField
-from eazy_sdk.response import Responses
-
-class CreatePost(TypedDict):
-    title: Annotated[str, JsonField()]
-    body: Annotated[str, JsonField()]
+from eazy_sdk.request.markers import JsonField, Path
 
 class PostsApi(SyncApi):
-    @api.post("/posts", responses=Responses[object](success=()))
-    def create(self, **request: Unpack[CreatePost]) -> object:
+    @api.post("/posts/{owner_id}", success=())
+    def create(
+        self,
+        *,
+        owner_id: Annotated[int, Path()],
+        title: Annotated[str, JsonField()],
+        body: Annotated[str, JsonField()],
+        summary: Annotated[str | None, JsonField()] = None,
+    ) -> object:
         raise NotImplementedError
 
 def invalid_calls(api: PostsApi) -> None:
-    api.create(title="missing body")
-    api.create(title="known", body="known", extra="unknown")
+    api.create(owner_id=1, title="missing body")
+    api.create(owner_id=1, title="known", body="known", extra="unknown")
 """,
         encoding="utf-8",
     )
@@ -228,14 +257,22 @@ def test_rejects_unknown_or_multiple_placements() -> None:
     with pytest.raises(PlanError, match="multiple placements"):
 
         class Multiple(SyncApi):
-            @api.get("/museums", operation_id="multiple", responses=RESPONSES)
+            @api.get(
+                "/museums",
+                operation_id="multiple",
+                success=(),
+            )
             def operation(self, *, value: Annotated[str, Query(), Header("X")]) -> object:
                 raise NotImplementedError
 
     with pytest.raises(PlanError, match="no placement"):
 
         class Missing(SyncApi):
-            @api.get("/museums", operation_id="missing", responses=RESPONSES)
+            @api.get(
+                "/museums",
+                operation_id="missing",
+                success=(),
+            )
             def operation(self, *, value: str) -> object:
                 raise NotImplementedError
 
@@ -244,7 +281,11 @@ def test_rejects_invalid_body_combinations() -> None:
     with pytest.raises(PlanError, match="incompatible body field codecs"):
 
         class Mixed(SyncApi):
-            @api.post("/museums", operation_id="mixed", responses=RESPONSES)
+            @api.post(
+                "/museums",
+                operation_id="mixed",
+                success=(),
+            )
             def operation(
                 self,
                 *,
@@ -256,7 +297,11 @@ def test_rejects_invalid_body_combinations() -> None:
     with pytest.raises(PlanError, match="root body with body fields"):
 
         class RootAndField(SyncApi):
-            @api.post("/museums", operation_id="rootField", responses=RESPONSES)
+            @api.post(
+                "/museums",
+                operation_id="rootField",
+                success=(),
+            )
             def operation(
                 self,
                 *,
@@ -268,7 +313,11 @@ def test_rejects_invalid_body_combinations() -> None:
     with pytest.raises(PlanError, match="QueryString with query fields"):
 
         class RawAndQuery(SyncApi):
-            @api.get("/museums", operation_id="rawQuery", responses=RESPONSES)
+            @api.get(
+                "/museums",
+                operation_id="rawQuery",
+                success=(),
+            )
             def operation(
                 self,
                 *,
@@ -286,14 +335,22 @@ def test_rejects_path_fields_that_do_not_match_template(path: str, message: str)
     with pytest.raises(PlanError, match=message):
 
         class Api(SyncApi):
-            @api.get(path, operation_id="museum", responses=RESPONSES)
+            @api.get(
+                path,
+                operation_id="museum",
+                success=(),
+            )
             def operation(self, *, museum_id: Annotated[str, Path("museumId")]) -> object:
                 raise NotImplementedError
 
 
 def test_parameterless_method_has_an_empty_shape() -> None:
     class HealthApi(SyncApi):
-        @api.get("/health", operation_id="health", responses=RESPONSES)
+        @api.get(
+            "/health",
+            operation_id="health",
+            success=(),
+        )
         def health(self) -> object:
             raise NotImplementedError
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from eazy_sdk import Client, ClientConfig, Resilience, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Http, HttpOperation, Path, Query, Resilience, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request.markers import JsonField, Path, Query
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk.request import markers
 
 BASE_URL = "https://jsonplaceholder.typicode.com"
 
@@ -21,43 +20,35 @@ class BlogPost(BaseModel):
     body: str
 
 
-class GetPostRequest(TypedDict):
-    post_id: Annotated[int, Path()]
+class GetPost(BaseModel, HttpOperation[BlogPost]):
+    """A Pydantic operation: ``frozen`` is required, the alias owns the wire name."""
+
+    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
+    __http__ = Http.get("/posts/{post_id}", operation_id="getPost")
+
+    post_id: Path[int]
 
 
-class ListPostsRequest(TypedDict):
-    user_id: Annotated[int, Query("userId")]
+class ListPosts(BaseModel, HttpOperation[list[BlogPost]]):
+    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
+    __http__ = Http.get("/posts", operation_id="listPosts")
+
+    user_id: Query[int] = Field(serialization_alias="userId")
 
 
-class CreatePostRequest(TypedDict):
-    user_id: Annotated[int, JsonField("userId")]
-    title: Annotated[str, JsonField()]
-    body: Annotated[str, JsonField()]
+class CreatePost(BaseModel, HttpOperation[BlogPost]):
+    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
+    __http__ = Http.post("/posts", operation_id="createPost", success={201: BlogPost})
 
-
-POST_RESPONSE = Responses(
-    success=(Success(200, Json(BlogPost)),)
-)
-POSTS_RESPONSE = Responses(
-    success=(Success(200, Json(list[BlogPost])),)
-)
-CREATE_RESPONSE = Responses(
-    success=(Success(201, Json(BlogPost)),)
-)
+    user_id: Annotated[int, markers.JsonField()] = Field(serialization_alias="userId")
+    title: Annotated[str, markers.JsonField()]
+    body: Annotated[str, markers.JsonField()]
 
 
 class JsonPlaceholderApi(SyncApi):
-    @api.get("/posts/{post_id}", operation_id="getPost", responses=POST_RESPONSE)
-    def get_post(self, **request: Unpack[GetPostRequest]) -> BlogPost:
-        raise NotImplementedError
-
-    @api.get("/posts", operation_id="listPosts", responses=POSTS_RESPONSE)
-    def list_posts(self, **request: Unpack[ListPostsRequest]) -> list[BlogPost]:
-        raise NotImplementedError
-
-    @api.post("/posts", operation_id="createPost", responses=CREATE_RESPONSE)
-    def create_post(self, **request: Unpack[CreatePostRequest]) -> BlogPost:
-        raise NotImplementedError
+    get_post = op(GetPost)
+    list_posts = op(ListPosts)
+    create_post = op(CreatePost)
 
 
 def main() -> None:
@@ -69,7 +60,6 @@ def main() -> None:
         posts = JsonPlaceholderApi(client)
 
         first = posts.get_post(post_id=1)
-
 
         by_user = posts.list_posts(user_id=1)
 

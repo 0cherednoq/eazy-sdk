@@ -28,7 +28,7 @@ from eazy_sdk.auth import (
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, NormalizedResponse, Responses
+from eazy_sdk.response import Json, NormalizedResponse
 
 MAIN = "https://api.shop.com"
 PAY = "https://pay.shop.com"
@@ -57,7 +57,7 @@ class AuthApi(AsyncApi):
     @api.post(
         "/session/login",
         operation_id="login",
-        responses=Responses(success={200: Json(UserSession)}),
+        success={200: Json(UserSession)},
         security=None,
     )
     async def login(self, *, body: Annotated[LoginRequest, JsonBody()]) -> UserSession:
@@ -66,7 +66,7 @@ class AuthApi(AsyncApi):
     @api.post(
         "/session/refresh",
         operation_id="refresh",
-        responses=Responses(success={200: Json(UserSession)}),
+        success={200: Json(UserSession)},
         security=None,
     )
     async def refresh(self, *, body: Annotated[LoginRequest, JsonBody()]) -> UserSession:
@@ -81,7 +81,7 @@ class PaymentsService:
 class BooksApi(AsyncApi):
     security = SHOP_SESSION
 
-    @api.get("/books", operation_id="books", responses=Responses(success=()), raw_response=True)
+    @api.get("/books", operation_id="books", success=(), raw_response=True)
     async def get(self) -> NormalizedResponse[object]:
         raise NotImplementedError
 
@@ -89,7 +89,7 @@ class BooksApi(AsyncApi):
 class CardApi(PaymentsService, AsyncApi):
     security = SHOP_SESSION
 
-    @api.get("/v1/cards", operation_id="cards", responses=Responses(success=()), raw_response=True)
+    @api.get("/v1/cards", operation_id="cards", success=(), raw_response=True)
     async def get(self) -> NormalizedResponse[object]:
         raise NotImplementedError
 
@@ -316,7 +316,7 @@ def test_a_scheme_outside_the_service_allowlist_is_rejected_at_assembly() -> Non
     class LeakyApi(PaymentsService, AsyncApi):
         security = other
 
-        @api.get("/leak", operation_id="leak", responses=Responses(success=()), raw_response=True)
+        @api.get("/leak", operation_id="leak", success=(), raw_response=True)
         async def get(self) -> NormalizedResponse[object]:
             raise NotImplementedError
 

@@ -102,8 +102,8 @@ list[str] = ..., ...)` без единого объекта в вызове. П�
 from dataclasses import dataclass
 from typing import Annotated
 
-from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, Path, Query, op
-from eazy_sdk.request import markers
+from eazy_sdk import AsyncApi, Http, HttpOperation, Path, Query, op
+from eazy_sdk.request import JsonField, markers
 from eazy_sdk.response import ApiError
 
 
@@ -320,8 +320,8 @@ pyright: Argument of type "QueryCls" cannot be assigned to parameter "x" of type
 не передать. Частый случай забирает короткое имя, редкий уходит в квалифицированный модуль:
 
 ```python
-from eazy_sdk import Path, Query, Header, Cookie, JsonField, Form, Part   # алиасы
-from eazy_sdk.request import markers                                      # дата-классы
+from eazy_sdk import Path, Query, Header, Cookie, JsonField   # алиасы (корень)
+from eazy_sdk.request import Form, Part, markers               # остальные алиасы и дата-классы
 ```
 
 ```python

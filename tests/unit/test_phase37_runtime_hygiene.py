@@ -8,7 +8,7 @@ from typing import Annotated, cast
 
 from zapros import BaseHandler, Request, Response
 
-from eazy_sdk import Client, Json, SyncApi, api
+from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.auth import session_auth, session_scheme
 from eazy_sdk.auth.session_runtime import generated_session_auth, generated_session_scheme
 from eazy_sdk.clients import executor
@@ -27,7 +27,7 @@ class Handler(BaseHandler):
 
 
 class Users(SyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     def get(self, *, user_id: Annotated[int, Path()]) -> dict[str, object]:
         raise NotImplementedError
 

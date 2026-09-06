@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 
 from pydantic import BaseModel, Field, SecretStr
 
@@ -11,7 +11,7 @@ from eazy_sdk import Client, ClientConfig, Identity, Resilience, SyncApi, api
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request.markers import JsonField
-from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+from eazy_sdk.response import ApiError
 
 BASE_URL = "https://dummyjson.com"
 USER_BEARER = BearerScheme("dummyjson-user")
@@ -20,12 +20,6 @@ USER_BEARER = BearerScheme("dummyjson-user")
 class LoginCredentials(BaseModel):
     username: str
     password: SecretStr
-
-
-class LoginRequest(TypedDict):
-    username: Annotated[str, JsonField()]
-    password: Annotated[str, JsonField()]
-    expires_in_mins: Annotated[int, JsonField("expiresInMins")]
 
 
 class LoginSession(BaseModel):
@@ -50,24 +44,20 @@ class LoginRejected(ApiError[AuthProblem]):
     pass
 
 
-LOGIN_RESPONSES: Responses[LoginSession] = Responses(
-    success=(Success(200, Json(LoginSession)),),
-    errors=(Error(400, Json(AuthProblem), exception=LoginRejected),),
-)
-ME_RESPONSES: Responses[CurrentUser] = Responses(
-    success=(Success(200, Json(CurrentUser)),),
-    errors=(Error(401, Json(AuthProblem)),),
-)
-
-
 class DummyJsonAuthApi(SyncApi):
     @api.post(
         "/auth/login",
         operation_id="login",
-        responses=LOGIN_RESPONSES,
+        errors={400: LoginRejected},
         security=None,
     )
-    def login(self, **request: Unpack[LoginRequest]) -> LoginSession:
+    def login(
+        self,
+        *,
+        username: Annotated[str, JsonField()],
+        password: Annotated[str, JsonField()],
+        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
+    ) -> LoginSession:
         raise NotImplementedError
 
 
@@ -75,7 +65,7 @@ class DummyJsonUsersApi(SyncApi):
     @api.get(
         "/auth/me",
         operation_id="getCurrentUser",
-        responses=ME_RESPONSES,
+        errors={401: AuthProblem},
         security=USER_BEARER,
     )
     def me(self) -> CurrentUser:

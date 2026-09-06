@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass
-from typing import Annotated, TypedDict, Unpack, cast
+from typing import Annotated, cast
 
 import httpx
 from pydantic import BaseModel
@@ -42,7 +42,6 @@ from eazy_sdk.request import (
     hmac_sha256,
 )
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, Responses, Success
 
 
 class Card(BaseModel):
@@ -114,26 +113,19 @@ PAYMENTS_HMAC = hmac_sha256(
     base=body_digest("sha256"),
     output=header_output("X-Signature"),
 )
-PAYMENT_RESPONSES: Responses[PaymentResult] = Responses(
-    success=(Success(201, Json(PaymentResult)),)
-)
-
-
-class CreatePaymentRequest(TypedDict):
-    body: Annotated[CreatePayment, JsonBody()]
 
 
 class PaymentsApi(SyncApi):
     @api.post(
         "/v1/payments",
         operation_id="createPayment",
-        responses=PAYMENT_RESPONSES,
+        success={201: PaymentResult},
         security=CUSTOMER,
         signing=PAYMENTS_HMAC,
         crypto=PAYMENT_CRYPTO,
         wire=Wire(encrypted=PAYMENT_WIRE),
     )
-    def create(self, **request: Unpack[CreatePaymentRequest]) -> PaymentResult:
+    def create(self, *, body: Annotated[CreatePayment, JsonBody()]) -> PaymentResult:
         raise NotImplementedError
 
 

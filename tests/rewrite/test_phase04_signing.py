@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import pytest
 from zapros import Client as ZaprosClient
 
-from eazy_sdk import Json, SyncApi, api
+from eazy_sdk import SyncApi, api
 from eazy_sdk.compile import (
     CompiledContract,
     InputField,
@@ -306,11 +306,11 @@ def test_signing_is_chosen_by_declaration_site_and_can_be_required() -> None:
         signed = True
 
     class PaymentsApi(SignedService, SyncApi):
-        @api.post("/inherits", response=Json())
+        @api.post("/inherits")
         def inherits(self) -> dict[str, object]:
             raise NotImplementedError
 
-        @api.post("/overrides", response=Json(), signing=(endpoint_signature,))
+        @api.post("/overrides", signing=(endpoint_signature,))
         def overrides(self) -> dict[str, object]:
             raise NotImplementedError
 
@@ -321,7 +321,7 @@ def test_signing_is_chosen_by_declaration_site_and_can_be_required() -> None:
     assert overridden.signing == (endpoint_signature,)
 
     class Unsigned(SignedService, SyncApi):
-        @api.post("/forgot", response=Json(), signing=())
+        @api.post("/forgot", signing=())
         def forgot(self) -> dict[str, object]:
             raise NotImplementedError
 

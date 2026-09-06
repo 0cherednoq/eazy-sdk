@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import inspect
+import dataclasses
 from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
 import pytest
 
 from eazy_sdk.compile.http_operation import _OperationDeclaration
-from eazy_sdk.compile.input import inspect_method_input
+from eazy_sdk.compile.input import inspect_operation_input
 from eazy_sdk.core import (
     OperationValues,
 )
 from eazy_sdk.core.errors import PlanError
+from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request.markers import Cookie, Header, Path, Query
 from eazy_sdk.request.prepared import RequestPreparer
-from eazy_sdk.response import Responses
 
 pytestmark = pytest.mark.unit
 
@@ -27,8 +27,7 @@ def prepare(
     headers: dict[str, object] | None = None,
     cookies: dict[str, object] | None = None,
 ) -> Any:
-    hints: dict[str, object] = {}
-    signature_parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+    fields: list[tuple[str, object, Any]] = []
     request: dict[str, object] = {}
     sources = {
         Path: path_values or {},
@@ -38,28 +37,21 @@ def prepare(
     }
     for index, parameter in enumerate(parameters):
         key = f"field_{index}"
-        hints[key] = Annotated[object, parameter]
-        signature_parameters.append(
-            inspect.Parameter(
-                key,
-                inspect.Parameter.KEYWORD_ONLY,
-                default=None,
-                annotation=object,
-            )
-        )
+        fields.append((key, Annotated[object, parameter], dataclasses.field(default=None)))
         for descriptor_type, source_values in sources.items():
             if isinstance(parameter, descriptor_type):
                 name = cast(str, cast(Any, parameter).name)
                 if name in source_values:
                     request[key] = source_values[name]
                 break
-    signature = inspect.Signature(signature_parameters)
-    input_schema = inspect_method_input(
-        signature,
-        hints,
+    operation_type = dataclasses.make_dataclass(
+        "Serialization", fields, frozen=True, slots=True, kw_only=True
+    )
+    input_schema = inspect_operation_input(
+        operation_type,
         operation_id="serialization",
         path=path,
-        self_parameter="self",
+        models=default_model_adapters(),
     )
     declaration: _OperationDeclaration[object] = _OperationDeclaration(
         operation_id="serialization",
@@ -68,7 +60,7 @@ def prepare(
         input_fields=input_schema.fields,
         input_schema=input_schema,
         result_type=object,
-        responses=Responses(success=()),
+        responses=object(),
         raw_response=True,
     )
     compiled = declaration.compile()

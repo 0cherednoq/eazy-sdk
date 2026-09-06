@@ -41,7 +41,7 @@ from eazy_sdk.auth import AuthContext, Bearer, ExpiresAt, RefreshToken, session_
 from eazy_sdk.auth.session import SessionKey, SessionRevision, SessionRevisionError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, NormalizedResponse, Responses
+from eazy_sdk.response import Json, NormalizedResponse
 
 
 def client_from_httpx(
@@ -110,7 +110,7 @@ class SqlSessionApi(AsyncApi):
     @api.post(
         "/login",
         operation_id="sqlLogin",
-        responses=Responses(success={200: Json(SqlAuthSession)}),
+        success={200: Json(SqlAuthSession)},
     )
     async def login(self, *, body: Annotated[SqlLoginRequest, JsonBody()]) -> SqlAuthSession:
         raise NotImplementedError
@@ -118,7 +118,7 @@ class SqlSessionApi(AsyncApi):
     @api.post(
         "/refresh",
         operation_id="sqlRefresh",
-        responses=Responses(success={200: Json(SqlAuthSession)}),
+        success={200: Json(SqlAuthSession)},
     )
     async def refresh(self, *, body: Annotated[SqlRefreshRequest, JsonBody()]) -> SqlAuthSession:
         raise NotImplementedError
@@ -500,7 +500,7 @@ async def test_session_auth_login_and_refresh_persist_through_sql_store(
         @api.get(
             "/account",
             operation_id="sqlProtected",
-            responses=Responses[NormalizedResponse[object]](success=()),
+            success=(),
             security=auth.scheme,
             raw_response=True,
         )

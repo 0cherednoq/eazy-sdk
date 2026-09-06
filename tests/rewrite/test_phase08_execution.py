@@ -97,7 +97,7 @@ class ItemsApi(SyncApi):
     @api.get(
         "/items",
         operation_id="items.get",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def items(self, *, page: Annotated[int | None, Query("page")] = None) -> dict[str, object]:
         raise NotImplementedError
@@ -107,7 +107,7 @@ class AsyncItemsApi(AsyncApi):
     @api.get(
         "/items",
         operation_id="items.get",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def items(
         self, *, page: Annotated[int | None, Query("page")] = None
@@ -119,7 +119,7 @@ class DeviceItemsApi(SyncApi):
     @api.get(
         "/items",
         operation_id="items.get",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def items(
         self,
@@ -134,7 +134,7 @@ class StreamApi(SyncApi):
     @api.post(
         "/stream",
         operation_id="stream.upload",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def upload(
         self,
@@ -509,7 +509,7 @@ def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> No
         @api.get(
             "/token",
             operation_id="token.acquire",
-            responses=Responses(success=(Success(200, Text()),)),
+            success=(Success(200, Text()),),
         )
         def token(self) -> str:
             raise NotImplementedError
@@ -518,7 +518,7 @@ def test_client_before_policy_uses_nested_operation_and_rebuilds_request() -> No
         @api.get(
             "/protected",
             operation_id="protected",
-            responses=Responses(success=(Success(200, Json(dict)),)),
+            success=(Success(200, Json(dict)),),
         )
         def protected(self) -> dict[str, object]:
             raise NotImplementedError

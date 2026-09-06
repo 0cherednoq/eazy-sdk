@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Annotated, TypedDict, Unpack
+from typing import Annotated
 from urllib.parse import urljoin
 
 from eazy_sdk_html import CSS, Scope
 
-from eazy_sdk import Client, ClientConfig, Resilience, SyncApi, api
+from eazy_sdk import Client, ClientConfig, Http, HttpOperation, Path, Resilience, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request.markers import Path
-from eazy_sdk.response import Html, Responses, Success
 
 BASE_URL = "https://books.toscrape.com"
 
@@ -44,23 +42,17 @@ class CatalogPage:
     next_href: Annotated[str | None, CSS("li.next a::attr(href)")] = None
 
 
-CATALOG_RESPONSE: Responses[CatalogPage] = Responses(
-    success=(Success(200, Html(CatalogPage)),)
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCatalogPage(HttpOperation[CatalogPage]):
+    """The model carries CSS selectors, so the response is read as a document, not JSON."""
 
+    __http__ = Http.get("/catalogue/page-{page}.html", operation_id="getCatalogPage")
 
-class GetCatalogPageRequest(TypedDict):
-    page: Annotated[int, Path()]
+    page: Path[int]
 
 
 class BooksApi(SyncApi):
-    @api.get(
-        "/catalogue/page-{page}.html",
-        operation_id="getCatalogPage",
-        responses=CATALOG_RESPONSE,
-    )
-    def page(self, **request: Unpack[GetCatalogPageRequest]) -> CatalogPage:
-        raise NotImplementedError
+    page = op(GetCatalogPage)
 
 
 def main() -> None:

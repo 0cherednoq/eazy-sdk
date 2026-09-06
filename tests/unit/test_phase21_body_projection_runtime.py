@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, TypedDict, Unpack, cast
+from typing import Any, ClassVar, TypedDict, cast
 
 import httpx
 import msgspec
@@ -15,7 +15,7 @@ from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.codecs import EncodeContext
 from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
@@ -45,8 +45,14 @@ async def _execute(
     value: str = "visible",
 ) -> Reply:
     class ProjectionApi(AsyncApi):
-        @api.put("/project", responses=RESPONSES, wire=Wire(projection=projection))
-        async def operation(self, **request: Unpack[PublicBody]) -> Reply:
+        @api.put(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def operation(self, *, value: str) -> Reply:
             raise NotImplementedError
 
     raw = httpx.AsyncClient(
@@ -73,7 +79,7 @@ async def test_projection_builds_exact_nested_json_from_flat_kwargs() -> None:
         return httpx.Response(200, json={"ok": True})
 
     result = await _execute(
-        BodyProjection(PublicBody, NestedWire, to_wire, JsonBody()),
+        BodyProjection(NestedWire, to_wire, JsonBody(), source=PublicBody),
         handler,
     )
 
@@ -108,7 +114,7 @@ async def test_projection_and_codec_are_fresh_once_per_retry_attempt() -> None:
 
     codec = ExactJsonCodec(documents)
     result = await _execute(
-        BodyProjection(PublicBody, NestedWire, to_wire, codec),
+        BodyProjection(NestedWire, to_wire, codec, source=PublicBody),
         handler,
         config=ClientConfig(
             resilience=Resilience(
@@ -146,7 +152,7 @@ async def test_projection_is_fresh_on_managed_redirect() -> None:
         return httpx.Response(200, json={"ok": True})
 
     await _execute(
-        BodyProjection(PublicBody, NestedWire, to_wire, JsonBody()),
+        BodyProjection(NestedWire, to_wire, JsonBody(), source=PublicBody),
         handler,
         config=ClientConfig(resilience=Resilience( auth_retries=0, max_redirects=1, )),
     )
@@ -179,11 +185,11 @@ async def test_standard_json_and_custom_codec_receive_the_same_semantic_document
         return httpx.Response(200, json={"ok": True})
 
     await _execute(
-        BodyProjection(PublicBody, NestedWire, to_wire, JsonBody()),
+        BodyProjection(NestedWire, to_wire, JsonBody(), source=PublicBody),
         standard_handler,
     )
     await _execute(
-        BodyProjection(PublicBody, NestedWire, to_wire, CaptureCodec()),
+        BodyProjection(NestedWire, to_wire, CaptureCodec(), source=PublicBody),
         custom_handler,
     )
 
@@ -252,10 +258,10 @@ async def test_projection_target_adapter_preserves_order_aliases_and_defaults(
         return httpx.Response(200, json={"ok": True})
 
     projection = BodyProjection(
-        PublicBody,
         target,
         mapper,
         JsonBody(),
+        source=PublicBody,
     )
     await _execute(projection, handler)
 
@@ -271,10 +277,10 @@ async def test_projection_target_model_is_dumped_once_per_attempt() -> None:
 
     await _execute(
         BodyProjection(
-            PublicBody,
             CountingTarget,
             lambda source: CountingTarget(value=source["value"]),
             JsonBody(),
+            source=PublicBody,
         ),
         handler,
     )
@@ -297,11 +303,17 @@ async def test_projection_mapper_cannot_mutate_caller_collections() -> None:
         source["values"].append("projected")
         return {"values": source["values"]}
 
-    projection = BodyProjection(ListSource, ListWire, mutate, JsonBody())
+    projection = BodyProjection(ListWire, mutate, JsonBody(), source=ListSource)
 
     class ProjectionApi(AsyncApi):
-        @api.put("/project", responses=RESPONSES, wire=Wire(projection=projection))
-        async def operation(self, **request: Unpack[ListSource]) -> Reply:
+        @api.put(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def operation(self, *, values: list[str]) -> Reply:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -337,7 +349,7 @@ async def test_projection_failures_are_safe_and_target_error_keeps_nested_path(
             raise ValueError(secret)
         return cast(ValidatedWire, {"account": {}})
 
-    projection = BodyProjection(PublicBody, ValidatedWire, mapper, JsonBody())
+    projection = BodyProjection(ValidatedWire, mapper, JsonBody(), source=PublicBody)
     sends = 0
 
     async def handler(_request: httpx.Request) -> httpx.Response:

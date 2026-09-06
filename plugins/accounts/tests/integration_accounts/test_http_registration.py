@@ -38,7 +38,7 @@ from eazy_sdk.auth.session import MemorySessionStore, SessionKey, SessionLifecyc
 from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.request import SigningKey, SigningKeyRequirement, header_output, hmac_sha256, method
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk.response import Json, Success
 from tests._support.zapros_clients import client_from_httpx
 
 
@@ -106,7 +106,7 @@ class RegistrationApi(AsyncApi):
     @api.post(
         "/accounts",
         operation_id="createAccount",
-        responses=Responses(success=(Success(201, Json(RegisterResponse)),)),
+        success=(Success(201, Json(RegisterResponse)),),
         signing=(SIGNATURE,),
         idempotent=True,
     )
@@ -118,7 +118,7 @@ class RegistrationApi(AsyncApi):
     @api.post(
         "/cookie-accounts",
         operation_id="createCookieAccount",
-        responses=Responses(success=(Success(201, Json(CookieRegisterResponse)),)),
+        success=(Success(201, Json(CookieRegisterResponse)),),
     )
     async def create_cookie_account(
         self, *, body: Annotated[RegisterRequest, JsonBody()]
@@ -128,7 +128,7 @@ class RegistrationApi(AsyncApi):
     @api.post(
         "/accounts/pending",
         operation_id="createPendingAccount",
-        responses=Responses(success=(Success(202, Json(PendingRegisterResponse)),)),
+        success=(Success(202, Json(PendingRegisterResponse)),),
     )
     async def create_pending_account(
         self, *, body: Annotated[RegisterRequest, JsonBody()]
@@ -138,7 +138,7 @@ class RegistrationApi(AsyncApi):
     @api.post(
         "/accounts/verify",
         operation_id="verifyAccount",
-        responses=Responses(success=(Success(200, Json(VerifyResponse)),)),
+        success=(Success(200, Json(VerifyResponse)),),
     )
     async def verify_account(self, *, body: Annotated[VerifyRequest, JsonBody()]) -> VerifyResponse:
         raise NotImplementedError
@@ -368,7 +368,7 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
         @api.get(
             "/protected",
             operation_id="protectedAfterRegistration",
-            responses=Responses(success=(Success(200, Json(CookieRegisterResponse)),)),
+            success=(Success(200, Json(CookieRegisterResponse)),),
             security=auth.scheme,
         )
         async def protected(self) -> CookieRegisterResponse:

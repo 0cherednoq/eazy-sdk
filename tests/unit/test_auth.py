@@ -22,7 +22,7 @@ from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthPr
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.request.markers import Header
-from eazy_sdk.response import NormalizedResponse, Responses
+from eazy_sdk.response import NormalizedResponse
 from tests._support.zapros_clients import client_from_httpx
 
 pytestmark = pytest.mark.unit
@@ -235,7 +235,7 @@ def _call(
         @api.get(
             "/auth",
             operation_id=operation_id,
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )

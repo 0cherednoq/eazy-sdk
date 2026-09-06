@@ -27,7 +27,7 @@ from eazy_sdk.auth.session_runtime import (
     SessionProvider,
 )
 from eazy_sdk.clients import CallOptions, UnsafeReplayError
-from eazy_sdk.response import NormalizedResponse, ResponseContext, Responses
+from eazy_sdk.response import NormalizedResponse, ResponseContext
 from tests._support.zapros_clients import client_from_curl_cffi, client_from_httpx
 
 pytestmark = pytest.mark.integration
@@ -126,7 +126,7 @@ async def _protected_call[T](
         @decorator(
             path,
             operation_id="sessionProtectedResource",
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )

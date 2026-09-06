@@ -14,7 +14,7 @@ from eazy_sdk.auth import Auth, BasicScheme, BearerScheme
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.request.markers import Form
-from eazy_sdk.response import NormalizedResponse, Responses
+from eazy_sdk.response import NormalizedResponse
 from tests._support.client_harness import ClientHarness
 
 pytestmark = [
@@ -43,7 +43,7 @@ class _FormOperation:
             @api.post(
                 self.url,
                 operation_id=self.operation_id,
-                responses=Responses(success=()),
+                success=(),
                 security=self.security,
                 raw_response=True,
             )
@@ -68,7 +68,7 @@ class _FormOperation:
             @api.post(
                 self.url,
                 operation_id=self.operation_id,
-                responses=Responses(success=()),
+                success=(),
                 security=self.security,
                 raw_response=True,
             )
@@ -100,7 +100,7 @@ class _GetOperation:
             @api.get(
                 self.url,
                 operation_id=self.operation_id,
-                responses=Responses(success=()),
+                success=(),
                 security=self.security,
                 raw_response=True,
             )
@@ -118,7 +118,7 @@ class _GetOperation:
             @api.get(
                 self.url,
                 operation_id=self.operation_id,
-                responses=Responses(success=()),
+                success=(),
                 security=self.security,
                 raw_response=True,
             )

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import inspect
-from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
+from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 import pytest
 
 import eazy_sdk.request as request_api
-from eazy_sdk import SyncApi, api
+from eazy_sdk import UNSET, Omittable, SyncApi, api
 from eazy_sdk.core import (
     PlanError,
     PlanNodeKind,
     RequestLocation,
 )
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody, JsonField, Path, Query
 from eazy_sdk.response import Responses
 
@@ -70,7 +70,7 @@ def to_wire(source: PublicBody) -> WireBody:
     return {"nested": source["value"]}
 
 
-PROJECTION = BodyProjection(PublicBody, WireBody, to_wire, JsonBody())
+PROJECTION = BodyProjection(WireBody, to_wire, JsonBody(), source=PublicBody)
 
 
 def _compile(api_type: type[SyncApi], method: str = "operation") -> Any:
@@ -80,8 +80,14 @@ def _compile(api_type: type[SyncApi], method: str = "operation") -> Any:
 
 def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:
     class ProjectionApi(SyncApi):
-        @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-        def operation(self, **request: Unpack[PublicBody]) -> object:
+        @api.post(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=PROJECTION,
+        )
+        def operation(self, *, value: str) -> object:
             raise NotImplementedError
 
     descriptor = cast(Any, ProjectionApi.operation)
@@ -89,7 +95,7 @@ def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:
 
     assert request_api.BodyProjection is BodyProjection
     assert "BodyProjection" in request_api.__all__
-    assert descriptor.declaration.input_schema.unpacked is PublicBody
+    assert descriptor.declaration.input_schema.operation_type is descriptor.Operation
     assert compiled.body_projection is PROJECTION
     assert tuple(compiled.projection_slots) == ("value",)
     assert tuple(compiled.input_slots) == ("value",)
@@ -99,7 +105,7 @@ def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:
     assert compiled.input_fields[0].wire_name is None
     assert compiled.input_fields[0].location is None
     assert compiled.input_fields[0].is_projection_source
-    assert tuple(descriptor.signature.parameters) == ("self", "request")
+    assert tuple(descriptor.signature.parameters) == ("self", "value")
     phase_kinds = tuple(node.kind for node in compiled.plan.phases)
     assert phase_kinds.index(PlanNodeKind.BODY_PROJECTION) < phase_kinds.index(
         PlanNodeKind.PREPARE
@@ -115,11 +121,24 @@ def test_projection_source_can_be_a_structural_subset_of_public_input() -> None:
             }
         }
 
-    projection = BodyProjection(UpdateBody, UpdateWire, update_to_wire, JsonBody())
+    projection = BodyProjection(UpdateWire, update_to_wire, JsonBody(), source=UpdateBody)
 
     class UpdateApi(SyncApi):
-        @api.patch("/users/{user_id}", responses=RESPONSES, wire=Wire(projection=projection))
-        def operation(self, **request: Unpack[UpdateRequest]) -> object:
+        @api.patch(
+            "/users/{user_id}",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        def operation(
+            self,
+            *,
+            display_name: str,
+            timezone: str,
+            user_id: Annotated[str, Path()],
+            locale: Annotated[str | None, Query()] = None,
+        ) -> object:
             raise NotImplementedError
 
     compiled = _compile(UpdateApi)
@@ -132,15 +151,27 @@ def test_projection_source_can_be_a_structural_subset_of_public_input() -> None:
 
 def test_projection_identity_contributes_to_plan_fingerprint() -> None:
     class First(SyncApi):
-        @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-        def operation(self, **request: Unpack[PublicBody]) -> object:
+        @api.post(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=PROJECTION,
+        )
+        def operation(self, *, value: str) -> object:
             raise NotImplementedError
 
-    named = BodyProjection(PublicBody, WireBody, to_wire, JsonBody(), "named-v2")
+    named = BodyProjection(WireBody, to_wire, JsonBody(), name="named-v2", source=PublicBody)
 
     class Second(SyncApi):
-        @api.post("/project", responses=RESPONSES, wire=Wire(projection=named))
-        def operation(self, **request: Unpack[PublicBody]) -> object:
+        @api.post(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=named,
+        )
+        def operation(self, *, value: str) -> object:
             raise NotImplementedError
 
     assert _compile(First).plan.fingerprint != _compile(Second).plan.fingerprint
@@ -150,16 +181,22 @@ def test_projection_identity_contributes_to_plan_fingerprint() -> None:
 
 def test_rejects_projection_source_that_is_not_a_typed_dict() -> None:
     invalid = BodyProjection(
-        cast(Any, dict),
         WireBody,
         cast(Any, lambda source: source),
         JsonBody(),
+        source=cast(Any, dict),
     )
-    with pytest.raises(PlanError, match=r"source.*must be a TypedDict"):
+    with pytest.raises(PlanError, match=r"source.*not a model any configured adapter supports"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=invalid))
-            def operation(self, **request: Unpack[PublicBody]) -> object:
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=invalid,
+            )
+            def operation(self, *, value: str) -> object:
                 raise NotImplementedError
 
 
@@ -167,59 +204,73 @@ def test_rejects_projection_when_source_is_absent_from_direct_input() -> None:
     with pytest.raises(PlanError, match="not present in the public input"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=PROJECTION,
+            )
             def operation(self) -> object:
                 raise NotImplementedError
 
 
 def test_rejects_unknown_source_key() -> None:
     projection = BodyProjection(
-        UnknownSource,
         WireBody,
         cast(Any, to_wire),
         JsonBody(),
+        source=UnknownSource,
     )
     with pytest.raises(PlanError, match=r"source field 'missing'.*not present"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))
-            def operation(self, **request: Unpack[PublicBody]) -> object:
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=projection,
+            )
+            def operation(self, *, value: str) -> object:
                 raise NotImplementedError
 
 
-@pytest.mark.parametrize(
-    ("public_request", "mismatch"),
-    [
-        (AnnotationMismatchRequest, "annotation"),
-        (RequirednessMismatchRequest, "requiredness"),
-    ],
-)
-def test_rejects_projection_source_shape_mismatch(
-    public_request: type[object], mismatch: str
-) -> None:
+def test_rejects_projection_source_shape_mismatch() -> None:
     projection = BodyProjection(
-        PublicBody,
         WireBody,
         cast(Any, to_wire),
         JsonBody(),
+        source=PublicBody,
     )
-    request_annotation = Unpack[public_request]
 
-    with pytest.raises(PlanError, match=f"incompatible {mismatch}"):
-        def operation(self: object, **request: object) -> object:
-            raise NotImplementedError
+    with pytest.raises(PlanError, match="incompatible annotation"):
 
-        declaration = cast(Any, operation)
-        declaration.__annotations__ = {"request": request_annotation, "return": object}
-        api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))(declaration)
+        class AnnotationMismatch(SyncApi):
+            @api.post("/project", success=(), projection=projection)
+            def operation(self, *, value: int) -> object:
+                raise NotImplementedError
+
+    with pytest.raises(PlanError, match="incompatible requiredness"):
+
+        class RequirednessMismatch(SyncApi):
+            @api.post("/project", success=(), projection=projection)
+            def operation(self, *, value: Omittable[str] = UNSET) -> object:
+                raise NotImplementedError
 
 
 def test_rejects_unplaced_field_outside_projection_source() -> None:
     with pytest.raises(PlanError, match=r"outside.*no placement"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-            def operation(self, **request: Unpack[ExtraRequest]) -> object:
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=PROJECTION,
+            )
+            def operation(self, *, value: str, outside: str) -> object:
                 raise NotImplementedError
 
 
@@ -230,8 +281,14 @@ def test_rejects_projection_source_with_another_placement() -> None:
     ):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-            def operation(self, **request: Unpack[PlacedRequest]) -> object:
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=PROJECTION,
+            )
+            def operation(self, *, value: Annotated[str, JsonField()]) -> object:
                 raise NotImplementedError
 
 
@@ -239,8 +296,14 @@ def test_rejects_projection_mixed_with_other_body_paths() -> None:
     with pytest.raises(PlanError, match="mixes a body projection"):
 
         class InvalidApi(SyncApi):
-            @api.post("/project", responses=RESPONSES, wire=Wire(projection=PROJECTION))
-            def operation(self, **request: Unpack[MixedRequest]) -> object:
+            @api.post(
+                "/project",
+                success=RESPONSES.success,
+                errors=RESPONSES.errors,
+                fallback=RESPONSES.fallback,
+                projection=PROJECTION,
+            )
+            def operation(self, *, value: str, extra: Annotated[str, JsonField()]) -> object:
                 raise NotImplementedError
 
     assert "wire_body" not in inspect.signature(api.post).parameters
@@ -251,15 +314,21 @@ def test_rejects_unsupported_projection_target_during_compile() -> None:
         pass
 
     projection = BodyProjection(
-        PublicBody,
         UnsupportedWire,
         cast(Any, to_wire),
         JsonBody(),
+        source=PublicBody,
     )
 
     class InvalidApi(SyncApi):
-        @api.post("/project", responses=RESPONSES, wire=Wire(projection=projection))
-        def operation(self, **request: Unpack[PublicBody]) -> object:
+        @api.post(
+            "/project",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        def operation(self, *, value: str) -> object:
             raise NotImplementedError
 
     with pytest.raises(PlanError, match=r"target.*unsupported"):
@@ -268,6 +337,6 @@ def test_rejects_unsupported_projection_target_during_compile() -> None:
 
 def test_rejects_non_body_encoding_and_empty_name() -> None:
     with pytest.raises(TypeError, match="projection encoding"):
-        BodyProjection(PublicBody, WireBody, to_wire, cast(Any, object()))
+        BodyProjection(WireBody, to_wire, cast(Any, object()), source=PublicBody)
     with pytest.raises(ValueError, match="name must not be empty"):
-        BodyProjection(PublicBody, WireBody, to_wire, JsonBody(), "")
+        BodyProjection(WireBody, to_wire, JsonBody(), name="", source=PublicBody)

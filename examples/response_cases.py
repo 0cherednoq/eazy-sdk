@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
 
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, SyncApi, api
+from eazy_sdk import Client, Http, HttpOperation, Path, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request.markers import Path
-from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+from eazy_sdk.response import ApiError
 
 
 class Order(BaseModel):
@@ -32,23 +31,21 @@ class RateLimited(ApiError[ApiProblem]):
     pass
 
 
-ORDER_RESPONSES: Responses[Order] = Responses(
-    success=(Success(200, Json(Order)),),
-    errors=(
-        Error(404, Json(ApiProblem), exception=OrderNotFound),
-        Error(429, Json(ApiProblem), exception=RateLimited),
-    ),
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetOrder(HttpOperation[Order]):
+    """``HttpOperation[Order]`` is the 200 case; each error names its own exception class."""
 
+    __http__ = Http.get(
+        "/orders/{order_id}",
+        operation_id="getOrder",
+        errors={404: OrderNotFound, 429: RateLimited},
+    )
 
-class GetOrderRequest(TypedDict):
-    order_id: Annotated[str, Path()]
+    order_id: Path[str]
 
 
 class OrdersApi(SyncApi):
-    @api.get("/orders/{order_id}", operation_id="getOrder", responses=ORDER_RESPONSES)
-    def get_order(self, **request: Unpack[GetOrderRequest]) -> Order:
-        raise NotImplementedError
+    get_order = op(GetOrder)
 
 
 def order_server(request: httpx.Request) -> httpx.Response:

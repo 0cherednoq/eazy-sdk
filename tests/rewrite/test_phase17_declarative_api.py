@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from typing import Annotated, Any, TypedDict, Unpack, assert_type, cast
+from typing import Annotated, Any, TypedDict, assert_type, cast
 
 import httpx
 import pytest
@@ -24,7 +24,7 @@ from eazy_sdk.protection.advanced import (
     bind_solver,
     protection_flow,
 )
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody, Path, Query
 from eazy_sdk.response import Json, ResponseEnvelope, Responses
 from tests._support.zapros_clients import client_from_httpx
@@ -126,14 +126,14 @@ def _nested_wire(source: LoginPublic) -> _NestedLoginWireBody:
     return cast(_NestedLoginWireBody, dict(source))
 
 
-LOGIN_BODY = BodyProjection(LoginPublic, _LoginWireBody, _login_wire, JsonBody())
-CSRF_BODY = BodyProjection(LoginPublic, _CsrfWireBody, _csrf_wire, JsonBody())
-INVALID_BODY = BodyProjection(LoginPublic, _InvalidWireBody, _invalid_wire, JsonBody())
+LOGIN_BODY = BodyProjection(_LoginWireBody, _login_wire, JsonBody(), source=LoginPublic)
+CSRF_BODY = BodyProjection(_CsrfWireBody, _csrf_wire, JsonBody(), source=LoginPublic)
+INVALID_BODY = BodyProjection(_InvalidWireBody, _invalid_wire, JsonBody(), source=LoginPublic)
 NESTED_BODY = BodyProjection(
-    LoginPublic,
     _NestedLoginWireBody,
     _nested_wire,
     JsonBody(),
+    source=LoginPublic,
 )
 
 
@@ -144,17 +144,29 @@ CSRF_RESPONSES = Responses[CsrfResult](success={200: Json(CsrfResult)})
 
 
 class AsyncUsersApi(AsyncApi):
-    @api.get("/users/{user_id}", operation_id="getUser", responses=USER_RESPONSES)
-    async def get_user(  # type: ignore[no-untyped-def]
+    @api.get(
+        "/users/{user_id}",
+        operation_id="getUser",
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
+    )
+    async def get_user(
         self,
         *,
         user_id: Annotated[int, Path()],
         include: Annotated[str | None, Query()] = None,
         options: CallOptions | None = None,
-    ):
+    ) -> User:
         raise AssertionError("declaration body must not execute")
 
-    @api.post("/users", operation_id="createUser", responses=USER_RESPONSES)
+    @api.post(
+        "/users",
+        operation_id="createUser",
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
+    )
     async def create_user(
         self,
         *,
@@ -164,23 +176,41 @@ class AsyncUsersApi(AsyncApi):
 
 
 class SyncUsersApi(SyncApi):
-    @api.get("/users/{user_id}", operation_id="getUserSync", responses=USER_RESPONSES)
-    def get_user(  # type: ignore[no-untyped-def]
+    @api.get(
+        "/users/{user_id}",
+        operation_id="getUserSync",
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
+    )
+    def get_user(
         self,
         *,
         user_id: Annotated[int, Path()],
         include: Annotated[str | None, Query()] = None,
         options: CallOptions | None = None,
-    ):
+    ) -> User:
         raise AssertionError("declaration body must not execute")
 
 
 class ProtectionApi(AsyncApi):
-    @api.get("/protection", operation_id="acquireProtection", responses=CHALLENGE_RESPONSES)
+    @api.get(
+        "/protection",
+        operation_id="acquireProtection",
+        success=CHALLENGE_RESPONSES.success,
+        errors=CHALLENGE_RESPONSES.errors,
+        fallback=CHALLENGE_RESPONSES.fallback,
+    )
     async def acquire(self) -> Challenge:
         raise AssertionError("declaration body must not execute")
 
-    @api.post("/protection/verify", operation_id="verifyProtection", responses=PROTECTION_RESPONSES)
+    @api.post(
+        "/protection/verify",
+        operation_id="verifyProtection",
+        success=PROTECTION_RESPONSES.success,
+        errors=PROTECTION_RESPONSES.errors,
+        fallback=PROTECTION_RESPONSES.fallback,
+    )
     async def verify(
         self,
         *,
@@ -188,7 +218,13 @@ class ProtectionApi(AsyncApi):
     ) -> ProtectionResult:
         raise AssertionError("declaration body must not execute")
 
-    @api.get("/csrf", operation_id="acquireCsrf", responses=CSRF_RESPONSES)
+    @api.get(
+        "/csrf",
+        operation_id="acquireCsrf",
+        success=CSRF_RESPONSES.success,
+        errors=CSRF_RESPONSES.errors,
+        fallback=CSRF_RESPONSES.fallback,
+    )
     async def csrf(self) -> CsrfResult:
         raise AssertionError("declaration body must not execute")
 
@@ -197,42 +233,50 @@ class AuthApi(AsyncApi):
     @api.post(
         "/login",
         operation_id="login",
-        responses=USER_RESPONSES,
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
         protections=(LOGIN_PROTECTION,),
-        wire=Wire(projection=LOGIN_BODY),
+        projection=LOGIN_BODY,
     )
-    async def login(self, **request: Unpack[LoginPublic]) -> User:
+    async def login(self, *, email: str, password: str) -> User:
         raise AssertionError("declaration body must not execute")
 
     @api.post(
         "/login/csrf",
         operation_id="loginCsrf",
-        responses=USER_RESPONSES,
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
         protections=(CSRF_PROTECTION,),
-        wire=Wire(projection=CSRF_BODY),
+        projection=CSRF_BODY,
     )
-    async def login_csrf(self, **request: Unpack[LoginPublic]) -> User:
+    async def login_csrf(self, *, email: str, password: str) -> User:
         raise AssertionError("declaration body must not execute")
 
     @api.post(
         "/login/invalid",
         operation_id="loginInvalid",
-        responses=USER_RESPONSES,
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
         protections=(LOGIN_PROTECTION,),
-        wire=Wire(projection=INVALID_BODY),
+        projection=INVALID_BODY,
     )
-    async def login_invalid(self, **request: Unpack[LoginPublic]) -> User:
+    async def login_invalid(self, *, email: str, password: str) -> User:
         raise AssertionError("declaration body must not execute")
 
     @api.post(
         "/login/nested",
         operation_id="loginNested",
-        responses=USER_RESPONSES,
+        success=USER_RESPONSES.success,
+        errors=USER_RESPONSES.errors,
+        fallback=USER_RESPONSES.fallback,
         protections=(LOGIN_PROTECTION,),
         idempotent=True,
-        wire=Wire(projection=NESTED_BODY),
+        projection=NESTED_BODY,
     )
-    async def login_nested(self, **request: Unpack[LoginPublic]) -> User:
+    async def login_nested(self, *, email: str, password: str) -> User:
         raise AssertionError("declaration body must not execute")
 
 
@@ -307,7 +351,12 @@ def test_invalid_method_signatures_fail_during_class_creation() -> None:
     with pytest.raises(Exception, match="do not match template"):
 
         class BadPath(AsyncApi):
-            @api.get("/users/{user_id}", responses=USER_RESPONSES)
+            @api.get(
+                "/users/{user_id}",
+                success=USER_RESPONSES.success,
+                errors=USER_RESPONSES.errors,
+                fallback=USER_RESPONSES.fallback,
+            )
             async def get_user(
                 self, *, other: Annotated[int, Path()]
             ) -> User:
@@ -316,14 +365,19 @@ def test_invalid_method_signatures_fail_during_class_creation() -> None:
     with pytest.raises(TypeError, match="options must be keyword-only"):
 
         class BadOptions(AsyncApi):
-            @api.get("/users", responses=USER_RESPONSES)
+            @api.get(
+                "/users",
+                success=USER_RESPONSES.success,
+                errors=USER_RESPONSES.errors,
+                fallback=USER_RESPONSES.fallback,
+            )
             async def users(self, options: CallOptions | None = None) -> User:
                 raise NotImplementedError
 
     with pytest.raises(TypeError, match="cannot infer its result type from responses"):
 
         class MissingResultType(SyncApi):
-            @api.get("/empty", responses=Responses[object](success=()))
+            @api.get("/empty", success=())
             def empty(self):  # type: ignore[no-untyped-def]
                 raise NotImplementedError
 
@@ -541,16 +595,18 @@ def test_overlapping_private_writer_paths_fail_during_compile() -> None:
     def project(source: LoginPublic) -> OverlappingTarget:
         return cast(OverlappingTarget, dict(source))
 
-    projection = BodyProjection(LoginPublic, OverlappingTarget, project, JsonBody())
+    projection = BodyProjection(OverlappingTarget, project, JsonBody(), source=LoginPublic)
 
     class InvalidWriterApi(AsyncApi):
         @api.post(
             "/overlap",
-            responses=USER_RESPONSES,
+            success=USER_RESPONSES.success,
+            errors=USER_RESPONSES.errors,
+            fallback=USER_RESPONSES.fallback,
             protections=(LOGIN_PROTECTION,),
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def overlap(self, **request: Unpack[LoginPublic]) -> User:
+        async def overlap(self, *, email: str, password: str) -> User:
             raise NotImplementedError
 
     descriptor = cast(Any, InvalidWriterApi.overlap)
@@ -564,16 +620,18 @@ async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:
     def collide(source: LoginPublic) -> _CsrfWireBody:
         return cast(_CsrfWireBody, {**source, "csrf": "caller-value"})
 
-    projection = BodyProjection(LoginPublic, _CsrfWireBody, collide, JsonBody())
+    projection = BodyProjection(_CsrfWireBody, collide, JsonBody(), source=LoginPublic)
 
     class CollisionApi(AsyncApi):
         @api.post(
             "/collision",
-            responses=USER_RESPONSES,
+            success=USER_RESPONSES.success,
+            errors=USER_RESPONSES.errors,
+            fallback=USER_RESPONSES.fallback,
             protections=(CSRF_PROTECTION,),
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def collision(self, **request: Unpack[LoginPublic]) -> User:
+        async def collision(self, *, email: str, password: str) -> User:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:

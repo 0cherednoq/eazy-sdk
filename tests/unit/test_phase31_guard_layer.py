@@ -29,7 +29,7 @@ from eazy_sdk.protection.advanced import (
     _ChallengeGuard,
 )
 from eazy_sdk.request.markers import Header
-from eazy_sdk.response import Json, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, ResponseContext, Success
 
 BASE_URL = "https://phase31.test"
 
@@ -43,7 +43,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase31.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(
         self,
@@ -57,7 +57,7 @@ class SyncProtectedApi(SyncApi):
     @api.get(
         "/protected",
         operation_id="phase31.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def protected(self) -> dict[str, object]:
         raise NotImplementedError

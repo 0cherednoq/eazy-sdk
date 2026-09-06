@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import gzip
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -310,6 +311,12 @@ class CountingModelAdapter:
         registry: ModelAdapterRegistry,
     ) -> T:
         return annotation()
+
+    def frozen(self, annotation: object) -> bool | None:
+        return None
+
+    def evolve(self, value: object, changes: Mapping[str, object]) -> object:
+        return value
 
 
 def test_serialization_occurs_once_and_prepared_types_have_no_logical_fields() -> None:

@@ -42,7 +42,6 @@ from eazy_sdk.response import (
     Json,
     NormalizedResponse,
     ResponseContext,
-    Responses,
     Success,
     callable_parser,
 )
@@ -59,7 +58,7 @@ class SyncRecaptchaApi(SyncApi):
     @api.post(
         "/create",
         operation_id="create",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def create(
         self,
@@ -73,7 +72,7 @@ class AsyncRecaptchaApi(AsyncApi):
     @api.post(
         "/create",
         operation_id="create",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def create(
         self,
@@ -87,7 +86,7 @@ class SyncClearanceApi(SyncApi):
     @api.get(
         "/protected",
         operation_id="protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -97,7 +96,7 @@ class AsyncClearanceApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -431,7 +430,7 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
         @api.get(
             "/guarded",
             operation_id="guarded",
-            responses=Responses(success=(Success(200, Json(dict)),)),
+            success=(Success(200, Json(dict)),),
         )
         def guarded(self, *, options: CallOptions | None = None) -> dict[str, object]:
             raise NotImplementedError
@@ -539,7 +538,7 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
         @api.get(
             "/protected",
             operation_id="protected",
-            responses=Responses(success=(Success(200, Json(dict)),)),
+            success=(Success(200, Json(dict)),),
         )
         def protected(
             self,

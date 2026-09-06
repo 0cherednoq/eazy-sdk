@@ -21,7 +21,7 @@ from eazy_sdk.auth import (
     any_of,
 )
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
-from eazy_sdk.response import NormalizedResponse, Responses
+from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.normalized import cast_headers
 from tests._support.zapros_clients import client_from_httpx
 
@@ -96,7 +96,7 @@ def _raw_operation(
         @api.get(
             "/protected",
             operation_id=operation_id,
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )
@@ -107,7 +107,7 @@ def _raw_operation(
         @api.get(
             "/protected",
             operation_id=operation_id,
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )

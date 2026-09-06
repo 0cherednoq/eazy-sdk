@@ -17,7 +17,7 @@ from typing import Annotated, TypedDict, Unpack, assert_type
 from eazy_sdk import AsyncApi, PrepareOptions, PreparedCall, api, api_group
 from eazy_sdk.ext import ParseAttempt, ParsedValue, ResponseParser
 from eazy_sdk.request.markers import Path
-from eazy_sdk.response import Json, ResponseContext, callable_parser
+from eazy_sdk.response import ResponseContext, callable_parser
 
 
 @dataclass
@@ -26,7 +26,7 @@ class User:
 
 
 class ExplicitApi(AsyncApi):
-    @api.get("/users", response=Json())
+    @api.get("/users")
     async def list_users(self, *, page: int = 1) -> User:
         raise NotImplementedError
 
@@ -36,7 +36,7 @@ class UserRequest(TypedDict):
 
 
 class UnpackedApi(AsyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     async def get_user(self, **request: Unpack[UserRequest]) -> User:
         raise NotImplementedError
 
@@ -78,7 +78,7 @@ class User:
 
 
 class UsersApi(AsyncApi):
-    @api.get("/users", response=Json())
+    @api.get("/users")
     async def users(self, *, page: int = 1) -> User:
         raise NotImplementedError
 

@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, TypedDict, assert_type, cast
+from typing import Annotated, Any, NotRequired, TypedDict, assert_type, cast
 
 import pytest
 
@@ -44,7 +44,7 @@ from eazy_sdk.protection.advanced import (
     private_header,
     until_rejected,
 )
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import Cookie, JsonBody, Path, Query
 from eazy_sdk.request.prepared import HttpProtocol
 from eazy_sdk.response import (
@@ -85,7 +85,7 @@ class ShorthandApi(SyncApi):
 
     @api.get(
         "/users/{user_id}",
-        response=Json(status=201, when=_regular_html),
+        success=Json(status=201, when=_regular_html),
         errors=(LOCAL_ERROR,),
     )
     def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
@@ -93,7 +93,6 @@ class ShorthandApi(SyncApi):
 
     @api.get(
         "/users/{user_id}/isolated",
-        response=Json(),
         errors=(LOCAL_ERROR,),
         inherit_errors=False,
     )
@@ -116,7 +115,7 @@ CAPABILITIES = HandlerProfile(
 
 
 class PrepareApi(SyncApi):
-    @api.post("/users", response=Json())
+    @api.post("/users")
     def create(
         self,
         *,
@@ -128,7 +127,7 @@ class PrepareApi(SyncApi):
 
 
 class AsyncPrepareApi(AsyncApi):
-    @api.post("/users", response=Json())
+    @api.post("/users")
     async def create(
         self,
         *,
@@ -139,13 +138,13 @@ class AsyncPrepareApi(AsyncApi):
 
 
 class RootUsersApi(SyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     def get(self, *, user_id: Annotated[int, Path()]) -> User:
         raise NotImplementedError
 
 
 class AsyncRootUsersApi(AsyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     async def get(self, *, user_id: Annotated[int, Path()]) -> User:
         raise NotImplementedError
 
@@ -162,7 +161,7 @@ class KadSearchInput(TypedDict):
     page: int
     count: int
     courts: Sequence[str]
-    side_name: str | None
+    side_name: NotRequired[str | None]
 
 
 class KadSearchWire(TypedDict):
@@ -177,20 +176,20 @@ def _kad_search_wire(source: KadSearchInput) -> KadSearchWire:
         "Page": source["page"],
         "Count": source["count"],
         "Courts": list(source["courts"]),
-        "SideName": source["side_name"],
+        "SideName": source.get("side_name"),
     }
 
 
 KAD_SEARCH_BODY = BodyProjection(
-    KadSearchInput,
     KadSearchWire,
     _kad_search_wire,
     JsonBody(),
+    source=KadSearchInput,
 )
 
 
 class AsyncKadApi(AsyncApi):
-    @api.post("/Kad/SearchInstances", response=Json(), wire=Wire(projection=KAD_SEARCH_BODY))
+    @api.post("/Kad/SearchInstances", projection=KAD_SEARCH_BODY)
     async def search_instances(
         self,
         *,
@@ -203,19 +202,19 @@ class AsyncKadApi(AsyncApi):
 
 
 class MethodApi(SyncApi):
-    @api.head("/resource", response=Json())
+    @api.head("/resource")
     def head_resource(self) -> User:
         raise NotImplementedError
 
-    @api.options("/resource", response=Json())
+    @api.options("/resource")
     def options_resource(self) -> User:
         raise NotImplementedError
 
-    @api.trace("/resource", response=Json())
+    @api.trace("/resource")
     def trace_resource(self) -> User:
         raise NotImplementedError
 
-    @api.request("PROPFIND", "/resource", response=Json())
+    @api.request("PROPFIND", "/resource")
     def propfind_resource(self) -> User:
         raise NotImplementedError
 
@@ -242,7 +241,15 @@ def test_singular_response_normalizes_and_inherits_default_errors() -> None:
     assert success.condition is _regular_html
     assert isinstance(success.response, Json)
     assert success.response.model is User
-    assert declaration.responses.errors == (COMMON_ERROR, LOCAL_ERROR)
+    inherited, local = declaration.responses.errors
+    assert local is LOCAL_ERROR
+    # Phase 50: a service error reaches the operation as a copy ranked one layer lower.
+    assert (inherited.status, inherited.response, inherited.exception, inherited.precedence) == (
+        COMMON_ERROR.status,
+        COMMON_ERROR.response,
+        COMMON_ERROR.exception,
+        1,
+    )
 
 
 def test_singular_response_can_disable_error_inheritance() -> None:
@@ -252,16 +259,20 @@ def test_singular_response_can_disable_error_inheritance() -> None:
 
 
 def test_response_and_responses_are_mutually_exclusive() -> None:
+    """Phase 50: ``responses=`` and ``response=`` are gone; ``success=``/``errors=`` remain."""
+
     responses: Responses[User] = Responses(success=(Success(200, Json(User)),))
-    with pytest.raises(TypeError, match="mutually exclusive"):
-        cast(Any, api.get)("/users", response=Json(), responses=responses)
+    with pytest.raises(TypeError, match="unexpected keyword argument 'responses'"):
+        cast(Any, api.get)("/users", responses=responses)
+    with pytest.raises(TypeError, match="unexpected keyword argument 'response'"):
+        cast(Any, api.get)("/users", response=Json())
 
 
 def test_singular_response_requires_an_explicit_return_annotation() -> None:
-    with pytest.raises(TypeError, match="requires a return annotation"):
+    with pytest.raises(TypeError, match="add a return annotation"):
 
         class InvalidApi(SyncApi):
-            @api.get("/invalid", response=Json())
+            @api.get("/invalid")
             def invalid(  # type: ignore[no-untyped-def]
                 self, *, value: Annotated[str, Path()]
             ):
@@ -337,7 +348,7 @@ def test_pure_prepare_reports_managed_requirements_and_full_mode_redacts_them() 
     scheme = BearerScheme()
 
     class SecuredApi(SyncApi):
-        @api.get("/secured", response=Json(), security=scheme)
+        @api.get("/secured", security=scheme)
         def secured(self) -> User:
             raise NotImplementedError
 
@@ -383,7 +394,7 @@ def test_full_prepare_does_not_commit_managed_protection_state() -> None:
     )
 
     class ManagedApi(AsyncApi):
-        @api.get("/managed", operation_id="managed", response=Json())
+        @api.get("/managed", operation_id="managed")
         async def managed(self) -> User:
             raise NotImplementedError
 
@@ -488,7 +499,7 @@ def test_standard_and_arbitrary_http_methods_share_one_decorator_path() -> None:
     } == expected
 
     with pytest.raises(ValueError, match="invalid HTTP method token"):
-        api.request("BAD METHOD", "/resource", response=Json())
+        api.request("BAD METHOD", "/resource")
 
 
 def test_kad_shaped_direct_signature_projects_defaults_without_forwarding_wrapper() -> None:

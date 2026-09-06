@@ -13,7 +13,7 @@ import pytest
 from zapros import BaseHandler, Request, Response
 
 import eazy_sdk
-from eazy_sdk import Client, Json, SyncApi, api
+from eazy_sdk import Client, SyncApi, api
 from eazy_sdk.clients import AttemptLimitError, RedirectLimitError
 from eazy_sdk.clients._shared import _ClientCore
 from eazy_sdk.clients.async_client import _AsyncClientCore
@@ -48,7 +48,7 @@ class Handler(BaseHandler):
 
 
 class Users(SyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    @api.get("/users/{user_id}")
     def get(self, *, user_id: Annotated[int, Path()]) -> dict[str, object]:
         raise NotImplementedError
 

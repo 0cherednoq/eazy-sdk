@@ -19,7 +19,7 @@ from eazy_sdk.request import (
     target,
 )
 from eazy_sdk.request.markers import JsonBody
-from eazy_sdk.response import Html, Json, Responses, Success
+from eazy_sdk.response import Html, Json, Success
 
 KEY = SigningKeyRequirement("phase18-signing")
 SIGNATURE = hmac_sha256(
@@ -33,7 +33,7 @@ class SignedApi(SyncApi):
     @api.post(
         "/signed",
         operation_id="phase18.signed",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
         signing=SIGNATURE,
         idempotent=True,
     )
@@ -102,7 +102,7 @@ class HtmlApi(SyncApi):
     @api.get(
         "/page",
         operation_id="phase18.html",
-        responses=Responses(success=(Success(200, Html(PageTitle)),)),
+        success=(Success(200, Html(PageTitle)),),
     )
     def page(self) -> PageTitle:
         raise NotImplementedError

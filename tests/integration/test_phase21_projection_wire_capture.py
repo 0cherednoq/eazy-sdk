@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from dataclasses import dataclass
-from typing import TypedDict, Unpack
+from typing import TypedDict
 
 import httpx
 import pytest
@@ -22,7 +22,6 @@ from eazy_sdk.request import (
     BodyProjection,
     SigningKey,
     SigningKeyRequirement,
-    Wire,
     body_digest,
     header_output,
     hmac_sha256,
@@ -63,10 +62,10 @@ async def test_projected_crypto_and_signature_match_localhost_first_hop(
 ) -> None:
     key = SigningKeyRequirement("capture-key")
     projection = BodyProjection(
-        CaptureSource,
         CaptureWire,
         to_capture_wire,
         JsonBody(),
+        source=CaptureSource,
     )
     crypto = payload_crypto(
         "capture",
@@ -88,12 +87,14 @@ async def test_projected_crypto_and_signature_match_localhost_first_hop(
     class CaptureApi(AsyncApi):
         @api.put(
             "/capture",
-            responses=responses,
+            success=responses.success,
+            errors=responses.errors,
+            fallback=responses.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def capture(self, **request: Unpack[CaptureSource]) -> None:
+        async def capture(self, *, secret: str) -> None:
             raise NotImplementedError
 
     expected_body = b'{"envelope":{"secret":"encrypted:visible"}}'

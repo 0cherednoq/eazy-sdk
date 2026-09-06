@@ -46,7 +46,13 @@ def test_xml_body_and_response_use_the_model_adapter_matrix(model: type[Any]) ->
     )
 
     class XmlApi(SyncApi):
-        @api.post("/xml", operation_id="xml", responses=responses)
+        @api.post(
+            "/xml",
+            operation_id="xml",
+            success=responses.success,
+            errors=responses.errors,
+            fallback=responses.fallback,
+        )
         def xml(self, *, body: Annotated[object, XML_BODY]) -> object:
             raise NotImplementedError
 

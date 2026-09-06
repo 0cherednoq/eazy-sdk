@@ -143,7 +143,7 @@ class UserSessionApi(AsyncApi):
     @api.post(
         "/login",
         operation_id="login",
-        responses=Responses(success={200: Json(UserSession)}),
+        success={200: Json(UserSession)},
     )
     async def login(self, *, body: Annotated[LoginRequest, JsonBody()]) -> UserSession:
         raise NotImplementedError
@@ -151,7 +151,7 @@ class UserSessionApi(AsyncApi):
     @api.post(
         "/refresh",
         operation_id="refresh",
-        responses=Responses(success={200: Json(UserSession)}),
+        success={200: Json(UserSession)},
     )
     async def refresh(self, *, body: Annotated[RefreshRequest, JsonBody()]) -> UserSession:
         raise NotImplementedError
@@ -192,7 +192,7 @@ def _recursive_sdk(scheme: object) -> type[AsyncRoot]:
         @api.post(
             "/recursive-login",
             operation_id="recursiveLogin",
-            responses=Responses(success=()),
+            success=(),
             raw_response=True,
         )
         async def login(self) -> NormalizedResponse[object]:
@@ -204,7 +204,7 @@ def _recursive_sdk(scheme: object) -> type[AsyncRoot]:
         @api.get(
             "/recursive-account",
             operation_id="recursiveAccount",
-            responses=Responses(success=()),
+            success=(),
             raw_response=True,
         )
         async def get(self) -> NormalizedResponse[object]:
@@ -250,7 +250,7 @@ async def _protected_call(
         @decorator(
             path,
             operation_id="account",
-            responses=Responses(success=()),
+            success=(),
             security=security,
             signing=signing,
             raw_response=True,
@@ -276,16 +276,14 @@ def _sync_protected_call(
         @api.get(
             "/account",
             operation_id="account",
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )
         def account(self) -> NormalizedResponse[object]:
             raise NotImplementedError
 
-    return cast(
-        NormalizedResponse[object], AccountApi(client, identity=identity).account()
-    )
+    return AccountApi(client, identity=identity).account()
 
 
 async def test_session_auth_annotations_drive_login_reuse_expiry_and_refresh() -> None:
@@ -633,7 +631,7 @@ class HeaderSessionApi(AsyncApi):
     @api.post(
         "/header-login",
         operation_id="headerLogin",
-        responses=Responses(success={200: Json(HeaderUserSession)}),
+        success={200: Json(HeaderUserSession)},
     )
     async def login(self, *, body: Annotated[LoginRequest, JsonBody()]) -> HeaderUserSession:
         raise NotImplementedError
@@ -699,7 +697,7 @@ class CookieSessionApi(AsyncApi):
     @api.post(
         "/cookie-login",
         operation_id="cookieLogin",
-        responses=Responses(success={200: Json(CookieLoginResult)}),
+        success={200: Json(CookieLoginResult)},
     )
     async def login(self, *, body: Annotated[LoginRequest, JsonBody()]) -> CookieLoginResult:
         raise NotImplementedError
@@ -1071,10 +1069,8 @@ async def test_retry_exhaustion_uses_the_contract_typed_terminal_error() -> None
         @api.get(
             "/eventually",
             operation_id="eventuallyAvailable",
-            responses=Responses(
-                success={200: Json(HeaderBackedResult)},
-                errors=(Error(503, Json(BusyProblem), exception=BusyError),),
-            ),
+            success={200: Json(HeaderBackedResult)},
+            errors=(Error(503, Json(BusyProblem), exception=BusyError),),
         )
         async def eventually(self) -> HeaderBackedResult:
             raise NotImplementedError

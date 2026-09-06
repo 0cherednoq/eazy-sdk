@@ -21,13 +21,25 @@ RESPONSES = Responses[dict[str, bool]](
 
 
 class TraceApi(SyncApi):
-    @api.get("/trace", operation_id="phase26.trace", responses=RESPONSES)
+    @api.get(
+        "/trace",
+        operation_id="phase26.trace",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+    )
     def trace(self, *, options: CallOptions | None = None) -> dict[str, bool]:
         raise NotImplementedError
 
 
 class AsyncTraceApi(AsyncApi):
-    @api.get("/trace", operation_id="phase26.trace", responses=RESPONSES)
+    @api.get(
+        "/trace",
+        operation_id="phase26.trace",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+    )
     async def trace(self, *, options: CallOptions | None = None) -> dict[str, bool]:
         raise NotImplementedError
 

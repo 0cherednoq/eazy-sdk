@@ -27,7 +27,7 @@ from eazy_sdk.protection import (
 )
 from eazy_sdk.redaction import REDACTED, redact_url_credentials
 from eazy_sdk.request.markers import Header
-from eazy_sdk.response import Json, NormalizedResponse, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, NormalizedResponse, ResponseContext, Success
 
 BASE_URL = "https://phase30.test"
 
@@ -49,7 +49,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase30.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(
         self,
@@ -63,7 +63,7 @@ class SyncProtectedApi(SyncApi):
     @api.get(
         "/protected",
         operation_id="phase30.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def protected(
         self,

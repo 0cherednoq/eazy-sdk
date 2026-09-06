@@ -29,7 +29,13 @@ RESPONSES: Responses[dict[str, object]] = Responses(success=(Success(200, Json(d
 
 
 class SyncSearchApi(SyncApi):
-    @api.get("/search", operation_id="search", responses=RESPONSES)
+    @api.get(
+        "/search",
+        operation_id="search",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+    )
     def search(
         self,
         *,
@@ -39,7 +45,13 @@ class SyncSearchApi(SyncApi):
 
 
 class AsyncSearchApi(AsyncApi):
-    @api.get("/search", operation_id="search", responses=RESPONSES)
+    @api.get(
+        "/search",
+        operation_id="search",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+    )
     async def search(
         self,
         *,

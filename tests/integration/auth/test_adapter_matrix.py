@@ -31,7 +31,7 @@ from eazy_sdk.auth.session_runtime import (
     SessionProvider,
 )
 from eazy_sdk.clients import CallOptions
-from eazy_sdk.response import NormalizedResponse, Responses
+from eazy_sdk.response import NormalizedResponse
 from tests._support.client_harness import ClientHarness, HarnessOperation
 
 pytestmark = pytest.mark.integration
@@ -64,7 +64,7 @@ def _operation(
         @api.get(
             url,
             operation_id=operation_id,
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )
@@ -75,7 +75,7 @@ def _operation(
         @api.get(
             url,
             operation_id=operation_id,
-            responses=Responses(success=()),
+            success=(),
             security=security,
             raw_response=True,
         )

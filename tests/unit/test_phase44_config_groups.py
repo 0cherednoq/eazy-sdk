@@ -17,11 +17,9 @@ from eazy_sdk import (
     Hooks,
     Json,
     Resilience,
-    Responses,
     RetryPolicy,
     Security,
     Serialization,
-    Success,
     SyncApi,
     SyncRoot,
     api,
@@ -32,7 +30,7 @@ from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
 from eazy_sdk.protection import Guard, GuardSolution, SolveContext, host
 from eazy_sdk.protection.advanced import ProtectionBundle
 from eazy_sdk.request.markers import JsonBody, Path
-from eazy_sdk.response import ResponseContext
+from eazy_sdk.response import ResponseContext, Responses, Success
 
 BASE = "https://config.test"
 
@@ -49,11 +47,11 @@ class Payload(BaseModel):
 
 
 class EchoApi(SyncApi):
-    @api.post("/echo", responses=ECHO)
+    @api.post("/echo", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     def send(self, *, body: Annotated[Payload, JsonBody()]) -> Echo:
         raise NotImplementedError
 
-    @api.get("/echo/{item_id}", responses=ECHO)
+    @api.get("/echo/{item_id}", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     def get(self, *, item_id: Annotated[int, Path()]) -> Echo:
         raise NotImplementedError
 

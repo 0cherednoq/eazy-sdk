@@ -24,9 +24,7 @@ from eazy_sdk import (
     Identity,
     Json,
     Resilience,
-    Responses,
     RetryPolicy,
-    Success,
     api,
 )
 from eazy_sdk.clients.attempts import (
@@ -52,6 +50,7 @@ from eazy_sdk.request import (
     hmac_sha256,
 )
 from eazy_sdk.request.markers import JsonBody
+from eazy_sdk.response import Responses, Success
 
 BASE = "https://attempts.test"
 
@@ -226,7 +225,13 @@ class Payload(BaseModel):
 
 
 class RetriedApi(AsyncApi):
-    @api.put("/pay", responses=RECEIPT, signing=SIGNATURE)
+    @api.put(
+        "/pay",
+        success=RECEIPT.success,
+        errors=RECEIPT.errors,
+        fallback=RECEIPT.fallback,
+        signing=SIGNATURE,
+    )
     async def pay(self, *, body: Annotated[Payload, JsonBody()]) -> Receipt:
         raise NotImplementedError
 

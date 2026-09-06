@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, TypedDict, Unpack, cast
+from typing import Any, TypedDict, cast
 
 import httpx
 import msgspec
@@ -13,7 +13,7 @@ from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, Resilience, api
 from eazy_sdk.clients import RetryPolicy
 from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request import BodyProjection, Wire
+from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, Responses, Success
 
@@ -82,15 +82,21 @@ async def test_optional_projection_key_may_be_omitted() -> None:
         return {"page": source.get("page", 1), "attempt": 1}
 
     projection = BodyProjection(
-        OptionalSource,
         OptionalWire,
         project,
         JsonBody(),
+        source=OptionalSource,
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
-        async def search(self, **request: Unpack[OptionalSource]) -> Reply:
+        @api.put(
+            "/search",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def search(self, *, page: int | None = None) -> Reply:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -115,15 +121,21 @@ async def test_explicit_none_is_distinct_from_omission() -> None:
         return {"page": source.get("page", 1), "attempt": 1}
 
     projection = BodyProjection(
-        OptionalSource,
         OptionalWire,
         project,
         JsonBody(),
+        source=OptionalSource,
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
-        async def search(self, **request: Unpack[OptionalSource]) -> Reply:
+        @api.put(
+            "/search",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def search(self, *, page: int | None = None) -> Reply:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -149,15 +161,21 @@ async def test_required_projection_key_fails_before_mapper_and_handler() -> None
         return {"page": source["page"]}
 
     projection = BodyProjection(
-        RequiredSource,
         RequiredWire,
         project,
         JsonBody(),
+        source=RequiredSource,
     )
 
     class SearchApi(AsyncApi):
-        @api.post("/search", responses=RESPONSES, wire=Wire(projection=projection))
-        async def search(self, **request: Unpack[RequiredSource]) -> Reply:
+        @api.post(
+            "/search",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def search(self, *, page: int) -> Reply:
             raise NotImplementedError
 
     async def handler(_request: httpx.Request) -> httpx.Response:
@@ -167,17 +185,10 @@ async def test_required_projection_key_fails_before_mapper_and_handler() -> None
 
     client = _client(handler)
     async with client:
-        with pytest.raises(OperationBindingError) as captured:
+        # Phase 50: the request is a value, so a missing required field is refused by the
+        # operation class constructor before any binding phase runs.
+        with pytest.raises(TypeError, match="missing 1 required keyword-only argument: 'page'"):
             await cast(Any, SearchApi(client).search)()
-
-    assert captured.value.as_dict() == {
-        "code": "missing_required",
-        "operation_id": "search",
-        "field": "page",
-        "phase": "bind",
-    }
-    assert "body-projection.source.page" not in str(captured.value)
-    assert "body-projection.source.page" not in repr(captured.value)
     assert mapper_calls == 0
     assert handler_calls == 0
 
@@ -193,15 +204,21 @@ async def test_binding_diagnostics_are_structured_and_do_not_expose_values() -> 
         return {"page": source.get("page", 1), "attempt": 1}
 
     projection = BodyProjection(
-        OptionalSource,
         OptionalWire,
         project,
         JsonBody(),
+        source=OptionalSource,
     )
 
     class SearchApi(AsyncApi):
-        @api.post("/search", responses=RESPONSES, wire=Wire(projection=projection))
-        async def search(self, **request: Unpack[OptionalSource]) -> Reply:
+        @api.post(
+            "/search",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def search(self, *, page: int | None = None) -> Reply:
             raise NotImplementedError
 
     async def handler(_request: httpx.Request) -> httpx.Response:
@@ -213,19 +230,14 @@ async def test_binding_diagnostics_are_structured_and_do_not_expose_values() -> 
     async with client:
         with pytest.raises(OperationBindingError) as invalid:
             await cast(Any, SearchApi(client).search)(page=secret)
-        with pytest.raises(OperationBindingError) as unknown:
+        # Phase 50: an unknown field never reaches binding; the class constructor refuses it.
+        with pytest.raises(TypeError, match="unexpected keyword argument 'private'") as unknown:
             await cast(Any, SearchApi(client).search)(private=secret)
 
     assert invalid.value.as_dict() == {
         "code": "invalid_value",
         "operation_id": "search",
         "field": "page",
-        "phase": "bind",
-    }
-    assert unknown.value.as_dict() == {
-        "code": "unknown_input",
-        "operation_id": "search",
-        "field": "private",
         "phase": "bind",
     }
     assert json.dumps(invalid.value.as_dict(), sort_keys=True) == (
@@ -252,15 +264,21 @@ async def test_omitted_projection_key_stays_omitted_on_retry() -> None:
         }
 
     projection = BodyProjection(
-        OptionalSource,
         OptionalWire,
         project,
         JsonBody(),
+        source=OptionalSource,
     )
 
     class SearchApi(AsyncApi):
-        @api.put("/search", responses=RESPONSES, wire=Wire(projection=projection))
-        async def search(self, **request: Unpack[OptionalSource]) -> Reply:
+        @api.put(
+            "/search",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def search(self, *, page: int | None = None) -> Reply:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -311,15 +329,21 @@ async def test_projection_gets_a_fresh_mutable_source_copy_for_each_target_famil
         return build(values=source["values"])
 
     projection = BodyProjection(
-        MutableSource,
         target,
         project,
         JsonBody(),
+        source=MutableSource,
     )
 
     class MutationApi(AsyncApi):
-        @api.put("/mutate", responses=RESPONSES, wire=Wire(projection=projection))
-        async def mutate(self, **request: Unpack[MutableSource]) -> Reply:
+        @api.put(
+            "/mutate",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            projection=projection,
+        )
+        async def mutate(self, *, values: list[str]) -> Reply:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:

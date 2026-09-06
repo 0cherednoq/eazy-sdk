@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass, field
-from typing import Annotated, Any, NotRequired, TypedDict, Unpack, cast
+from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 import httpx
 import pytest
@@ -114,21 +114,23 @@ async def test_projection_target_crypto_and_exact_signature_are_fresh_on_retry()
         name="phase21-exact",
     )
     projection = BodyProjection(
-        PaymentSource,
         PaymentWire,
         payment_to_wire,
         JsonBody(),
+        source=PaymentSource,
     )
 
     class PaymentApi(AsyncApi):
         @api.put(
             "/payments",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def pay(self, **request: Unpack[PaymentSource]) -> None:
+        async def pay(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
 
     captures: list[tuple[bytes, str]] = []
@@ -172,7 +174,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
         projections.append(len(projections) + 1)
         return payment_to_wire(source)
 
-    projection = BodyProjection(PaymentSource, PaymentWire, project, JsonBody())
+    projection = BodyProjection(PaymentWire, project, JsonBody(), source=PaymentSource)
     crypto = payload_crypto(
         "phase21-redirect-fields",
         outbound=encrypt_outbound(
@@ -192,12 +194,14 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
     class RedirectApi(AsyncApi):
         @api.put(
             "/redirect",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[PaymentSource]) -> None:
+        async def send(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
 
     captures: list[tuple[str, bytes, str]] = []
@@ -271,7 +275,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_auth_replay() -> Non
         projections.append(len(projections) + 1)
         return payment_to_wire(source)
 
-    projection = BodyProjection(PaymentSource, PaymentWire, project, JsonBody())
+    projection = BodyProjection(PaymentWire, project, JsonBody(), source=PaymentSource)
     crypto = payload_crypto(
         "phase21-auth-fields",
         outbound=encrypt_outbound(
@@ -291,13 +295,15 @@ async def test_projection_crypto_and_signature_are_fresh_on_auth_replay() -> Non
     class AuthApi(AsyncApi):
         @api.put(
             "/auth-replay",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
             security=scheme,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[PaymentSource]) -> None:
+        async def send(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
 
     captures: list[tuple[str, bytes, str]] = []
@@ -367,7 +373,7 @@ class EncodedCipher:
 async def test_custom_compression_precedes_encoded_crypto_and_exact_signing() -> None:
     codec = GzipJsonCodec()
     cipher = EncodedCipher()
-    projection = BodyProjection(PaymentSource, PaymentWire, payment_to_wire, codec)
+    projection = BodyProjection(PaymentWire, payment_to_wire, codec, source=PaymentSource)
     crypto = payload_crypto(
         "phase21-encoded",
         outbound=encrypt_outbound(encoded=encrypt_encoded(using=cipher)),
@@ -383,12 +389,14 @@ async def test_custom_compression_precedes_encoded_crypto_and_exact_signing() ->
         @api.post(
             "/compressed",
             operation_id="compressedProjection",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection, encrypted=wire),
+            projection=projection, wire=Wire(encrypted=wire),
         )
-        async def send(self, **request: Unpack[PaymentSource]) -> None:
+        async def send(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -460,16 +468,18 @@ async def test_nested_body_reserved_output_uses_the_projected_target_path() -> N
         output=output,
         name="embedded",
     )
-    projection = BodyProjection(SignedSource, SignedWire, signed_to_wire, JsonBody())
+    projection = BodyProjection(SignedWire, signed_to_wire, JsonBody(), source=SignedSource)
 
     class SignedApi(AsyncApi):
         @api.post(
             "/signed",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     expected = hmac.new(b"secret", b"POST", hashlib.sha256).hexdigest()
@@ -502,10 +512,10 @@ def test_private_and_signature_writer_collision_fails_during_compile() -> None:
         return {"payload": source["payload"], "signatures": {}}
 
     projection = BodyProjection(
-        SignedSource,
         ManagedSignedWire,
         project,
         JsonBody(),
+        source=SignedSource,
     )
     signature = hmac_sha256(
         key=SIGNING_KEY,
@@ -516,12 +526,14 @@ def test_private_and_signature_writer_collision_fails_during_compile() -> None:
     class CollisionApi(AsyncApi):
         @api.post(
             "/collision",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             protections=(SIGNATURE_PROTECTION,),
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     descriptor = cast(Any, CollisionApi.send)
@@ -530,7 +542,7 @@ def test_private_and_signature_writer_collision_fails_during_compile() -> None:
 
 
 def test_body_signature_output_must_select_a_declared_target_field() -> None:
-    projection = BodyProjection(SignedSource, SignedWire, signed_to_wire, JsonBody())
+    projection = BodyProjection(SignedWire, signed_to_wire, JsonBody(), source=SignedSource)
     signature = hmac_sha256(
         key=SIGNING_KEY,
         base=method(),
@@ -540,11 +552,13 @@ def test_body_signature_output_must_select_a_declared_target_field() -> None:
     class InvalidTargetApi(AsyncApi):
         @api.post(
             "/invalid-target",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     descriptor = cast(Any, InvalidTargetApi.send)
@@ -560,17 +574,19 @@ async def test_body_signature_output_and_encoded_crypto_fail_before_key_or_netwo
         "invalid-body-output",
         outbound=encrypt_outbound(encoded=encrypt_encoded(using=cipher)),
     )
-    projection = BodyProjection(SignedSource, SignedWire, signed_to_wire, JsonBody())
+    projection = BodyProjection(SignedWire, signed_to_wire, JsonBody(), source=SignedSource)
 
     class InvalidApi(AsyncApi):
         @api.post(
             "/invalid",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     keys = 0
@@ -621,17 +637,19 @@ async def test_body_signature_and_field_crypto_writer_collision_fails_before_sid
             )
         ),
     )
-    projection = BodyProjection(SignedSource, SignedWire, signed_to_wire, JsonBody())
+    projection = BodyProjection(SignedWire, signed_to_wire, JsonBody(), source=SignedSource)
 
     class InvalidApi(AsyncApi):
         @api.post(
             "/invalid-field",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     keys = 0
@@ -680,20 +698,22 @@ async def test_document_crypto_is_bound_to_projection_target_not_public_source()
         ),
     )
     projection = BodyProjection(
-        PaymentSource,
         PaymentWire,
         payment_to_wire,
         JsonBody(),
+        source=PaymentSource,
     )
 
     class InvalidModelApi(AsyncApi):
         @api.put(
             "/invalid-model",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=invalid_crypto,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[PaymentSource]) -> None:
+        async def send(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
 
     sends = 0
@@ -728,7 +748,7 @@ async def test_projection_rejects_prepopulated_nested_signature_output() -> None
             "signatures": {"value": "mapper-owned"},
         }
 
-    projection = BodyProjection(SignedSource, SignedWire, occupied, JsonBody())
+    projection = BodyProjection(SignedWire, occupied, JsonBody(), source=SignedSource)
     signature = hmac_sha256(
         key=SIGNING_KEY,
         base=method(),
@@ -738,11 +758,13 @@ async def test_projection_rejects_prepopulated_nested_signature_output() -> None
     class OccupiedApi(AsyncApi):
         @api.post(
             "/occupied",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             signing=signature,
-            wire=Wire(projection=projection),
+            projection=projection,
         )
-        async def send(self, **request: Unpack[SignedSource]) -> None:
+        async def send(self, *, payload: str) -> None:
             raise NotImplementedError
 
     sends = 0

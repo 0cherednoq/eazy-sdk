@@ -12,9 +12,8 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import hmac
-import inspect as inspect_module
 import json
-from typing import Annotated, Any, TypedDict, Unpack
+from typing import Annotated, Any, TypedDict
 
 import httpx
 import pytest
@@ -24,7 +23,7 @@ from pydantic import BaseModel
 from eazy_sdk import AsyncApi, AsyncClient, Identity, api
 from eazy_sdk.clients.executor import transport_requirements
 from eazy_sdk.compile.http_operation import _OperationDeclaration
-from eazy_sdk.compile.input import inspect_method_input
+from eazy_sdk.compile.input import inspect_operation_input
 from eazy_sdk.crypto import (
     encrypt_encoded,
     encrypt_field,
@@ -34,6 +33,7 @@ from eazy_sdk.crypto import (
 )
 from eazy_sdk.crypto.core import CryptoContext, FrozenValue
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
+from eazy_sdk.models import default_model_adapters
 from eazy_sdk.request import (
     BodyProjection,
     SigningKey,
@@ -98,12 +98,14 @@ async def _accept(_request: httpx.Request) -> httpx.Response:
     return httpx.Response(204)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Phase48:
+    pass
+
+
 def _declaration() -> _OperationDeclaration[Any]:
-    signature = inspect_module.Signature(
-        [inspect_module.Parameter("self", inspect_module.Parameter.POSITIONAL_OR_KEYWORD)]
-    )
-    schema = inspect_method_input(
-        signature, {}, operation_id="phase48", path="/x", self_parameter="self"
+    schema = inspect_operation_input(
+        _Phase48, operation_id="phase48", path="/x", models=default_model_adapters()
     )
     return _OperationDeclaration(
         operation_id="phase48",
@@ -142,7 +144,12 @@ async def _stages_of(router: Any, **call: Any) -> tuple[RequestStage, ...]:
 @pytest.mark.asyncio
 async def test_a_plain_operation_runs_only_the_stages_it_declares() -> None:
     class PlainApi(AsyncApi):
-        @api.post("/plain", responses=NO_CONTENT)
+        @api.post(
+            "/plain",
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
+        )
         async def send(self, *, body: Annotated[dict[str, str], JsonBody()]) -> None:
             raise NotImplementedError
 
@@ -164,15 +171,20 @@ async def test_a_projected_encrypted_signed_operation_runs_the_declared_order() 
     class SealedApi(AsyncApi):
         @api.post(
             "/sealed",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Sig")),
-            wire=Wire(
-                projection=BodyProjection(Payment, Payment, lambda source: source, JsonBody()),
-                encrypted=http_encrypted(content_type="application/sealed+json"),
+            projection=BodyProjection(
+                Payment,
+                lambda source: source,
+                JsonBody(),
+                source=Payment,
             ),
+            wire=Wire(encrypted=http_encrypted(content_type="application/sealed+json")),
         )
-        async def send(self, **request: Unpack[Payment]) -> None:
+        async def send(self, *, note: str) -> None:
             raise NotImplementedError
 
     stages = await _stages_of(SealedApi, note="hi")
@@ -196,7 +208,9 @@ async def test_the_signature_reads_the_bytes_that_leave_including_the_encrypted_
     class SealedApi(AsyncApi):
         @api.post(
             "/sealed",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Sig")),
             wire=Wire(encrypted=http_encrypted(content_type="application/sealed+json")),
@@ -230,7 +244,12 @@ async def test_a_wire_declaration_is_inherited_and_the_operation_wins() -> None:
         wire = Wire(encoding=JsonPolicy(ensure_ascii=True), query=QueryCodec(space="plus"))
 
     class InheritedApi(SealedService, AsyncApi):
-        @api.post("/inherited", responses=NO_CONTENT)
+        @api.post(
+            "/inherited",
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
+        )
         async def inherited(
             self,
             *,
@@ -239,7 +258,13 @@ async def test_a_wire_declaration_is_inherited_and_the_operation_wins() -> None:
         ) -> None:
             raise NotImplementedError
 
-        @api.post("/overridden", responses=NO_CONTENT, wire=Wire(encoding=JsonPolicy()))
+        @api.post(
+            "/overridden",
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
+            wire=Wire(encoding=JsonPolicy()),
+        )
         async def overridden(self, *, body: Annotated[dict[str, str], JsonBody()]) -> None:
             raise NotImplementedError
 
@@ -265,7 +290,6 @@ async def test_no_field_of_wire_is_decoration() -> None:
 
     names = {item.name for item in dataclasses.fields(Wire)}
     assert names == {
-        "projection",
         "encrypted",
         "order",
         "exact",
@@ -278,7 +302,9 @@ async def test_no_field_of_wire_is_decoration() -> None:
     class WireApi(AsyncApi):
         @api.post(
             "/ordered",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             wire=Wire(
                 order=FieldOrder(body=("second", "first")),
                 encoding=JsonPolicy(ensure_ascii=True),
@@ -324,12 +350,6 @@ async def test_no_field_of_wire_is_decoration() -> None:
     assert any(item.minimum == "http/2" for item in transport_requirements(http2).dimensions)
     proven.add("transport")
 
-    projected = dataclasses.replace(
-        base,
-        wire=Wire(projection=BodyProjection(Payment, Payment, lambda source: source, JsonBody())),
-    )
-    assert projected.compile().body_projection is not None
-    proven.add("projection")
     sealed = dataclasses.replace(
         base, wire=Wire(encrypted=http_encrypted(content_type="application/sealed+json"))
     )
@@ -382,7 +402,9 @@ async def test_a_signature_base_and_a_body_output_use_the_operation_policy() -> 
     class SignedApi(AsyncApi):
         @api.post(
             "/base",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             wire=ascii_wire,
             signing=hmac_sha256(key=KEY, base=canonical_json(), output=header_output("X-Sig")),
         )
@@ -391,7 +413,9 @@ async def test_a_signature_base_and_a_body_output_use_the_operation_policy() -> 
 
         @api.post(
             "/into-body",
-            responses=NO_CONTENT,
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
             wire=ascii_wire,
             signing=hmac_sha256(key=KEY, base=literal(b"const"), output=body_output("signature")),
         )
@@ -451,7 +475,11 @@ class AsciiIncapableJson:
 async def test_a_backend_that_cannot_produce_the_declared_bytes_is_rejected() -> None:
     class AsciiApi(AsyncApi):
         @api.post(
-            "/ascii", responses=NO_CONTENT, wire=Wire(encoding=JsonPolicy(ensure_ascii=True))
+            "/ascii",
+            success=NO_CONTENT.success,
+            errors=NO_CONTENT.errors,
+            fallback=NO_CONTENT.fallback,
+            wire=Wire(encoding=JsonPolicy(ensure_ascii=True)),
         )
         async def send(self, *, body: Annotated[dict[str, str], JsonBody()]) -> None:
             raise NotImplementedError
@@ -499,11 +527,11 @@ async def test_a_parser_that_cannot_read_the_operation_selector_is_rejected() ->
         )
 
     class PageApi(AsyncApi):
-        @api.get("/xpath", responses=Responses(success=(Success(200, Html(ByXPath)),)))
+        @api.get("/xpath", success=(Success(200, Html(ByXPath)),))
         async def by_xpath(self) -> ByXPath:
             raise NotImplementedError
 
-        @api.get("/css", responses=Responses(success=(Success(200, Html(ByCss)),)))
+        @api.get("/css", success=(Success(200, Html(ByCss)),))
         async def by_css(self) -> ByCss:
             raise NotImplementedError
 

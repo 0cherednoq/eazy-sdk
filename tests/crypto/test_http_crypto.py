@@ -134,7 +134,9 @@ RESPONSES = Responses[PaymentResult](success={200: Json(PaymentResult)})
 class AsyncPaymentsApi(AsyncApi):
     @api.post(
         "/payments",
-        responses=RESPONSES,
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
         crypto=PAYMENT_CRYPTO,
         idempotent=True,
         wire=Wire(encrypted=WIRE),
@@ -148,7 +150,14 @@ class AsyncPaymentsApi(AsyncApi):
 
 
 class SyncPaymentsApi(SyncApi):
-    @api.post("/payments", responses=RESPONSES, crypto=PAYMENT_CRYPTO, wire=Wire(encrypted=WIRE))
+    @api.post(
+        "/payments",
+        success=RESPONSES.success,
+        errors=RESPONSES.errors,
+        fallback=RESPONSES.fallback,
+        crypto=PAYMENT_CRYPTO,
+        wire=Wire(encrypted=WIRE),
+    )
     def create(
         self,
         *,
@@ -248,7 +257,13 @@ async def test_field_only_crypto_preserves_json_media_type() -> None:
     )
 
     class FieldOnlyApi(AsyncApi):
-        @api.post("/field-only", responses=RESPONSES, crypto=field_profile)
+        @api.post(
+            "/field-only",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            crypto=field_profile,
+        )
         async def create(
             self,
             *,
@@ -285,7 +300,13 @@ async def test_field_only_crypto_preserves_json_media_type() -> None:
 
 async def test_whole_payload_crypto_uses_octet_stream_wire_default() -> None:
     class DefaultWireApi(AsyncApi):
-        @api.post("/default-wire", responses=RESPONSES, crypto=PAYMENT_CRYPTO)
+        @api.post(
+            "/default-wire",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            crypto=PAYMENT_CRYPTO,
+        )
         async def create(
             self,
             *,
@@ -379,7 +400,9 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
     class InvalidApi(SyncApi):
         @api.post(
             "/invalid",
-            responses=RESPONSES,
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
             crypto=invalid,
         )
         def create(
@@ -415,7 +438,12 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
 
 async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> None:
     class ScopedApi(AsyncApi):
-        @api.post("/scoped", responses=RESPONSES)
+        @api.post(
+            "/scoped",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+        )
         async def encrypted(
             self,
             *,
@@ -423,7 +451,13 @@ async def test_client_scope_applies_and_explicit_none_disables_inheritance() -> 
         ) -> PaymentResult:
             raise AssertionError
 
-        @api.post("/plain", responses=RESPONSES, crypto=None)
+        @api.post(
+            "/plain",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            crypto=None,
+        )
         async def plain(
             self,
             *,
@@ -479,7 +513,9 @@ async def test_crypto_wire_rejects_manual_representation_header_before_network()
     class ConflictingApi(AsyncApi):
         @api.post(
             "/conflict",
-            responses=RESPONSES,
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
             crypto=PAYMENT_CRYPTO,
             wire=Wire(encrypted=WIRE),
         )
@@ -527,7 +563,9 @@ async def test_exact_signature_reads_the_ciphertext_that_reaches_handler() -> No
     class SignedApi(AsyncApi):
         @api.post(
             "/signed",
-            responses=RESPONSES,
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
             crypto=PAYMENT_CRYPTO,
             signing=signature,
             wire=Wire(encrypted=WIRE),
@@ -621,7 +659,12 @@ async def test_redirect_re_resolves_crypto_scope_and_rebuilds_from_logical_body(
     )
 
     class ScopedRedirectApi(AsyncApi):
-        @api.post("/payments", responses=RESPONSES)
+        @api.post(
+            "/payments",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+        )
         async def create(
             self,
             *,
@@ -686,7 +729,14 @@ async def test_content_coding_runs_before_whole_payload_encryption() -> None:
     responses: Responses[None] = Responses(success=(Success(204, Empty()),))
 
     class CompressedApi(AsyncApi):
-        @api.post("/compressed", responses=responses, crypto=profile, wire=Wire(encrypted=WIRE))
+        @api.post(
+            "/compressed",
+            success=responses.success,
+            errors=responses.errors,
+            fallback=responses.fallback,
+            crypto=profile,
+            wire=Wire(encrypted=WIRE),
+        )
         async def send(
             self,
             *,
@@ -723,7 +773,13 @@ async def test_whole_payload_crypto_rejects_stream_without_buffering_or_network(
     )
 
     class StreamApi(AsyncApi):
-        @api.post("/stream", responses=RESPONSES, crypto=stream_profile)
+        @api.post(
+            "/stream",
+            success=RESPONSES.success,
+            errors=RESPONSES.errors,
+            fallback=RESPONSES.fallback,
+            crypto=stream_profile,
+        )
         async def upload(
             self,
             *,

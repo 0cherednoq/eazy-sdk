@@ -15,8 +15,6 @@ from eazy_sdk import (
     AsyncRoot,
     Client,
     Json,
-    Responses,
-    Success,
     SyncApi,
     SyncRoot,
     api,
@@ -27,6 +25,7 @@ from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from eazy_sdk.request import SigningKeyRequirement, body_digest, header_output, hmac_sha256
 from eazy_sdk.request.markers import Path
+from eazy_sdk.response import Responses, Success
 from eazy_sdk.testing import RecordingHandler
 
 
@@ -65,19 +64,19 @@ class PaymentsService:
 
 
 class BooksApi(SyncApi):
-    @api.get("/books/{book_id}", responses=ECHO)
+    @api.get("/books/{book_id}", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     def get(self, *, book_id: Annotated[int, Path()]) -> Echo:
         raise NotImplementedError
 
 
 class CardApi(PaymentsService, SyncApi):
-    @api.get("/v1/cards", responses=ECHO)
+    @api.get("/v1/cards", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     def get(self) -> Echo:
         raise NotImplementedError
 
 
 class RefundApi(PaymentsService, SyncApi):
-    @api.get("/v1/refunds", responses=ECHO)
+    @api.get("/v1/refunds", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     def get(self) -> Echo:
         raise NotImplementedError
 
@@ -152,7 +151,7 @@ def test_service_attributes_are_inherited_through_the_mro() -> None:
         base_url = "https://eu.pay.shop.com"
 
     class RegionalCardApi(Regional, SyncApi):
-        @api.get("/v1/cards", responses=ECHO)
+        @api.get("/v1/cards", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
         def get(self) -> Echo:
             raise NotImplementedError
 
@@ -186,7 +185,13 @@ def test_a_scheme_outside_allow_is_rejected_when_the_root_is_assembled() -> None
         allow = (SHOP_SESSION,)
 
     class LeakyApi(GuardedService, SyncApi):
-        @api.get("/leak", responses=ECHO, security=OTHER_SESSION)
+        @api.get(
+            "/leak",
+            success=ECHO.success,
+            errors=ECHO.errors,
+            fallback=ECHO.fallback,
+            security=OTHER_SESSION,
+        )
         def get(self) -> Echo:
             raise NotImplementedError
 
@@ -203,7 +208,13 @@ def test_a_signature_outside_allow_is_rejected_when_the_root_is_assembled() -> N
         allow = (SHOP_SESSION,)
 
     class SignedApi(GuardedService, SyncApi):
-        @api.post("/sign", responses=ECHO, signing=PAYMENTS_HMAC)
+        @api.post(
+            "/sign",
+            success=ECHO.success,
+            errors=ECHO.errors,
+            fallback=ECHO.fallback,
+            signing=PAYMENTS_HMAC,
+        )
         def post(self) -> Echo:
             raise NotImplementedError
 
@@ -220,7 +231,14 @@ def test_an_allowed_scheme_and_signature_pass() -> None:
         allow = (SHOP_SESSION, PAYMENTS_HMAC)
 
     class AllowedApi(GuardedService, SyncApi):
-        @api.post("/ok", responses=ECHO, security=SHOP_SESSION, signing=PAYMENTS_HMAC)
+        @api.post(
+            "/ok",
+            success=ECHO.success,
+            errors=ECHO.errors,
+            fallback=ECHO.fallback,
+            security=SHOP_SESSION,
+            signing=PAYMENTS_HMAC,
+        )
         def post(self) -> Echo:
             raise NotImplementedError
 
@@ -252,7 +270,7 @@ def test_two_bindings_of_equal_specificity_are_an_assembly_error() -> None:
         pass
 
     class MarkedApi(Marker, PaymentsService, SyncApi):
-        @api.get("/marked", responses=ECHO)
+        @api.get("/marked", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
         def get(self) -> Echo:
             raise NotImplementedError
 
@@ -270,7 +288,7 @@ def test_an_operation_on_the_root_class_is_a_declaration_error() -> None:
     with pytest.raises(TypeError, match="only composes routers"):
 
         class RootWithOperation(SyncRoot):
-            @api.get("/oops", responses=ECHO)  # type: ignore[type-var]
+            @api.get("/oops", success=ECHO.success)  # type: ignore[arg-type, type-var]
             def get(self) -> Echo:
                 raise NotImplementedError
 
@@ -354,13 +372,13 @@ def test_the_merged_declaration_is_computed_once_per_router() -> None:
 
 
 class AsyncBooksApi(AsyncApi):
-    @api.get("/books/{book_id}", responses=ECHO)
+    @api.get("/books/{book_id}", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     async def get(self, *, book_id: Annotated[int, Path()]) -> Echo:
         raise NotImplementedError
 
 
 class AsyncCardApi(PaymentsService, AsyncApi):
-    @api.get("/v1/cards", responses=ECHO)
+    @api.get("/v1/cards", success=ECHO.success, errors=ECHO.errors, fallback=ECHO.fallback)
     async def get(self) -> Echo:
         raise NotImplementedError
 

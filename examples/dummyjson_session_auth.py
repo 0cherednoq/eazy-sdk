@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import Annotated, Self, TypedDict, Unpack
+from typing import Annotated, Self
 
 import httpx
 from pydantic import BaseModel, Field, SecretStr
@@ -36,7 +36,7 @@ from eazy_sdk.auth import (
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request.markers import JsonField
-from eazy_sdk.response import ApiError, Error, Json, Responses, Success
+from eazy_sdk.response import ApiError
 
 BASE_URL = "https://dummyjson.com"
 
@@ -44,17 +44,6 @@ BASE_URL = "https://dummyjson.com"
 class LoginCredentials(BaseModel):
     username: str
     password: SecretStr
-
-
-class LoginRequest(TypedDict):
-    username: Annotated[str, JsonField()]
-    password: Annotated[str, JsonField()]
-    expires_in_mins: Annotated[int, JsonField("expiresInMins")]
-
-
-class RefreshRequest(TypedDict):
-    refresh_token: Annotated[str, JsonField("refreshToken")]
-    expires_in_mins: Annotated[int, JsonField("expiresInMins")]
 
 
 class UserSession(BaseModel):
@@ -81,37 +70,43 @@ class SessionRejected(ApiError[AuthProblem]):
     pass
 
 
-SESSION_RESPONSES: Responses[UserSession] = Responses(success=(Success(200, Json(UserSession)),))
-ME_RESPONSES: Responses[CurrentUser] = Responses(
-    success=(Success(200, Json(CurrentUser)),),
-    errors=(Error(401, Json(AuthProblem), exception=SessionRejected),),
-)
-
-
 class DummyJsonAuthApi(AsyncApi):
     @api.post(
         "/auth/login",
         operation_id="login",
-        responses=SESSION_RESPONSES,
         security=None,
     )
-    async def login(self, **request: Unpack[LoginRequest]) -> UserSession:
+    async def login(
+        self,
+        *,
+        username: Annotated[str, JsonField()],
+        password: Annotated[str, JsonField()],
+        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
+    ) -> UserSession:
         raise NotImplementedError
 
     @api.post(
         "/auth/refresh",
         operation_id="refreshSession",
-        responses=SESSION_RESPONSES,
         security=None,
     )
-    async def refresh(self, **request: Unpack[RefreshRequest]) -> UserSession:
+    async def refresh(
+        self,
+        *,
+        refresh_token: Annotated[str, JsonField("refreshToken")],
+        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
+    ) -> UserSession:
         raise NotImplementedError
 
 
 class DummyJsonUsersApi(AsyncApi):
     security = DUMMYJSON_SESSION
 
-    @api.get("/auth/me", operation_id="getCurrentUser", responses=ME_RESPONSES)
+    @api.get(
+        "/auth/me",
+        operation_id="getCurrentUser",
+        errors={401: SessionRejected},
+    )
     async def me(self) -> CurrentUser:
         raise NotImplementedError
 

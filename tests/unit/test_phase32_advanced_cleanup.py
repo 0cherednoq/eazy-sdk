@@ -38,7 +38,7 @@ from eazy_sdk.protection.advanced import (
     SolverRequirement,
     _detector_model,
 )
-from eazy_sdk.response import Json, ResponseContext, Responses, Success
+from eazy_sdk.response import Json, ResponseContext, Success
 
 BASE_URL = "https://phase32.test"
 
@@ -52,7 +52,7 @@ class ProtectedApi(AsyncApi):
     @api.get(
         "/protected",
         operation_id="phase32.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     async def protected(self) -> dict[str, object]:
         raise NotImplementedError
@@ -62,7 +62,7 @@ class SyncProtectedApi(SyncApi):
     @api.get(
         "/protected",
         operation_id="phase32.protected",
-        responses=Responses(success=(Success(200, Json(dict)),)),
+        success=(Success(200, Json(dict)),),
     )
     def protected(self) -> dict[str, object]:
         raise NotImplementedError

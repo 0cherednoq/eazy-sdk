@@ -18,7 +18,6 @@ from eazy_sdk.core.errors import OperationBindingError
 from eazy_sdk.request import DelimitedScalarCodec, FieldOrder, MultipartPart, Wire
 from eazy_sdk.request.markers import Form, JsonBody, JsonField, Part
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer, UnsignedPreparedRequest
-from eazy_sdk.response import Responses
 
 
 class FlatJsonRequest(TypedDict):
@@ -28,7 +27,7 @@ class FlatJsonRequest(TypedDict):
 
 
 class BodyApi(SyncApi):
-    @api.post("/body", operation_id="jsonBody", responses=Responses(success=()))
+    @api.post("/body", operation_id="jsonBody", success=())
     def json_body(
         self,
         *,
@@ -38,7 +37,7 @@ class BodyApi(SyncApi):
     ) -> object:
         raise NotImplementedError
 
-    @api.post("/body", operation_id="formBody", responses=Responses(success=()))
+    @api.post("/body", operation_id="formBody", success=())
     def form_body(
         self,
         *,
@@ -50,7 +49,7 @@ class BodyApi(SyncApi):
     ) -> object:
         raise NotImplementedError
 
-    @api.post("/body", operation_id="multipartBody", responses=Responses(success=()))
+    @api.post("/body", operation_id="multipartBody", success=())
     def multipart_body(
         self,
         *,
@@ -59,7 +58,7 @@ class BodyApi(SyncApi):
     ) -> object:
         raise NotImplementedError
 
-    @api.post("/body", operation_id="typedDictBody", responses=Responses(success=()))
+    @api.post("/body", operation_id="typedDictBody", success=())
     def typed_dict_body(
         self,
         *,

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
 
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, SyncApi, api
+from eazy_sdk import Client, Http, HttpOperation, Path, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request.markers import Path
-from eazy_sdk.response import Json, Responses, Success
 
 
 class Product(BaseModel):
@@ -19,19 +17,17 @@ class Product(BaseModel):
     price: int
 
 
-PRODUCT_RESPONSES = Responses[Product](
-    success=(Success(200, Json(Product)),)
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetProduct(HttpOperation[Product]):
+    """The request as a value: its fields are the inputs, ``__http__`` is the contract."""
 
+    __http__ = Http.get("/v1/products/{product_id}")
 
-class GetProductRequest(TypedDict):
-    product_id: Annotated[int, Path()]
+    product_id: Path[int]
 
 
 class StoreApi(SyncApi):
-    @api.get("/v1/products/{product_id}", responses=PRODUCT_RESPONSES)
-    def product(self, **request: Unpack[GetProductRequest]) -> Product:
-        raise NotImplementedError
+    product = op(GetProduct)
 
 
 def store(request: httpx.Request) -> httpx.Response:
