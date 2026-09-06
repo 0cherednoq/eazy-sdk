@@ -22,9 +22,9 @@
     }
   },
   "api-reference/crypto.mdx": {
-    "fingerprint": "sha256:2717342daecd0183655426505a548d5a65e7bda221dba900471ea3a6a21451c7",
+    "fingerprint": "sha256:1ca897fcf483baa16619a7a70467dc11ebfff0aac70248b32279f8915da8451f",
     "symbols": {
-      "eazy_sdk.crypto": "sha256:5efa612d255e1cf27c6da78dce2b1a637b615eeb5bc44c668b1f84ada1214854"
+      "eazy_sdk.crypto": "sha256:6fc5804c353041e6d0d5a9f450efc5e8185fdacb03de5c97d5cded21fc0f3b3e"
     }
   },
   "api-reference/dependencies.mdx": {
@@ -75,16 +75,16 @@
     }
   },
   "api-reference/request.mdx": {
-    "fingerprint": "sha256:c673004d84aa93f66d5f1a341948715773e53d5d0fb8bd96614ce95607f55ae1",
+    "fingerprint": "sha256:434c841ca04208d8d458ebd1a79c45c72e619aac3b88f413ba2b253516b9e3cb",
     "symbols": {
       "eazy_sdk.core.errors.OperationBindingError": "sha256:521998615f5e60e0afd5737fc41a23502a4bcf2d2793d0ceb4ada21601eb720b",
-      "eazy_sdk.request": "sha256:9af5b6b61e2ce76cea796f35386e69aad3919a5aaf84bc028ae4ce1055b62673"
+      "eazy_sdk.request": "sha256:573c0d4fcbc188bbfef759defb2e7e179662df0d151e9e61b3d4c22d1eec4d9a"
     }
   },
   "api-reference/response.mdx": {
-    "fingerprint": "sha256:6bf5c8d85a1f5942d1a732618cbae223b5bcb6d2f20bdbcac73484dbfe1bc639",
+    "fingerprint": "sha256:ce7a73d82608fdcde51fc5da572ee948694414b52f09b635c13841e5b802ac1c",
     "symbols": {
-      "eazy_sdk.response": "sha256:bb5a23b0415f161cb00d41700bbe33d1367cb020adddbae6d903e207f1a19ba7"
+      "eazy_sdk.response": "sha256:f42141430b152565aa79dbc78f5ae71b310fb2aa0209a4eeacc55915a586abad"
     }
   },
   "api-reference/session.mdx": {
@@ -401,9 +401,9 @@
     }
   },
   "guides/websocket.mdx": {
-    "fingerprint": "sha256:e81a1461a7a77161911dbfab724b8fcffaf151166b2a41ce7675076d7fb8315e",
+    "fingerprint": "sha256:b86c9acb698a55e0d00c0817c074e3816cf507394ec5b19ef845fc86fb3c2638",
     "symbols": {
-      "eazy_sdk.websocket": "sha256:8de9337f0ffb542d7b1e3ac5b0b8b0f8efb27a734745db615636749122c0a8ed",
+      "eazy_sdk.websocket": "sha256:992d72e05e0bc04822db15164e4f707ae1cd0b5758706dc2f01ee29aefdd782f",
       "eazy_sdk_asyncapi.generate_package": "sha256:b1f5750ab8103a9ba4d114d7ba2e9ed22ef6fea570ad50b882347a33868584df"
     }
   },

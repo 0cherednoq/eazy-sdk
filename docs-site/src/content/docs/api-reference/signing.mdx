@@ -44,8 +44,35 @@ Output может записать подпись в header, query, cookie ил�
 Подпись объявляется **по месту объявления**: параметром `signing=` операции или атрибутом
 `signing` роутера/миксина сервиса, наследуемым по MRO. Адресных (host/path) правил подписи нет:
 глядя на операцию, всегда видно, подписана она или нет, а опечатка в правиле не может оставить
-запрос молча неподписанным. Роутер может объявить `signed = True` — тогда операция без подписи
-отвергается при компиляции.
+запрос молча неподписанным.
+
+Если весь сервис подписывается одинаково, правило пишется один раз:
+
+```python
+from typing import Annotated
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import body_digest, header_output, hmac_sha256, markers
+
+
+class PaymentsService:
+    base_url = "https://pay.shop.com"
+    signing = (hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Signature")),)
+    signed = True          # операция без подписи отвергается при компиляции
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    @api.post("/charge")          # подпись — от сервиса
+    async def charge(self, *, account: Annotated[str, markers.JsonField()]) -> Receipt:
+        raise NotImplementedError
+
+    @api.post("/refund", signing=(REFUND_SIGNATURE,))
+    async def refund(self, *, account: Annotated[str, markers.JsonField()]) -> Receipt:
+        raise NotImplementedError
+```
+
+`signing=` на операции **заменяет** сервисное правило целиком, а не дополняет его; `signing=()`
+снимает подпись и вместе с `signed = True` даёт ошибку при компиляции. Полная таблица слияния —
+в {doc}`мультисервисном SDK </guides/multi-service>`.
 
 База подписи считается от тех же байтов, которые уйдут, — в том числе когда тело зашифровано
 целиком, — и кодируется той же `JsonPolicy`, что и тело

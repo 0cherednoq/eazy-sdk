@@ -3,47 +3,54 @@ title: Response API
 description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:6bf5c8d85a1f5942d1a732618cbae223b5bcb6d2f20bdbcac73484dbfe1bc639"
+api_fingerprint: "sha256:ce7a73d82608fdcde51fc5da572ee948694414b52f09b635c13841e5b802ac1c"
 ---
 
 ## Одна успешная case
 
-В hand-written SDK стандартный ответ объявляется рядом с operation:
+Тип результата операции и есть успешный случай:
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
 from pydantic import BaseModel
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Path
-from eazy_sdk.response import Json
+
+from eazy_sdk import AsyncApi, Http, HttpOperation, Path, op
 
 class User(BaseModel):
     id: int
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetUser(HttpOperation[User]):
+    __http__ = Http.get("/users/{user_id}")
+
+    user_id: Path[int]
+
 class UsersApi(AsyncApi):
-    @api.get("/users/{user_id}", response=Json(status=200))
-    async def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
-        raise NotImplementedError
+    get_user = op(GetUser)
 ```
 
-`Json()` получает `User` из return-аннотации. Status по умолчанию равен `200`; `when=` задаёт
-дополнительное условие case. То же правило поддерживает `Html()`.
+Семья читается из модели: модель с CSS/XPath-селекторами — документ, любая другая — JSON, `str` —
+текст, `bytes` — байты, `None` — пустое тело. Явные `Json(status=201)`, `Html(...)`, `Text()`
+нужны, когда важны статус, медиа-тип или условие `when=`.
 
-## Полный `Responses`
+## Несколько случаев
 
-Используйте advanced contract, когда успехов несколько или нужна сложная arbitration:
+`success=`, `errors=` и `fallback=` принимают мэппинг «селектор → случай»:
 
 ```python
-RESPONSES = Responses(
-    success=(
-        Success(200, Json(User)),
-        Success(202, Json(PendingUser)),
-    ),
-    errors=(Error(404, Json(Problem), exception=UserNotFound),),
-    fallback=Error(DEFAULT, Text()),
+__http__ = Http.get(
+    "/users/{user_id}",
+    success={200: User, 202: PendingUser},
+    errors={404: UserNotFound, "5xx": ServiceUnavailable},
+    fallback=Problem,
 )
 ```
+
+Ключ — статус, диапазон (`"4xx"`, `"5xx"`) или `DEFAULT`; `DEFAULT` допустим только в `fallback=`.
+Значение — модель, представление, класс `ApiError[Model]`, пара `(Model, factory)` или их список.
+Эквивалентная запись через `Responses(success=(Success(...),), errors=(Error(...),))` остаётся
+доступной — это то же значение, собранное вручную.
 
 | Representation | Результат |
 |---|---|

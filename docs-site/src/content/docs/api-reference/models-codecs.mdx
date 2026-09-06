@@ -158,23 +158,20 @@ Msgspec adapter выгружает request через `msgspec.to_builtins(...)`
 `CreateUser` и `User` из выбранного примера:
 
 ```python
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import JsonBody
-from eazy_sdk.response import Json, Responses, Success
+from eazy_sdk import Http, HttpOperation, SyncApi, op
+from eazy_sdk.request import markers
 
-CREATE_USER_RESPONSES = Responses(
-    success=(Success(201, Json(User)),),
-)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateUserOperation(HttpOperation[User]):
+    __http__ = Http.post("/users", operation_id="createUser", success={201: User})
 
-class CreateUserRequest(TypedDict):
-    body: Annotated[CreateUser, JsonBody()]
+    body: Annotated[CreateUser, markers.JsonBody()]
 
 class UsersApi(SyncApi):
-    @api.post("/users", operation_id="createUser", responses=CREATE_USER_RESPONSES)
-    def create_user(self, **request: Unpack[CreateUserRequest]) -> User:
-        raise NotImplementedError
+    create_user = op(CreateUserOperation)
 
 created = UsersApi(client).create_user(
     body=CreateUser(
@@ -378,9 +375,10 @@ Registry также предоставляет `with_adapter(...)` для нов
 
 ```python
 import json
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
+from eazy_sdk import Http, HttpOperation, SyncApi, op
 from eazy_sdk.codecs import EncodeContext
 
 class CanonicalJson:
@@ -394,13 +392,14 @@ class CanonicalJson:
             separators=(",", ":"),
         ).encode("utf-8")
 
-class CreatePaymentRequest(TypedDict):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentOperation(HttpOperation[Payment]):
+    __http__ = Http.post("/payments")
+
     body: Annotated[CreatePayment, CanonicalJson()]
 
 class PaymentsApi(SyncApi):
-    @api.post("/payments", responses=PAYMENT_RESPONSES)
-    def create(self, **request: Unpack[CreatePaymentRequest]) -> Payment:
-        raise NotImplementedError
+    create = op(CreatePaymentOperation)
 ```
 
 До вызова codec runtime уже выбрал `ModelAdapter`, преобразовал model в semantic primitives и

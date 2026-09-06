@@ -57,11 +57,11 @@ PAYMENTS = RequestScope(
 
 ```python
 import json
-from typing import Annotated, TypedDict, Unpack
+from dataclasses import dataclass
+from typing import Annotated
 
-from eazy_sdk import SyncApi, api
+from eazy_sdk import Http, HttpOperation, SyncApi, op
 from eazy_sdk.ext import EncodeContext, ScalarEncodeContext
-from eazy_sdk.response import Responses
 
 class CanonicalJson:
     name = "canonical-json"
@@ -78,13 +78,14 @@ class PipeSeparated:
             raise TypeError("PipeSeparated expects a list")
         return "|".join(str(item) for item in value)
 
-class UploadRequest(TypedDict):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Upload(HttpOperation[object]):
+    __http__ = Http.post("/uploads", success=None, raw_response=True)
+
     body: Annotated[dict[str, object], CanonicalJson()]
 
 class UploadsApi(SyncApi):
-    @api.post("/uploads", responses=Responses(success=()), raw_response=True)
-    def upload(self, **request: Unpack[UploadRequest]) -> object:
-        raise NotImplementedError
+    upload = op(Upload)
 ```
 
 `EncodeContext` и `ScalarEncodeContext` immutable. Codec не получает client, transport или

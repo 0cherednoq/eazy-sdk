@@ -1,163 +1,153 @@
 ---
 title: API methods
-description: Декларативные sync/async HTTP-операции, сигнатуры и подготовка запросов.
+description: Операция как frozen-класс, публикация на роутере, декоратор как короткая форма.
 sources:
   - eazy_sdk.api
   - eazy_sdk.preparation
 api_fingerprint: "sha256:50c4178c3bb810f58ba1336cf2d1acf52efb16876bc36f2f5e4111948aa06238"
 ---
 
-Наследуйте `AsyncApi` или `SyncApi`. Сигнатура метода становится публичной сигнатурой SDK,
-а тело декларации не выполняется.
+Операция — это класс: его поля описывают запрос, `__http__` — метод, путь и всё остальное, что
+операция объявляет. Роутер (`SyncApi` или `AsyncApi`) публикует операцию через `op(...)`, и
+публичной сигнатурой SDK становится конструктор класса.
 
-## Явные keyword-only параметры
-
-Этот стиль удобен для hand-written SDK: Python defaults видны IDE и передаются в
-`BodyProjection` как обычные значения.
+## Операция как класс
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
 from pydantic import BaseModel
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Path, Query
-from eazy_sdk.response import Json
+
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Path, Query, op
 
 class User(BaseModel):
     id: int
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetUser(HttpOperation[User]):
+    __http__ = Http.get("/users/{user_id}")
+
+    user_id: Path[int]
+    include: Query[Omittable[str]] = UNSET
+    page: Query[int] = 1
+
 class UsersApi(AsyncApi):
-    @api.get("/users/{user_id}", response=Json())
+    get_user = op(GetUser)
+```
+
+`HttpOperation[User]` называет тип результата. Класс может быть dataclass, Pydantic-моделью или
+msgspec-структурой; требование одно — он frozen, потому что запрос является значением. Значения по
+умолчанию — обычные Python defaults, включая `default_factory`; поле, которое иногда не нужно
+отправлять вовсе, объявляется `Omittable[T] = UNSET`.
+
+HTTP-параметры всегда keyword-only: конструктор объявляется `kw_only=True`.
+
+## Декоратор как короткая форма
+
+```python
+from typing import Annotated
+
+from eazy_sdk import AsyncApi, api
+from eazy_sdk.request import markers
+
+class UsersApi(AsyncApi):
+    @api.get("/users/{user_id}")
     async def get_user(
         self,
         *,
-        user_id: Annotated[int, Path()],
-        include: Annotated[str | None, Query()] = None,
-        page: Annotated[int, Query()] = 1,
+        user_id: Annotated[int, markers.Path()],
+        page: Annotated[int, markers.Query()] = 1,
     ) -> User:
         raise NotImplementedError
 ```
 
-HTTP-параметры всегда keyword-only. Для запроса разрешён либо этот стиль, либо
-`**request: Unpack[TypedDict]`; смешивать их в одной операции нельзя. Единственное исключение —
-служебный `options: CallOptions | None = None`.
-
-## `Unpack[TypedDict]`
-
-Reusable и generated SDK могут сохранить именованную схему:
-
-```python
-from typing import Annotated, NotRequired, TypedDict, Unpack
-
-from pydantic import BaseModel
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Path, Query
-from eazy_sdk.response import Json
-
-class User(BaseModel):
-    id: int
-
-class GetUserRequest(TypedDict):
-    user_id: Annotated[int, Path()]
-    include: NotRequired[Annotated[str, Query()]]
-
-class GeneratedUsersApi(AsyncApi):
-    @api.get("/users/{user_id}", response=Json())
-    async def get_user(self, **request: Unpack[GetUserRequest]) -> User:
-        raise NotImplementedError
-```
-
-Оба стиля lower-ятся в один `MethodInputSchema` и один executor. Positional HTTP arguments не
-поддерживаются.
+Декоратор синтезирует ровно такой же frozen-класс — он доступен как
+`UsersApi.get_user.Operation`. Тело декларации не выполняется; сохраняйте
+`raise NotImplementedError` как недостижимое тело обычной strict-mypy декларации (`...` даёт
+ошибку `empty-body`). Единственное отличие двух форм — `options`: у декорированной операции это
+параметр вызова, у класса он передаётся через `send(request, options=...)`.
 
 ## Ответ операции
 
-Для одной успешной case используйте `response=`. Модель берётся из обязательной return-аннотации:
+Тип результата и есть успешный случай; `success=` нужен, только когда случаев несколько или у
+ответа особый статус. Ошибки объявляются мэппингом:
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
 from pydantic import BaseModel
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import Path
-from eazy_sdk.response import Error, Json
 
-class User(BaseModel):
-    id: int
+from eazy_sdk import AsyncApi, Http, HttpOperation, Path, op
+from eazy_sdk.response import ApiError
 
 class NotFound(BaseModel):
     detail: str
 
-class UserNotFound(Exception):
+class UserNotFound(ApiError[NotFound]):
     pass
 
-COMMON_ERRORS = ()
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetUser(HttpOperation[User]):
+    __http__ = Http.get("/users/{user_id}", errors={404: UserNotFound})
+
+    user_id: Path[int]
 
 class UsersApi(AsyncApi):
-    errors = COMMON_ERRORS
+    errors = ({429: RateLimited},)
 
-    @api.get(
-        "/users/{user_id}",
-        response=Json(status=200),
-        errors=(Error(404, Json(NotFound), exception=UserNotFound),),
-    )
-    async def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
-        raise NotImplementedError
+    get_user = op(GetUser)
 ```
 
-Operation errors добавляются после `errors`, объявленных на классе роутера. Передайте `inherit_errors=False`, чтобы
-отключить inherited cases. `response=` и `responses=` взаимоисключающие. Используйте полный
-`Responses[T]` для нескольких success cases, fallback и сложной arbitration.
+Ошибки операции складываются с `errors` роутера; `inherit_errors=False` отключает наследование.
+При совпадении статуса выигрывает случай, объявленный ближе к операции. Подробности — в
+{doc}`Ошибки API </guides/responses/errors>`.
 
-## Namespace `api`
+## Namespace `api` и `Http`
 
-Стандартные decorators:
+Одни и те же глаголы в двух формах:
 
-- `api.get`, `api.post`, `api.put`, `api.patch`, `api.delete`;
-- `api.head`, `api.options`, `api.trace`.
+- `Http.get`, `Http.post`, `Http.put`, `Http.patch`, `Http.delete`, `Http.head`, `Http.options`,
+  `Http.trace` — для класса;
+- `api.get`, `api.post`, ... — для декоратора.
 
-Для другого валидного HTTP token используйте единый generic entry point:
+Для другого валидного HTTP token есть общий вход: `Http.request("PROPFIND", "/resources")` и
+`api.request("PROPFIND", "/resources")`. Невалидный token отклоняется при создании спецификации.
 
-```python
-from pydantic import BaseModel
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.response import Json
-
-class Resources(BaseModel):
-    items: list[str]
-
-class ResourceApi(AsyncApi):
-    @api.request("PROPFIND", "/resources", response=Json())
-    async def resources(self) -> Resources:
-        raise NotImplementedError
-```
-
-Все helpers делегируют одному operation compiler. Невалидный token отклоняется при создании
-decorator.
-
-## Параметры decorator
+## Параметры `Http.*` и `api.*`
 
 | Параметр | Назначение | Default |
 |---|---|---|
 | `path` | URL path с `{placeholder}` | обязательный |
-| `response` | Одна success representation | — |
-| `responses` | Полный `Responses` contract | — |
-| `errors` | Локальные typed error cases | `()` |
+| `success` | Успешные случаи, когда их больше одного | тип результата |
+| `errors` | Typed error cases: `{404: NotFound}` | `{}` |
+| `fallback` | Случай «на всё остальное» | — |
 | `inherit_errors` | Добавить `errors` роутера | `True` |
-| `operation_id` | Стабильная identity операции | имя метода |
+| `operation_id` | Стабильная identity операции | имя класса или метода |
 | `security` | Auth scheme или policy | inherited |
 | `requires`, `inject` | Managed request dependencies | `()` |
 | `signing` | Request signatures | inherited |
 | `crypto` | Payload crypto | inherited |
 | `protections` | Mandatory protection requirements | `()` |
 | `wire` | `Wire` — представление запроса на проводе | inherited |
+| `projection` | `BodyProjection` — wire-структура тела | — |
 | `tags` | Metadata | `()` |
 | `idempotent` | Явное replay-доказательство | выводится из method |
 | `raw_response` | Вернуть normalized response | `False` |
 
-Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `wire`, `errors`, `signed` и
-`allow` обычными атрибутами класса; они наследуются по MRO, поэтому общий для нескольких роутеров
-сервис описывается обычным базовым классом (см. {doc}`Мультисервисный SDK </guides/multi-service>`).
+Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `wire`, `errors`, `unwrap`,
+`protocol`, `signed` и `allow` обычными атрибутами класса; они наследуются по MRO, поэтому общий
+для нескольких роутеров сервис описывается обычным базовым классом (см. {doc}`Мультисервисный SDK
+</guides/multi-service>`).
+
+## Запрос как значение
+
+Связанная операция умеет строить запрос, менять его и отправлять — см. {doc}`Запрос как значение
+</guides/requests/values>`:
+
+```python
+request = users.get_user.request(user_id=42)
+await users.get_user.send(users.get_user.evolve(request, page=2))
+```
 
 ## Подготовка без отправки
 
@@ -172,9 +162,6 @@ prepared = await users.get_user.prepare(
 
 `prepare` выполняет обычные bind/default/project/encode/sign стадии и останавливается на общей
 границе перед handler send. Pure mode не вызывает providers и возвращает
-`PreparationIncompleteError`, если нужны managed values. Full mode (`resolve_managed=True`) использует
-test providers, но сеть всё равно не вызывается. `PreparedCall` редактирует secret headers,
-cookies, query и private body.
-
-Сохраняйте `raise NotImplementedError` как недостижимое тело обычной strict-mypy декларации.
-`...` приводит к `empty-body` ошибке type checker.
+`PreparationIncompleteError`, если нужны managed values. Full mode (`resolve_managed=True`)
+использует test providers, но сеть всё равно не вызывается. `PreparedCall` редактирует secret
+headers, cookies, query и private body.
