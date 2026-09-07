@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import copy
-import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, cast
 from urllib.parse import urljoin
 
@@ -26,6 +26,9 @@ from eazy_sdk.request.prepared import _NO_BODY_DOCUMENT_OVERRIDE
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.cases import ResponseOutcome, SuccessOutcome
 from eazy_sdk.response.normalized import cast_headers
+
+_NO_INJECTIONS: Mapping[RequestDependency[Any], object] = MappingProxyType({})
+"""No dependency values: an immutable default, never a shared mutable one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,28 +214,12 @@ def _projection_source[T](compiled: CompiledContract[T], values: OperationValues
     }
 
 
-def _projection_arity(using: object) -> int:
-    try:
-        parameters = inspect.signature(cast(Any, using)).parameters.values()
-    except (TypeError, ValueError):
-        return 1
-    positional = [
-        parameter
-        for parameter in parameters
-        if parameter.kind
-        in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
-    ]
-    if any(parameter.kind is inspect.Parameter.VAR_POSITIONAL for parameter in parameters):
-        return 2
-    return len(positional)
-
-
 def _project_body[T](
     compiled: CompiledContract[T],
     values: OperationValues,
     models: ModelAdapterRegistry,
     private_values: Mapping[int, object],
-    injected: Mapping[RequestDependency[Any], object] = {},
+    injected: Mapping[RequestDependency[Any], object] = _NO_INJECTIONS,
 ) -> object:
     projection = compiled.body_projection
     assert projection is not None
@@ -240,7 +227,7 @@ def _project_body[T](
     try:
         using = cast(Any, projection.using)
         projected = (
-            using(source, injected) if _projection_arity(using) >= 2 else using(source)
+            using(source, injected) if compiled.projection_arity >= 2 else using(source)
         )
     except Exception:
         raise OperationBindingError(

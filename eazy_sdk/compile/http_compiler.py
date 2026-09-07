@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, get_args, get_origin, runtime_checkable
@@ -112,6 +113,27 @@ HTTP_COMPILER_KIND = CompilerKind[EndpointLike]("http")
 type HttpCompilerRegistry = CompilerRegistry[EndpointLike, PlanNode]
 
 
+def _projection_arity(projection: BodyProjection[object, object] | None) -> int:
+    """How many positional arguments the projection takes: one source, or source and injected.
+
+    A property of the declaration, so it is read once here rather than on every request.
+    """
+
+    if projection is None:
+        return 0
+    try:
+        parameters = inspect.signature(cast(Any, projection.using)).parameters.values()
+    except (TypeError, ValueError):
+        return 1
+    if any(parameter.kind is inspect.Parameter.VAR_POSITIONAL for parameter in parameters):
+        return 2
+    return sum(
+        parameter.kind
+        in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+        for parameter in parameters
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledContract[T]:
     contract: EndpointLike
@@ -124,6 +146,8 @@ class CompiledContract[T]:
     body_slots: Mapping[str, ValueSlot[object]]
     body_field_slots: Mapping[str, ValueSlot[object]]
     body_projection: BodyProjection[object, object] | None
+    projection_arity: int
+    """How many positional arguments ``BodyProjection.using`` takes; two means injected values."""
     projection_slots: Mapping[str, ValueSlot[object]]
     private_wire_writers: tuple[PrivateWireWriter, ...]
     private_binding_slots: Mapping[object, ValueSlot[object]]
@@ -347,6 +371,7 @@ def compile_endpoint[T](
         body_slots=slot_groups[RequestLocation.BODY],
         body_field_slots=body_field_slots,
         body_projection=body_projection,
+        projection_arity=_projection_arity(body_projection),
         projection_slots=projection_slots,
         private_wire_writers=private_wire_writers,
         private_binding_slots=private_binding_slots,
