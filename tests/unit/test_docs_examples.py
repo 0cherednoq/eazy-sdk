@@ -16,6 +16,11 @@ from eazy_sdk import Client, Identity
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from examples.adaptix_nested_wire_body import (
     AdaptixWireDefaults,
+)
+from examples.adaptix_nested_wire_body import (
+    RegisterUser as AdaptixRegisterUser,
+)
+from examples.adaptix_nested_wire_body import (
     make_register_converter,
 )
 from examples.books_to_scrape import CatalogPage
@@ -30,6 +35,9 @@ from examples.dummyjson_session_auth import (
     UserSession,
 )
 from examples.flat_model_wire_body import (
+    DEVICE,
+    DeviceContext,
+    RegisterUser,
     RegisterUserProjection,
     RegisterWireSettings,
 )
@@ -142,12 +150,17 @@ def test_flat_public_model_example_projects_nested_wire_body_with_generated_valu
     )
 
     body = projection(
+        RegisterUser(
+            login="john",
+            email="john@example.com",
+            first_name="John",
+            last_name="Smith",
+        ),
         {
-            "login": "john",
-            "email": "john@example.com",
-            "first_name": "John",
-            "last_name": "Smith",
-        }
+            DEVICE.dependency: DeviceContext(
+                device_id="device-7", device_type="desktop", app_version="3.4.1"
+            )
+        },
     )
 
     assert body == {
@@ -165,6 +178,11 @@ def test_flat_public_model_example_projects_nested_wire_body_with_generated_valu
             "version": "1.0",
             "platform": "web",
             "timestamp": 1_787_740_000,
+            "device": {
+                "id": "device-7",
+                "type": "desktop",
+                "app_version": "3.4.1",
+            },
         },
     }
 
@@ -176,12 +194,12 @@ def test_adaptix_example_uses_wire_defaults_and_injected_time_factory() -> None:
     )
 
     body = converter(
-        {
-            "login": "john",
-            "email": "john@example.com",
-            "first_name": "John",
-            "last_name": "Smith",
-        }
+        AdaptixRegisterUser(
+            login="john",
+            email="john@example.com",
+            first_name="John",
+            last_name="Smith",
+        )
     )
 
     assert body.payload.account.login == "john"

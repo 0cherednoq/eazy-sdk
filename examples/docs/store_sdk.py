@@ -16,7 +16,7 @@ from typing import Annotated, cast
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Identity, SyncApi, SyncRoot, api, api_group
+from eazy_sdk import Http, HttpOperation, Identity, SyncApi, SyncRoot, api_group, op
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.crypto import (
     CryptoContext,
@@ -115,8 +115,9 @@ PAYMENTS_HMAC = hmac_sha256(
 )
 
 
-class PaymentsApi(SyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentOperation(HttpOperation[PaymentResult]):
+    __http__ = Http.post(
         "/v1/payments",
         operation_id="createPayment",
         success={201: PaymentResult},
@@ -125,8 +126,12 @@ class PaymentsApi(SyncApi):
         crypto=PAYMENT_CRYPTO,
         wire=Wire(encrypted=PAYMENT_WIRE),
     )
-    def create(self, *, body: Annotated[CreatePayment, JsonBody()]) -> PaymentResult:
-        raise NotImplementedError
+
+    body: Annotated[CreatePayment, JsonBody()]
+
+
+class PaymentsApi(SyncApi):
+    create = op(CreatePaymentOperation)
 
 
 class StoreSdk(SyncRoot):

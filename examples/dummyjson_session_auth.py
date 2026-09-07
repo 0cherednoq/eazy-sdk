@@ -22,11 +22,14 @@ from eazy_sdk import (
     Binding,
     ClientConfig,
     HandlerProfile,
+    Http,
+    HttpOperation,
     Identity,
+    JsonField,
     Resilience,
     Serialization,
-    api,
     api_group,
+    op,
 )
 from eazy_sdk.auth import (
     AuthContext,
@@ -35,7 +38,7 @@ from eazy_sdk.auth import (
     session_scheme,
 )
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.request.markers import JsonField
+from eazy_sdk.request import markers
 from eazy_sdk.response import ApiError
 
 BASE_URL = "https://dummyjson.com"
@@ -70,49 +73,45 @@ class SessionRejected(ApiError[AuthProblem]):
     pass
 
 
-class DummyJsonAuthApi(AsyncApi):
-    @api.post(
-        "/auth/login",
-        operation_id="login",
-        security=None,
-    )
-    async def login(
-        self,
-        *,
-        username: Annotated[str, JsonField()],
-        password: Annotated[str, JsonField()],
-        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
-    ) -> UserSession:
-        raise NotImplementedError
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/login", operation_id="login", security=None)
 
-    @api.post(
-        "/auth/refresh",
-        operation_id="refreshSession",
-        security=None,
+    username: JsonField[str]
+    password: JsonField[str]
+    expires_in_mins: Annotated[int, markers.JsonField("expiresInMins")]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RefreshSession(HttpOperation[UserSession]):
+    __http__ = Http.post("/auth/refresh", operation_id="refreshSession", security=None)
+
+    refresh_token: Annotated[str, markers.JsonField("refreshToken")]
+    expires_in_mins: Annotated[int, markers.JsonField("expiresInMins")]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCurrentUser(HttpOperation[CurrentUser]):
+    __http__ = Http.get(
+        "/auth/me",
+        operation_id="getCurrentUser",
+        errors={401: SessionRejected},
     )
-    async def refresh(
-        self,
-        *,
-        refresh_token: Annotated[str, JsonField("refreshToken")],
-        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
-    ) -> UserSession:
-        raise NotImplementedError
+
+
+class DummyJsonAuthApi(AsyncApi):
+    login = op(Login)
+    refresh = op(RefreshSession)
 
 
 class DummyJsonUsersApi(AsyncApi):
     security = DUMMYJSON_SESSION
 
-    @api.get(
-        "/auth/me",
-        operation_id="getCurrentUser",
-        errors={401: SessionRejected},
-    )
-    async def me(self) -> CurrentUser:
-        raise NotImplementedError
+    me = op(GetCurrentUser)
 
 
 class DummyJsonLoginService:
-    """Translate lifecycle values into ordinary decorated auth operations."""
+    """Translate lifecycle values into ordinary declared auth operations."""
 
     async def acquire(
         self,

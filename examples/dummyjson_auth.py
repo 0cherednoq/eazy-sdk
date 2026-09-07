@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from typing import Annotated
 
 from pydantic import BaseModel, Field, SecretStr
 
-from eazy_sdk import Client, ClientConfig, Identity, Resilience, SyncApi, api
+from eazy_sdk import (
+    Client,
+    ClientConfig,
+    Http,
+    HttpOperation,
+    Identity,
+    JsonField,
+    Resilience,
+    SyncApi,
+    op,
+)
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request.markers import JsonField
+from eazy_sdk.request import markers
 from eazy_sdk.response import ApiError
 
 BASE_URL = "https://dummyjson.com"
@@ -44,32 +55,36 @@ class LoginRejected(ApiError[AuthProblem]):
     pass
 
 
-class DummyJsonAuthApi(SyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[LoginSession]):
+    __http__ = Http.post(
         "/auth/login",
         operation_id="login",
         errors={400: LoginRejected},
         security=None,
     )
-    def login(
-        self,
-        *,
-        username: Annotated[str, JsonField()],
-        password: Annotated[str, JsonField()],
-        expires_in_mins: Annotated[int, JsonField("expiresInMins")],
-    ) -> LoginSession:
-        raise NotImplementedError
+
+    username: JsonField[str]
+    password: JsonField[str]
+    expires_in_mins: Annotated[int, markers.JsonField("expiresInMins")]
 
 
-class DummyJsonUsersApi(SyncApi):
-    @api.get(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCurrentUser(HttpOperation[CurrentUser]):
+    __http__ = Http.get(
         "/auth/me",
         operation_id="getCurrentUser",
         errors={401: AuthProblem},
         security=USER_BEARER,
     )
-    def me(self) -> CurrentUser:
-        raise NotImplementedError
+
+
+class DummyJsonAuthApi(SyncApi):
+    login = op(Login)
+
+
+class DummyJsonUsersApi(SyncApi):
+    me = op(GetCurrentUser)
 
 
 def login(credentials: LoginCredentials) -> LoginSession:
@@ -108,7 +123,6 @@ def main() -> None:
         raise SystemExit(f"DummyJSON rejected the demo login: {error.error.message}") from error
 
     user = current_user(session)
-
 
     print(f"authenticated: {user.username} ({user.first_name} {user.last_name})")
     print("access token received and kept out of output")

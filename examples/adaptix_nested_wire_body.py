@@ -6,25 +6,17 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypedDict, cast
+from functools import cache
+from typing import cast
 
 import httpx
 from adaptix import P
 from adaptix.conversion import get_converter, link_constant, link_function
 
-from eazy_sdk import Client, SyncApi, api
+from eazy_sdk import Client, Http, HttpOperation, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import BodyProjection
 from eazy_sdk.request.markers import JsonBody
-
-
-class RegisterUser(TypedDict):
-    """Only values owned by the SDK caller are public operation parameters."""
-
-    login: str
-    email: str
-    first_name: str
-    last_name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,13 +85,13 @@ def make_register_converter(
     def payload_factory(source: RegisterUser) -> RegisterPayloadWire:
         return RegisterPayloadWire(
             account=AccountWire(
-                login=source["login"],
-                email=source["email"],
+                login=source.login,
+                email=source.email,
             ),
             profile=ProfileWire(
                 name=PersonNameWire(
-                    first=source["first_name"],
-                    last=source["last_name"],
+                    first=source.first_name,
+                    last=source.last_name,
                 ),
             ),
         )
@@ -124,14 +116,19 @@ def make_register_converter(
     return converter
 
 
-REGISTER_TO_WIRE = make_register_converter()
-REGISTER_BODY = BodyProjection(
-    source=RegisterUser,
-    target=RegisterUserWire,
-    using=REGISTER_TO_WIRE,
-    encoding=JsonBody(),
-    name="adaptix-register-user-v1",
-)
+@cache
+def _register_converter() -> RegisterConverter:
+    """Build the converter once, on the first call.
+
+    The converter reads the operation class, and the operation class declares the
+    projection, so one of the two has to be resolved lazily.
+    """
+
+    return make_register_converter()
+
+
+def register_to_wire(source: RegisterUser) -> RegisterUserWire:
+    return _register_converter()(source)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,17 +137,30 @@ class RegisteredUser:
     login: str
 
 
-class RegistrationApi(SyncApi):
-    @api.post(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterUser(HttpOperation[RegisteredUser]):
+    """Only values owned by the SDK caller are public operation fields."""
+
+    __http__ = Http.post(
         "/register",
         operation_id="adaptixRegisterUser",
         success={201: RegisteredUser},
-        projection=REGISTER_BODY,
+        projection=BodyProjection(
+            target=RegisterUserWire,
+            using=register_to_wire,
+            encoding=JsonBody(),
+            name="adaptix-register-user-v1",
+        ),
     )
-    def register(
-        self, *, login: str, email: str, first_name: str, last_name: str
-    ) -> RegisteredUser:
-        raise NotImplementedError
+
+    login: str
+    email: str
+    first_name: str
+    last_name: str
+
+
+class RegistrationApi(SyncApi):
+    register = op(RegisterUser)
 
 
 def registration_service(request: httpx.Request) -> httpx.Response:
