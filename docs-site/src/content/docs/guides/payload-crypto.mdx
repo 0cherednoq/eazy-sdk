@@ -125,19 +125,27 @@ class PaymentsApi(AsyncApi):
 ## WebSocket и frame kind
 
 ```python
-from eazy_sdk.crypto import websocket_encrypted
-from eazy_sdk.websocket import AsyncWsApi, JsonPayload, Replies, SuccessReply, ws
+from dataclasses import dataclass
 
-class PaymentsSocket(AsyncWsApi):
-    @ws.call(
+from eazy_sdk import op
+from eazy_sdk.crypto import websocket_encrypted
+from eazy_sdk.websocket import AsyncWsApi, JsonPayload, Replies, SuccessReply, Ws, WsCall
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentCall(WsCall[PaymentResult]):
+    __ws__ = Ws.call(
         "create-payment",
         payload=JsonPayload(CreatePayment),
         replies=Replies((SuccessReply("created", PaymentResult),)),
         crypto=PAYMENT_CRYPTO,
         encrypted=websocket_encrypted(frame_kind="binary"),
     )
-    async def create(self, number: str, amount: int) -> PaymentResult:
-        raise NotImplementedError
+
+    card: Card
+    amount: int
+
+class PaymentsSocket(AsyncWsApi):
+    create = op(CreatePaymentCall)
 ```
 
 Whole-frame encryption по умолчанию отправляет binary data frame. Text frame разрешён только как

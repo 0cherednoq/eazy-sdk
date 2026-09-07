@@ -27,7 +27,7 @@ payment = await api.payments.get_payment(
 ```
 
 Safe policy повторяет только replay-safe операции для временных status/transport failures. Для
-семантически безопасного POST установите `idempotent=True` в decorator; одноразовый stream требует
+семантически безопасного POST установите `idempotent=True` в `__http__`; одноразовый stream требует
 `ReplayableStreamBody`. Каждый attempt заново выполняет preparation и signing.
 Если operation использует payload crypto, field/encoded transforms также выполняются заново:
 ciphertext и nonce предыдущей попытки не переиспользуются.

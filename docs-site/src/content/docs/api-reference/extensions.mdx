@@ -191,7 +191,7 @@ VENDOR_SIGNATURE = custom_signature(
 )
 ```
 
-Передайте `VENDOR_SIGNATURE` в `signing=(VENDOR_SIGNATURE,)` у API decorator. Runtime проверяет
+Передайте `VENDOR_SIGNATURE` в `signing=(VENDOR_SIGNATURE,)` объявления операции. Runtime проверяет
 undeclared/missing outputs до отправки. `SigningInput` не даёт мутировать prepared request;
 `SignatureResult` не может добавлять новый target, который не был зарезервирован compiler-ом.
 

@@ -53,6 +53,62 @@ present, the package exports `crypto_registry(profiles)`; application code suppl
 `PayloadCrypto` objects through `WsClientConfig`. See
 {doc}`payload crypto for HTTP and WebSocket </guides/payload-crypto>`.
 
+## Объявите операцию классом
+
+Операция WebSocket объявляется так же, как HTTP-операция: frozen-классом, который публикует
+`op(...)`. URL и статуса здесь нет, поэтому класс проще — каждое поле уходит в payload, а имя
+события и схема ответа объявлены в `__ws__`. Маркер размещения (`Query`, `Header`, ...) на поле
+WebSocket-операции — ошибка объявления.
+
+```python
+from dataclasses import dataclass
+
+from eazy_sdk import op
+from eazy_sdk.websocket import AsyncWsApi, Ws, WsCall, WsSend, WsSubscribe
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Notify(WsSend):
+    __ws__ = Ws.send("notify")
+
+    value: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Lookup(WsCall[str]):
+    __ws__ = Ws.call("lookup")
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Prices(WsSubscribe[PriceEvent]):
+    __ws__ = Ws.subscribe("prices")
+
+    symbol: str
+
+
+class MarketApi(AsyncWsApi):
+    notify = op(Notify)
+    lookup = op(Lookup)
+    prices = op(Prices)
+```
+
+`WsSend` возвращает `None`, `WsCall[T]` — значение `T`, `WsSubscribe[T]` — `Subscription[T]`:
+
+```python
+api = MarketApi(client)
+await api.notify(value=3)
+price = await api.lookup(name="BTCUSD")
+
+async with await api.prices(symbol="BTCUSD") as prices:
+    print((await anext(prices)).value)
+```
+
+HTTP-роутер не принимает WebSocket-операцию, а `AsyncWsApi` — HTTP-операцию; и то и другое
+проверяется при объявлении класса. Короткая форма — декораторы `@ws.send`, `@ws.call` и
+`@ws.subscribe`; их же эмитит генератор AsyncAPI.
+
 ## Author a GraphQL-WS client
 
 `GraphqlTransportWsProtocol` implements the `graphql-transport-ws` envelopes. Само понятие

@@ -401,30 +401,35 @@ HTTP и WebSocket используют один `PayloadCrypto`. Меняетс�
 type, WebSocket задаёт text или binary frame.
 
 ```python
+from dataclasses import dataclass
+
+from eazy_sdk import op
 from eazy_sdk.crypto import websocket_encrypted
 from eazy_sdk.websocket import (
     AsyncWsApi,
     JsonPayload,
     Replies,
     SuccessReply,
-    ws,
+    Ws,
+    WsCall,
 )
 
-class PaymentsSocket(AsyncWsApi):
-    @ws.call(
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentCall(WsCall[PaymentResult]):
+    __ws__ = Ws.call(
         "create-payment",
         payload=JsonPayload(CreatePayment),
         replies=Replies((SuccessReply("payment-created", PaymentResult),)),
         crypto=PAYMENT_CRYPTO,
         encrypted=websocket_encrypted(frame_kind="binary"),
     )
-    async def create(
-        self,
-        card: Card,
-        order_id: str,
-        amount: int,
-    ) -> PaymentResult:
-        raise NotImplementedError
+
+    card: Card
+    order_id: str
+    amount: int
+
+class PaymentsSocket(AsyncWsApi):
+    create = op(CreatePaymentCall)
 ```
 
 ```python

@@ -9,7 +9,7 @@ sources:
 api_fingerprint: "sha256:5a44011869a2b62a6c63d6c3f0fa53359243c502740ffddf53acfd724318043b"
 ---
 
-Объявите `AsyncAuthApi` с decorated `login`/`refresh` и защищённый API-класс с bearer scheme.
+Объявите `AsyncAuthApi` с операциями `login`/`refresh` и защищённый API-класс с bearer scheme.
 Session service получает `AuthContext`, вызывает `context.sdk.auth.login(...)` или
 `context.sdk.auth.refresh(...)` и возвращает Pydantic session model. Клиент хранит session через
 нейтральный `SessionStore` (protocol из `eazy_sdk.auth.session`; по умолчанию —
