@@ -46,6 +46,7 @@ dev = [
   "pytest-timeout>=2.3",
   "basedpyright>=1.31",
   "ty>=0.0.74",
+  "pyrefly>=0.60.0",
   "mypy>=1.10",
   "ruff>=0.5",
   "pydantic>=2",
