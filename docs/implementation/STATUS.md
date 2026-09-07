@@ -4241,6 +4241,23 @@ central `Retort` as a model adapter; the public surface is back at its baseline.
   the root at 39 of its 40. What left is plumbing — see decision 37 for the list; every name stays
   importable from the module that defines it.
 
+### Follow-up after the phase closed (2026-09-07)
+
+- The documentation was swept a second time on the owner's request: every example and page now
+  declares operations as classes, the decorator survives only in the new
+  `guides/requests/declarative.mdx`, `guides/serialization.mdx` lists the shipped backends, and
+  `guides/requests/representation.mdx` carries the wire-name rules plus a device-context
+  projection (`examples/flat_model_wire_body.py` is its runnable form).
+  Two docs claims were corrected against the runtime: `apply=` bindings of a `dependency(...)`
+  write into a slot the operation must already declare, while `Inject` creates its own; and a
+  decorated operation is a value too (`request`/`evolve`/`send` over its `.Operation`).
+- `_HttpOptions` and `_HttpSpec` were reordered by how often an author writes each keyword —
+  outcome (`success`, `errors`), request shape (`projection`, `wire`), what the service requires
+  (`security`, `signing`, `crypto`, `protections`, `requires`, `inject`), the rare knobs
+  (`fallback`, `inherit_errors`, `idempotent`, `raw_response`), then the names (`operation_id`,
+  `tags`). Both are keyword-only, so the order is documentation and completion order, not a
+  contract change; no test or caller depended on it.
+
 ### Surface baseline
 
 `uv run python scripts/surface_count.py --total` on master before any phase-50 edit: **436**.

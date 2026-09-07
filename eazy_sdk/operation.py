@@ -65,24 +65,36 @@ class _HttpSpec:
 
     method: str
     path: str
-    operation_id: str | None = None
+
+    # What comes back.
     success: SuccessSpec | None = None
     errors: Mapping[Selector, ErrorSpec | Sequence[ErrorSpec]] | Sequence[ErrorSpec] = field(
         default_factory=dict
     )
-    fallback: ErrorSpec | None = None
-    inherit_errors: bool = True
+
+    # How the request is shaped.
+    projection: BodyProjection[Any, Any] | None = None
+    wire: Wire = EMPTY_WIRE
+
+    # What the service requires of the request.
     security: object = _INHERIT
-    requires: tuple[object, ...] = ()
-    inject: tuple[Inject, ...] = ()
     signing: object = _INHERIT
     crypto: PayloadCrypto | None | _Inherit = _INHERIT
     protections: tuple[SolverRequirement[Any, Any], ...] = ()
-    wire: Wire = EMPTY_WIRE
-    projection: BodyProjection[Any, Any] | None = None
-    tags: tuple[str, ...] = ()
+    requires: tuple[object, ...] = ()
+    inject: tuple[Inject, ...] = ()
+
+    # Rarely needed, and never on the first version of an operation.
+    fallback: ErrorSpec | None = None
+    inherit_errors: bool = True
     idempotent: bool | None = None
     raw_response: bool = False
+
+    # Names, read by tooling rather than by the runtime.
+    operation_id: str | None = None
+    tags: tuple[str, ...] = ()
+
+    # Filled by ``Rpc.method``, never written by an author; absent from ``_HttpOptions``.
     discriminator: str | None = None
     """What the service envelope calls this operation; only ``Rpc`` fills it."""
     envelope_cases: bool = False
@@ -97,22 +109,38 @@ class _HttpSpec:
 
 
 class _HttpOptions(TypedDict, total=False):
-    operation_id: str | None
+    """The keywords of ``Http.get(...)`` and ``api.get(...)``, ordered by how often they are used.
+
+    Completion lists them in this order, so the ones an operation declares first come first:
+    what comes back, then how the request is shaped, then what the service requires of it. The
+    tail is the part most operations never write.
+    """
+
+    # What comes back. ``success=`` is only needed when the result type is not the whole story.
     success: SuccessSpec | None
     errors: Mapping[Selector, ErrorSpec | Sequence[ErrorSpec]] | Sequence[ErrorSpec]
-    fallback: ErrorSpec | None
-    inherit_errors: bool
+
+    # How the request is shaped.
+    projection: BodyProjection[Any, Any] | None
+    wire: Wire
+
+    # What the service requires of the request; each also inherits from the router's MRO.
     security: object
-    requires: tuple[object, ...]
-    inject: tuple[Inject, ...]
     signing: object
     crypto: PayloadCrypto | None | _Inherit
     protections: tuple[SolverRequirement[Any, Any], ...]
-    wire: Wire
-    projection: BodyProjection[Any, Any] | None
-    tags: tuple[str, ...]
+    requires: tuple[object, ...]
+    inject: tuple[Inject, ...]
+
+    # Rarely needed.
+    fallback: ErrorSpec | None
+    inherit_errors: bool
     idempotent: bool | None
     raw_response: bool
+
+    # Names, read by tooling rather than by the runtime.
+    operation_id: str | None
+    tags: tuple[str, ...]
 
 
 class Http:
