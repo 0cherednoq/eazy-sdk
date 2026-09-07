@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 from xml.etree import ElementTree
@@ -16,7 +16,9 @@ class XmlDecodeError(ValueError):
     pass
 
 
-class XmlCodec(Protocol):
+class XmlCodec(Hashable, Protocol):
+    """A codec is also the key its parsed document is cached under, so it is hashable."""
+
     def serialize(self, value: object) -> bytes: ...
 
     def parse(self, body: bytes) -> object: ...

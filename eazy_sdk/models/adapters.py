@@ -19,6 +19,7 @@ from typing import (
     Protocol,
     ReadOnly,
     Required,
+    TypeAliasType,
     Union,
     cast,
     get_args,
@@ -28,6 +29,7 @@ from typing import (
 )
 
 from eazy_sdk.core.errors import EazySdkError
+from eazy_sdk.sentinels import Unset
 
 type ModelDumpMode = Literal["json", "python"]
 
@@ -220,7 +222,14 @@ class ModelAdapterRegistry:
         if isinstance(value, Enum):
             return self._normalize_dump(value.value, mode=mode)
         if isinstance(value, Mapping):
-            return {str(key): self._normalize_dump(item, mode=mode) for key, item in value.items()}
+            return {
+                str(key): self._normalize_dump(item, mode=mode)
+                for key, item in value.items()
+                # ``UNSET`` is what "not passed" looks like, so the field is not in the
+                # payload at all. An operation rebuilt from its values fills the sentinel
+                # back in for whatever the caller left out.
+                if not isinstance(item, Unset)
+            }
         if _is_sequence(value):
             return [self._normalize_dump(item, mode=mode) for item in cast(Sequence[object], value)]
         selected = self.adapter_for_value(value, name=adapter)
@@ -230,7 +239,9 @@ class ModelAdapterRegistry:
         return self._normalize_dump(converted, mode=mode)
 
     def _load(self, annotation: object, value: object, *, adapter: str | None = None) -> object:
-        annotation, _ = unwrap_annotated(annotation)
+        # ``Omittable[str]`` is an alias for ``str | Unset``: what the field accepts is the
+        # value behind the alias, on this side of the boundary as on the HTTP side.
+        annotation, _ = unwrap_annotated(unroll_alias(annotation))
         origin = get_origin(annotation)
         args = get_args(annotation)
         if annotation in {Any, object}:
@@ -607,6 +618,20 @@ def _adapter_fingerprint(adapter: ModelAdapter) -> str:
                 declared_version = "absent"
     implementation = f"{type(adapter).__module__}.{type(adapter).__qualname__}"
     return f"model-adapter:{adapter.name}:{declared_version}:{implementation}"
+
+
+def unroll_alias(annotation: object) -> object:
+    """Substitute a PEP 695 ``type`` alias (``Omittable[int]``) with its value."""
+
+    while True:
+        if isinstance(annotation, TypeAliasType):
+            annotation = annotation.__value__
+            continue
+        origin = get_origin(annotation)
+        if isinstance(origin, TypeAliasType):
+            annotation = origin.__value__[get_args(annotation)]
+            continue
+        return annotation
 
 
 def unwrap_annotated(annotation: object) -> tuple[object, tuple[object, ...]]:

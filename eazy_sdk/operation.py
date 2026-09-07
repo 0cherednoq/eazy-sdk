@@ -21,7 +21,6 @@ everything the decorator used to take as keyword arguments — the decorator bui
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, Unpack, cast, get_args, get_origin
 
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from eazy_sdk.dependencies import Inject
     from eazy_sdk.protection.advanced import SolverRequirement
     from eazy_sdk.request.descriptors import BodyProjection
-    from eazy_sdk.response._mapping import ErrorSpec, Selector, SuccessSpec
+    from eazy_sdk.response._mapping import ErrorSpec, ErrorsSpec, SuccessSpec
 
 
 class _Inherit:
@@ -68,9 +67,7 @@ class _HttpSpec:
 
     # What comes back.
     success: SuccessSpec | None = None
-    errors: Mapping[Selector, ErrorSpec | Sequence[ErrorSpec]] | Sequence[ErrorSpec] = field(
-        default_factory=dict
-    )
+    errors: ErrorsSpec = field(default_factory=dict)
 
     # How the request is shaped.
     projection: BodyProjection[Any, Any] | None = None
@@ -118,7 +115,7 @@ class _HttpOptions(TypedDict, total=False):
 
     # What comes back. ``success=`` is only needed when the result type is not the whole story.
     success: SuccessSpec | None
-    errors: Mapping[Selector, ErrorSpec | Sequence[ErrorSpec]] | Sequence[ErrorSpec]
+    errors: ErrorsSpec
 
     # How the request is shaped.
     projection: BodyProjection[Any, Any] | None

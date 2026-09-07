@@ -41,8 +41,13 @@ type Spec = type[object] | None | ResponseRepresentation[Any]
 type ErrorSpec = (
     type[BaseException] | Spec | Error[Any] | tuple[type[object], ApiErrorFactory[Any]]
 )
-type SuccessSpec = Spec | Mapping[Selector, Spec | Sequence[Spec]] | Sequence[Success[Any]]
-type ErrorsSpec = Mapping[Selector, ErrorSpec | Sequence[ErrorSpec]] | Sequence[ErrorSpec]
+type SuccessSpec = Spec | Mapping[Selector, Spec | list[Spec]] | Sequence[Success[Any]]
+type ErrorsSpec = Mapping[Selector, ErrorSpec | list[ErrorSpec]] | Sequence[ErrorSpec]
+"""One status documents several shapes as a ``list``; a tuple is one spec, never a list of them.
+
+``errors={404: (Problem, Refused)}`` is the ``(model, factory)`` form, so the list is what tells
+several cases apart from one pair.
+"""
 
 
 def selector(value: Selector, *, operation_id: str) -> StatusSelector:
@@ -109,13 +114,15 @@ def problem_model(cls: type[Any]) -> type[Any] | None:
     return None
 
 
-def _sequence(spec: object) -> tuple[Any, ...]:
+def _sequence[T](spec: T | list[T]) -> tuple[T, ...]:
+    """A list declares several shapes for one status; anything else is a single spec."""
+
     return tuple(spec) if isinstance(spec, list) else (spec,)
 
 
 def _success_cases(
     key: Selector | None,
-    spec: Spec | Sequence[Spec],
+    spec: Spec | list[Spec],
     *,
     result_type: object | None = None,
     models: ModelAdapterRegistry,
@@ -294,6 +301,7 @@ def result_type_of(success: SuccessSpec | None, generic: object | None) -> objec
         return generic
     if success is None:
         return None
+    specs: list[Spec | object]
     if isinstance(success, Mapping):
         specs = [item for value in success.values() for item in _sequence(value)]
     elif isinstance(success, list | tuple):

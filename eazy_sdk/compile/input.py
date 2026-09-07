@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from typing import (
     Annotated,
     Any,
-    TypeAliasType,
     Union,
     get_args,
     get_origin,
@@ -22,6 +21,7 @@ from eazy_sdk.models.adapters import (
     ModelAdapterRegistry,
     ModelField,
     UnsupportedModelTypeError,
+    unroll_alias,
     unwrap_annotated,
 )
 from eazy_sdk.request.descriptors import (
@@ -201,6 +201,8 @@ def inspect_operation_input(
 def _validate_base_order(operation_type: type[object]) -> None:
     """D-03: a Pydantic operation lists ``BaseModel`` before the operation base."""
 
+    from eazy_sdk.operation import HttpOperation
+
     bases = operation_type.__bases__
     model_index = next(
         (index for index, base in enumerate(bases) if _is_pydantic_model(base)), None
@@ -208,7 +210,11 @@ def _validate_base_order(operation_type: type[object]) -> None:
     if model_index is None:
         return
     operation_base = next(
-        (base for base in bases[:model_index] if getattr(base, "__slots__", None) == ()),
+        (
+            base
+            for base in bases[:model_index]
+            if isinstance(base, type) and issubclass(base, HttpOperation)
+        ),
         None,
     )
     if operation_base is None:
@@ -302,20 +308,6 @@ def _dedupe(metadata: tuple[object, ...]) -> tuple[object, ...]:
 def _is_library_metadata(item: object) -> bool:
     module = type(item).__module__ or ""
     return module.split(".", 1)[0] in _LIBRARY_METADATA_MODULES
-
-
-def unroll_alias(annotation: object) -> object:
-    """Substitute a PEP 695 ``type`` alias (``Omittable[int]``) with its value."""
-
-    while True:
-        if isinstance(annotation, TypeAliasType):
-            annotation = annotation.__value__
-            continue
-        origin = get_origin(annotation)
-        if isinstance(origin, TypeAliasType):
-            annotation = origin.__value__[get_args(annotation)]
-            continue
-        return annotation
 
 
 def flatten_annotation(annotation: object) -> tuple[object, tuple[object, ...]]:

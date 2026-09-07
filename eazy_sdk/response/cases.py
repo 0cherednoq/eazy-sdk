@@ -242,35 +242,43 @@ def resolve_json_pointer(document: object, pointer: str) -> object:
 JSON_EXTRACTOR = JsonExtractor()
 
 
+class _ExtractionSchema(Protocol):
+    """What the core reads off a compiled document schema; the plugin owns the rest."""
+
+    @property
+    def has_required_field(self) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
 class HtmlExtractor:
     name: str = "html"
 
-    def prepare(self, model: type[object], serialization: Serialization) -> None:
+    def _compile(self, model: type[object], serialization: Serialization) -> _ExtractionSchema:
+        """The schema of the first parser that reads this model; any one of them is enough.
+
+        Which parser answers is decided per response by its media, so a model only has to
+        be readable by one of the configured backends to be a valid declaration.
+        """
+
         from eazy_sdk_html import compile_extraction_schema
 
         failures: list[Exception] = []
         for backend in serialization.documents or (None,):
             try:
-                compile_extraction_schema(model, models=serialization.models, backend=backend)
+                return compile_extraction_schema(
+                    model, models=serialization.models, backend=backend
+                )
             except Exception as exc:
                 failures.append(exc)
-            else:
-                return
         raise BackendCapabilityError(str(failures[0])) from failures[0]
+
+    def prepare(self, model: type[object], serialization: Serialization) -> None:
+        self._compile(model, serialization)
 
     def check_discriminating(self, model: type[object], serialization: Serialization) -> None:
         """A document model with nothing required matches any page, error pages included."""
 
-        from eazy_sdk_html import compile_extraction_schema
-
-        backend = next(iter(serialization.documents), None)
-        try:
-            schema = compile_extraction_schema(
-                model, models=serialization.models, backend=backend
-            )
-        except Exception as exc:
-            raise BackendCapabilityError(str(exc)) from exc
+        schema = self._compile(model, serialization)
         if not schema.has_required_field:
             raise BackendCapabilityError(
                 f"Html model {model.__name__} matches any document; "
@@ -327,8 +335,14 @@ class Json[T]:
     """A JSON pointer (RFC 6901) to the payload inside a service envelope, applied first."""
 
     def __post_init__(self) -> None:
-        if self.unwrap is not None and self.extractor is JSON_EXTRACTOR:
-            object.__setattr__(self, "extractor", JsonExtractor(pointer=self.unwrap))
+        if self.unwrap is None:
+            return
+        if self.extractor is not JSON_EXTRACTOR:
+            raise ValueError(
+                "Json(unwrap=...) is the standard extractor reading a pointer; "
+                "a custom extractor unwraps the envelope itself, so pass one or the other"
+            )
+        object.__setattr__(self, "extractor", JsonExtractor(pointer=self.unwrap))
 
 
 @dataclass(frozen=True, slots=True)

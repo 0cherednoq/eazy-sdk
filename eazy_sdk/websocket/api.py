@@ -183,15 +183,22 @@ class _WsOperationDescriptor[TApi, **P, T]:
         return dict(bound.arguments), options
 
     def values_of(self, request: object) -> dict[str, object]:
-        """The payload fields of a request value, by their Python names."""
+        """The payload fields of a request value; ``UNSET`` is what "not passed" looks like.
+
+        The HTTP side drops an omitted field the same way, so ``Omittable[T] = UNSET`` means
+        one thing on both protocols: the field is not in the message at all.
+        """
 
         from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+        from eazy_sdk.sentinels import Unset
 
         models = self.models if isinstance(self.models, ModelAdapterRegistry) else None
         registry = models or default_model_adapters()
         owner = cast(type[object], self.operation_type)
         return {
-            field.name: getattr(request, field.name) for field in registry.fields(owner)
+            field.name: value
+            for field in registry.fields(owner)
+            if not isinstance(value := getattr(request, field.name), Unset)
         }
 
 

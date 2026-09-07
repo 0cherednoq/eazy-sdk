@@ -126,11 +126,21 @@ class ClientConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.errors, Mapping):
             raise TypeError("ClientConfig.errors maps a host to its error cases")
+        written: dict[str, str] = {}
         for host in self.errors:
             if not isinstance(host, str) or not host or ":" in host:
                 raise TypeError(
                     f"ClientConfig.errors key {host!r} must be a host without a port"
                 )
+            # A request is matched against the lowercase hostname, so two spellings of one
+            # host are two answers to the same question.
+            key = host.lower()
+            if key in written:
+                raise TypeError(
+                    f"ClientConfig.errors names host {key!r} twice: "
+                    f"{written[key]!r} and {host!r}"
+                )
+            written[key] = host
 
     @property
     def bundle(self) -> ProtectionBundle:
@@ -169,7 +179,7 @@ def _runtime_from_boundary(
         middleware=config.hooks.middleware,
         limiter=config.resilience.rate_limiter,
         crypto=config.crypto or CryptoRegistry(),
-        errors=config.errors,
+        errors={host.lower(): cases for host, cases in config.errors.items()},
         allow_async_crypto=allow_async_crypto,
     )
 
