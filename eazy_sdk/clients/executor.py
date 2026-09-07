@@ -582,7 +582,15 @@ class ExecutionCore:
         self.identity = identity if identity is not None else _IdentityScope()
         self.serialization = serialization if serialization is not None else Serialization()
         self.resolution_graph = resolution_graph
-        self._client_error_contracts: dict[tuple[int, str], Any] = {}
+        self._client_error_contracts: dict[
+            tuple[str, str],
+            tuple[_OperationDeclaration[Any], _OperationDeclaration[Any]],
+        ] = {}
+        """``(operation_id, host)`` to the declaration it was derived from and the result.
+
+        The source is held so a rebuilt router, which declares the same operation again,
+        derives its own contract instead of inheriting the previous one.
+        """
 
     async def prepare[T](
         self,
@@ -748,10 +756,10 @@ class ExecutionCore:
         entry = declared.get(host)
         if entry is None:
             return contract
-        key = (id(contract), host)
+        key = (contract.operation_id, host)
         cached = self._client_error_contracts.get(key)
-        if cached is not None:
-            return cast(_OperationDeclaration[T], cached)
+        if cached is not None and cached[0] is contract:
+            return cast(_OperationDeclaration[T], cached[1])
         responses = cast(Responses[T], contract.responses)
         host_errors = tuple(
             replace(case, precedence=2)
@@ -767,7 +775,7 @@ class ExecutionCore:
                 fallback=responses.fallback,
             ),
         )
-        self._client_error_contracts[key] = extended
+        self._client_error_contracts[key] = (contract, extended)
         return extended
 
     def _preflight[T](

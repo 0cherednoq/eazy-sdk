@@ -5,7 +5,7 @@ from __future__ import annotations
 import json as json_module
 import operator
 import typing
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property, reduce
 from http.cookies import SimpleCookie
@@ -70,7 +70,7 @@ class ResponseContext[TRaw = object]:
     request: PreparedRequestSummary = PreparedRequestSummary("", "", 0)
     operation: OperationInfo = OperationInfo("generic")
     serialization: Serialization = field(default_factory=Serialization)
-    _artifacts: dict[int, object] = field(default_factory=dict, compare=False, repr=False)
+    _artifacts: dict[Hashable, object] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def models(self) -> ModelAdapterRegistry:
@@ -102,8 +102,13 @@ class ResponseContext[TRaw = object]:
     def cookies(self) -> ResponseCookies:
         return ResponseCookies.from_headers(self.headers)
 
-    def cached[T](self, identity: object, factory: Callable[[], T]) -> T:
-        key = id(identity)
+    def cached[T](self, key: Hashable, factory: Callable[[], T]) -> T:
+        """One parsed artifact per key, shared by every case that reads this response.
+
+        The key is held by value, so what it stands for stays alive as long as the entry
+        does: a parser identity, a document backend, or a tuple of both.
+        """
+
         if key not in self._artifacts:
             self._artifacts[key] = factory()
         return cast(T, self._artifacts[key])
