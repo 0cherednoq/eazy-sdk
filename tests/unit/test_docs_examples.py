@@ -16,12 +16,10 @@ from eazy_sdk import Client, Identity
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 from examples.adaptix_nested_wire_body import (
     AdaptixWireDefaults,
+    make_register_converter,
 )
 from examples.adaptix_nested_wire_body import (
     RegisterUser as AdaptixRegisterUser,
-)
-from examples.adaptix_nested_wire_body import (
-    make_register_converter,
 )
 from examples.books_to_scrape import CatalogPage
 from examples.dummyjson_auth import (
@@ -54,9 +52,7 @@ REPOSITORY = Path(__file__).resolve().parents[2]
         ("examples/quickstart.py", "Mechanical keyboard 12900\n"),
         (
             "examples/response_cases.py",
-            "200: order-42 is paid\n"
-            "404: Unknown order missing\n"
-            "429: rate_limited\n",
+            "200: order-42 is paid\n404: Unknown order missing\n429: rate_limited\n",
         ),
         (
             "examples/request_values.py",
@@ -189,9 +185,7 @@ def test_flat_public_model_example_projects_nested_wire_body_with_generated_valu
 
 def test_adaptix_example_uses_wire_defaults_and_injected_time_factory() -> None:
     generated_at = datetime(2026, 8, 26, 12, 30, tzinfo=UTC)
-    converter = make_register_converter(
-        AdaptixWireDefaults(now_factory=lambda: generated_at)
-    )
+    converter = make_register_converter(AdaptixWireDefaults(now_factory=lambda: generated_at))
 
     body = converter(
         AdaptixRegisterUser(

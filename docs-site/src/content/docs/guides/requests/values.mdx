@@ -85,9 +85,9 @@ from eazy_sdk.policies import CallOptions
 catalog.list_items.send(request, options=CallOptions(timeout=5))
 ```
 
-У операции, объявленной декоратором, `options` остаётся параметром самого вызова:
+У операции, объявленной декоратором, `options` можно передать и прямо в вызов:
 `sdk.list_items(page=1, options=CallOptions(timeout=5))`. У класса такого параметра нет —
-конструктор описывает только поля запроса, и это единственное отличие двух форм.
+конструктор описывает только поля запроса, поэтому `options` живёт в `send(...)`.
 
 ## С метаданными ответа
 
