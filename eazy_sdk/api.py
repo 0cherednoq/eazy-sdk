@@ -689,11 +689,10 @@ def op(operation: Any, /) -> Any:
 
     if not isinstance(operation, type):
         raise TypeError(f"op() expects an operation class, got {operation!r}")
-    publish = getattr(operation, "__publish__", None)
-    if callable(publish):
+    if isinstance(operation, _PublishesItself):
         # A protocol that is not HTTP publishes itself: the HTTP side never learns its
         # package exists, which is the layering the WS boundary test enforces.
-        return publish()
+        return operation.__publish__()
     if not issubclass(operation, HttpOperation):
         raise TypeError(
             "op() expects a subclass of HttpOperation, RpcOperation, WsCall, WsSubscribe "

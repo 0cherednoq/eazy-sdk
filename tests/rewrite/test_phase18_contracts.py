@@ -19,6 +19,7 @@ from eazy_sdk.core import (
     RequestLocation,
 )
 from eazy_sdk.core.errors import PlanError
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import Header, Query
 from eazy_sdk.response import Bytes, Success
 
@@ -30,6 +31,9 @@ class Contract:
     method: str = "GET"
     path: str = "/items"
     responses: object = None
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
 
 def test_compiler_rejects_duplicate_query_wire_names() -> None:

@@ -22,6 +22,7 @@ from eazy_sdk.core import (
     RequestLocation,
 )
 from eazy_sdk.core.errors import BindingError, PlanError
+from eazy_sdk.dependencies import Inject
 from eazy_sdk.models import (
     ModelAdapterRegistry,
     ModelDumpMode,
@@ -29,6 +30,7 @@ from eazy_sdk.models import (
     default_model_adapters,
 )
 from eazy_sdk.request import FieldOrder, MultipartPart, Wire
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import (
     BytesBody,
     Cookie,
@@ -63,6 +65,9 @@ class Contract:
     )
     body: object | None = None
     responses: object = "responses"
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
     wire: Wire = dataclasses.field(default_factory=Wire)
     input_fields: tuple[InputField, ...] = dataclasses.field(init=False)
 

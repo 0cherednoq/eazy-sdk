@@ -44,6 +44,7 @@ from eazy_sdk.core import (
 from eazy_sdk.dependencies import (
     DependencyCachePolicy,
     DependencyRegistry,
+    Inject,
     RequestDependency,
 )
 from eazy_sdk.dependencies import (
@@ -67,6 +68,7 @@ from eazy_sdk.dependencies import (
 from eazy_sdk.dependencies import (
     _ResultBinding as ResultBinding,
 )
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import Path
 
 
@@ -165,6 +167,9 @@ class Contract:
         ),
     )
     responses: object = "responses"
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
     security: object | None = None
 
 

@@ -196,7 +196,7 @@ def _projection_source[T](compiled: CompiledContract[T], values: OperationValues
 
     projection = compiled.body_projection
     assert projection is not None
-    operation_type = getattr(compiled.contract, "operation_type", None)
+    operation_type = compiled.contract.operation_type
     if projection.source is None and operation_type is not None:
         arguments = {
             name: copy.deepcopy(values.require(slot))

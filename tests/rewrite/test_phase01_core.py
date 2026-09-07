@@ -36,6 +36,8 @@ from eazy_sdk.core import (
     compile_plan,
 )
 from eazy_sdk.core.kernel import OperationIdentity
+from eazy_sdk.dependencies import Inject
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.params import Path, Query
 
 
@@ -190,6 +192,9 @@ class Contract:
         ),
     )
     responses: object = "responses"
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
 
 def test_compact_contract_compiles_and_binds_without_public_slots() -> None:

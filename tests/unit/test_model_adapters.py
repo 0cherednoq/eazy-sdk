@@ -20,6 +20,7 @@ from eazy_sdk.core import (
     RequestLocation,
 )
 from eazy_sdk.core.http_plan import ExecutionPlan
+from eazy_sdk.dependencies import Inject
 from eazy_sdk.models import (
     AmbiguousModelAdapterError,
     DataclassModelAdapter,
@@ -28,6 +29,7 @@ from eazy_sdk.models import (
     ModelField,
     default_model_adapters,
 )
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import FormBody, JsonBody, MultipartBody
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 from eazy_sdk.response import (
@@ -96,6 +98,9 @@ class RequestContract:
     method: str = "POST"
     path: str = "/users"
     responses: object = None
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
     @property
     def input_fields(self) -> tuple[InputField, ...]:

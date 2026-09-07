@@ -13,6 +13,8 @@ from eazy_sdk.core import (
     OperationValues,
     RequestLocation,
 )
+from eazy_sdk.dependencies import Inject
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import Query
 from eazy_sdk.request.prepared import BufferedBody, RequestPreparer
 
@@ -24,6 +26,9 @@ class Contract:
     method: str = "POST"
     path: str = "/items"
     responses: object = None
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
 
 def prepare(

@@ -215,15 +215,17 @@ class AsyncWsApi:
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
+        # The boundary runs the other way: the HTTP side may not import this package, so
+        # the check that an HTTP operation is not published here lives on this side.
+        from eazy_sdk.api import _OperationDescriptor
+
         operation_ids: set[str] = set()
         for name in dir(cls):
             descriptor = inspect.getattr_static(cls, name)
             if not isinstance(descriptor, _WsOperationDescriptor):
                 # D-23: an HTTP or RPC operation has a URL and a status line; a WebSocket
                 # router has neither, so it cannot carry one.
-                if getattr(descriptor, "spec", None) is not None and hasattr(
-                    descriptor, "operation_type"
-                ):
+                if isinstance(descriptor, _OperationDescriptor):
                     raise PlanError(
                         f"HTTP operation {name} is published on {cls.__name__}; "
                         "an AsyncWsApi carries WebSocket operations"

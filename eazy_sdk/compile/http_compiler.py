@@ -97,6 +97,16 @@ class EndpointLike(Protocol):
     @property
     def responses(self) -> object: ...
 
+    @property
+    def operation_type(self) -> type[object] | None: ...
+    """The class the fields were read from; ``None`` for a raw client call."""
+
+    @property
+    def projection(self) -> BodyProjection[Any, Any] | None: ...
+
+    @property
+    def inject(self) -> tuple[Inject, ...]: ...
+
 
 HTTP_COMPILER_KIND = CompilerKind[EndpointLike]("http")
 type HttpCompilerRegistry = CompilerRegistry[EndpointLike, PlanNode]
@@ -501,14 +511,11 @@ def _compile_input_layout(
     body_field_slots.update(
         {
             injection.wire_name: slot_groups[RequestLocation.BODY][injection.wire_name]
-            for injection in getattr(contract, "inject", ())
-            if isinstance(injection, Inject) and injection.location == "body"
+            for injection in contract.inject
+            if injection.location == "body"
         }
     )
-    body_projection = cast(
-        BodyProjection[object, object] | None,
-        getattr(contract, "projection", None),
-    )
+    body_projection = cast(BodyProjection[object, object] | None, contract.projection)
     return _InputLayoutPass(
         contract,
         operation,

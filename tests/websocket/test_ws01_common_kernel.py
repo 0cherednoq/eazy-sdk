@@ -32,6 +32,8 @@ from eazy_sdk.core.kernel import (
     ValueSlot,
     arbitrate_cases,
 )
+from eazy_sdk.dependencies import Inject
+from eazy_sdk.request.descriptors import BodyProjection
 
 ROOT = Path(__file__).parents[2]
 
@@ -115,6 +117,9 @@ class _Contract:
     path = "/items"
     input_fields: tuple[InputField, ...] = ()
     responses = object()
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
 
 def test_http_compiler_rejects_a_foreign_nominal_registry() -> None:

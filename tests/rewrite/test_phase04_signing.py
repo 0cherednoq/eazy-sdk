@@ -20,6 +20,7 @@ from eazy_sdk.core import (
     OperationValues,
     RequestLocation,
 )
+from eazy_sdk.dependencies import Inject
 from eazy_sdk.handlers import EmitOptions, ZaprosSyncEmitter
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import (
@@ -41,6 +42,7 @@ from eazy_sdk.request import (
     query_output,
     target,
 )
+from eazy_sdk.request.descriptors import BodyProjection
 from eazy_sdk.request.markers import Header, JsonBody, Path, Query
 from eazy_sdk.request.prepared import (
     BufferedBody,
@@ -85,6 +87,9 @@ class Contract:
         InputField("body", "body", object, True, RequestLocation.BODY, JsonBody()),
     )
     responses: object = "responses"
+    operation_type: type[object] | None = None
+    projection: BodyProjection[object, object] | None = None
+    inject: tuple[Inject, ...] = ()
 
 
 def unsigned(
