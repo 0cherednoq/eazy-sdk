@@ -47,6 +47,7 @@ from eazy_sdk.operation import (
     HttpOperation,
     _HttpOptions,
     _HttpSpec,
+    _Inherit,
     generic_argument,
 )
 from eazy_sdk.policies import CallOptions
@@ -55,8 +56,13 @@ from eazy_sdk.protocols import Envelope
 from eazy_sdk.protocols.operation import Rpc, RpcOperation, rpc_responses
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import Wire
-from eazy_sdk.response import ResponseEnvelope, Responses, Success
-from eazy_sdk.response._mapping import error_cases, normalize_responses, result_type_of
+from eazy_sdk.response import Error, ResponseEnvelope, Responses, Success
+from eazy_sdk.response._mapping import (
+    ErrorsMapping,
+    error_cases,
+    normalize_responses,
+    result_type_of,
+)
 from eazy_sdk.sentinels import UNSET, Omittable, Unset
 from eazy_sdk.serialization import Serialization
 
@@ -102,7 +108,7 @@ class _ServiceDefaults:
     wire: Wire | None = None
     protocol: Envelope | None = None
     """The application-level envelope this service speaks, if it speaks one."""
-    errors: tuple[object, ...] = ()
+    errors: tuple[ErrorsMapping | Error[Any], ...] = ()
     """Error declarations as written (``Error`` cases or ``{status: spec}`` mappings)."""
     unwrap: str | None = None
     """JSON pointer to the payload inside this service's success envelope."""
@@ -509,20 +515,30 @@ class _OperationDescriptor[**P, T]:
         else:
             declaration = self.declare(registry, unwrap=defaults.unwrap)
         spec = self.spec
-        security = defaults.security if spec.security is _INHERIT else spec.security
-        signing = defaults.signing if spec.signing is _INHERIT else spec.signing
-        crypto = defaults.crypto if spec.crypto is _INHERIT else spec.crypto
-        if signing is None:
+        declared_security = spec.security
+        security = (
+            defaults.security
+            if isinstance(declared_security, _Inherit)
+            else declared_security
+        )
+        declared_signing = spec.signing
+        signing: tuple[RequestSignature, ...]
+        if isinstance(declared_signing, _Inherit):
+            signing = defaults.signing
+        elif declared_signing is None:
             signing = ()
-        elif not isinstance(signing, tuple):
-            signing = (signing,)
+        elif isinstance(declared_signing, tuple):
+            signing = declared_signing
+        else:
+            signing = (declared_signing,)
+        crypto = defaults.crypto if spec.crypto is _INHERIT else spec.crypto
         responses = cast(Responses[T], declaration.responses)
         if spec.inherit_errors and defaults.errors:
             service_errors = tuple(
                 replace(case, precedence=1)
                 for item in defaults.errors
                 for case in error_cases(
-                    cast(Any, item if isinstance(item, Mapping) else (item,)),
+                    item if isinstance(item, Mapping) else (item,),
                     models=registry,
                     operation_id=declaration.operation_id,
                 )
@@ -532,12 +548,7 @@ class _OperationDescriptor[**P, T]:
                 errors=(*service_errors, *responses.errors),
                 fallback=responses.fallback,
             )
-        _validate_allowed(
-            defaults.allow,
-            declaration.operation_id,
-            security,
-            cast(tuple[RequestSignature, ...], signing),
-        )
+        _validate_allowed(defaults.allow, declaration.operation_id, security, signing)
         if defaults.signed and not signing:
             raise TypeError(
                 f"operation {declaration.operation_id!r} carries no signature, and its "
@@ -561,8 +572,8 @@ class _OperationDescriptor[**P, T]:
             **cast(Any, addressing),
             base_url=defaults.base_url,
             responses=responses,
-            security=cast(Any, security),
-            signing=cast(tuple[RequestSignature, ...], signing),
+            security=security,
+            signing=signing,
             crypto=cast(PayloadCrypto | None, crypto),
             wire=declaration.wire.over(defaults.wire),
             crypto_inherit=spec.crypto is _INHERIT and defaults.crypto is None,

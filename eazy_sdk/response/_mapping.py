@@ -42,7 +42,8 @@ type ErrorSpec = (
     type[BaseException] | Spec | Error[Any] | tuple[type[object], ApiErrorFactory[Any]]
 )
 type SuccessSpec = Spec | Mapping[Selector, Spec | list[Spec]] | Sequence[Success[Any]]
-type ErrorsSpec = Mapping[Selector, ErrorSpec | list[ErrorSpec]] | Sequence[ErrorSpec]
+type ErrorsMapping = Mapping[Selector, ErrorSpec | list[ErrorSpec]]
+type ErrorsSpec = ErrorsMapping | Sequence[ErrorSpec]
 """One status documents several shapes as a ``list``; a tuple is one spec, never a list of them.
 
 ``errors={404: (Problem, Refused)}`` is the ``(model, factory)`` form, so the list is what tells

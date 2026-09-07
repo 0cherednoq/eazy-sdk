@@ -9,6 +9,7 @@ from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast, overloa
 
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.crypto import PayloadCrypto, WebSocketEncrypted
+from eazy_sdk.models import ModelAdapterRegistry
 
 from ._messages import WsOperationKind
 from .policies import (
@@ -95,11 +96,11 @@ class _WsOperationDescriptor[TApi, **P, T]:
         self,
         function: Callable[..., object] | None,
         declaration: _WsOperationDeclaration,
-        crypto: object,
-        encrypted: object,
+        crypto: PayloadCrypto | None | _InheritCrypto,
+        encrypted: WebSocketEncrypted | None | _InheritCrypto,
         *,
         operation_type: type[object] | None = None,
-        models: object = None,
+        models: ModelAdapterRegistry | None = None,
     ) -> None:
         self.function = function
         self.declaration = declaration
@@ -125,12 +126,20 @@ class _WsOperationDescriptor[TApi, **P, T]:
     def resolve(self, defaults: WsApiDefaults) -> _WsOperationDeclaration:
         from dataclasses import replace
 
-        crypto = defaults.crypto if self.crypto is _INHERIT_CRYPTO else self.crypto
-        wire = defaults.encrypted if self.encrypted is _INHERIT_CRYPTO else self.encrypted
+        declared_crypto = self.crypto
+        declared_wire = self.encrypted
         return replace(
             self.declaration,
-            crypto=cast(PayloadCrypto | None, crypto),
-            encrypted=cast(WebSocketEncrypted | None, wire),
+            crypto=(
+                defaults.crypto
+                if isinstance(declared_crypto, _InheritCrypto)
+                else declared_crypto
+            ),
+            encrypted=(
+                defaults.encrypted
+                if isinstance(declared_wire, _InheritCrypto)
+                else declared_wire
+            ),
             crypto_inherit=self.crypto is _INHERIT_CRYPTO and defaults.crypto is None,
         )
 
@@ -189,11 +198,10 @@ class _WsOperationDescriptor[TApi, **P, T]:
         one thing on both protocols: the field is not in the message at all.
         """
 
-        from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+        from eazy_sdk.models import default_model_adapters
         from eazy_sdk.sentinels import Unset
 
-        models = self.models if isinstance(self.models, ModelAdapterRegistry) else None
-        registry = models or default_model_adapters()
+        registry = self.models or default_model_adapters()
         owner = cast(type[object], self.operation_type)
         return {
             field.name: value
@@ -241,8 +249,8 @@ class _WsOperationDecorator:
         payload: OutboundPayload,
         replies: Replies | None,
         messages: Messages | None,
-        crypto: object,
-        encrypted: object,
+        crypto: PayloadCrypto | None | _InheritCrypto,
+        encrypted: WebSocketEncrypted | None | _InheritCrypto,
     ) -> None:
         if not discriminator:
             raise ValueError("WebSocket discriminator cannot be empty")

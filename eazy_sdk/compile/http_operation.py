@@ -8,6 +8,7 @@ from typing import Any
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
+from eazy_sdk.dependencies import DependencySpec, Inject
 from eazy_sdk.protection.advanced import SolverRequirement
 from eazy_sdk.protocols import Envelope
 from eazy_sdk.request.descriptors import BodyProjection
@@ -46,8 +47,8 @@ class _OperationDeclaration[T]:
     base_url: str = ""
     """Service address declared by the router; empty means the client's own ``base_url``."""
     security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None
-    requires: tuple[object, ...] = ()
-    inject: tuple[object, ...] = ()
+    requires: tuple[DependencySpec[Any], ...] = ()
+    inject: tuple[Inject, ...] = ()
     signing: tuple[RequestSignature, ...] = ()
     protections: tuple[SolverRequirement[Any, Any], ...] = ()
     wire: Wire = EMPTY_WIRE

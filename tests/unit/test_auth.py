@@ -15,6 +15,8 @@ from eazy_sdk.auth import (
     BasicScheme,
     BearerScheme,
     CookieScheme,
+    SecurityAlternative,
+    SecurityPolicy,
     all_of,
     any_of,
 )
@@ -225,7 +227,7 @@ def test_invalid_static_credentials_fail_before_transport(
 
 def _call(
     client: Any,
-    security: object,
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy,
     *,
     operation_id: str,
     identity: Identity | None = None,

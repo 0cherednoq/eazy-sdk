@@ -10,7 +10,14 @@ import pytest
 pytest.importorskip("pytest_iam", reason="install the auth-conformance dependency group")
 
 from eazy_sdk import AsyncApi, Identity, SyncApi, api
-from eazy_sdk.auth import Auth, BasicScheme, BearerScheme
+from eazy_sdk.auth import (
+    Auth,
+    AuthScheme,
+    BasicScheme,
+    BearerScheme,
+    SecurityAlternative,
+    SecurityPolicy,
+)
 from eazy_sdk.auth.core import AuthProviderIdentity, AuthProviders, StaticAuthProvider
 from eazy_sdk.clients import CallOptions
 from eazy_sdk.request.markers import Form
@@ -33,7 +40,7 @@ pytestmark = [
 class _FormOperation:
     url: str
     operation_id: str
-    security: object
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy
     values: dict[str, str]
 
     async def run_async(
@@ -91,7 +98,7 @@ class _FormOperation:
 class _GetOperation:
     url: str
     operation_id: str
-    security: object | None = None
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None = None
 
     async def run_async(
         self, client: Any, options: CallOptions | None, identity: Identity | None = None

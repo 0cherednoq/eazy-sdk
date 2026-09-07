@@ -138,7 +138,7 @@ from eazy_sdk.response import (
     ResponseEnvelope,
     Responses,
 )
-from eazy_sdk.response._mapping import error_cases
+from eazy_sdk.response._mapping import ErrorsSpec, error_cases
 from eazy_sdk.response.cases import (
     AttemptIdentity,
     HtmlExtractor,
@@ -477,8 +477,8 @@ class ExecutionRuntime:
     middleware: tuple[object, ...] = ()
     limiter: RateLimiter | None = None
     crypto: CryptoRegistry = field(default_factory=CryptoRegistry)
-    errors: Mapping[str, Any] = field(default_factory=dict)
-    """Host-scoped error cases from ``ClientConfig.errors``, keyed by exact host."""
+    errors: Mapping[str, ErrorsSpec] = field(default_factory=dict)
+    """Host-scoped error cases from ``ClientConfig.errors``, keyed by lowercase host."""
     allow_async_crypto: bool = True
     _protection_state: dict[_ProtectionCacheKey, _ManagedProtectionState] = field(
         default_factory=dict, init=False, repr=False

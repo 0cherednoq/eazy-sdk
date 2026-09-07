@@ -22,6 +22,7 @@ from eazy_sdk import (
 from eazy_sdk.auth import (
     ApiKeyScheme,
     AuthContext,
+    AuthScheme,
     BasicScheme,
     Bearer,
     BearerScheme,
@@ -29,6 +30,8 @@ from eazy_sdk.auth import (
     ExpiresAt,
     RefreshToken,
     ResolutionCycleError,
+    SecurityAlternative,
+    SecurityPolicy,
     SessionConfigurationError,
     session_auth,
     session_cookie,
@@ -38,6 +41,7 @@ from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.exceptions import HeaderValidationError
 from eazy_sdk.request import SigningKey, SigningKeyRequirement, header_output, hmac_sha256, method
 from eazy_sdk.request.markers import JsonBody
+from eazy_sdk.request.signatures import CustomSignature, DeclarativeSignature
 from eazy_sdk.response import (
     ApiError,
     Error,
@@ -236,13 +240,13 @@ class FakeClock:
 
 async def _protected_call(
     client: Any,
-    security: object,
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None,
     *,
     identity: Identity | None = None,
     sdk: type[AsyncRoot] = UserSessionSdk,
     method_name: str = "GET",
     path: str = "/account",
-    signing: tuple[object, ...] = (),
+    signing: tuple[DeclarativeSignature | CustomSignature, ...] = (),
 ) -> NormalizedResponse[object]:
     decorator = api.get if method_name == "GET" else api.post
 
@@ -268,7 +272,10 @@ async def _protected_call(
 
 
 def _sync_protected_call(
-    client: Any, security: object, *, identity: Identity | None = None
+    client: Any,
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None,
+    *,
+    identity: Identity | None = None,
 ) -> NormalizedResponse[object]:
     from eazy_sdk import SyncApi
 

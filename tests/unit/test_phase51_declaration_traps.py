@@ -271,3 +271,61 @@ def test_a_list_of_shapes_declares_two_cases() -> None:
     responses = declaration.responses
     assert isinstance(responses, Responses)
     assert len(responses.success) == 2
+
+
+# --- what the operation declares about its service ------------------------------------
+
+
+AUTHORING_SURFACE = r'''# pyright: strict
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation
+from eazy_sdk.auth import BearerScheme
+
+
+@dataclass(frozen=True)
+class Order:
+    id: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Declared(HttpOperation[Order]):
+    """The forms the authoring surface accepts."""
+
+    __http__ = Http.get("/orders", security=BearerScheme(), requires=())
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WrongSecurity(HttpOperation[Order]):
+    __http__ = Http.get("/orders", security="bearer")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WrongSigning(HttpOperation[Order]):
+    __http__ = Http.get("/orders", signing="hmac")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WrongRequires(HttpOperation[Order]):
+    __http__ = Http.get("/orders", requires=("device",))
+'''
+
+
+def test_the_authoring_surface_is_checked() -> None:
+    """``security=``/``signing=``/``requires=`` were ``object``: nothing was checked at all."""
+
+    with tempfile.TemporaryDirectory(prefix="phase51-typing-", dir=ROOT / "tests") as temp:
+        source = FilePath(temp) / "surface.py"
+        source.write_text(AUTHORING_SURFACE, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "mypy", "--strict", str(source)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert output.count("error:") == 3, output
+    for keyword in ('"security"', '"signing"', '"requires"'):
+        assert keyword in output, output

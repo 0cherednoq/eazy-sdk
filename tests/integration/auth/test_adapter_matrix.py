@@ -15,6 +15,8 @@ from eazy_sdk.auth import (
     BasicScheme,
     BearerScheme,
     CookieScheme,
+    SecurityAlternative,
+    SecurityPolicy,
     all_of,
     any_of,
 )
@@ -56,7 +58,7 @@ class _HarnessOperation:
 
 def _operation(
     url: str,
-    security: object,
+    security: AuthScheme[Any] | SecurityAlternative | SecurityPolicy,
     *,
     operation_id: str,
 ) -> HarnessOperation:

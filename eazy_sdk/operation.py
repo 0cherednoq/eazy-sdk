@@ -27,11 +27,16 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, Unpack, cast, get_ar
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 
 if TYPE_CHECKING:
+    from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
     from eazy_sdk.crypto import PayloadCrypto
-    from eazy_sdk.dependencies import Inject
+    from eazy_sdk.dependencies import DependencySpec, Inject
     from eazy_sdk.protection.advanced import SolverRequirement
     from eazy_sdk.request.descriptors import BodyProjection
+    from eazy_sdk.request.signatures import RequestSignature
     from eazy_sdk.response._mapping import ErrorSpec, ErrorsSpec, SuccessSpec
+
+type _Security = AuthScheme[Any] | SecurityAlternative | SecurityPolicy | None
+type _Signing = RequestSignature | tuple[RequestSignature, ...] | None
 
 
 class _Inherit:
@@ -74,11 +79,11 @@ class _HttpSpec:
     wire: Wire = EMPTY_WIRE
 
     # What the service requires of the request.
-    security: object = _INHERIT
-    signing: object = _INHERIT
+    security: _Security | _Inherit = _INHERIT
+    signing: _Signing | _Inherit = _INHERIT
     crypto: PayloadCrypto | None | _Inherit = _INHERIT
     protections: tuple[SolverRequirement[Any, Any], ...] = ()
-    requires: tuple[object, ...] = ()
+    requires: tuple[DependencySpec[Any], ...] = ()
     inject: tuple[Inject, ...] = ()
 
     # Rarely needed, and never on the first version of an operation.
@@ -122,11 +127,11 @@ class _HttpOptions(TypedDict, total=False):
     wire: Wire
 
     # What the service requires of the request; each also inherits from the router's MRO.
-    security: object
-    signing: object
+    security: _Security | _Inherit
+    signing: _Signing | _Inherit
     crypto: PayloadCrypto | None | _Inherit
     protections: tuple[SolverRequirement[Any, Any], ...]
-    requires: tuple[object, ...]
+    requires: tuple[DependencySpec[Any], ...]
     inject: tuple[Inject, ...]
 
     # Rarely needed.
