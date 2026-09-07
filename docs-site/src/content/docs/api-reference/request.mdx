@@ -75,10 +75,10 @@ custom `BodyCodec` кодирует один semantic document. Mapper не по
 | `BytesBody(...)` | заданный caller-ом | Buffered bytes |
 | `ReplayableStreamBody(...)` | заданный caller-ом | Повторно создаваемый stream |
 
-`BodyProjection(...)` не является ещё одним body marker. Это связь public mapper schema с private
-wire schema и одним из перечисленных encodings; смешивать projection с root/flat body нельзя.
-Источник может быть представлен direct параметрами или `Unpack`. Direct defaults материализуются
-до вызова mapper; omitted `NotRequired` key в `Unpack` остаётся отсутствующим.
+`BodyProjection(...)` не является ещё одним body marker. Это связь публичных полей операции с
+private wire schema и одним из перечисленных encodings; смешивать projection с root/flat body
+нельзя. Источник по умолчанию — сам класс операции: в проекцию идут поля без маркера размещения,
+уже с применёнными значениями по умолчанию.
 
 ## Ошибки binding и projection
 
@@ -96,10 +96,10 @@ Tooling читает поля ошибки напрямую, не разбира
 `error.as_dict()` возвращает только эти безопасные поля. Значение аргумента, private wire document,
 credentials и internal slot name в message, `repr` и mapping не входят.
 
-Для источника проекции три состояния не смешиваются. Поле, оставшееся `UNSET`, в mapper input не
+Для источника проекции три состояния не смешиваются. Поле, оставшееся `UNSET`, в input проекции не
 попадает. Явный `None` попадает. Отсутствие обязательного поля — это `TypeError` конструктора
-операции, до mapper, providers и handler. Mapper получает значения этой attempt, включая retry и
-redirect.
+операции, до проекции, providers и handler. Проекция получает значения этой attempt, включая retry
+и redirect.
 
 Для плоского JSON, form или multipart document объявляйте поля операции маркерами `JsonField`,
 `Form` или `Part`. Не оборачивайте несколько scalar fields в Pydantic, dataclass или msgspec model.

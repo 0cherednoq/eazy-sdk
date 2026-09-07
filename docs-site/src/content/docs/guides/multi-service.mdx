@@ -15,11 +15,9 @@ api_fingerprint: "sha256:209cf9bd29b0764948fcea4236c529b79888a1e1a6b8757a9571e7b
 для «домена» нет: общие атрибуты в Python выражаются наследованием.
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
-from eazy_sdk import Path, SyncApi, SyncRoot, api, api_group
-from eazy_sdk.request import JsonField
-from eazy_sdk.response import Json
+from eazy_sdk import Http, HttpOperation, JsonField, Path, SyncApi, SyncRoot, api_group, op
 
 class PaymentsService:
     """Обычный миксин: всё, что общее у роутеров одного сервиса."""
@@ -27,15 +25,23 @@ class PaymentsService:
     base_url = "https://pay.shop.com"
     errors = PAYMENT_ERRORS
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterCard(HttpOperation[Card]):
+    __http__ = Http.post("/v1/cards", success={201: Card})
+
+    number: JsonField[str]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetBook(HttpOperation[Book]):
+    __http__ = Http.get("/books/{book_id}")
+
+    book_id: Path[int]
+
 class CardApi(PaymentsService, SyncApi):
-    @api.post("/v1/cards", success={201: Card})
-    def register(self, *, number: Annotated[str, JsonField()]) -> Card:
-        raise NotImplementedError
+    register = op(RegisterCard)
 
 class BooksApi(SyncApi):
-    @api.get("/books/{book_id}")
-    def get(self, *, book_id: Annotated[int, Path()]) -> Book:
-        raise NotImplementedError
+    get = op(GetBook)
 
 class ShopSdk(SyncRoot):
     books = api_group(BooksApi)   # адрес не объявлен → берётся из клиента
@@ -90,7 +96,9 @@ cookie jar; cookie при этом остаются домен-скоупным�
 на роутере или на общем миксине и наследуются по MRO. Повторять их в каждом декораторе не нужно.
 
 ```python
-from eazy_sdk import AsyncApi, JsonField, api
+from dataclasses import dataclass
+
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
 from eazy_sdk.crypto import encrypt_encoded, encrypt_outbound, payload_crypto
 from eazy_sdk.request import JsonPolicy, Wire, header_output, hmac_sha256, method
 
@@ -110,17 +118,28 @@ class PaymentsService:
     errors = PAYMENT_ERRORS
     signed = True          # операция без подписи отвергается при компиляции
 
-class PaymentsApi(PaymentsService, AsyncApi):
-    @api.post("/charge")
-    async def charge(self, *, account: JsonField[str]) -> Receipt:
-        raise NotImplementedError                       # подпись, crypto и wire — от сервиса
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Charge(HttpOperation[Receipt]):
+    """Подпись, crypto и wire — от сервиса."""
 
-    @api.post("/refund", signing=(REFUND_SIGNATURE,), crypto=None)
-    async def refund(self, *, account: JsonField[str]) -> Receipt:
-        raise NotImplementedError                       # своя подпись, шифрования нет
+    __http__ = Http.post("/charge")
+
+    account: JsonField[str]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Refund(HttpOperation[Receipt]):
+    """Своя подпись, шифрования нет."""
+
+    __http__ = Http.post("/refund", signing=(REFUND_SIGNATURE,), crypto=None)
+
+    account: JsonField[str]
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    charge = op(Charge)
+    refund = op(Refund)
 ```
 
-Объявление на операции не «добавляется» к сервисному, а **заменяет** его целиком: глядя на
+Объявление в `__http__` не «добавляется» к сервисному, а **заменяет** его целиком: глядя на
 операцию, всегда видно, чем именно она подписана. Единственное исключение — `errors` и `wire`,
 где складывать безопасно, потому что ни то, ни другое не может тихо ослабить требование сервера.
 
@@ -132,14 +151,14 @@ class PaymentsApi(PaymentsService, AsyncApi):
 | `crypto` | побеждает ближайший объявленный | `crypto=` заменяет, `crypto=None` отключает |
 | `wire` | `Wire.over(...)` — по полям | по полям поверх сервисного |
 | `errors` | складываются | `errors=` добавляются, `inherit_errors=False` отбрасывает сервисные |
-| `protocol` | побеждает ближайший объявленный | не объявляется: берётся конвертом `@api.rpc` |
+| `protocol` | побеждает ближайший объявленный | не объявляется: берётся конвертом `Rpc.method` |
 | `allow`, `signed` | ближайший объявленный / логическое «или» | не объявляются |
 
 Снять наследование на подклассе роутера нельзя: пустое значение (`signing = ()`, `security =
 None`) читается как «не объявлено» и наследование не отменяет — отказ от сервисного правила
 выражается на операции, где он виден.
 
-Что **не** наследуется от сервиса: `responses` (успешные случаи задают тип результата, а он —
+Что **не** наследуется от сервиса: успешные случаи (они задают тип результата, а он —
 часть сигнатуры операции; как убрать повтор, см.
 {doc}`Успешный ответ </guides/responses/success>`), `protections`, `requires`/`inject`,
 `idempotent`.
@@ -151,7 +170,7 @@ None`) читается как «не объявлено» и наследова
 | Роутер / миксин сервиса | `base_url`, `errors`, `security`, `signing`, `crypto`, `wire`, `signed`, `allow` | контракт API: что сервер требует и что возвращает |
 | Клиент | `base_url` по умолчанию, retry, timeout, proxy, impersonation, handler, guard/protection | доставка байтов |
 
-Цепочка дефолтов — одна: корень → MRO роутера → аргументы операции. Слияние выполняется один раз
+Цепочка дефолтов — одна: корень → MRO роутера → объявление операции. Слияние выполняется один раз
 при разрешении дескриптора операции, а не на каждом вызове.
 
 ## Ошибки объявления и сборки

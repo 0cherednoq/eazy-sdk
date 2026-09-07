@@ -65,16 +65,20 @@ Query-вариант отправит `/weather?api_key=key_demo_123`.
 :::
 ::::
 
-Передайте `auth` в `ClientConfig` и укажите `security=API_KEY` в декораторе операции:
+Передайте `auth` в `Identity` и укажите `security=API_KEY` в объявлении операции:
 
 ```python
-from eazy_sdk import Client, Identity, SyncApi, api
+from dataclasses import dataclass
+
+from eazy_sdk import Client, Http, HttpOperation, Identity, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetReports(HttpOperation[Reports]):
+    __http__ = Http.get("/reports", security=API_KEY)
+
 class ReportsApi(SyncApi):
-    @api.get("/reports", security=API_KEY)
-    def reports(self) -> Reports:
-        raise NotImplementedError
+    reports = op(GetReports)
 
 client = Client(
     base_url="https://api.example",

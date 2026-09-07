@@ -44,28 +44,9 @@ HTTP-параметры всегда keyword-only: конструктор объ
 
 ## Декоратор как короткая форма
 
-```python
-from typing import Annotated
-
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import markers
-
-class UsersApi(AsyncApi):
-    @api.get("/users/{user_id}")
-    async def get_user(
-        self,
-        *,
-        user_id: Annotated[int, markers.Path()],
-        page: Annotated[int, markers.Query()] = 1,
-    ) -> User:
-        raise NotImplementedError
-```
-
-Декоратор синтезирует ровно такой же frozen-класс — он доступен как
-`UsersApi.get_user.Operation`. Тело декларации не выполняется; сохраняйте
-`raise NotImplementedError` как недостижимое тело обычной strict-mypy декларации (`...` даёт
-ошибку `empty-body`). Единственное отличие двух форм — `options`: у декорированной операции это
-параметр вызова, у класса он передаётся через `send(request, options=...)`.
+`@api.get(...)` синтезирует ровно такой же frozen-класс — он доступен как
+`UsersApi.get_user.Operation`. Отличия двух форм и когда какая уместна — на странице
+{doc}`Объявление операции </guides/requests/declarative>`.
 
 ## Ответ операции
 

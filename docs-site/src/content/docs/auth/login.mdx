@@ -8,7 +8,7 @@ sources:
 api_fingerprint: "sha256:8e23dfe7e5ea90feea2bf451de76be42c5c677d853ad5aefae951b57b4f3a7e1"
 ---
 
-Login в Eazy SDK является обычной декорированной операцией. `session_auth(...)` вызывает её
+Login в Eazy SDK является обычной объявленной операцией. `session_auth(...)` вызывает её
 автоматически, когда защищённой ручке нужна session, а сохранённой session ещё нет.
 
 :::{note} Кому нужны шаги этой страницы
@@ -98,7 +98,7 @@ refresh, а `ExpiresAt()` определяет, когда session следуе�
 ```python
 from dataclasses import dataclass
 
-from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, JsonField, Omittable, api, op
+from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, JsonField, Omittable, op
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Login(HttpOperation[UserSession]):
@@ -108,19 +108,21 @@ class Login(HttpOperation[UserSession]):
     password: JsonField[str]
     remember_me: JsonField[Omittable[bool]] = UNSET
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetAccount(HttpOperation[Account]):
+    __http__ = Http.get("/account", operation_id="getAccount")
+
 class AsyncAuthApi(AsyncApi):
     login = op(Login)
 
 class AsyncAccountApi(AsyncApi):
     security = USER_SESSION
 
-    @api.get("/account", operation_id="getAccount")
-    async def get_account(self) -> Account:
-        raise NotImplementedError
+    get_account = op(GetAccount)
 ```
 
-`security=None` явно отключает inherited security для login. Тело функции не выполняется:
-descriptor связывает аргументы и передаёт вызов общему executor.
+`security=None` явно отключает inherited security для login. Класс операции описывает только
+поля запроса; вызов исполняет общий executor.
 
 ## 3. Вызовите login из auth service
 

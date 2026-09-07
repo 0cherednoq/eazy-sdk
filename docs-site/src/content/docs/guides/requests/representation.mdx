@@ -1,11 +1,12 @@
 ---
 title: Представление запроса
-description: Wire собирает всё, что влияет на байты запроса; Serialization — всё, что не влияет.
+description: Имена на проводе, проекция публичных полей в приватный документ и Wire как байтовый контракт.
 sources:
   - eazy_sdk.request.Wire
+  - eazy_sdk.request.BodyProjection
   - eazy_sdk.serialization.Serialization
 draft: false
-api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e3537770cc77c4a"
+api_fingerprint: "sha256:9e1bacd9f6520fd615c285d70a2359fb23695d898683b7a1d87d066fabfb5a92"
 ---
 
 Сериализация — это не одна операция, а четыре преобразования с разными владельцами. Пока они
@@ -14,19 +15,19 @@ api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e35377
 | # | Преобразование | Кто владеет | Где объявляется |
 |---|---|---|---|
 | 1 | модель ↔ структура | библиотека моделей | `Serialization(models=…)` на корне |
-| 2 | структура ↔ байты | кодек формата и JSON-бэкенд | кодек — маркер тела операции, бэкенд — `Serialization(json=…)`; парсеры документов — `Serialization(documents=(…,))` |
+| 2 | структура ↔ байты | кодек формата и JSON-бэкенд | кодек — маркер тела операции, бэкенд — `Serialization(json=…)` |
 | 3 | public schema ↔ wire schema | проекция | `projection=BodyProjection(…)` в `__http__` |
 | 4 | байты ↔ байты на проводе | шифрование, порядок, точность | `Wire(encrypted=…, order=…, exact=…)` |
 
 Правило, которое их разделяет: **всё, что влияет на байты, — контракт; всё, что не влияет, —
 реализация.** Контракт объявляется на операции (и наследуется от роутера и миксина сервиса),
-реализация — один раз на корне SDK.
+реализация — один раз на корне SDK (см. {doc}`Бэкенды сериализации </guides/serialization>`).
 
 ## Конвейер
 
 ```
 модель  ─(1 ModelAdapter.dump)──→ структура
-        ─(3 Wire.projection)────→ wire-структура
+        ─(3 projection)─────────→ wire-структура
         ─(3′ envelope)──────────→ конверт протокола, если объявлен
         ─(4 crypto: document)───→ структура с зашифрованными полями
         ─(2 кодек + JsonPolicy)─→ байты
@@ -41,12 +42,291 @@ api_fingerprint: "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e35377
 
 Ответ проходит зеркально: расшифровка → парсинг → извлечение по селекторам → загрузка в модель.
 
-## Wire на операции
+## Имена на проводе
+
+Python-имя поля и имя на проводе — разные вещи: `per_page` в коде, `perPage` в запросе. Кто задаёт
+второе, зависит от того, где поле объявлено.
+
+**Поле операции** именует маркер: короткая форма `Query[int]` аргументов не принимает, поэтому имя
+пишется полной формой.
+
+```python
+from typing import Annotated
+
+from eazy_sdk import Http, HttpOperation, Query
+from eazy_sdk.request import markers
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListOrders(HttpOperation[list[Order]]):
+    __http__ = Http.get("/orders")
+
+    page: Query[int] = 1
+    per_page: Annotated[int, markers.Query("perPage")] = 20
+    trace_id: Annotated[str, markers.Header("X-Trace-Id")]
+```
+
+Имя принимают все маркеры размещения: `markers.Path("orderId")`, `markers.Query("perPage")`,
+`markers.Header("X-Trace-Id")`, `markers.Cookie("sid")`, `markers.JsonField("firstName")`,
+`markers.Form("grant_type")`, `markers.Part("file")`.
+
+**Поле модели** именует сама модель — та же настройка, что и вне SDK:
+
+| Библиотека | Имя на проводе | Имя при разборе ответа |
+|---|---|---|
+| Pydantic v2 | `serialization_alias` (или `alias`) при `model_config = ConfigDict(serialize_by_alias=True)` | `validation_alias` |
+| msgspec | `rename=` у `Struct` или `msgspec.field(name=...)` | то же имя |
+| dataclass | имя поля; алиасов нет — используйте маркер или проекцию | имя поля |
+| `TypedDict` | имя ключа | имя ключа |
+
+Операция, объявленная Pydantic-моделью, именует поля так же, как любая другая модель:
+
+```python
+class ListPosts(BaseModel, HttpOperation[list[BlogPost]]):
+    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
+    __http__ = Http.get("/posts")
+
+    user_id: Query[int] = Field(serialization_alias="userId")
+```
+
+Два правила проверяются при объявлении, а не на первом запросе:
+
+```text
+PlanError: input field 'user_id' in 'listPosts' names its wire field twice:
+model says 'userId', marker says 'user'; keep one
+```
+
+```text
+PlanError: input field 'user_id' in 'listPosts' has alias 'userId' that will not reach
+the wire; set model_config = ConfigDict(serialize_by_alias=True)
+```
+
+Второе — про частую ошибку: у Pydantic alias по умолчанию работает только на входе, поэтому без
+`serialize_by_alias=True` запрос ушёл бы с `user_id`, а автор был бы уверен в обратном.
+
+## Проекция: публичные поля и приватный документ
+
+Иногда имя на проводе — не единственное отличие: сервер ждёт вложенный документ, в котором есть
+поля, которых у вызывающей стороны просто нет. Не добавляйте caller-у wrapper-словарь — объявите
+проекцию. `BodyProjection` берёт значение операции и строит из него приватную wire-модель.
 
 ```python
 from dataclasses import dataclass
+from typing import TypedDict
 
-from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
+from eazy_sdk import Http, HttpOperation, SyncApi, op
+from eazy_sdk.request import BodyProjection
+from eazy_sdk.request.markers import JsonBody
+
+
+class AccountWire(TypedDict):
+    login: str
+    email: str
+
+
+class RegisterUserWire(TypedDict):
+    account: AccountWire
+
+
+def to_wire(user: RegisterUser) -> RegisterUserWire:
+    return {"account": {"login": user.login, "email": user.email}}
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterUser(HttpOperation[RegisteredUser]):
+    __http__ = Http.post(
+        "/register",
+        projection=BodyProjection(
+            target=RegisterUserWire,
+            using=to_wire,
+            encoding=JsonBody(),
+            name="register-user-v1",
+        ),
+    )
+
+    login: str
+    email: str
+
+
+class RegistrationApi(SyncApi):
+    register = op(RegisterUser)
+```
+
+`source=` не указывается: источник проекции — сам класс операции, поэтому поля объявлены один раз.
+Проекция вызывается на каждой подготовке запроса, то есть заново на каждой retry и redirect
+attempt. Поля операции без маркера размещения — это поля проекции; те, у которых маркер есть,
+уходят своим путём (в path, query, header или cookie) и в проекцию не попадают.
+
+`name=` — стабильная идентичность проекции в диагностике и в схеме; без него имя собирается из
+имени callable.
+
+## Проекция посложнее: константы, время и контекст приложения
+
+Реальный приватный API редко ограничивается переименованием. Тело такого сервиса обычно содержит
+три вида значений, и ни один из них не должен быть параметром метода:
+
+- **константы контракта** — версия API, платформа, кодировка;
+- **вычисляемое на каждую попытку** — timestamp, nonce;
+- **контекст приложения** — `device_id`, тип устройства, версия приложения: их знает не тот, кто
+  вызывает ручку, а тот, кто собрал SDK.
+
+Первые два принадлежат самой проекции. Третий приходит из зависимости: приложение один раз
+передаёт его в SDK, а проекция получает уже разрешённое значение вторым аргументом.
+
+```python
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TypedDict, cast
+
+from eazy_sdk.dependencies import DependencyContext, Injected, dependency
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceContext:
+    """Значения, которые знает приложение, а не вызывающий ручку код."""
+
+    device_id: str
+    device_type: str
+    app_version: str
+
+
+DEVICE = dependency(DeviceContext, name="device")
+
+
+class DeviceWire(TypedDict):
+    id: str
+    type: str
+    app_version: str
+
+
+class ClientWire(TypedDict):
+    platform: str
+    version: str
+    timestamp: int
+    device: DeviceWire
+
+
+class RegisterUserWire(TypedDict):
+    account: AccountWire
+    profile: ProfileWire
+    client: ClientWire
+
+
+def unix_timestamp() -> int:
+    return int(time.time())
+
+
+@dataclass(frozen=True, slots=True)
+class RegisterWireSettings:
+    """Константы контракта и заменяемая фабрика времени."""
+
+    platform: str = "web"
+    version: str = "1.0"
+    timestamp_factory: Callable[[], int] = unix_timestamp
+
+
+@dataclass(frozen=True, slots=True)
+class RegisterUserProjection:
+    settings: RegisterWireSettings = field(default_factory=RegisterWireSettings)
+
+    def __call__(self, user: RegisterUser, injected: Injected) -> RegisterUserWire:
+        device = cast(DeviceContext, injected[DEVICE.dependency])
+        return {
+            "account": {"login": user.login, "email": user.email},
+            "profile": {"first_name": user.first_name, "last_name": user.last_name},
+            "client": {
+                "platform": self.settings.platform,
+                "version": self.settings.version,
+                "timestamp": self.settings.timestamp_factory(),
+                "device": {
+                    "id": device.device_id,
+                    "type": device.device_type,
+                    "app_version": device.app_version,
+                },
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterUser(HttpOperation[RegisteredUser]):
+    __http__ = Http.post(
+        "/register",
+        requires=(DEVICE,),
+        projection=BodyProjection(
+            target=RegisterUserWire,
+            using=RegisterUserProjection(),
+            encoding=JsonBody(),
+            name="register-user-v1",
+        ),
+    )
+
+    login: str
+    email: str
+    first_name: str
+    last_name: str
+```
+
+Проекция с двумя параметрами получает вторым аргументом `Injected` — разрешённые значения
+`requires=`. Пользователь SDK передаёт device context один раз, при сборке:
+
+```python
+from eazy_sdk import Identity
+from eazy_sdk.dependencies import DependencyRegistry
+
+
+@dataclass(frozen=True, slots=True)
+class StaticDevice:
+    device: DeviceContext
+
+    def resolve(self, context: DependencyContext) -> DeviceContext:
+        return self.device
+
+
+dependencies = DependencyRegistry()
+dependencies.register(
+    DEVICE.dependency,
+    StaticDevice(DeviceContext(device_id="device-7", device_type="desktop", app_version="3.4.1")),
+)
+
+registration = RegistrationApi(client, identity=Identity(dependencies=dependencies))
+registered = registration.register(
+    login="john", email="john@example.com", first_name="John", last_name="Smith"
+)
+```
+
+Публичная сигнатура осталась плоской и содержит ровно то, что принадлежит вызывающей стороне, а на
+провод ушёл документ со всеми четырьмя видами значений:
+
+```json
+{
+  "account": {"login": "john", "email": "john@example.com"},
+  "profile": {"first_name": "John", "last_name": "Smith"},
+  "client": {
+    "platform": "web",
+    "version": "1.0",
+    "timestamp": 1787740000,
+    "device": {"id": "device-7", "type": "desktop", "app_version": "3.4.1"}
+  }
+}
+```
+
+Исполняемая версия этого примера — `examples/flat_model_wire_body.py`; тот же документ, собранный
+adaptix-конвертером вместо ручной функции, — `examples/adaptix_nested_wire_body.py`.
+
+:::{note} Что не место проекции
+Access token, session, CSRF-токен и решение CAPTCHA в проекцию не попадают: у них есть свои
+механизмы — {doc}`авторизация </auth/index>`, {doc}`dependencies </guides/dependencies>`,
+`Inject` и {doc}`protection </guides/protection/index>`. Проекция описывает форму документа, а не
+добывает значения.
+:::
+
+Значение зависимости, которому не нужна проекция, кладётся прямо в поле запроса —
+`Inject(markers.Header("X-Device-Id"), source)` (см. {doc}`Dependencies </guides/dependencies>`).
+
+## Wire на операции
+
+```python
 from eazy_sdk.request import FieldOrder, JsonPolicy, QueryCodec, Wire
 
 
@@ -87,7 +367,7 @@ from eazy_sdk.serialization import Serialization
 
 
 class Store(AsyncRoot):
-    payments = PaymentsApi
+    payments = api_group(PaymentsApi)
 
 
 store = Store(client, serialization=Serialization(models=registry))
@@ -95,10 +375,6 @@ store = Store(client, serialization=Serialization(models=registry))
 
 `Serialization` объявляет, какая библиотека читает модели, какой бэкенд кодирует JSON и какой
 парсер строит документ для извлечения по селекторам. Клиент об этом не знает: клиент доставляет
-байты, а не решает, как они выглядят.
-
-Выбор бэкенда — не просто предпочтение. Бэкенд, неспособный выдать байты, которых требует
-`JsonPolicy` операции, отвергается **при компиляции** с указанием операции, политики и бэкенда.
-Симметрично для ответов: парсер, не понимающий язык селектора операции (например, backend без
-XPath), тоже отвергается при компиляции — молчаливое пустое извлечение выглядело бы как «сервер
-перестал присылать поле».
+байты, а не решает, как они выглядят. Несовместимость обнаруживается при компиляции операции:
+бэкенд, неспособный выдать байты `JsonPolicy`, и парсер, не понимающий язык селектора, отвергаются
+до сети. Полный список бэкендов — в {doc}`Бэкендах сериализации </guides/serialization>`.

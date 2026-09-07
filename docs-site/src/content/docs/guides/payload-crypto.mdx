@@ -114,7 +114,7 @@ class PaymentsApi(AsyncApi):
 ```
 
 При whole-payload encryption Eazy SDK единолично записывает финальные `Content-Type` и
-`Content-Length`. Ручной параметр этих headers в том же методе является configuration error.
+`Content-Length`. Объявление этих headers полем той же операции является configuration error.
 `response.headers` сохраняет внешний encrypted media type, а parsing и `response.content_type`
 используют `clear_content_type`. Статусы из `plaintext_statuses` разрешают явно объявленные
 незашифрованные ошибки; остальные несовпадения fail closed.
@@ -194,7 +194,9 @@ client scope), профиль применяет его к operation, а `crypto
 рядом с `base_url`, и наследуется по MRO вместе с `wire`:
 
 ```python
-from eazy_sdk import AsyncApi, JsonBody, api
+from dataclasses import dataclass
+
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonBody, op
 from eazy_sdk.crypto import http_encrypted
 from eazy_sdk.request import Wire
 
@@ -204,14 +206,19 @@ class PaymentsService:
     crypto = PAYMENT_CRYPTO
     wire = Wire(encrypted=http_encrypted(content_type="application/vnd.example.encrypted+json"))
 
-class PaymentsApi(PaymentsService, AsyncApi):
-    @api.post("/v1/payments")   # шифрование — от сервиса
-    async def create(self, *, body: JsonBody[CreatePayment]) -> PaymentResult:
-        raise NotImplementedError
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreatePaymentOperation(HttpOperation[PaymentResult]):
+    __http__ = Http.post("/v1/payments")   # шифрование — от сервиса
 
-    @api.get("/v1/rates", crypto=None)   # публичный справочник
-    async def rates(self) -> Rates:
-        raise NotImplementedError
+    body: JsonBody[CreatePayment]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetRates(HttpOperation[Rates]):
+    __http__ = Http.get("/v1/rates", crypto=None)   # публичный справочник
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    create = op(CreatePaymentOperation)
+    rates = op(GetRates)
 ```
 
 Порядок разрешения — операция, затем сервис, и только если ни один из них ничего не объявил,

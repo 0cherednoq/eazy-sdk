@@ -10,18 +10,22 @@ api_fingerprint: "sha256:e2fff75c3b7db2776393cf39d440eb20d820453e27b30febe997a2f
 автоматически выполнять login или refresh.
 
 ```python
+from dataclasses import dataclass
+
 import httpx
 
-from eazy_sdk import AsyncApi, AsyncClient, ClientConfig, api
+from eazy_sdk import AsyncApi, AsyncClient, Http, HttpOperation, Identity, op
 from eazy_sdk.auth import BearerScheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
 BEARER = BearerScheme("user-bearer")
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetAccount(HttpOperation[Account]):
+    __http__ = Http.get("/account", security=BEARER)
+
 class AsyncAccountApi(AsyncApi):
-    @api.get("/account", security=BEARER)
-    async def get_account(self) -> Account:
-        raise NotImplementedError
+    get_account = op(GetAccount)
 
 identity = Identity(auth=(BEARER.static("access-v1"),))
 client = AsyncClient(

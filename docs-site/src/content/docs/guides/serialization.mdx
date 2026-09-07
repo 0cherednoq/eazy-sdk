@@ -1,0 +1,182 @@
+---
+title: Бэкенды сериализации
+description: Какие библиотеки читают модели, кодируют JSON и разбирают документы — и как их заменить.
+sources:
+  - eazy_sdk.serialization.Serialization
+  - eazy_sdk.models
+  - eazy_sdk.request.wire.JsonBackend
+draft: false
+api_fingerprint: "sha256:3673bf780bb46879d96ea074fcb361d1b0d1b5306b2dafa26354aade5c4963fa"
+---
+
+Сериализация состоит из двух половин. Одна влияет на байты — кодек тела, `JsonPolicy`, проекция,
+шифрование — и потому принадлежит операции (см. {doc}`Представление запроса
+</guides/requests/representation>`). Другая на байты не влияет: какая библиотека читает модель,
+какой библиотекой закодирован JSON, какой парсер строит документ. Эта половина объявляется один
+раз на корне SDK — в `Serialization`.
+
+```python
+from eazy_sdk import AsyncRoot
+from eazy_sdk.serialization import Serialization
+
+class Store(AsyncRoot):
+    catalogue = api_group(CatalogueApi)
+
+store = Store(client, serialization=Serialization(models=registry, json=backend, documents=(parser,)))
+```
+
+Клиент об этом не знает: клиент доставляет байты, а не решает, как они выглядят. Роутер,
+привязанный прямо к клиенту (`CatalogueApi(client)`), использует значения по умолчанию.
+
+| Поле `Serialization` | Что выбирает | По умолчанию |
+|---|---|---|
+| `models` | библиотеки моделей — `ModelAdapterRegistry` | `default_model_adapters()` |
+| `json` | библиотека, кодирующая JSON-структуру в байты | `StdlibJson()` |
+| `documents` | парсеры документов для извлечения по селекторам | `()` — выбор оставлен плагину |
+
+## Модели
+
+`default_model_adapters()` содержит четыре адаптера; они опрашиваются по порядку, и подходящий
+для типа должен быть ровно один.
+
+| Адаптер | Что читает | Имя на проводе задаёт | Установка |
+|---|---|---|---|
+| `TypedDictModelAdapter` | `TypedDict` | имя ключа | входит в пакет |
+| `PydanticModelAdapter` | `pydantic.BaseModel` (v2) | `serialization_alias`/`alias` при `serialize_by_alias=True` | `eazy-sdk[pydantic]` |
+| `MsgspecModelAdapter` | `msgspec.Struct` | `rename` / `msgspec.field(name=...)` | `eazy-sdk[msgspec]` |
+| `DataclassModelAdapter` | любой dataclass | имя поля | входит в пакет |
+
+Optional-зависимость обнаруживается в момент, когда встречается соответствующая модель, поэтому
+устанавливать нужно только выбранную библиотеку.
+
+Собственный адаптер реализует протокол `ModelAdapter` и добавляется в реестр:
+
+```python
+from eazy_sdk.models import ModelAdapterRegistry, default_model_adapters
+
+registry = ModelAdapterRegistry((*default_model_adapters().adapters, VendorUserAdapter()))
+```
+
+Контракт адаптера и полный пример — в {doc}`Сериализация моделей и codecs
+</api-reference/models-codecs>`.
+
+### Adaptix как центральный retort
+
+Плагин `eazy-sdk-adaptix` превращает один `Retort` приложения в адаптер моделей. Он **заменяет**
+штатный dataclass-адаптер: adaptix читает любые dataclass, поэтому два адаптера на один тип дали
+бы `AmbiguousModelAdapterError`. Типы из `types=` идут через retort, остальные dataclass —
+через штатную реализацию.
+
+```bash
+uv add eazy-sdk-adaptix
+```
+
+```python
+from adaptix import Retort, name_mapping
+from eazy_sdk.models import default_model_adapters
+from eazy_sdk.serialization import Serialization
+from eazy_sdk_adaptix import adaptix_models
+
+retort = Retort(recipe=[name_mapping(Order, map={"order_id": "orderId"})])
+serialization = Serialization(
+    models=adaptix_models(default_model_adapters(), retort=retort, types=(Order,))
+)
+```
+
+## JSON
+
+JSON-бэкенд отвечает на один вопрос: какая библиотека превратит структуру в байты. *Какие именно*
+байты требуются — это `JsonPolicy` операции (`ensure_ascii`, разделители, сортировка ключей), и
+она часть контракта, потому что от неё зависит подпись.
+
+```python
+from eazy_sdk.request.wire import JsonPolicy
+
+class OrjsonBackend:
+    name = "orjson"
+
+    def supports(self, policy: JsonPolicy) -> bool:
+        return not policy.ensure_ascii and policy.separators == (",", ":")
+
+    def dumps(self, value, policy, *, default=None, sort_keys=None) -> bytes:
+        import orjson
+
+        option = orjson.OPT_SORT_KEYS if (sort_keys or policy.sort_keys) else 0
+        return orjson.dumps(value, default=default, option=option)
+
+    def loads(self, data: bytes) -> object:
+        import orjson
+
+        return orjson.loads(data)
+```
+
+Бэкенд, который не может выдать требуемые байты, отвергается **при компиляции операции**, а не на
+первом запросе:
+
+```text
+BackendCapabilityError: operation 'createPayment' requires JSON encoding
+JsonPolicy(ensure_ascii=True, ...), which the 'orjson' backend cannot produce
+```
+
+Штатный `StdlibJson` удовлетворяет любой политике, которую можно выразить в SDK, поэтому менять
+его стоит только ради скорости.
+
+## Документы
+
+Модель, поля которой несут CSS- или XPath-селекторы, читается документным бэкендом. Библиотека
+поставляет два, в отдельных дистрибутивах:
+
+| Бэкенд | Пакет | Языки селекторов | Медиа-типы |
+|---|---|---|---|
+| `ParselBackend` | `eazy-sdk[html]` | `css`, `xpath` | `text/html`, `application/xhtml+xml` |
+| `ElementTreeBackend` | `eazy-sdk-xml` | `xpath` | `application/xml`, `text/xml` |
+
+```python
+from eazy_sdk.serialization import Serialization
+from eazy_sdk_html import ParselBackend
+from eazy_sdk_xml import ElementTreeBackend
+
+serialization = Serialization(documents=(ParselBackend(), ElementTreeBackend()))
+```
+
+Правила выбора ровно три:
+
+1. `documents=()` — выбор оставлен плагину извлечения: он берёт свой парсер по умолчанию
+   (`ParselBackend`).
+2. Один бэкенд — читает всегда: SDK, который объявил парсер, имел это в виду.
+3. Несколько — выбирает медиа-тип ответа; суффикс `+xml` считается XML. Если ни один не подходит,
+   это `BackendCapabilityError` с перечислением настроенных парсеров, а не пустое извлечение.
+
+Выбор бэкенда — не предпочтение: `ElementTreeBackend` не читает CSS. Операция, чей селектор
+бэкенд не понимает, отвергается при компиляции — молчаливое пустое извлечение выглядело бы как
+«сервер перестал присылать поле».
+
+```text
+BackendCapabilityError: operation 'getCatalogue': CatalogPage.title selects by 'css', which
+the 'elementtree' document backend cannot read (it speaks xpath)
+```
+
+По той же причине документная модель, у которой нет ни одного обязательного поля, отвергается:
+она совпала бы с любой страницей, включая страницу ошибки соседнего случая.
+
+```text
+BackendCapabilityError: operation 'getCatalogue': Html model CatalogPage matches any document;
+add a required selector field or when=
+```
+
+## Кодеки тела
+
+Парсер документа — это про ответ. Для запроса форму байтов задаёт маркер тела операции:
+`markers.JsonBody()`, `FormBody()`, `MultipartBody()`, `BytesBody()` или собственный `BodyCodec`.
+`eazy-sdk-xml` поставляет `XmlBody`/`XmlResponse` для XML-контрактов
+(см. {doc}`XML </guides/xml>`); скалярные значения path, query, header и cookie кодирует
+`ScalarCodec`.
+
+| Расширение | Что делает | Где объявляется |
+|---|---|---|
+| `ModelAdapter` | модель ↔ примитивы | `Serialization(models=…)` |
+| `JsonBackend` | структура ↔ байты JSON | `Serialization(json=…)` |
+| `DocumentBackend` | байты ответа → документ | `Serialization(documents=(…,))` |
+| `BodyCodec` | структура → байты нестандартного тела | маркер тела операции |
+| `ScalarCodec` | одно значение → строка | маркер параметра |
+| `ResponseExtractor` | ответ → примитивы | представление в `success=`/`errors=` |

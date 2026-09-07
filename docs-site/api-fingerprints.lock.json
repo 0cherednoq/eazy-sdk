@@ -318,6 +318,13 @@
       "eazy_sdk.request.Cookie": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
+  "guides/requests/declarative.mdx": {
+    "fingerprint": "sha256:4a81cfb7bf9d2f8984226f5bbe39b753307b3541f356f7717cacff1f085d7795",
+    "symbols": {
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
+      "eazy_sdk.operation": "sha256:e52b58093d5b04bd5d5bc94211d33bd1d1498d900934c566e456a1ccd48e6a12"
+    }
+  },
   "guides/requests/form.mdx": {
     "fingerprint": "sha256:57cc49a702463f8a149b91c9dbfafbc8fb6b8bdb6c7e5112ccc1d43813aab03e",
     "symbols": {
@@ -357,8 +364,9 @@
     }
   },
   "guides/requests/representation.mdx": {
-    "fingerprint": "sha256:835447e25e9fc8f2d36f82168370344a6c383fd4338ec86d0e3537770cc77c4a",
+    "fingerprint": "sha256:9e1bacd9f6520fd615c285d70a2359fb23695d898683b7a1d87d066fabfb5a92",
     "symbols": {
+      "eazy_sdk.request.BodyProjection": "sha256:e5842b286ea1ae096d80f88a7ea8c3bb8a25f12fa80c3fd38bacf3364a2ad0c2",
       "eazy_sdk.request.Wire": "sha256:65156e82586dc751eddc264d668ea8606893036dd4b4fb08c60162a3d0e81cd6",
       "eazy_sdk.serialization.Serialization": "sha256:4d9e1b84881398c9258807686e24141a421925796033581ba016b24ab4f5aa01"
     }
@@ -392,6 +400,14 @@
     "symbols": {
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.response": "sha256:f42141430b152565aa79dbc78f5ae71b310fb2aa0209a4eeacc55915a586abad"
+    }
+  },
+  "guides/serialization.mdx": {
+    "fingerprint": "sha256:3673bf780bb46879d96ea074fcb361d1b0d1b5306b2dafa26354aade5c4963fa",
+    "symbols": {
+      "eazy_sdk.models": "sha256:09807aaca77730f5c586faef4ac34326dc86996ebd827381ef0c5b72294386f8",
+      "eazy_sdk.request.wire.JsonBackend": "sha256:118296e507c96f45f344d695444acd3d3c2fdf6457bf8cfc692526cdd4e9644b",
+      "eazy_sdk.serialization.Serialization": "sha256:4d9e1b84881398c9258807686e24141a421925796033581ba016b24ab4f5aa01"
     }
   },
   "guides/sqlmodel.mdx": {

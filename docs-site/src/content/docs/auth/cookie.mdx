@@ -90,9 +90,20 @@ auth = COOKIE.static("session-demo-42")
 :::::
 
 ```python
+from dataclasses import dataclass
+
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk import AsyncApi, AsyncRoot, Identity, JsonField, api, api_group
+from eazy_sdk import (
+    AsyncApi,
+    AsyncRoot,
+    Http,
+    HttpOperation,
+    Identity,
+    JsonField,
+    api_group,
+    op,
+)
 from eazy_sdk.auth import AuthContext, session_cookie
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
@@ -103,15 +114,15 @@ class LoginCredentials(BaseModel):
 class Dashboard(BaseModel):
     welcome: str
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Login(HttpOperation[None]):
+    __http__ = Http.post("/auth/login", operation_id="login", security=None)
+
+    username: JsonField[str]
+    password: JsonField[str]
+
 class AsyncAuthApi(AsyncApi):
-    @api.post("/auth/login", operation_id="login", security=None)
-    async def login(
-        self,
-        *,
-        username: JsonField[str],
-        password: JsonField[str],
-    ) -> None:
-        raise NotImplementedError
+    login = op(Login)
 
 class CookieLoginService:
     async def acquire(
@@ -136,12 +147,14 @@ auth = session_cookie(
     name="dashboard-session",
 )
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetDashboard(HttpOperation[Dashboard]):
+    __http__ = Http.get("/dashboard", operation_id="getDashboard")
+
 class AsyncDashboardApi(AsyncApi):
     security = auth.scheme
 
-    @api.get("/dashboard", operation_id="getDashboard")
-    async def get_dashboard(self) -> Dashboard:
-        raise NotImplementedError
+    get_dashboard = op(GetDashboard)
 
 class DashboardSdk(AsyncRoot):
     auth = api_group(AsyncAuthApi)

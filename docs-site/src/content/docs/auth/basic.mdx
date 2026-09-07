@@ -10,18 +10,22 @@ Basic Auth подходит, когда сервер ожидает логин �
 укажите её в операции и передайте credentials через `ClientConfig`.
 
 ```python
+from dataclasses import dataclass
+
 import httpx
 
-from eazy_sdk import Client, ClientConfig, SyncApi, api
+from eazy_sdk import Client, Http, HttpOperation, Identity, SyncApi, op
 from eazy_sdk.auth import BasicScheme
 from eazy_sdk.handlers.httpx import HttpxHandler
 
 BASIC = BasicScheme("admin-basic")
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetProfile(HttpOperation[Profile]):
+    __http__ = Http.get("/admin/profile", security=BASIC)
+
 class AdminApi(SyncApi):
-    @api.get("/admin/profile", security=BASIC)
-    def profile(self) -> Profile:
-        raise NotImplementedError
+    profile = op(GetProfile)
 
 identity = Identity(auth=(BASIC.static(("ada", "correct-horse")),))
 client = Client(
@@ -73,4 +77,5 @@ Base64 не шифрует credentials. Не отправляйте Basic Auth �
   записывайте значение `Authorization` в логи.
 :::
 
-Опишите `401` как `Error(...)` в `Responses`, чтобы неверные credentials давали typed API error.
+Объявите `errors={401: InvalidCredentials}`, чтобы неверные credentials давали typed API error
+(см. {doc}`Ошибки API </guides/responses/errors>`).

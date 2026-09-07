@@ -25,18 +25,22 @@ auth = session_auth(
 Автор hand-written SDK может один раз объявить ту же scheme для API defaults и lifecycle binding:
 
 ```python
-from eazy_sdk import AsyncApi, AsyncRoot, Identity, api, api_group
+from dataclasses import dataclass
+
+from eazy_sdk import AsyncApi, AsyncRoot, Http, HttpOperation, Identity, api_group, op
 from eazy_sdk.auth import session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 
 USER_SESSION = session_scheme(UserSession, name="user-session")
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetAccount(HttpOperation[Account]):
+    __http__ = Http.get("/account", operation_id="getAccount")
+
 class AccountApi(AsyncApi):
     security = USER_SESSION
 
-    @api.get("/account", operation_id="getAccount")
-    async def get_account(self) -> Account:
-        raise NotImplementedError
+    get_account = op(GetAccount)
 
 class StoreSdk(AsyncRoot):
     auth = api_group(AsyncAuthApi)

@@ -11,7 +11,8 @@ api_fingerprint: "sha256:e2ab6a55460ba526ee5988357ef9a06f0c5d2830e12c8beef6e4742
 Eazy SDK поддерживает dataclass из стандартной библиотеки, Pydantic v2 и `msgspec.Struct`.
 Одна и та же модель работает в `JsonBody()`, `FormBody()`, `MultipartBody()`, `Json(Model)`,
 `Html(Model)` и `Extracted(Model, ...)`. Для другой model library реализуйте `ModelAdapter` и
-передайте registry в `ClientConfig`.
+передайте registry в `Serialization(models=…)` на корне SDK (см.
+{doc}`Бэкенды сериализации </guides/serialization>`).
 
 ## Что именно расширять
 
@@ -52,8 +53,9 @@ dependency во время использования соответствующ
 
 ## Опишите модели
 
-Выберите один вариант. Здесь намеренно показан вложенный document (`profile`): для плоского
-request object используйте `TypedDict`, как описано в {doc}`JSON body </guides/requests/json>`.
+Выберите один вариант. Здесь намеренно показан вложенный document (`profile`): плоское тело
+объявляется полями самой операции с маркером `JsonField`, как описано в
+{doc}`JSON body </guides/requests/json>`.
 Во всех трёх примерах вложенная request-модель сериализуется в JSON, а response-модель создаётся
 из JSON-ответа.
 
@@ -203,7 +205,8 @@ Eazy SDK не включает aliases принудительно. Наприм�
 приводятся к semantic primitives.
 
 У Pydantic `exclude_unset` — аргумент `model_dump`, а не настройка `ConfigDict`. Для плоского
-частичного payload используйте отдельный `TypedDict` с `NotRequired` keys. Если такая семантика
+частичного payload объявите поля операции как `Omittable[T] = UNSET`: `UNSET` не уходит на
+провод, а `None` уходит как `null`. Если такая семантика
 нужна вложенному model-owned документу, задайте её в его `model_dump`/`model_serializer` или в
 заменяющем Pydantic adapter-е. Для особого wire format или canonical bytes используйте
 `BodyCodec`.

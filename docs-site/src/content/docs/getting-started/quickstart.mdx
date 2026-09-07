@@ -76,33 +76,17 @@ Mechanical keyboard 12900
 `op(GetProduct)` публикует класс на роутере, и `store.product(...)` показывает в IDE ровно
 конструктор класса — с типами полей и их значениями по умолчанию.
 
-Тот же метод можно объявить декоратором — это короткая форма того же самого класса:
-
-```python
-from typing import Annotated
-
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import markers
-
-class StoreApi(SyncApi):
-    @api.get("/v1/products/{product_id}")
-    def product(self, *, product_id: Annotated[int, markers.Path()]) -> Product:
-        raise NotImplementedError
-```
-
-Декоратор синтезирует тот же frozen-класс: `StoreApi.product.Operation` — это он. Пишите
-return-аннотацию у каждой декларации (объявление проходит `mypy --strict` без отключения
-`no-untyped-def`) и оставляйте `raise NotImplementedError` в теле: runtime его не вызывает, а
-`...` mypy считает ошибкой `empty-body`.
-
-`api` содержит стандартные HTTP-декораторы, включая `head`, `options` и `trace`;
-`api.request(method, ...)` принимает другой валидный HTTP token. У класса тот же набор:
-`Http.get`, `Http.post`, ..., `Http.request(method, path)`.
+`Http` объявляет все стандартные глаголы — `Http.get`, `Http.post`, `Http.put`, `Http.patch`,
+`Http.delete`, `Http.head`, `Http.options`, `Http.trace`, — а `Http.request(method, path)`
+принимает любой валидный HTTP token. Ту же операцию можно объявить короткой формой — декоратором
+`@api.get(...)`, который синтезирует такой же класс; обе формы разобраны на странице
+{doc}`Объявление операции </guides/requests/declarative>`.
 
 Для POST/PUT объявите поля тела маркером `JsonField` — они станут полями того же класса, с
 обычными Python-значениями по умолчанию. Если внешний API требует nested JSON, не добавляйте
 caller-у wrapper dict: `BodyProjection` связывает поля операции с private wire schema и повторяет
-mapping/validation/encoding на каждой retry или redirect attempt.
+mapping/validation/encoding на каждой retry или redirect attempt (см.
+{doc}`Представление запроса </guides/requests/representation>`).
 
 Один роутер живёт прямо на клиенте: `StoreApi(client)`. Когда роутеров несколько, соберите их
 в корень `SyncRoot`/`AsyncRoot` через `api_group(...)`; адрес каждого сервиса при этом объявляет

@@ -49,10 +49,10 @@ Output может записать подпись в header, query, cookie ил�
 Если весь сервис подписывается одинаково, правило пишется один раз:
 
 ```python
-from typing import Annotated
+from dataclasses import dataclass
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import body_digest, header_output, hmac_sha256, markers
+from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
+from eazy_sdk.request import body_digest, header_output, hmac_sha256
 
 
 class PaymentsService:
@@ -60,14 +60,21 @@ class PaymentsService:
     signing = (hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Signature")),)
     signed = True          # операция без подписи отвергается при компиляции
 
-class PaymentsApi(PaymentsService, AsyncApi):
-    @api.post("/charge")          # подпись — от сервиса
-    async def charge(self, *, account: Annotated[str, markers.JsonField()]) -> Receipt:
-        raise NotImplementedError
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Charge(HttpOperation[Receipt]):
+    __http__ = Http.post("/charge")          # подпись — от сервиса
 
-    @api.post("/refund", signing=(REFUND_SIGNATURE,))
-    async def refund(self, *, account: Annotated[str, markers.JsonField()]) -> Receipt:
-        raise NotImplementedError
+    account: JsonField[str]
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Refund(HttpOperation[Receipt]):
+    __http__ = Http.post("/refund", signing=(REFUND_SIGNATURE,))
+
+    account: JsonField[str]
+
+class PaymentsApi(PaymentsService, AsyncApi):
+    charge = op(Charge)
+    refund = op(Refund)
 ```
 
 `signing=` на операции **заменяет** сервисное правило целиком, а не дополняет его; `signing=()`

@@ -13,10 +13,21 @@ dependency(
     name: str | None = None,
     provide: object | None = None,
     apply=(),
-    cache=CALL,
+    cache=DependencyCachePolicy.CALL,
     secret: bool = False,
 ) -> DependencySpec[T]
 ```
+
+```python
+Inject(
+    placement: Path | Query | Header | Cookie | JsonField | Form | Part,
+    source: object,
+    cache=DependencyCachePolicy.ATTEMPT,
+    secret: bool = False,
+)
+```
+
+`DependencySpec` передаётся в `requires=(...)`, `Inject` — в `inject=(...)` объявления операции.
 
 ## Binding
 
@@ -28,26 +39,43 @@ field("attribute").to_body("name")
 value().to_header("X-Value")
 ```
 
-## Cache
-
-`DependencyCachePolicy` поддерживает `NONE`, `CLIENT`, `CALL` и `ATTEMPT`.
-
-## Registry
-
-```python
-registry.register(descriptor, provider)
-```
-
-`DependencySpec` передаётся в `requires=(...)` декоратора. `provide=` может задать reusable provider
-identity, но implementation всегда регистрируется в `DependencyRegistry`, а не в операции.
-
 | Binding | Target |
 |---|---|
 | `field(name).to_header(name)` | Request header |
 | `field(name).to_query(name)` | Query parameter |
 | `field(name).to_cookie(name)` | Cookie |
-| `field(name).to_body(name)` | Body field |
-| `value().to_*` | Весь dependency result |
+| `field(name).to_body(name)` | Поле тела |
+| `value().to_*` | Весь результат зависимости |
+
+`apply=` пишет в **уже объявленный** слот операции: цель, которой нет среди полей, — ошибка
+объявления (`dependency target is not declared: header.X-Device-Id`). `Inject` создаёт слот сам и
+потому не требует поля, но конфликтует с одноимённым полем операции.
+
+## Cache
+
+`DependencyCachePolicy` поддерживает `NONE`, `CLIENT`, `CALL` и `ATTEMPT`. `dependency(...)` по
+умолчанию `CALL`, `Inject(...)` — `ATTEMPT`.
+
+## Registry
+
+```python
+registry.register(spec.dependency, provider)
+Identity(dependencies=registry)
+```
+
+Provider — объект с методом `resolve(context: DependencyContext)`, синхронный или асинхронный;
+callable без `resolve` оборачивается автоматически, когда передан через `provide=` или как
+`Inject.source`. `provide=` задаёт reusable provider identity, но реализация всегда живёт в
+`DependencyRegistry`, а не в операции.
+
+## Проекция
+
+Проекция, объявленная с двумя параметрами, получает разрешённые значения `requires=` как
+`Injected` — мэппинг `RequestDependency` → значение:
+
+```python
+def to_wire(source: CreateOrder, injected: Injected) -> OrderWire: ...
+```
 
 `secret=True` redacts значение из diagnostics. Missing provider, invalid result type или конфликт
 нескольких bindings завершается до network side effects. `ATTEMPT` dependency пересчитывается для

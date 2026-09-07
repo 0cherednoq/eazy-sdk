@@ -11,8 +11,10 @@ Eazy SDK различает требования AND и OR. `all_of(...)` фор
 нужны все credentials. `any_of(...)` выбирает первую полностью доступную альтернативу.
 
 ```python
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.auth import ApiKeyScheme, BearerScheme, BasicScheme, all_of, any_of
+from dataclasses import dataclass
+
+from eazy_sdk import AsyncApi, Http, HttpOperation, op
+from eazy_sdk.auth import ApiKeyScheme, BasicScheme, BearerScheme, all_of, any_of
 
 BASIC = BasicScheme("basic")
 BEARER = BearerScheme("bearer")
@@ -20,16 +22,19 @@ DEVICE_KEY = ApiKeyScheme.header("X-Device-Key", name="device-key")
 
 USER_OR_SERVICE = any_of(BEARER, all_of(BASIC, DEVICE_KEY))
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListReports(HttpOperation[list[Report]]):
+    __http__ = Http.get("/reports")
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HealthCheck(HttpOperation[Health]):
+    __http__ = Http.post("/health-check", security=None)
+
 class AsyncReportsApi(AsyncApi):
     security = USER_OR_SERVICE
 
-    @api.get("/reports")
-    async def list_reports(self) -> list[Report]:
-        raise NotImplementedError
-
-    @api.post("/health-check", security=None)
-    async def health_check(self) -> Health:
-        raise NotImplementedError
+    list_reports = op(ListReports)
+    health_check = op(HealthCheck)
 ```
 
 В этом примере `/reports` принимает либо Bearer token, либо одновременно Basic credentials и

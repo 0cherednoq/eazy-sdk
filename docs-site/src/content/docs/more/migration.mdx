@@ -92,7 +92,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.crypto.CryptoWire` | `eazy_sdk.crypto.Encrypted` | Тип шифрованного представления; у HTTP-операции это `wire=Wire(encrypted=…)`. |
 | `eazy_sdk.crypto.CryptoRule.wire` | `eazy_sdk.crypto.CryptoRule.encrypted` | Одно имя для одного понятия и в HTTP, и в WebSocket: `ws.call(encrypted=…)` — тоже. |
 
-Новое без замены: `eazy_sdk.serialization.Serialization(json=…, html=…)` — JSON-бэкенд и парсер
+Новое без замены: `eazy_sdk.serialization.Serialization(json=…, documents=(…,))` — JSON-бэкенд и парсер
 документов объявляются на корне, а бэкенд, не способный выполнить контракт операции, отвергается
 при компиляции, а не молча меняет байты.
 

@@ -87,8 +87,8 @@ product = await catalog.product(product_id=42)
 keyboards = await catalog.search(query="keyboard", page=2)
 ```
 
-`Path()` и `Query()` задают wire placement. `Responses[T]` задаёт parser реального ответа, а явная
-return-аннотация сохраняет strict mypy и IDE без module-level исключений.
+`Path[T]` и `Query[T]` задают wire placement, а `HttpOperation[T]` — тип успешного ответа: семья
+парсера выводится из модели, объявлять её отдельно не нужно.
 
 ## 2. Добавьте JSON body и ошибки API
 

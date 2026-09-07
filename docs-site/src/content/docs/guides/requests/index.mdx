@@ -35,27 +35,8 @@ frozen: запрос является значением. `HttpOperation[Order]`
 `orders.create_order(customer_id="c-1", item="keyboard")` проверяется type checker'ом по именам и
 типам полей, вместе со значениями по умолчанию.
 
-Короткая форма — декоратор; он синтезирует такой же frozen-класс, доступный как
-`OrdersApi.create_order.Operation`:
-
-```python
-from typing import Annotated
-
-from eazy_sdk import SyncApi, api
-from eazy_sdk.request import markers
-
-class OrdersApi(SyncApi):
-    @api.post("/customers/{customer_id}/orders")
-    def create_order(
-        self,
-        *,
-        customer_id: Annotated[str, markers.Path()],
-        dry_run: Annotated[bool, markers.Query()] = False,
-        item: Annotated[str, markers.JsonField()],
-        quantity: Annotated[int, markers.JsonField()] = 1,
-    ) -> Order:
-        raise NotImplementedError
-```
+Требования к классу, наследование операций и короткая форма объявления через декоратор описаны
+на странице {doc}`Объявление операции </guides/requests/declarative>`.
 
 ## Короткая форма маркеров
 
@@ -77,7 +58,8 @@ class OrdersApi(SyncApi):
 | Представление на проводе | — | `wire=Wire(...)` в `__http__` | {doc}`Представление запроса </guides/requests/representation>` |
 
 Имя на проводе принадлежит модели: `markers.Query("perPage")` у dataclass, `serialization_alias`
-у Pydantic, `msgspec.field(name=...)` у msgspec. Объявлять его дважды — ошибка объявления.
+у Pydantic, `msgspec.field(name=...)` у msgspec. Объявлять его дважды — ошибка объявления;
+подробности — в разделе {doc}`Имена на проводе </guides/requests/representation>`.
 
 ## Необязательное поле
 
@@ -96,6 +78,5 @@ class ListOrders(HttpOperation[list[Order]]):
 ```
 
 Один параметр нельзя разместить дважды. Placeholder path должен иметь ровно один `Path` marker.
-`options` — параметр вызова, а не поле: у декорированной операции он объявляется в сигнатуре, у
-класса передаётся через `send(request, options=...)` (см. {doc}`Запрос как значение
-</guides/requests/values>`).
+`options` — параметр вызова, а не поле: он передаётся через `send(request, options=...)`
+(см. {doc}`Запрос как значение </guides/requests/values>`).
