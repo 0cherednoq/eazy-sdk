@@ -241,7 +241,7 @@ class Tupled(HttpOperation[OrderV1]):
 def test_a_tuple_of_shapes_is_rejected_by_the_checker() -> None:
     """``_sequence`` unrolls a list; the type now says so instead of promising ``Sequence``."""
 
-    with tempfile.TemporaryDirectory(prefix="phase51-typing-", dir=ROOT / "tests") as temp:
+    with tempfile.TemporaryDirectory(prefix="phase50-review-typing-", dir=ROOT / "tests") as temp:
         source = FilePath(temp) / "shapes.py"
         source.write_text(SEVERAL_SHAPES, encoding="utf-8")
         result = subprocess.run(
@@ -314,7 +314,7 @@ class WrongRequires(HttpOperation[Order]):
 def test_the_authoring_surface_is_checked() -> None:
     """``security=``/``signing=``/``requires=`` were ``object``: nothing was checked at all."""
 
-    with tempfile.TemporaryDirectory(prefix="phase51-typing-", dir=ROOT / "tests") as temp:
+    with tempfile.TemporaryDirectory(prefix="phase50-review-typing-", dir=ROOT / "tests") as temp:
         source = FilePath(temp) / "surface.py"
         source.write_text(AUTHORING_SURFACE, encoding="utf-8")
         result = subprocess.run(

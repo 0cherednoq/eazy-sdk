@@ -4389,3 +4389,83 @@ None for phase 50. Two items from earlier phases stay open and are recorded rath
 the a3 plan's metric 4.5 (<=300 public names, 436 now) and `PartialOutcome` for
 GraphQL-over-HTTP. The `pyrefly` runtime dependency in the working tree's `pyproject.toml` belongs
 to the repository owner and keeps `package_audit.py` red until it is removed.
+
+
+## Phase 51 — serialization performance (2026-09-07)
+
+### State
+
+Planning complete, implementation not started. The measured facts are in
+`docs/eazy-sdk-serialization-performance-audit.md`; the plan is
+`51-serialization-performance.md`. The audit establishes that the bottleneck is SDK code rather
+than the model library an author picks: 121.5 us of the 170.7 us spent decoding one JSON response
+goes to `_apply_header_sources` re-resolving the model's annotations through `get_type_hints()` on
+every response, while turning the structure into a model costs 4.8 us. A prototype field cache
+measured 2.8-4.5x on a single response across all four model libraries with no change to the
+bytes on the wire.
+
+### Next executable increment
+
+51.0 — build `experiments/perf/harness.py`, freeze the scenario set, and record
+`experiments/perf/results/00-baseline.json` on a clean tree over three runs. No step that changes
+`eazy_sdk/` may start before that baseline exists.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| `uv run python experiments/perf/harness.py --step <NN> --runs 3` | Not run: the harness does not exist yet (51.0). |
+| `uv run pytest -q` | Not run for this phase. |
+| `uv run mypy` | Not run for this phase. |
+| `uv run ruff check` | Not run for this phase. |
+
+### Remaining work / blockers
+
+The whole phase. No blockers: every finding is reproduced by scripts recorded in the audit's
+appendix B, and steps 51.1-51.5 change no bytes on the wire.
+
+
+## Phase 50 review remediation (2026-09-07)
+
+### State
+
+Complete. The code review of `master...docs/declarative-operations` produced sixteen confirmed
+findings; the plan is `docs/eazy-sdk-phase50-review-plan.md` (phases A-G, one commit each, branch
+`fix/phase50-review`). Every finding is fixed and covered by a test that was verified to fail
+before the fix (red baseline recorded per phase in the plan's log).
+
+### Delivered
+
+- **A** `pyrefly` moved out of `[project].dependencies` into the dev group.
+- **B** Two caches keyed by `id()` of an object they did not hold: `ResponseContext.cached` now
+  takes a `Hashable` key it holds itself, and the client-error contract cache keys by
+  `(operation_id, host)` while remembering the declaration each entry was derived from.
+- **C** Five silently ignored declarations: host case in `ClientConfig.errors`, a document model
+  readable only by the second configured backend, `Json(unwrap=..., extractor=...)`,
+  `success={200: (A, B)}` and the `__slots__` heuristic for the operation base. `Omittable` on the
+  WebSocket side turned out to be broken in three places and is fixed with them.
+- **D** `object`/`Any` replaced by real types on the authoring surface (`_HttpSpec`,
+  `_HttpOptions`), the declaration, `ExecutionRuntime.errors`, `_ServiceDefaults.errors` and the
+  WebSocket descriptor; three `cast`s removed from `resolve()`.
+- **E** `EndpointLike` declares `operation_type`, `projection`, `inject`; `op()` and D-23 use the
+  declared protocol and type instead of duck-typing.
+- **F** Projection arity decided at compile time; the mutable default argument replaced.
+
+### Verification evidence
+
+| Gate | Result |
+|---|---|
+| `uv run pytest -q --timeout=300` | PASS: 1244 passed, 11 skipped in 189.89s. |
+| `uv run mypy` | PASS: no issues found in 338 source files. |
+| `uv run ruff check eazy_sdk tests plugins` | PASS. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 66 pages fresh. |
+| `uv run python scripts/absence_audit.py` | PASS. |
+| `uv build --all-packages` + `scripts/package_audit.py` | PASS (phase A). |
+| `uv run python scripts/surface_count.py` | 437 distinct public names; phase 50 closed at 436 and this work adds none. The extra name is `Body`, from work in progress by the repository owner in the same tree. |
+
+### Remaining work / blockers
+
+None for this remediation. One finding recorded rather than fixed, because it is outside the
+review's scope: `compile_endpoint` runs on every operation call (no compiled-contract cache), and
+`_core_for` builds a fresh `ExecutionCore` per SDK call. Both are candidates for the performance
+phase.
