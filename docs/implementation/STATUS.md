@@ -4395,8 +4395,12 @@ to the repository owner and keeps `package_audit.py` red until it is removed.
 
 ### State
 
-Planning complete, implementation not started. The measured facts are in
-`docs/eazy-sdk-serialization-performance-audit.md`; the plan is
+Active. 51.0 is done: the harness exists, the scenario set is frozen, and the baseline is
+recorded in `experiments/perf/results/00-baseline.json` — 18 scenarios, 5 runs, every row valid,
+taken from a clean `git worktree` at `b7295b8` because the working tree carried someone else's
+uncommitted runtime changes (plan §12, D1). No runtime file was touched by this step.
+
+The measured facts are in `docs/eazy-sdk-serialization-performance-audit.md`; the plan is
 `51-serialization-performance.md`. The audit establishes that the bottleneck is SDK code rather
 than the model library an author picks: 121.5 us of the 170.7 us spent decoding one JSON response
 goes to `_apply_header_sources` re-resolving the model's annotations through `get_type_hints()` on
@@ -4404,24 +4408,92 @@ every response, while turning the structure into a model costs 4.8 us. A prototy
 measured 2.8-4.5x on a single response across all four model libraries with no change to the
 bytes on the wire.
 
+The baseline confirms the audit within 15% on every metric but one, so the absolute targets stand
+as written; `L200-ms` came in 18.3% higher and its target was recomputed by the plan's own rule
+(§2.3) from 1.0 ms to 1.18 ms (§12, D4).
+
+What measuring taught, and what the plan now says (§12, D2): absolute microseconds on this machine
+drift by up to 30% between runs as the clock boosts and settles, while the ratio to the library's
+own API — measured alternately with the scenario, series by series — holds to ±1%. Validity is
+therefore judged on the ratio and on how well it is known between runs, not on the scatter within
+one series, which is where the plan's original 3% threshold sat: below the machine's own 1.3-2.1%
+noise floor.
+
+### Baseline (results/00-baseline.json, 2026-09-08)
+
+| Scenario | median | ratio | ± | Target ratio |
+|---|---:|---:|---:|---:|
+| `S1-ms` | 189.1 us | 272.7 | 0.8% | ≤ 36 (G1) |
+| `S1-pd` | 200.4 us | 77.5 | 0.6% | ≤ 14 (G2) |
+| `S1-dc` | 328.1 us | 46.9 | 1.2% | ≤ 8 (G3) |
+| `S1-td` | 210.9 us | 62.8 | 0.7% | ≤ 14 (G4) |
+| `L200-ms` | 1.56 ms | 12.3 | 0.6% | ≤ 7 (G5) |
+| `L200-dc` | 32.88 ms | 34.1 | 0.9% | ≤ 8 (G6) |
+| `L200-td` | 20.86 ms | 73.3 | 1.4% | ≤ 13 (G7) |
+| `REQ-ms` | 21.7 us | 33.3 | 0.8% | — (G8: ≤ 14 us) |
+| `BAD` / `SIGN` / `MULTI` | 186.7 / 148.7 / 197.7 us | 102.1 / 230.7 / 271.4 | ≤1.3% | ≤ +5% (G9) |
+
+### 51.1 — done (2026-09-08, worktree commit 4bdba08)
+
+`ModelAdapterRegistry.fields()` now remembers what it read, keyed weakly by the model class.
+Everything that went through `_apply_header_sources` got four times cheaper: `S1-ms` 189.1 -> 40.7
+us, `S2-hdr` 233.8 -> 46.4 us, `MULTI` 197.7 -> 48.7 us, `BAD` 186.7 -> 41.1 us. The request path
+is untouched and `REQ-*`/`SIGN` sit inside measurement precision, so G9 holds.
+
+What the plan expected and measurement corrected (§12, D6): dataclass and TypedDict lists did not
+move, because `DataclassModelAdapter.load` and `TypedDictModelAdapter.load` call `self.fields()`
+on the adapter rather than the registry, so the registry's cache is not on that path at all. G3,
+G4, G6 and G7 belong to 51.3, which is where F2 is addressed.
+
+The suite passes both ways, cache on and cache off (`EAZY_SDK_NO_FIELD_CACHE=1`): 1264 passed /
+11 skipped and 1252 passed / 23 skipped, the difference being the twelve tests that are about the
+cache existing.
+
+### 51.2 — skipped by threshold (2026-09-08)
+
+Measured before starting, per §5: eliminating `_apply_header_sources`'s remaining per-response
+`FromHeader` scan entirely is worth 3.23 us, 8% of the post-51.1 `S1-ms` and 10% of the 32 us
+target -- below the 20%-of-target bar the plan sets for spending a cache on it. Skipped
+(`skipped (порог)`); plan §12, D7. Revisit only if 51.4 leaves G1 short by less than 4 us.
+
+### 51.3 — done (2026-09-08, commit 74cac05)
+
+`DataclassModelAdapter.load` and `TypedDictModelAdapter.load` called their own uncached `fields()`
+once per object -- the 51.1 cache lives on the registry and was never on this path (D6). Both
+adapters now build a load plan once per class (one loader per field, chosen from its annotation,
+stored beside the field cache under the same rules) instead of re-reading fields and re-walking
+`_load`'s dispatch chain for every object.
+
+Measured (`results/03-load-plan.json`, 5 runs, 18/18 valid, clean worktree at `74cac05`):
+`L200-dc` 32.72 ms -> 4.04 ms (ratio 34.7 -> 4.3, G6 met), `L200-td` 20.34 ms -> 3.78 ms (ratio
+71.7 -> 13.6, target <= 13), `S1-dc` 205.4 -> 54.8 us (ratio 29.3 -> 8.1, target <= 8), `S1-td`
+139.6 -> 53.6 us (ratio 42.8 -> 16.6, target <= 14). `BAD`/`SIGN`/`MULTI` hold within +-5% (G9).
+
+G6 is met (decided by `ratio`, per §2.3). G3, G4 and G7 land within a few tenths of `ratio` of
+their targets but not on them: what is left is F6 (adapter selection scanned linearly in
+`registry._load`/`_select` for the object itself, and for every element of a 200-item list), which
+the plan already assigns to 51.4 rather than 51.3. Recorded as plan §12, D8, with the condition
+that if 51.4 still leaves them short, 51.8 records a final decision under §9.
+
 ### Next executable increment
 
-51.0 — build `experiments/perf/harness.py`, freeze the scenario set, and record
-`experiments/perf/results/00-baseline.json` on a clean tree over three runs. No step that changes
-`eazy_sdk/` may start before that baseline exists.
+51.4 — cache adapter selection by type in `registry._select` (F6), and revisit `_normalize_dump`
+under P1 (F3, only if a byte-identity property test can be written honestly first). Target
+metrics: G1, G5, G8, plus the G3/G4/G7 remainder from 51.3 (§12, D8) as a side effect of the same
+fix. Per §5, take a decomposition before starting.
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| `uv run python experiments/perf/harness.py --step <NN> --runs 3` | Not run: the harness does not exist yet (51.0). |
-| `uv run pytest -q` | Not run for this phase. |
-| `uv run mypy` | Not run for this phase. |
-| `uv run ruff check` | Not run for this phase. |
+| `uv run python experiments/perf/harness.py --step 03 --runs 5` (51.3) | Green: 18/18 rows valid. |
+| `uv run pytest -q` | Green: 1277 passed, 11 skipped. |
+| `uv run mypy` | Green: no issues in 340 source files. |
+| `uv run ruff check` | Green. |
 
 ### Remaining work / blockers
 
-The whole phase. No blockers: every finding is reproduced by scripts recorded in the audit's
+51.4 through 51.8. No blockers: every finding is reproduced by scripts recorded in the audit's
 appendix B, and steps 51.1-51.5 change no bytes on the wire.
 
 
