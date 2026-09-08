@@ -4,7 +4,7 @@ description: Стратегия страниц объявляется на кл�
 sources:
   - eazy_sdk.pagination
 draft: false
-api_fingerprint: "sha256:39e9bbe6ab958d10fa76c7d246583863e7ecbe551dbd5467fea9a4657ed74608"
+api_fingerprint: "sha256:e8002b7bc57f2618a256c2285018f615e7b3b2a40a603d732b63ed2f54c5e53e"
 ---
 
 Сервис отдаёт список порциями, а вызывающему коду нужны все элементы. Обычно ради этого на
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, Http, HttpOperation, Query, SyncApi, op
+from eazy_sdk import UNSET, Client, Http, HttpOperation, Omittable, Query, SyncApi, op
 from eazy_sdk.pagination import Pages
 
 
@@ -193,6 +193,41 @@ class ListSlice(HttpOperation[Slice]):
 3. `limit=` объявлен, и элементов на странице меньше лимита.
 4. Иначе тот же запрос со сдвинутым `offset`.
 
+## Токен продолжения: `Pages.cursor`
+
+Сервис, который вместо номера или смещения отдаёт непрозрачный токен следующей страницы,
+объявляется через `cursor=` — имя поля операции, куда токен кладётся, — и `next_cursor=` —
+функцию от результата к токену. `None` из `next_cursor` означает, что следующей страницы нет.
+
+```python
+class Feed(BaseModel):
+    items: list[Document]
+    next: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListFeed(HttpOperation[Feed]):
+    __http__ = Http.get("/documents")
+    __pages__ = Pages.cursor(
+        Feed,
+        cursor="after",
+        items=lambda r: r.items,
+        next_cursor=lambda r: r.next,
+    )
+
+    case_id: Query[str]
+    after: Query[Omittable[str]] = UNSET
+```
+
+Первая страница уходит с тем, что лежит в поле: здесь `UNSET`, то есть без параметра `after`
+вовсе. Каждая следующая несёт токен предыдущей. Остановка, по порядку:
+
+1. Страница не дала ни одного элемента.
+2. `next_cursor=` вернул `None`.
+3. Иначе тот же запрос с новым токеном.
+
+Чтобы начать с середины, передайте токен в вызов: `api.feed.items(case_id=..., after="c1")`.
+
 ## Асинхронный роутер
 
 На `AsyncApi` те же методы отдают асинхронные генераторы:
@@ -204,7 +239,7 @@ async for document in api.documents.items(case_id="A40-1/2026"):
 
 ## Чего здесь нет
 
-- Стратегии `cursor` и `next_url` — следующие шаги той же фазы; объявление будет тем же
-  `__pages__` с другой фабрикой `Pages.*`.
+- Стратегия `next_url` (сервер отдаёт готовый URL следующей страницы) пока не объявляется:
+  ей нужен запрос по абсолютному URL вместо `path` операции.
 - Декоратор `@api.get` не поддерживает `__pages__`: стратегии нужен класс с полями.
 - Тип элементов `items()` — `Any`: связанная операция знает тип страницы, но не тип элемента.

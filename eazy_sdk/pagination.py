@@ -37,7 +37,7 @@ from typing import Any
 
 from eazy_sdk.core.errors import PlanError
 
-__all__ = ["NumberedPages", "OffsetPages", "Pages", "Pagination", "next_changes"]
+__all__ = ["CursorPages", "NumberedPages", "OffsetPages", "Pages", "Pagination", "next_changes"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -106,7 +106,36 @@ class OffsetPages[T]:
         return (self.offset,) if self.limit is None else (self.offset, self.limit)
 
 
-type Pagination[T] = NumberedPages[T] | OffsetPages[T]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CursorPages[T]:
+    """Pages addressed by an opaque token the previous page handed out.
+
+    ``cursor`` is the Python field name that carries the token; the first page sends whatever
+    the request value holds there (usually ``UNSET`` or ``None``). ``next_cursor`` reads the
+    token for the following page out of the result; ``None`` means there is no following page.
+    """
+
+    result: type[T]
+    cursor: str
+    items: Callable[[T], Sequence[object]]
+    next_cursor: Callable[[T], object | None]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, type):
+            raise TypeError("Pages.cursor() expects the result class as its first argument")
+        if not isinstance(self.cursor, str) or not self.cursor:
+            raise TypeError("Pages.cursor(cursor=) must be a field name")
+        if not callable(self.items):
+            raise TypeError("Pages.cursor(items=) must be callable")
+        if not callable(self.next_cursor):
+            raise TypeError("Pages.cursor(next_cursor=) must be callable")
+
+    @property
+    def fields(self) -> tuple[str, ...]:
+        return (self.cursor,)
+
+
+type Pagination[T] = NumberedPages[T] | OffsetPages[T] | CursorPages[T]
 """Every strategy an operation may declare as ``__pages__``."""
 
 
@@ -139,6 +168,16 @@ class Pages:
     ) -> OffsetPages[T]:
         return OffsetPages(result=result, offset=offset, items=items, limit=limit, total=total)
 
+    @staticmethod
+    def cursor[T](
+        result: type[T],
+        *,
+        cursor: str,
+        items: Callable[[T], Sequence[object]],
+        next_cursor: Callable[[T], object | None],
+    ) -> CursorPages[T]:
+        return CursorPages(result=result, cursor=cursor, items=items, next_cursor=next_cursor)
+
 
 def next_changes[T](
     strategy: Pagination[T],
@@ -159,7 +198,9 @@ def next_changes[T](
         return None
     if isinstance(strategy, NumberedPages):
         return _next_numbered(strategy, request, result)
-    return _next_offset(strategy, request, result)
+    if isinstance(strategy, OffsetPages):
+        return _next_offset(strategy, request, result)
+    return _next_cursor(strategy, result)
 
 
 def _int_field(request: object, name: str) -> int:
@@ -212,6 +253,15 @@ def _next_offset[T](
     return {strategy.offset: current + count}
 
 
+def _next_cursor[T](strategy: CursorPages[T], result: T) -> dict[str, object] | None:
+    """2. no ``next_cursor`` in the result → stop; 3. the same request carrying that token."""
+
+    token = strategy.next_cursor(result)
+    if token is None:
+        return None
+    return {strategy.cursor: token}
+
+
 def validate_declaration(
     strategy: object,
     *,
@@ -222,7 +272,7 @@ def validate_declaration(
     """Check ``__pages__`` against the class it sits on; raise :class:`PlanError` at import."""
 
     name = operation_type.__name__
-    if not isinstance(strategy, NumberedPages | OffsetPages):
+    if not isinstance(strategy, NumberedPages | OffsetPages | CursorPages):
         raise PlanError(
             f"operation class {name}.__pages__ must be a Pages strategy, "
             f"got {type(strategy).__name__}"

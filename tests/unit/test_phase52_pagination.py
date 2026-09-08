@@ -17,7 +17,7 @@ import pytest
 from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Query, SyncApi, op
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.middleware import call_middleware
-from eazy_sdk.pagination import NumberedPages, Pages, next_changes
+from eazy_sdk.pagination import CursorPages, NumberedPages, Pages, next_changes
 from eazy_sdk.policies import CallOptions
 from tests._support.zapros_clients import client_from_httpx
 
@@ -558,3 +558,131 @@ def test_offset_declaration_errors() -> None:
         "offset",
         "limit",
     )
+
+
+# --- 52.3: Pages.cursor ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Feed:
+    items: list[Document]
+    next: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListFeed(HttpOperation[Feed]):
+    __http__ = Http.get("/feed")
+    __pages__ = Pages.cursor(
+        Feed, cursor="after", items=lambda r: r.items, next_cursor=lambda r: r.next
+    )
+
+    after: Query[Omittable[str]] = UNSET
+
+
+class FeedApi(SyncApi):
+    feed = op(ListFeed)
+
+
+class AsyncFeedApi(AsyncApi):
+    feed = op(ListFeed)
+
+
+def _feed_handler(
+    pages: dict[str | None, tuple[Sequence[str], str | None]], seen: list[httpx.Request]
+) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        ids, following = pages[request.url.params.get("after")]
+        return httpx.Response(200, json={"items": [{"id": i} for i in ids], "next": following})
+
+    return handler
+
+
+FEED: dict[str | None, tuple[Sequence[str], str | None]] = {
+    None: (("a", "b"), "c1"),
+    "c1": (("c",), "c2"),
+    "c2": ((), None),
+}
+
+
+def _feed(ids: Sequence[str], following: str | None) -> Feed:
+    return Feed(items=[Document(i) for i in ids], next=following)
+
+
+def test_cursor_stops_on_empty() -> None:
+    assert next_changes(ListFeed.__pages__, ListFeed(), _feed((), "c9"), fresh=0) is None
+
+
+def test_cursor_stops_without_next() -> None:
+    request = ListFeed(after="c1")
+    assert next_changes(ListFeed.__pages__, request, _feed(("a",), None), fresh=1) is None
+
+
+def test_cursor_advances_with_the_token() -> None:
+    changes = next_changes(ListFeed.__pages__, ListFeed(), _feed(("a",), "c1"), fresh=1)
+    assert changes == {"after": "c1"}
+
+
+def test_cursor_rules_order() -> None:
+    calls: list[str] = []
+
+    def counting_next(result: Feed) -> str | None:
+        calls.append("next")
+        return result.next
+
+    strategy = Pages.cursor(
+        Feed, cursor="after", items=lambda r: r.items, next_cursor=counting_next
+    )
+    assert next_changes(strategy, ListFeed(), _feed(("a",), "c1"), fresh=0) is None
+    assert calls == []
+    assert next_changes(strategy, ListFeed(), _feed(("a",), "c1"), fresh=1) == {"after": "c1"}
+    assert calls == ["next"]
+
+
+def test_cursor_first_page_sends_no_token_and_follows_the_chain() -> None:
+    seen: list[httpx.Request] = []
+    client = client_from_httpx(
+        httpx.Client(
+            base_url="https://api.example",
+            transport=httpx.MockTransport(_feed_handler(FEED, seen)),
+        )
+    )
+    api = FeedApi(client)
+    assert [d.id for d in api.feed.items()] == ["a", "b", "c"]
+    # The first request carries no ``after``; each page's token addresses the next one; the
+    # last token leads to an empty page, which ends the loop.
+    assert [request.url.params.get("after") for request in seen] == [None, "c1", "c2"]
+    seen.clear()
+    assert [d.id for page in api.feed.pages(after="c1") for d in page.items] == ["c"]
+    assert [request.url.params.get("after") for request in seen] == ["c1", "c2"]
+
+
+async def test_cursor_async_with_max_pages() -> None:
+    seen: list[httpx.Request] = []
+    client = client_from_httpx(
+        httpx.AsyncClient(
+            base_url="https://api.example",
+            transport=httpx.MockTransport(_feed_handler(FEED, seen)),
+        )
+    )
+    api = AsyncFeedApi(client)
+    assert [d.id async for d in api.feed.items(max_pages=1)] == ["a", "b"]
+    assert len(seen) == 1
+
+
+def test_cursor_declaration_errors() -> None:
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Typo(HttpOperation[Feed]):
+        __http__ = Http.get("/feed")
+        __pages__ = Pages.cursor(
+            Feed, cursor="afetr", items=lambda r: r.items, next_cursor=lambda r: r.next
+        )
+
+        after: Query[Omittable[str]] = UNSET
+
+    with pytest.raises(PlanError, match=r"Typo\.__pages__ names unknown field 'afetr'"):
+        op(Typo)
+    with pytest.raises(TypeError, match=r"next_cursor=\) must be callable"):
+        Pages.cursor(Feed, cursor="after", items=lambda r: r.items, next_cursor=None)  # type: ignore[arg-type]
+    assert isinstance(ListFeed.__pages__, CursorPages)
+    assert ListFeed.__pages__.fields == ("after",)
