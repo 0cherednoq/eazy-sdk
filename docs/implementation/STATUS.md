@@ -4504,25 +4504,52 @@ Per §5, both trigger conditions for 51.6 (fast-path) are now true simultaneousl
 `L200-ms` (1.19 ms) is still above 1.0 ms. 51.6 is not optional at this measurement -- it runs
 after the mandatory 51.5.
 
+### 51.5 — done (2026-09-08, commit 2e0d232)
+
+`_validate_serialization` now refuses, at operation-compile time, a non-stdlib
+`Serialization.json` backend paired with a signature that touches the JSON body -- reads it
+(`JsonProjection`, tag `"json"`) or writes into it (a `SignatureOutput` at `RequestLocation.BODY`).
+Both `JsonProjection.build` and the body rewrite after inserting a signature output
+(`_apply_body_output`) go through the module-level `dump_json`, which is always the stdlib
+encoder; with a second backend in play that could sign bytes the server never receives (plan F5).
+A component that only reads the already-produced bytes (a raw body component, a body digest) is
+unaffected.
+
+`results/05-backend-guard.json` shows every scenario "10-20% slower vs prev" -- including ones
+this step's code cannot reach, like `S1-ms`, which never touches `clients/executor.py`. That is
+machine drift between measurement sessions (the same effect as §12, D2), not a regression: judged
+by `ratio`, the only metric §2.3 uses for a decision, `BAD`/`SIGN`/`MULTI` moved by 2-3%, inside
+measurement noise. G9 holds. Plan §12, D10.
+
+**The phase stops here by owner decision, not by a threshold miss.** After 51.4, both trigger
+conditions for 51.6 (fast-path) are true (G1 not met, `L200-ms` above 1.0 ms), which per plan §5
+would make 51.6 non-optional. Presented with the full picture -- every response-parsing scenario
+4.2x-9.3x faster than the starting point, with no byte on the wire changed -- the owner decided
+the remaining gap to native decode speed does not justify a second, more complex parsing path
+(plan §12, D11). G1, G4, G5 and G8 are recorded as consciously undertaken and not closed, which
+plan §9 treats as a legitimate outcome when the reason is measured and written down. 51.7 (read
+through `Serialization.json`, F4) is a correctness step independent of 51.6 and still runs, then
+51.8 closes the phase with this result.
+
 ### Next executable increment
 
-51.5 — forbid the combination of a non-stdlib JSON backend and a signature over the body at
-operation-compile time (F5), a correctness step inside the performance phase. Then 51.6 (fast-path
-bytes -> model for msgspec/pydantic, plan §6, triggered per the above) before 51.7.
+51.7 — read the response body through `Serialization.json` rather than hardcoding stdlib in
+`ResponseContext.json` (F4), with the orjson big-integer precision warning the plan calls for.
+Then 51.8 closes the phase.
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| `uv run python experiments/perf/harness.py --step 04 --runs 5` (51.4) | Green: 18/18 rows valid. |
-| `uv run pytest -q` | Green: 1290 passed, 11 skipped. |
-| `uv run mypy` | Green: no issues in 341 source files. |
+| `uv run python experiments/perf/harness.py --step 05 --runs 5` (51.5) | Green: 18/18 rows valid. |
+| `uv run pytest -q` | Green: 1295 passed, 11 skipped. |
+| `uv run mypy` | Green: no issues in 342 source files. |
 | `uv run ruff check` | Green. |
 
 ### Remaining work / blockers
 
-51.5 through 51.8. No blockers: every finding is reproduced by scripts recorded in the audit's
-appendix B, and steps 51.1-51.5 change no bytes on the wire.
+51.7 and 51.8 (51.6 declined by owner decision, §12 D11). No blockers: every finding is reproduced
+by scripts recorded in the audit's appendix B, and steps 51.1-51.5 change no bytes on the wire.
 
 
 ## Phase 50 review remediation (2026-09-07)
