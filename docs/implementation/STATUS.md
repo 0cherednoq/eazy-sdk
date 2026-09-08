@@ -4741,3 +4741,39 @@ Speakeasy's `x-speakeasy-pagination` (roles of request fields, paths into the re
 
 None for phase 52. Recorded, not pending: `items()` elements are typed `Any` (plan D6); the
 decorator form `@api.get` has no `__pages__` (plan D7).
+
+
+## Phase 53 — response cases, arbitration order, envelope on the model (2026-09-08)
+
+### State
+
+Active. 53.1 (`when=` on every representation) is done; 53.2 (condition before status), 53.3
+(`Envelope` on the model plus `accept=`), 53.4 (`eazy_sdk.response.match`) and 53.5 (docs and the
+`kad` acceptance rewrite) are pending. Plan: `53-response-cases.md`. Origin: two issues written
+against 0.2.0a7 (`docs/eazy-sdk-v0.2.0a7-response-cases-api-issue.md`,
+`docs/eazy-sdk-v0.2.0a7-accept-post-parse-issue.md`) and three owner decisions recorded in the
+plan's §10: `Envelope` lives in `eazy_sdk.response`, `accept=` stays as a per-case override, and
+the arbitration order changes so a condition outranks status precision.
+
+### Delivered (53.1)
+
+- `when: ResponseCondition | None = None` on `Text`, `Bytes`, `Empty`, `Extracted` and `Parsed`,
+  the five representations that lacked it. `_mapping.py` needed no change: it already reads the
+  condition uniformly through `getattr(shape, "when", None)`.
+- The `(body, factory)` error entry accepts a written-out representation, not only a model class
+  (`_ERROR_BODIES`). Without it the dict form still could not give one error case both its own
+  media type and its own exception, so invariant I1 was not actually reachable. Recorded as a
+  plan refinement in §9.
+
+### Verification evidence
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed. |
+| `uv run ruff check`, `uv run mypy` (touched files) | PASS. |
+
+### Remaining work / blockers
+
+53.2 through 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
+consumer at `C:/Users/user/Desktop/parsing/kad`.
+

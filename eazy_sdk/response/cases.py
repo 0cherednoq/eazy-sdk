@@ -370,6 +370,7 @@ class Extracted[T]:
     model: type[T]
     using: ResponseExtractor
     media_type: str | None = None
+    when: ResponseCondition | None = None
 
     @property
     def extractor(self) -> ResponseExtractor:
@@ -381,6 +382,7 @@ class Parsed[T]:
     model: type[T]
     using: ResponseParser
     media_type: str | None = None
+    when: ResponseCondition | None = None
 
     @property
     def parser(self) -> ResponseParser:
@@ -390,16 +392,19 @@ class Parsed[T]:
 @dataclass(frozen=True, slots=True)
 class Text:
     media_type: str | None = "text/plain"
+    when: ResponseCondition | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Bytes:
     media_type: str | None = None
+    when: ResponseCondition | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Empty:
     media_type: str | None = None
+    when: ResponseCondition | None = None
 
 
 type ResponseRepresentation[T] = Json[T] | Html[T] | Extracted[T] | Parsed[T] | Text | Bytes | Empty

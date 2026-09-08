@@ -35,11 +35,16 @@ from .cases import (
 )
 
 _REPRESENTATIONS = (Json, Html, Extracted, Parsed, Text, Bytes, Empty)
+_ERROR_BODIES = (type, *_REPRESENTATIONS)
+"""What may stand as the body half of an ``(body, factory)`` error entry."""
 
 type Selector = int | str | StatusRange | DefaultStatus
 type Spec = type[object] | None | ResponseRepresentation[Any]
 type ErrorSpec = (
-    type[BaseException] | Spec | Error[Any] | tuple[type[object], ApiErrorFactory[Any]]
+    type[BaseException]
+    | Spec
+    | Error[Any]
+    | tuple[type[object] | ResponseRepresentation[Any], ApiErrorFactory[Any]]
 )
 type SuccessSpec = Spec | Mapping[Selector, Spec | list[Spec]] | Sequence[Success[Any]]
 type ErrorsMapping = Mapping[Selector, ErrorSpec | list[ErrorSpec]]
@@ -162,9 +167,16 @@ def error_case(
     if isinstance(spec, Error):
         return spec
     if isinstance(spec, tuple):
-        if len(spec) != 2 or not isinstance(spec[0], type) or not callable(spec[1]):
+        # The first element is the body: a model the family is read from, or a representation
+        # written out when the error needs its own media type or ``when=``.
+        if (
+            len(spec) != 2
+            or not isinstance(spec[0], _ERROR_BODIES)
+            or not callable(spec[1])
+        ):
             raise PlanError(
-                f"error entry for {status!r} in {operation_id!r} must be (Model, factory)"
+                f"error entry for {status!r} in {operation_id!r} must be (Model, factory) "
+                "or (Representation, factory)"
             )
         model, factory = spec
         shape = representation(model, models=models, error=True)
