@@ -4531,25 +4531,48 @@ plan §9 treats as a legitimate outcome when the reason is measured and written 
 through `Serialization.json`, F4) is a correctness step independent of 51.6 and still runs, then
 51.8 closes the phase with this result.
 
+### 51.7 — done (2026-09-08, commit 65510b9)
+
+`ResponseContext.json` hardcoded `json.loads` regardless of `Serialization.json` (F4). `JsonBackend`
+gains a `readable` property -- separate from `supports()`/`dumps()` -- because a backend can encode
+correctly and still decode lossily: `orjson.loads()` silently represents an integer wider than 64
+bits as a `float`. The response is parsed through the configured backend only when it declares
+`readable = True`; otherwise the stdlib decoder runs, which is exact for every integer this SDK's
+models can express. `StdlibJson.readable = True`. `guides/serialization.mdx` documents the exact
+`orjson` failure mode, with the float it would actually produce.
+
+`results/07-read-backend.json` (5 runs, 18/18 valid, clean worktree at `65510b9`): `BAD`/`SIGN`/
+`MULTI` hold 76-89% faster than baseline and inside `ratio` noise against the previous step -- G9
+holds. This step's metric is absence of regression, as the plan states; no speedup was expected or
+measured on its own, since the one backend shipped today is the same `StdlibJson` that read
+responses before.
+
+**Where the phase stands.** 51.0-51.5 and 51.7 are implemented and measured; 51.6 is not run, by
+owner decision (§12, D11); formal 51.8 closure (the full serialization guide rewrite, `docs_
+freshness.py check`, `npm run check`/`build`) was not run in this session -- the requested scope
+was 51.5 and 51.7. G1, G4, G5 and G8 remain open goals, recorded with cause per plan §9 (§12, D12).
+
 ### Next executable increment
 
-51.7 — read the response body through `Serialization.json` rather than hardcoding stdlib in
-`ResponseContext.json` (F4), with the orjson big-integer precision warning the plan calls for.
-Then 51.8 closes the phase.
+51.8, if the owner wants the phase formally closed: the full guide rewrite (library-choice
+recommendations after optimization, the `eazy-sdk-adaptix` note, what `Serialization.json` does,
+the orjson warning already added), `docs_freshness.py check`, and the docs-site `npm run check`/
+`build` gates. Optional otherwise -- the phase's runtime work is done and measured either way.
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| `uv run python experiments/perf/harness.py --step 05 --runs 5` (51.5) | Green: 18/18 rows valid. |
-| `uv run pytest -q` | Green: 1295 passed, 11 skipped. |
-| `uv run mypy` | Green: no issues in 342 source files. |
+| `uv run python experiments/perf/harness.py --step 07 --runs 5` (51.7) | Green: 18/18 rows valid. |
+| `uv run pytest -q` | Green: 1298 passed, 11 skipped. |
+| `uv run mypy` | Green: no issues in 343 source files. |
 | `uv run ruff check` | Green. |
 
 ### Remaining work / blockers
 
-51.7 and 51.8 (51.6 declined by owner decision, §12 D11). No blockers: every finding is reproduced
-by scripts recorded in the audit's appendix B, and steps 51.1-51.5 change no bytes on the wire.
+51.8, only if the owner wants formal closure (51.6 declined by owner decision, §12 D11). No
+blockers: every finding is reproduced by scripts recorded in the audit's appendix B, and steps
+51.1-51.5 and 51.7 change no bytes on the wire.
 
 
 ## Phase 50 review remediation (2026-09-07)
