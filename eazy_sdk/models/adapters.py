@@ -112,6 +112,30 @@ def _new_field_cache() -> FieldCache | None:
     return WeakKeyDictionary()
 
 
+type PlannedLoader = Callable[[object, "ModelAdapterRegistry"], object]
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedField:
+    """One field of a load plan: a name, its wire name, and a loader chosen once."""
+
+    name: str
+    wire_name: str
+    load: PlannedLoader
+    required: bool
+    default: object = MISSING
+
+
+type LoadPlan = tuple[PlannedField, ...]
+type LoadPlanCache = WeakKeyDictionary[type, LoadPlan]
+
+
+def _new_load_plan_cache() -> LoadPlanCache | None:
+    if os.environ.get("EAZY_SDK_NO_FIELD_CACHE") == "1":
+        return None
+    return WeakKeyDictionary()
+
+
 def _caches_fields(model: type) -> bool:
     """Whether this model's fields are settled enough to remember.
 
@@ -137,6 +161,10 @@ class ModelAdapterRegistry:
     in a plugin -- can still be collected; a registry must not be the reason a class outlives its
     module.
     """
+    _load_plans: LoadPlanCache | None = dataclasses.field(
+        default_factory=_new_load_plan_cache, compare=False, repr=False, hash=False
+    )
+    """Load plans already built, keyed by the model class. Same exclusions as ``_fields``."""
 
     def with_adapter(self, adapter: ModelAdapter, *, first: bool = True) -> ModelAdapterRegistry:
         if any(item.name == adapter.name for item in self.adapters):
@@ -193,8 +221,33 @@ class ModelAdapterRegistry:
                 cache[base] = read
         return read
 
+    def load_plan(self, annotation: type, *, build: Callable[[], LoadPlan]) -> LoadPlan:
+        """A model's load plan -- one loader chosen once per field, from its annotation.
+
+        The dataclass and TypedDict adapters call this instead of reading their own fields per
+        object: resolving the class's annotations and, for every field, walking the same
+        union/list/tuple/dict/scalar dispatch that :meth:`_load` walks, are both facts about the
+        class, not about any one object of it. Same rules as :meth:`fields` (plan §3, P4-P7):
+        weak keys, no caching while forward references are unresolved, one switch retires both.
+        """
+
+        cache = self._load_plans
+        if cache is None or not isinstance(annotation, type):
+            return build()
+        try:
+            remembered = cache.get(annotation)
+        except TypeError:
+            return build()
+        if remembered is not None:
+            return remembered
+        plan = build()
+        if _caches_fields(annotation):
+            with suppress(TypeError):
+                cache[annotation] = plan
+        return plan
+
     def clear_field_cache(self) -> None:
-        """Forget every field list read so far.
+        """Forget every field list and load plan read so far.
 
         Nothing in the SDK needs this: replacing an adapter builds a new registry, so there is no
         stale entry to invalidate. It exists for the case the cache cannot see -- a class edited
@@ -203,6 +256,8 @@ class ModelAdapterRegistry:
 
         if self._fields is not None:
             self._fields.clear()
+        if self._load_plans is not None:
+            self._load_plans.clear()
 
     def dump(
         self,
@@ -386,6 +441,127 @@ class ModelAdapterRegistry:
         return selected.load(annotation, value, registry=self)
 
 
+def _compile_loader(annotation: object, registry: ModelAdapterRegistry) -> PlannedLoader:
+    """Choose, once, the branch of :meth:`ModelAdapterRegistry._load` a field's annotation takes.
+
+    This mirrors ``_load`` branch for branch, using the same precedence, but resolves
+    ``unwrap_annotated``/``get_origin``/``get_args`` and the adapter lookup a single time instead
+    of on every object a field is read from. Nested annotations (a union candidate, a list's item
+    type, a dict's value type) are *not* compiled eagerly -- that would recurse forever on a
+    self-referential model -- they go back through ``registry._load``, which is where the next
+    optimization (caching adapter selection, plan §6, 51.4) belongs.
+    """
+
+    annotation, _ = unwrap_annotated(unroll_alias(annotation))
+    if annotation in {Any, object}:
+        return lambda value, reg: value
+    if annotation in {dict, list, tuple, set, frozenset}:
+        ctor = cast(Callable[[object], object], annotation)
+
+        def _bare_container(value: object, reg: ModelAdapterRegistry) -> object:
+            return value if isinstance(value, annotation) else ctor(value)
+
+        return _bare_container
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in {types.UnionType, Union}:
+        candidates = tuple(candidate for candidate in args if candidate is not type(None))
+        has_none = type(None) in args
+
+        def _union(value: object, reg: ModelAdapterRegistry) -> object:
+            if value is None and has_none:
+                return None
+            failures: list[Exception] = []
+            for candidate in candidates:
+                try:
+                    return reg._load(candidate, value)
+                except (TypeError, ValueError) as exc:
+                    failures.append(exc)
+            raise ModelAdapterError(f"value does not match {_type_name(annotation)}") from (
+                failures[-1] if failures else None
+            )
+
+        return _union
+    if origin is list:
+        item_type = args[0] if args else object
+
+        def _list(value: object, reg: ModelAdapterRegistry) -> object:
+            if not _is_sequence(value):
+                raise ModelAdapterError(f"expected list, got {type(value).__name__}")
+            return [reg._load(item_type, item) for item in cast(Sequence[object], value)]
+
+        return _list
+    if origin is tuple:
+
+        def _tuple(value: object, reg: ModelAdapterRegistry) -> object:
+            if not _is_sequence(value):
+                raise ModelAdapterError(f"expected tuple, got {type(value).__name__}")
+            values = cast(Sequence[object], value)
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(reg._load(args[0], item) for item in values)
+            if args and len(args) != len(values):
+                raise ModelAdapterError(f"expected {len(args)} tuple items, got {len(values)}")
+            return tuple(
+                reg._load(item_type, item)
+                for item_type, item in zip(args or (object,) * len(values), values, strict=True)
+            )
+
+        return _tuple
+    if origin is dict:
+        key_type, item_type = args or (object, object)
+
+        def _dict(value: object, reg: ModelAdapterRegistry) -> object:
+            if not isinstance(value, Mapping):
+                raise ModelAdapterError(f"expected mapping, got {type(value).__name__}")
+            return {
+                reg._load(key_type, key): reg._load(item_type, item)
+                for key, item in value.items()
+            }
+
+        return _dict
+    if annotation is type(None):
+
+        def _none(value: object, reg: ModelAdapterRegistry) -> object:
+            if value is not None:
+                raise ModelAdapterError(f"expected None, got {type(value).__name__}")
+            return None
+
+        return _none
+    if is_typeddict(annotation):
+        selected_typed_dict = registry.adapter_for_type(annotation)
+
+        def _typed_dict(value: object, reg: ModelAdapterRegistry) -> object:
+            return selected_typed_dict.load(cast(type[Any], annotation), value, registry=reg)
+
+        return _typed_dict
+    if not isinstance(annotation, type):
+        raise UnsupportedModelTypeError(f"no model adapter supports {_type_name(annotation)}")
+    if annotation in {str, int, float, bool, bytes, Decimal, date, datetime}:
+
+        def _scalar(value: object, reg: ModelAdapterRegistry) -> object:
+            if isinstance(value, annotation):
+                return value
+            return _load_scalar(cast(type[object], annotation), value)
+
+        return _scalar
+    if issubclass(annotation, Enum):
+
+        def _enum(value: object, reg: ModelAdapterRegistry) -> object:
+            if isinstance(value, annotation):
+                return value
+            return annotation(value)
+
+        return _enum
+    selected_model = registry.adapter_for_type(annotation)
+
+    def _model(value: object, reg: ModelAdapterRegistry) -> object:
+        if isinstance(value, annotation):
+            return value
+        return selected_model.load(annotation, value, registry=reg)
+
+    return _model
+
+
 @dataclass(frozen=True, slots=True)
 class DataclassModelAdapter:
     name: str = "dataclass"
@@ -442,15 +618,30 @@ class DataclassModelAdapter:
             raise ModelAdapterError(
                 f"expected mapping for {annotation.__name__}, got {type(value).__name__}"
             )
+        plan = registry.load_plan(
+            annotation, build=lambda: self._build_load_plan(annotation, registry)
+        )
         kwargs: dict[str, object] = {}
-        for field in self.fields(annotation):
+        for field in plan:
             if field.wire_name in value:
-                kwargs[field.name] = registry._load(field.annotation, value[field.wire_name])
+                kwargs[field.name] = field.load(value[field.wire_name], registry)
             elif field.required:
                 raise ModelAdapterError(
                     f"missing required field {annotation.__name__}.{field.name}"
                 )
         return annotation(**kwargs)
+
+    def _build_load_plan(self, annotation: type, registry: ModelAdapterRegistry) -> LoadPlan:
+        return tuple(
+            PlannedField(
+                field.name,
+                field.wire_name,
+                _compile_loader(field.annotation, registry),
+                field.required,
+                field.default,
+            )
+            for field in registry.fields(annotation)
+        )
 
     def frozen(self, annotation: object) -> bool | None:
         params = getattr(annotation, "__dataclass_params__", None)
@@ -657,22 +848,36 @@ class TypedDictModelAdapter:
             raise ModelAdapterError(
                 f"expected mapping for {annotation.__name__}, got {type(value).__name__}"
             )
-        fields = self.fields(annotation)
-        known = {field.name for field in fields}
+        plan = registry.load_plan(
+            annotation, build=lambda: self._build_load_plan(annotation, registry)
+        )
+        known = {field.name for field in plan}
         unknown = set(value) - known
         if unknown:
             raise ModelAdapterError(
                 f"unknown fields for {annotation.__name__}: {sorted(unknown)!r}"
             )
         result: dict[str, object] = {}
-        for field in fields:
+        for field in plan:
             if field.name in value:
-                result[field.name] = registry._load(field.annotation, value[field.name])
+                result[field.name] = field.load(value[field.name], registry)
             elif field.required:
                 raise ModelAdapterError(
                     f"missing required field {annotation.__name__}.{field.name}"
                 )
         return cast(T, result)
+
+    def _build_load_plan(self, annotation: type, registry: ModelAdapterRegistry) -> LoadPlan:
+        return tuple(
+            PlannedField(
+                field.name,
+                field.wire_name,
+                _compile_loader(field.annotation, registry),
+                field.required,
+                field.default,
+            )
+            for field in registry.fields(annotation)
+        )
 
     def frozen(self, annotation: object) -> bool | None:
         return None
