@@ -4747,9 +4747,9 @@ decorator form `@api.get` has no `__pages__` (plan D7).
 
 ### State
 
-Active. 53.1 (`when=` on every representation) and 53.2 (criterion before status) are done; 53.3
-(`Envelope` on the model plus `accept=`), 53.4 (`eazy_sdk.response.match`) and 53.5 (docs and the
-`kad` acceptance rewrite) are pending. Plan: `53-response-cases.md`. Origin: two issues written
+Active. 53.1 (`when=` on every representation), 53.2 (criterion before status) and 53.3
+(`Envelope` on the model plus `accept=`) are done; 53.4 (`eazy_sdk.response.match`) and 53.5 (docs
+and the `kad` acceptance rewrite) are pending. Plan: `53-response-cases.md`. Origin: two issues written
 against 0.2.0a7 (`docs/eazy-sdk-v0.2.0a7-response-cases-api-issue.md`,
 `docs/eazy-sdk-v0.2.0a7-accept-post-parse-issue.md`) and three owner decisions recorded in the
 plan's §10: `Envelope` lives in `eazy_sdk.response`, `accept=` stays as a per-case override, and
@@ -4776,16 +4776,35 @@ the arbitration order changes so a condition outranks status precision.
 - Breaking, recorded in CHANGELOG: an operation that owns a status against a conditional service
   case must now state its own `when=`, which 53.1 made possible for every representation.
 
+### Delivered (53.3)
+
+- `Envelope[TEnvelope = Any, TPayload = Any]` in `eazy_sdk.response`, read off a model class as
+  `__envelope__` by `envelope_of`. `_decide_parsed` applies the criterion and then the projection
+  at the one point in `Responses.inspect` where a model value exists: a criterion that says no
+  returns `NoMatch` so arbitration carries on, and an exception from an author callable becomes
+  `Malformed` rather than escaping the call.
+- `succeeds` is inverted by the kind of case, `accept=` is not. `payload` runs on success cases
+  only, so an `ApiError` still receives the envelope carrying its message.
+- `_criterion_of` now covers all three spellings, so an envelope case ranks as conditional.
+- `_representation_result_type` reads the annotated return of `payload` when there is one, through
+  the new `envelope_payload_type`.
+- Both type parameters default to `Any`, decided by measurement: without a default, strict mypy
+  demands an annotation on every declaration, and the model being declared cannot yet be named
+  inside its own class body; with a default of `object`, a lambda's `r.field` stops type-checking.
+  With `Any`, a lambda needs no annotation and an annotated named function is still inferred and
+  checked. Recorded in the plan's §9.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed after 53.1; 15 after 53.2. |
-| `uv run pytest -q tests/unit/test_phase50_responses.py tests/rewrite/test_phase05_responses.py` | PASS: 39 passed, unchanged by the new order. |
+| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed after 53.1; 15 after 53.2; 28 after 53.3, including one test that runs the envelope through dataclass, Pydantic, msgspec and TypedDict. |
+| `uv run pytest -q tests/unit tests/rewrite --timeout=120` | PASS: 870 passed. |
+| `uv run pytest -q plugins/openapi/tests --timeout=300` | PASS: 55 passed. `test_generated_session_factory_hides_runtime_plumbing_and_executes` failed once under a five-suite run and passed alone and in its own suite; this is the generated-SDK subprocess flake already recorded for phases 50 and 52, not a regression. |
 | `uv run ruff check`, `uv run mypy` (touched files) | PASS. |
 
 ### Remaining work / blockers
 
-53.3 through 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
+53.4 and 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
 consumer at `C:/Users/user/Desktop/parsing/kad`.
 

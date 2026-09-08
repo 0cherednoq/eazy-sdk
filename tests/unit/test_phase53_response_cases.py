@@ -8,21 +8,24 @@ service. Nothing about that should force every operation to repeat the negation 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, ClassVar, TypedDict, cast
 
 import httpx
 import pytest
 
 from eazy_sdk import Client, Http, HttpOperation, SyncApi, op
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.response import (
     ApiError,
     Bytes,
     Empty,
+    Envelope,
     Error,
     Extracted,
     Html,
     Json,
+    MalformedResponseError,
     Parsed,
     ResponseContext,
     ResponseExtractor,
@@ -30,7 +33,12 @@ from eazy_sdk.response import (
     Success,
     Text,
 )
-from eazy_sdk.response.cases import ResponseParser, _specificity
+from eazy_sdk.response.cases import (
+    ResponseParser,
+    _specificity,
+    envelope_of,
+    envelope_payload_type,
+)
 
 BASE = "https://api.example"
 
@@ -184,8 +192,6 @@ def test_representation_and_factory_is_a_valid_error_entry() -> None:
 
 
 def test_error_entry_still_rejects_a_malformed_pair() -> None:
-    from eazy_sdk.core.errors import PlanError
-
     @dataclass(frozen=True, slots=True, kw_only=True)
     class Fetch(HttpOperation[bytes]):
         __http__ = Http.get(
@@ -358,3 +364,279 @@ def test_an_operation_overrides_a_service_condition_with_its_own() -> None:
 
     with _serve(CHALLENGE) as client:
         assert Service(client).download() == CHALLENGE
+
+
+# --- 53.3: the envelope is declared on the model ----------------------------------------------
+
+
+@dataclass(frozen=True)
+class Page:
+    """The payload a caller actually wants; the envelope around it is a transport detail."""
+
+    number: int
+
+
+class RequestFailed(ApiError[Any]):
+    """The business failure a 200 can carry, now an ordinary error case."""
+
+
+@dataclass(frozen=True)
+class DataclassEnvelope:
+    Result: Page | None
+    Success: bool
+    Message: str | None = None
+
+    __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=lambda r: r.Result)
+
+
+ENVELOPE_OK = b'{"Result": {"number": 7}, "Success": true, "Message": null}'
+ENVELOPE_FAILED = b'{"Result": null, "Success": false, "Message": "not found"}'
+
+
+def _envelope_service(model: Any) -> Any:
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Page]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(model)},
+            errors={200: (Json(model), RequestFailed)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    return Service
+
+
+def test_envelope_splits_success_and_failure_on_one_status() -> None:
+    """One predicate on the model declares both halves of a 200-with-business-status service."""
+
+    service = _envelope_service(DataclassEnvelope)
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert service(client).fetch() == Page(number=7)
+    with (
+        _serve(ENVELOPE_FAILED, media="application/json") as client,
+        pytest.raises(RequestFailed) as raised,
+    ):
+        service(client).fetch()
+    assert raised.value.error.Message == "not found"
+
+
+def test_envelope_payload_becomes_the_operation_result() -> None:
+    """The error keeps the whole envelope; only the success is projected to the payload."""
+
+    service = _envelope_service(DataclassEnvelope)
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        result = service(client).fetch()
+    assert isinstance(result, Page)
+    assert not hasattr(result, "Success")
+
+
+def test_envelope_works_on_every_model_backend() -> None:
+    """I9: a class attribute is the one declaration form all four libraries support."""
+
+    import msgspec
+    from pydantic import BaseModel
+
+    class PydanticEnvelope(BaseModel):
+        Result: Page | None
+        Success: bool
+        Message: str | None = None
+
+        __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=lambda r: r.Result)
+
+    class MsgspecEnvelope(msgspec.Struct):
+        Result: Page | None
+        Success: bool
+        Message: str | None = None
+
+        __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=lambda r: r.Result)
+
+    class TypedDictEnvelope(TypedDict):
+        Result: Page | None
+        Success: bool
+        Message: str | None
+
+        # A TypedDict value is a plain dict, so the rule reads keys, not attributes. That is
+        # exactly why the declaration is an attribute and never a method.
+        __envelope__ = Envelope(  # type: ignore[misc]
+            succeeds=lambda r: r["Success"],
+            payload=lambda r: r["Result"],
+        )
+
+    for model in (DataclassEnvelope, PydanticEnvelope, MsgspecEnvelope, TypedDictEnvelope):
+        service = _envelope_service(model)
+        with _serve(ENVELOPE_OK, media="application/json") as client:
+            assert service(client).fetch() == Page(number=7), model
+        with (
+            _serve(ENVELOPE_FAILED, media="application/json") as client,
+            pytest.raises(RequestFailed),
+        ):
+            service(client).fetch()
+
+
+def test_envelope_inherited_from_a_base_class() -> None:
+    """A service declares the rule once; every envelope of that service inherits it."""
+
+    @dataclass(frozen=True)
+    class Base:
+        __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=lambda r: r.Result)
+
+    @dataclass(frozen=True)
+    class Inherited(Base):
+        Result: Page | None
+        Success: bool
+        Message: str | None = None
+
+    service = _envelope_service(Inherited)
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert service(client).fetch() == Page(number=7)
+
+
+@dataclass(frozen=True)
+class StatusOnly:
+    """An envelope that says when it succeeded but names no payload."""
+
+    Result: Page | None
+    Success: bool
+    Message: str | None = None
+
+    __envelope__ = Envelope(succeeds=lambda r: r.Success)
+
+
+def test_accept_overrides_the_model_rule() -> None:
+    """``accept=`` answers a different question, so it is read as written and wins."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[StatusOnly]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(StatusOnly, accept=lambda r: r.Message == "not found")},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    # The envelope calls this a failure; ``accept=`` says this case wants it anyway.
+    with _serve(ENVELOPE_FAILED, media="application/json") as client:
+        assert Service(client).fetch().Message == "not found"
+
+
+def test_payload_applies_whichever_criterion_decided() -> None:
+    """``accept=`` replaces the criterion only; where the payload sits is still the model's."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Page]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(DataclassEnvelope, accept=lambda _r: True)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert Service(client).fetch() == Page(number=7)
+
+
+def test_accept_is_not_inverted_on_an_error_case() -> None:
+    """``accept=`` on an error case matches when it returns True, never when it returns False."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Page]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(DataclassEnvelope, accept=lambda r: r.Success)},
+            errors={200: (Json(DataclassEnvelope, accept=lambda r: not r.Success), RequestFailed)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with (
+        _serve(ENVELOPE_FAILED, media="application/json") as client,
+        pytest.raises(RequestFailed),
+    ):
+        Service(client).fetch()
+
+
+def test_exception_in_succeeds_is_malformed() -> None:
+    """A broken author callable meeting a real body is Malformed, not a crashed call."""
+
+    def explode(_envelope: object) -> bool:
+        raise KeyError("Succes")
+
+    @dataclass(frozen=True)
+    class Broken:
+        Result: Page | None
+        Success: bool
+        Message: str | None = None
+
+        __envelope__ = Envelope(succeeds=explode)
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Broken]):
+        __http__ = Http.get("/page", success={200: Json(Broken)})
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with (
+        _serve(ENVELOPE_OK, media="application/json") as client,
+        pytest.raises(MalformedResponseError),
+    ):
+        Service(client).fetch()
+
+
+def test_a_case_with_an_envelope_ranks_as_conditional() -> None:
+    """I3: all three spellings of a criterion carry the same rank."""
+
+    plain: Success[Any] = Success(200, Json(Page))
+    with_envelope: Success[Any] = Success(200, Json(DataclassEnvelope))
+    with_accept: Success[Any] = Success(200, Json(Page, accept=lambda _value: True))
+
+    assert _specificity(plain)[0] == 0
+    assert _specificity(with_envelope)[0] == 1
+    assert _specificity(with_accept)[0] == 1
+
+
+def test_envelope_must_be_an_envelope() -> None:
+    @dataclass(frozen=True)
+    class Wrong:
+        Result: Page | None
+        Success: bool
+
+        __envelope__: ClassVar[Any] = {"succeeds": "yes"}
+
+    with pytest.raises(PlanError, match=r"Wrong\.__envelope__ must be an Envelope, got dict"):
+        envelope_of(Wrong)
+
+
+def test_envelope_declares_at_least_one_rule() -> None:
+    with pytest.raises(ValueError, match="declares neither succeeds= nor payload="):
+        Envelope()
+
+
+def test_envelope_rules_must_be_callable() -> None:
+    with pytest.raises(TypeError, match=r"Envelope\(succeeds=\) must be callable"):
+        Envelope(succeeds=cast(Any, "yes"))
+    with pytest.raises(TypeError, match=r"Envelope\(payload=\) must be callable"):
+        Envelope(payload=cast(Any, "there"))
+
+
+def test_annotated_payload_declares_the_result_type() -> None:
+    """An annotated projection states the result type; an unannotated lambda states nothing."""
+
+    def to_page(envelope: DataclassEnvelope) -> Page | None:
+        return envelope.Result
+
+    @dataclass(frozen=True)
+    class WithAnnotation:
+        Result: Page | None
+        Success: bool
+
+        __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=to_page)
+
+    assert envelope_payload_type(WithAnnotation) == (Page | None)
+    assert envelope_payload_type(DataclassEnvelope) is None
+    assert envelope_payload_type(Page) is None

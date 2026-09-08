@@ -22,6 +22,19 @@ Added:
   field of a case except `precedence`, which authors never write.
 - An `errors=` entry pairs a factory with a written-out representation, not only with a model
   class: `errors={200: (Text(media_type=None, when=is_challenge), ChallengeRequired)}`.
+- `Envelope` in `eazy_sdk.response`: a model declares how its service envelope reads, as the class
+  attribute `__envelope__ = Envelope(succeeds=..., payload=...)`. `succeeds` answers whether the
+  envelope is a success, so a `Success` case matches when it says yes and an `Error` case when it
+  says no; one predicate declares both halves of a service that reports business failure inside a
+  200, and the failure becomes an ordinary `ApiError` instead of a hand-written check downstream.
+  `payload` projects the successful value, so the operation returns the payload while the envelope
+  stays a detail of the declaration; an error case keeps the whole envelope, where its message
+  lives. The declaration is a class attribute holding plain callables rather than a method,
+  because a `TypedDict` value is a plain `dict` and carries no methods; all four model libraries
+  are covered by one test.
+- `accept=` on `Json`, `Html`, `Extracted` and `Parsed`: decides on the parsed value and overrides
+  the model's own rule, for a model you cannot edit. It answers "does this case match", so unlike
+  `succeeds` it is read as written on both success and error cases.
 
 ## 0.2.0a7 - 2026-09-08
 

@@ -11,7 +11,7 @@ from functools import cached_property, reduce
 from http.cookies import SimpleCookie
 from typing import Protocol, cast, runtime_checkable
 
-from eazy_sdk.core.errors import EazySdkError
+from eazy_sdk.core.errors import EazySdkError, PlanError
 from eazy_sdk.core.kernel import (
     AmbiguousCases,
     MalformedCase,
@@ -335,6 +335,56 @@ class _BoundHtmlExtractor:
 HTML_EXTRACTOR = HtmlExtractor()
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Envelope[TEnvelope = typing.Any, TPayload = typing.Any]:
+    """How to read a service envelope: whether it succeeded, and where its payload sits.
+
+    Declared on the model as the class attribute ``__envelope__``, never as a method: a
+    ``TypedDict`` value is a plain ``dict`` and carries no methods, so an attribute is the only
+    form every model library supports. It holds ordinary callables, so the rule can be as
+    involved as the service is.
+
+    ``succeeds`` answers "is this envelope a success". A :class:`Success` case matches when it
+    says yes, an :class:`Error` case when it says no, so one predicate declares both halves of
+    a service that reports business failure inside a 200.
+
+    ``payload`` is applied to the successful value only. An error case keeps the whole envelope,
+    because the message and the code an ``ApiError`` reports live there and nowhere else.
+
+    Both parameters default to ``Any`` so a rule written as a lambda needs no annotation at the
+    declaration site, where the model being declared cannot yet be named. A rule written as an
+    annotated function is inferred and checked as usual.
+    """
+
+    succeeds: Callable[[TEnvelope], bool] | None = None
+    payload: Callable[[TEnvelope], TPayload] | None = None
+
+    def __post_init__(self) -> None:
+        if self.succeeds is None and self.payload is None:
+            raise ValueError("Envelope() declares neither succeeds= nor payload=")
+        if self.succeeds is not None and not callable(self.succeeds):
+            raise TypeError("Envelope(succeeds=) must be callable")
+        if self.payload is not None and not callable(self.payload):
+            raise TypeError("Envelope(payload=) must be callable")
+
+
+def envelope_of(model: object) -> Envelope[object, object] | None:
+    """The ``__envelope__`` a model class declares, or ``None`` when it declares none.
+
+    An ordinary attribute lookup, so a service declares the rule once on a base class and every
+    envelope inherits it. Cheap enough to do per response: this walks the MRO in C, unlike the
+    annotation resolution phase 51 had to cache.
+    """
+
+    declared = getattr(model, "__envelope__", None)
+    if declared is None:
+        return None
+    if not isinstance(declared, Envelope):
+        name = getattr(model, "__name__", repr(model))
+        raise PlanError(f"{name}.__envelope__ must be an Envelope, got {type(declared).__name__}")
+    return cast(Envelope[object, object], declared)
+
+
 @dataclass(frozen=True, slots=True)
 class Json[T]:
     model: type[T] | None = None
@@ -342,6 +392,8 @@ class Json[T]:
     extractor: ResponseExtractor = JSON_EXTRACTOR
     status: StatusSelector = 200
     when: ResponseCondition | None = None
+    accept: Callable[[T], bool] | None = None
+    """Decides on the parsed value, overriding the model's own ``__envelope__`` when given."""
     unwrap: str | None = None
     """A JSON pointer (RFC 6901) to the payload inside a service envelope, applied first."""
 
@@ -363,6 +415,7 @@ class Html[T]:
     extractor: ResponseExtractor = HTML_EXTRACTOR
     status: StatusSelector = 200
     when: ResponseCondition | None = None
+    accept: Callable[[T], bool] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,6 +424,7 @@ class Extracted[T]:
     using: ResponseExtractor
     media_type: str | None = None
     when: ResponseCondition | None = None
+    accept: Callable[[T], bool] | None = None
 
     @property
     def extractor(self) -> ResponseExtractor:
@@ -383,6 +437,7 @@ class Parsed[T]:
     using: ResponseParser
     media_type: str | None = None
     when: ResponseCondition | None = None
+    accept: Callable[[T], bool] | None = None
 
     @property
     def parser(self) -> ResponseParser:
@@ -735,7 +790,11 @@ class Responses[T]:
                 result = parser_session.try_parse(model)
                 decoder = parser
             if isinstance(result, ParsedValue):
-                matches.append((case, result.value))
+                decided = _decide_parsed(case, representation, result.value)
+                if isinstance(decided, ParsedValue):
+                    matches.append((case, decided.value))
+                elif isinstance(decided, Malformed):
+                    malformed.append((case, Malformed(decided.cause, decoder)))
             elif isinstance(result, Malformed):
                 malformed.append((case, Malformed(result.cause, decoder)))
         arbitration = arbitrate_cases(_most_specific(matches), malformed)
@@ -763,6 +822,39 @@ class Responses[T]:
         )
 
 
+def _decide_parsed(
+    case: ResponseCase[object],
+    representation: ResponseRepresentation[object],
+    value: object,
+) -> ParseAttempt[object]:
+    """Apply what only the parsed value can answer: the criterion, then the projection.
+
+    ``NoMatch`` means the case did not claim this response after all, so arbitration carries on
+    with the other candidates. An exception raised by the author's own callable is ``Malformed``:
+    it is a broken declaration meeting a real body, not a reason to abort the call.
+    """
+
+    accept = getattr(representation, "accept", None)
+    envelope = envelope_of(getattr(representation, "model", None))
+    try:
+        if accept is not None:
+            # ``accept`` answers "does this case match", so it is read as written for both kinds.
+            if not accept(value):
+                return NoMatch()
+        # ``succeeds`` answers "is the envelope a success", so the error case wants the no.
+        elif (
+            envelope is not None
+            and envelope.succeeds is not None
+            and bool(envelope.succeeds(value)) != isinstance(case, Success)
+        ):
+            return NoMatch()
+        if envelope is not None and envelope.payload is not None and isinstance(case, Success):
+            return ParsedValue(envelope.payload(value))
+    except Exception as exc:  # any failure of an author callable is Malformed, not a crash
+        return Malformed(exc)
+    return ParsedValue(value)
+
+
 def _representation_result_type(
     representation: ResponseRepresentation[object],
 ) -> object | None:
@@ -772,7 +864,25 @@ def _representation_result_type(
         return bytes
     if isinstance(representation, Empty):
         return type(None)
-    return representation.model
+    payload_type = envelope_payload_type(representation.model)
+    return representation.model if payload_type is None else payload_type
+
+
+def envelope_payload_type(model: object) -> object | None:
+    """What ``__envelope__.payload`` is annotated to return, when it is annotated at all.
+
+    An unannotated lambda says nothing, and then the operation's own ``HttpOperation[T]`` stays
+    the only statement of the result type.
+    """
+
+    envelope = envelope_of(model)
+    if envelope is None or envelope.payload is None:
+        return None
+    try:
+        hints = typing.get_type_hints(envelope.payload)
+    except Exception:  # an unresolvable annotation is simply no statement about the type
+        return None
+    return cast(object | None, hints.get("return"))
 
 
 DOCUMENT_MEDIA_TYPES = ("text/html", "application/xhtml+xml")
@@ -837,11 +947,19 @@ def _criterion_of(case: ResponseCase[object]) -> object | None:
     """What the case states beyond status and media, or ``None`` when it states nothing.
 
     One rank for every kind of criterion: a case either narrows the responses it claims or it
-    does not. Today that is ``when=``, read from the case; phase 53.3 adds the two that are
-    decided after parsing.
+    does not. Three spellings reach here — ``when=`` on the case, decided before parsing, and
+    ``accept=`` or the model's ``__envelope__``, decided after it.
     """
 
-    return case.condition
+    if case.condition is not None:
+        return case.condition
+    accept: object | None = getattr(case.response, "accept", None)
+    if accept is not None:
+        return accept
+    envelope = envelope_of(getattr(case.response, "model", None))
+    if envelope is not None and envelope.succeeds is not None:
+        return envelope.succeeds
+    return None
 
 
 def _status_rank(selector: StatusSelector) -> int:
