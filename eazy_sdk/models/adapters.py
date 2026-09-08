@@ -136,6 +136,24 @@ def _new_load_plan_cache() -> LoadPlanCache | None:
     return WeakKeyDictionary()
 
 
+type AdapterCache = WeakKeyDictionary[type, "ModelAdapter"]
+
+
+def _new_adapter_cache() -> AdapterCache | None:
+    """A per-registry adapter-selection cache, one for types and a separate one for values.
+
+    Caching a value's adapter by ``type(value)`` rather than the value itself assumes every
+    adapter's ``supports_value`` depends only on the value's type -- true of the four adapters
+    this module ships (an ``isinstance``/``is_dataclass`` check apiece) and a reasonable contract
+    for a third-party one to keep. An adapter that truly needs to look inside the value stays
+    correct by being looked up with an explicit name, which bypasses both caches.
+    """
+
+    if os.environ.get("EAZY_SDK_NO_FIELD_CACHE") == "1":
+        return None
+    return WeakKeyDictionary()
+
+
 def _caches_fields(model: type) -> bool:
     """Whether this model's fields are settled enough to remember.
 
@@ -165,6 +183,14 @@ class ModelAdapterRegistry:
         default_factory=_new_load_plan_cache, compare=False, repr=False, hash=False
     )
     """Load plans already built, keyed by the model class. Same exclusions as ``_fields``."""
+    _adapters_by_type: AdapterCache | None = dataclasses.field(
+        default_factory=_new_adapter_cache, compare=False, repr=False, hash=False
+    )
+    """Which adapter answered ``supports_type``, keyed by the annotation. Same exclusions."""
+    _adapters_by_value: AdapterCache | None = dataclasses.field(
+        default_factory=_new_adapter_cache, compare=False, repr=False, hash=False
+    )
+    """Which adapter answered ``supports_value``, keyed by ``type(value)``. Same exclusions."""
 
     def with_adapter(self, adapter: ModelAdapter, *, first: bool = True) -> ModelAdapterRegistry:
         if any(item.name == adapter.name for item in self.adapters):
@@ -247,7 +273,7 @@ class ModelAdapterRegistry:
         return plan
 
     def clear_field_cache(self) -> None:
-        """Forget every field list and load plan read so far.
+        """Forget every field list, load plan and adapter selection read so far.
 
         Nothing in the SDK needs this: replacing an adapter builds a new registry, so there is no
         stale entry to invalidate. It exists for the case the cache cannot see -- a class edited
@@ -258,6 +284,10 @@ class ModelAdapterRegistry:
             self._fields.clear()
         if self._load_plans is not None:
             self._load_plans.clear()
+        if self._adapters_by_type is not None:
+            self._adapters_by_type.clear()
+        if self._adapters_by_value is not None:
+            self._adapters_by_value.clear()
 
     def dump(
         self,
@@ -325,6 +355,19 @@ class ModelAdapterRegistry:
                         )
                     return adapter
             raise UnsupportedModelTypeError(f"unknown model adapter: {name!r}")
+        # Naming no adapter is the common case, and the one worth remembering: which adapter
+        # answers for a type or a value's type is a fact about that class, resolved by scanning
+        # every adapter today so it need not be scanned again tomorrow (plan §1, F6).
+        cache = self._adapters_by_value if by_value else self._adapters_by_type
+        key = type(subject) if by_value else subject
+        if cache is not None and isinstance(key, type):
+            try:
+                remembered = cache.get(key)
+            except TypeError:
+                remembered = None
+            else:
+                if remembered is not None:
+                    return remembered
         matches = tuple(
             adapter
             for adapter in self.adapters
@@ -337,7 +380,11 @@ class ModelAdapterRegistry:
             raise AmbiguousModelAdapterError(
                 f"multiple model adapters support {_type_name(subject)}: {names}"
             )
-        return matches[0]
+        selected = matches[0]
+        if cache is not None and isinstance(key, type):
+            with suppress(TypeError):
+                cache[key] = selected
+        return selected
 
     def _normalize_dump(
         self,
