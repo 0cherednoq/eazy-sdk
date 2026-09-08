@@ -118,7 +118,8 @@ for doc in api.documents.items(case_id=cid, key=lambda d: d.id):  # elements, de
 Остановка, по порядку: пустая страница (или ни одного нового элемента при `key=`), достигнут
 `total_pages`, страница короче `size`, достигнут `max_pages=`. Первая страница — та, что в полях
 запроса. `options=` уходит в каждый `send()`. Обычный вызов операции не меняется. `Pages` не
-экспортируется из корня `eazy_sdk` (бюджет имён). Пока есть только `Pages.numbered`; план и
+экспортируется из корня `eazy_sdk` (бюджет имён). `Pages.offset(Model, offset=, limit=, items=,
+total=)` адресует страницы смещением и двигает его на длину реально полученной страницы. План и
 остальные стратегии — `52-pagination.md`.
 
 ## Public request и private wire body

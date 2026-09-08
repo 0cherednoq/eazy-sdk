@@ -4,7 +4,7 @@ description: Стратегия страниц объявляется на кл�
 sources:
   - eazy_sdk.pagination
 draft: false
-api_fingerprint: "sha256:1b67ffcd2c25da23266ffb7281f0ce9cf5cf82a2d69279c34900ec44176de54a"
+api_fingerprint: "sha256:39e9bbe6ab958d10fa76c7d246583863e7ecbe551dbd5467fea9a4657ed74608"
 ---
 
 Сервис отдаёт список порциями, а вызывающему коду нужны все элементы. Обычно ради этого на
@@ -157,6 +157,42 @@ first_two = list(api.documents.pages(case_id="A40-1/2026", max_pages=2))
 передаётся каждому запросу страницы: каждая страница — это обычный `send()` операции, со всеми
 retry, middleware и защитами роутера.
 
+## Смещение вместо номера: `Pages.offset`
+
+Когда сервис адресует страницы числом уже отданных элементов, стратегия та же по форме, но
+поля другие: `offset=` и необязательный `limit=` — имена полей операции, `total=` — функция от
+результата к общему числу элементов.
+
+```python
+class Slice(BaseModel):
+    items: list[Document]
+    total: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListSlice(HttpOperation[Slice]):
+    __http__ = Http.get("/documents")
+    __pages__ = Pages.offset(
+        Slice,
+        offset="offset",
+        limit="limit",
+        items=lambda r: r.items,
+        total=lambda r: r.total,
+    )
+
+    case_id: Query[str]
+    offset: Query[int] = 0
+    limit: Query[int] = 100
+```
+
+Следующий запрос получает `offset + <сколько элементов вернул сервер>`, а не `offset + limit`:
+сервер, который отдал меньше, чем просили, не приводит к пропуску. Остановка, по порядку:
+
+1. Страница не дала ни одного элемента.
+2. `total=` объявлен, и `offset` плюс длина страницы достигли общего числа.
+3. `limit=` объявлен, и элементов на странице меньше лимита.
+4. Иначе тот же запрос со сдвинутым `offset`.
+
 ## Асинхронный роутер
 
 На `AsyncApi` те же методы отдают асинхронные генераторы:
@@ -168,7 +204,7 @@ async for document in api.documents.items(case_id="A40-1/2026"):
 
 ## Чего здесь нет
 
-- Стратегии `offset`, `cursor` и `next_url` — следующие шаги той же фазы; объявление будет
-  тем же `__pages__` с другой фабрикой `Pages.*`.
+- Стратегии `cursor` и `next_url` — следующие шаги той же фазы; объявление будет тем же
+  `__pages__` с другой фабрикой `Pages.*`.
 - Декоратор `@api.get` не поддерживает `__pages__`: стратегии нужен класс с полями.
 - Тип элементов `items()` — `Any`: связанная операция знает тип страницы, но не тип элемента.

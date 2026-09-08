@@ -401,3 +401,160 @@ def test_root_export_budget_is_unchanged() -> None:
 
     assert "Pages" not in eazy_sdk.__all__
     assert len(eazy_sdk.__all__) <= 40
+
+
+# --- 52.2: Pages.offset ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Slice:
+    items: list[Document]
+    total: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListOffset(HttpOperation[Slice]):
+    __http__ = Http.get("/offset")
+    __pages__ = Pages.offset(
+        Slice, offset="offset", limit="limit", items=lambda r: r.items, total=lambda r: r.total
+    )
+
+    offset: Query[int] = 0
+    limit: Query[int] = 2
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListOffsetPlain(HttpOperation[Slice]):
+    """No ``limit`` and no ``total``: only an empty page stops it."""
+
+    __http__ = Http.get("/offset")
+    __pages__ = Pages.offset(Slice, offset="offset", items=lambda r: r.items)
+
+    offset: Query[int] = 0
+
+
+class OffsetApi(SyncApi):
+    sliced = op(ListOffset)
+    plain = op(ListOffsetPlain)
+
+
+def _offset_api(ids: Sequence[str], *, short_by: int = 0) -> tuple[OffsetApi, list[httpx.Request]]:
+    """Serve ``ids`` by offset; ``short_by`` makes every page that many elements shorter."""
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        offset = int(request.url.params.get("offset", "0"))
+        limit = int(request.url.params.get("limit", "2")) - short_by
+        chunk = ids[offset : offset + limit]
+        return httpx.Response(200, json={"items": [{"id": i} for i in chunk], "total": len(ids)})
+
+    client = client_from_httpx(
+        httpx.Client(base_url="https://api.example", transport=httpx.MockTransport(handler))
+    )
+    return OffsetApi(client), seen
+
+
+def _offsets(seen: list[httpx.Request]) -> list[int]:
+    return [int(request.url.params.get("offset", "0")) for request in seen]
+
+
+def _slice(ids: Sequence[str], total: int = 99) -> Slice:
+    return Slice(items=[Document(i) for i in ids], total=total)
+
+
+def test_offset_stops_on_empty() -> None:
+    assert next_changes(ListOffset.__pages__, ListOffset(), _slice(()), fresh=0) is None
+
+
+def test_offset_stops_at_total() -> None:
+    request = ListOffset(offset=4, limit=2)
+    assert next_changes(ListOffset.__pages__, request, _slice(("e", "f"), total=6), fresh=2) is None
+
+
+def test_offset_stops_below_limit() -> None:
+    request = ListOffset(offset=0, limit=2)
+    assert next_changes(ListOffset.__pages__, request, _slice(("a",)), fresh=1) is None
+
+
+def test_offset_advances_by_returned_count() -> None:
+    """A server that answers fewer than ``limit`` without ``limit`` declared is followed exactly."""
+
+    request = ListOffsetPlain(offset=3)
+    assert next_changes(ListOffsetPlain.__pages__, request, _slice(("a",)), fresh=1) == {
+        "offset": 4
+    }
+    limited = ListOffset(offset=2, limit=2)
+    assert next_changes(ListOffset.__pages__, limited, _slice(("c", "d")), fresh=2) == {"offset": 4}
+
+
+def test_offset_rules_order() -> None:
+    calls: list[str] = []
+
+    def counting_total(result: Slice) -> int:
+        calls.append("total")
+        return 99
+
+    strategy = Pages.offset(
+        Slice, offset="offset", limit="limit", items=lambda r: r.items, total=counting_total
+    )
+    request = ListOffset(offset=0, limit=2)
+    assert next_changes(strategy, request, _slice(("a", "b")), fresh=0) is None
+    assert calls == []
+    assert next_changes(strategy, request, _slice(("a", "b")), fresh=2) == {"offset": 2}
+    assert calls == ["total"]
+
+
+def test_offset_requires_int_offset() -> None:
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Loose(HttpOperation[Slice]):
+        __http__ = Http.get("/offset")
+        __pages__ = Pages.offset(Slice, offset="offset", items=lambda r: r.items)
+
+        offset: Query[Omittable[int]] = UNSET
+
+    with pytest.raises(PlanError, match=r"Loose\.offset must be an int to paginate, got Unset"):
+        next_changes(Loose.__pages__, Loose(), _slice(("a",)), fresh=1)
+
+
+def test_offset_pages_and_items_through_the_router() -> None:
+    api, seen = _offset_api(["a", "b", "c", "d", "e"])
+    pages = list(api.sliced.pages())
+    assert [[d.id for d in page.items] for page in pages] == [["a", "b"], ["c", "d"], ["e"]]
+    assert _offsets(seen) == [0, 2, 4]
+    seen.clear()
+    assert [d.id for d in api.sliced.items(limit=3)] == ["a", "b", "c", "d", "e"]
+    assert _offsets(seen) == [0, 3]
+
+
+def test_offset_follows_a_server_that_returns_fewer_than_asked() -> None:
+    """``plain`` has no limit or total: the next offset is what the server actually returned."""
+
+    api, seen = _offset_api(["a", "b", "c", "d", "e"], short_by=1)
+    assert [d.id for d in api.plain.items()] == ["a", "b", "c", "d", "e"]
+    assert _offsets(seen) == [0, 1, 2, 3, 4, 5]
+
+
+def test_offset_first_page_is_the_request_value() -> None:
+    api, seen = _offset_api(["a", "b", "c", "d", "e"])
+    assert [d.id for d in api.sliced.items(offset=3)] == ["d", "e"]
+    assert _offsets(seen) == [3]
+
+
+def test_offset_declaration_errors() -> None:
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Typo(HttpOperation[Slice]):
+        __http__ = Http.get("/offset")
+        __pages__ = Pages.offset(Slice, offset="offest", items=lambda r: r.items)
+
+        offset: Query[int] = 0
+
+    with pytest.raises(PlanError, match=r"Typo\.__pages__ names unknown field 'offest'"):
+        op(Typo)
+    with pytest.raises(TypeError, match=r"offset=\) must be a field name"):
+        Pages.offset(Slice, offset="", items=lambda r: r.items)
+    assert Pages.offset(Slice, offset="offset", limit="limit", items=lambda r: r.items).fields == (
+        "offset",
+        "limit",
+    )

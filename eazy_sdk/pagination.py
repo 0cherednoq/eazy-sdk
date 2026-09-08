@@ -37,7 +37,7 @@ from typing import Any
 
 from eazy_sdk.core.errors import PlanError
 
-__all__ = ["NumberedPages", "Pages", "Pagination", "next_changes"]
+__all__ = ["NumberedPages", "OffsetPages", "Pages", "Pagination", "next_changes"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -74,7 +74,39 @@ class NumberedPages[T]:
         return (self.page,) if self.size is None else (self.page, self.size)
 
 
-type Pagination[T] = NumberedPages[T]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OffsetPages[T]:
+    """Pages addressed by the number of elements already seen, in one request field.
+
+    ``offset`` and ``limit`` are Python field names of the operation class. The next offset is
+    the current one plus the length of the page the server actually returned, so a server that
+    answers fewer elements than asked is followed, not skipped over.
+    """
+
+    result: type[T]
+    offset: str
+    items: Callable[[T], Sequence[object]]
+    limit: str | None = None
+    total: Callable[[T], int] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, type):
+            raise TypeError("Pages.offset() expects the result class as its first argument")
+        if not isinstance(self.offset, str) or not self.offset:
+            raise TypeError("Pages.offset(offset=) must be a field name")
+        if self.limit is not None and (not isinstance(self.limit, str) or not self.limit):
+            raise TypeError("Pages.offset(limit=) must be a field name or None")
+        if not callable(self.items):
+            raise TypeError("Pages.offset(items=) must be callable")
+        if self.total is not None and not callable(self.total):
+            raise TypeError("Pages.offset(total=) must be callable or None")
+
+    @property
+    def fields(self) -> tuple[str, ...]:
+        return (self.offset,) if self.limit is None else (self.offset, self.limit)
+
+
+type Pagination[T] = NumberedPages[T] | OffsetPages[T]
 """Every strategy an operation may declare as ``__pages__``."""
 
 
@@ -96,6 +128,17 @@ class Pages:
             result=result, page=page, items=items, size=size, total_pages=total_pages
         )
 
+    @staticmethod
+    def offset[T](
+        result: type[T],
+        *,
+        offset: str,
+        items: Callable[[T], Sequence[object]],
+        limit: str | None = None,
+        total: Callable[[T], int] | None = None,
+    ) -> OffsetPages[T]:
+        return OffsetPages(result=result, offset=offset, items=items, limit=limit, total=total)
+
 
 def next_changes[T](
     strategy: Pagination[T],
@@ -108,33 +151,65 @@ def next_changes[T](
 
     ``fresh`` is how many elements of this page the caller used: zero after ``key=``
     deduplication means the server has nothing new, even when the page itself is not empty.
-    The rules apply in this order, and a test pins it:
-
-    1. no fresh elements → stop;
-    2. ``total_pages`` declared and the current page reached it → stop;
-    3. ``size`` declared, the request carries an ``int`` there, and the page is shorter → stop;
-    4. otherwise the same request with the page number incremented.
+    Every strategy stops on it first; the rest of the rules are the strategy's own, applied
+    in the order its function documents, and a test pins each order.
     """
 
     if fresh <= 0:
         return None
-    current = getattr(request, strategy.page)
-    if not isinstance(current, int) or isinstance(current, bool):
+    if isinstance(strategy, NumberedPages):
+        return _next_numbered(strategy, request, result)
+    return _next_offset(strategy, request, result)
+
+
+def _int_field(request: object, name: str) -> int:
+    value = getattr(request, name)
+    if not isinstance(value, int) or isinstance(value, bool):
         raise PlanError(
-            f"{type(request).__name__}.{strategy.page} must be an int to paginate, "
-            f"got {type(current).__name__}"
+            f"{type(request).__name__}.{name} must be an int to paginate, "
+            f"got {type(value).__name__}"
         )
+    return value
+
+
+def _declared_int(request: object, name: str | None) -> int | None:
+    """An optional size field: its ``int`` value, or ``None`` when absent or not an int."""
+
+    if name is None:
+        return None
+    value = getattr(request, name)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _next_numbered[T](
+    strategy: NumberedPages[T], request: object, result: T
+) -> dict[str, object] | None:
+    """2. ``total_pages`` reached → stop; 3. page shorter than ``size`` → stop; 4. page + 1."""
+
+    current = _int_field(request, strategy.page)
     if strategy.total_pages is not None and current >= strategy.total_pages(result):
         return None
-    if strategy.size is not None:
-        size = getattr(request, strategy.size)
-        if (
-            isinstance(size, int)
-            and not isinstance(size, bool)
-            and len(strategy.items(result)) < size
-        ):
-            return None
+    size = _declared_int(request, strategy.size)
+    if size is not None and len(strategy.items(result)) < size:
+        return None
     return {strategy.page: current + 1}
+
+
+def _next_offset[T](
+    strategy: OffsetPages[T], request: object, result: T
+) -> dict[str, object] | None:
+    """2. ``total`` reached → stop; 3. page shorter than ``limit`` → stop; 4. offset + len."""
+
+    current = _int_field(request, strategy.offset)
+    count = len(strategy.items(result))
+    if strategy.total is not None and current + count >= strategy.total(result):
+        return None
+    limit = _declared_int(request, strategy.limit)
+    if limit is not None and count < limit:
+        return None
+    return {strategy.offset: current + count}
 
 
 def validate_declaration(
@@ -147,7 +222,7 @@ def validate_declaration(
     """Check ``__pages__`` against the class it sits on; raise :class:`PlanError` at import."""
 
     name = operation_type.__name__
-    if not isinstance(strategy, NumberedPages):
+    if not isinstance(strategy, NumberedPages | OffsetPages):
         raise PlanError(
             f"operation class {name}.__pages__ must be a Pages strategy, "
             f"got {type(strategy).__name__}"

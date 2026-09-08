@@ -4670,8 +4670,9 @@ phase.
 
 ### State
 
-Active. 52.1 (`Pages.numbered`, `pages()`/`items()`, declaration checks, docs) is done; 52.2
-(`Pages.offset`), 52.3 (`Pages.cursor`) and the conditional 52.4 (`Pages.next_url`) are pending.
+Active. 52.1 (`Pages.numbered`, `pages()`/`items()`, declaration checks, docs) and 52.2
+(`Pages.offset`) are done; 52.3 (`Pages.cursor`) and the conditional 52.4 (`Pages.next_url`) are
+pending.
 Plan: `52-pagination.md`. Origin: the owner asked for a declarative way to write the paging
 generators that `op()`-only SDKs still needed as hand-written router methods; a broader
 composite-operation form (`Flow`/`Step`) was proposed and declined by the owner the same day
@@ -4696,11 +4697,19 @@ Speakeasy's `x-speakeasy-pagination` (roles of request fields, paths into the re
   Unreleased, `README.md` phase note. The root export list is unchanged (`Pages` lives in
   `eazy_sdk.pagination`, plan D3).
 
+### Delivered (52.2)
+
+- `OffsetPages[T]`, `Pages.offset(result, *, offset, items, limit=None, total=None)`;
+  `next_changes` dispatches on the strategy type, the shared "fresh == 0 stops" rule first. The
+  next offset is the current one plus the length of the returned page, so a server answering
+  fewer than `limit` is followed rather than skipped (plan §9). Docs: section in
+  `guides/pagination.mdx`, authoring reference, CHANGELOG.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase52_pagination.py --timeout=120` | PASS: 26 passed. |
+| `uv run pytest -q tests/unit/test_phase52_pagination.py --timeout=120` | PASS: 26 passed after 52.1; 36 passed after 52.2. |
 | `uv run pytest -q --timeout=120` (full suite) | 1322 passed, 11 skipped, 2 failed: `plugins/openapi/tests/test_phase21_body_projection_codegen.py::test_generated_projection_import_types_and_executes_exact_wire_body[3.2.0]` and `plugins/openapi/tests/test_rewrite_generator.py::test_generated_session_factory_hides_runtime_plumbing_and_executes`. Both re-run green in isolation (4 passed) and as their two files together (48 passed, 61 s); they spawn generated-SDK subprocesses and are the load-sensitive tests already recorded for phase 50. Not caused by this change: neither touches `__pages__`, and the generated SDK imports through the same `op()`. |
 | `uv run mypy` | PASS: no issues in 345 source files. |
 | `uv run ruff check` | PASS. |

@@ -228,6 +228,10 @@ async for doc in api.case_documents_page.items(case_id=cid, key=lambda d: d.docu
   Evidence — `STATUS.md`, раздел «Phase 52». Отклонений от §3–§4 нет. Замечено: `HttpOperation[Any]`
   не считается generic-аргументом (правило фазы 50), поэтому D-52-03 сверяет с `success=`; тест
   `test_pages_follows_success_when_no_generic` закрепляет это.
+- 2026-09-08 — 52.2 done: `Pages.offset` (§4.2), `next_changes` диспетчеризует по типу стратегии,
+  общие `_int_field`/`_declared_int`; 10 тестов (правила, порядок, роутер, сервер короче лимита,
+  объявление). Уточнение к §4.2: следующий `offset` = текущий + длина полученной страницы,
+  не `+ limit` — сервер, отдавший меньше, не пропускается.
 
 ## 10. Решения и отвергнутые варианты
 
