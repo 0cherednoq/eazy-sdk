@@ -4748,8 +4748,8 @@ decorator form `@api.get` has no `__pages__` (plan D7).
 ### State
 
 Active. 53.1 (`when=` on every representation), 53.2 (criterion before status) and 53.3
-(`Envelope` on the model plus `accept=`) are done; 53.4 (`eazy_sdk.response.match`) and 53.5 (docs
-and the `kad` acceptance rewrite) are pending. Plan: `53-response-cases.md`. Origin: two issues written
+(`Envelope` on the model plus `accept=`) and 53.4 (`eazy_sdk.response.match`) are done; only 53.5
+(docs and the `kad` acceptance rewrite) is pending. Plan: `53-response-cases.md`. Origin: two issues written
 against 0.2.0a7 (`docs/eazy-sdk-v0.2.0a7-response-cases-api-issue.md`,
 `docs/eazy-sdk-v0.2.0a7-accept-post-parse-issue.md`) and three owner decisions recorded in the
 plan's §10: `Envelope` lives in `eazy_sdk.response`, `accept=` stays as a per-case override, and
@@ -4794,17 +4794,29 @@ the arbitration order changes so a condition outranks status precision.
   With `Any`, a lambda needs no annotation and an annotated named function is still inferred and
   checked. Recorded in the plan's §9.
 
+### Delivered (53.4)
+
+- `eazy_sdk/response/match.py`: `Predicate` with `&`, `|`, `~` and a `label` that reads in a
+  diagnostic, plus the `body`, `content_type`, `status` and `header` factories. Not re-exported
+  from `eazy_sdk.response`, so the entry point is an explicit
+  `from eazy_sdk.response.match import body`.
+- A `str` argument compares against the decoded text and answers False when the body does not
+  decode, so a marker written in Cyrillic needs no `.encode()` and a mis-encoded body cannot turn
+  a routing decision into a crashed call.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed after 53.1; 15 after 53.2; 28 after 53.3, including one test that runs the envelope through dataclass, Pydantic, msgspec and TypedDict. |
+| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed after 53.1; 15 after 53.2; 28 after 53.3, including one test that runs the envelope through dataclass, Pydantic, msgspec and TypedDict; 36 after 53.4. |
 | `uv run pytest -q tests/unit tests/rewrite --timeout=120` | PASS: 870 passed. |
 | `uv run pytest -q plugins/openapi/tests --timeout=300` | PASS: 55 passed. `test_generated_session_factory_hides_runtime_plumbing_and_executes` failed once under a five-suite run and passed alone and in its own suite; this is the generated-SDK subprocess flake already recorded for phases 50 and 52, not a regression. |
 | `uv run ruff check`, `uv run mypy` (touched files) | PASS. |
 
 ### Remaining work / blockers
 
-53.4 and 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
+53.5: documentation and the `kad` rewrite that the plan's §7.1 measures acceptance against.
+Diagnostics D-53-04 and D-53-05 moved into 53.5 with the other declaration-time checks, which
+need the operation id. The acceptance criteria live in the plan's §7 and are measured on the `kad`
 consumer at `C:/Users/user/Desktop/parsing/kad`.
 

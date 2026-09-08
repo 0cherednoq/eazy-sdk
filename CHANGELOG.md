@@ -35,6 +35,13 @@ Added:
 - `accept=` on `Json`, `Html`, `Extracted` and `Parsed`: decides on the parsed value and overrides
   the model's own rule, for a model you cannot edit. It answers "does this case match", so unlike
   `succeeds` it is read as written on both success and error cases.
+- `eazy_sdk.response.match`: composable predicates for `when=`, combined with `&`, `|` and `~`.
+  `body.startswith`, `body.contains(..., ignore_case=)`, `body.matches`, `body.is_empty`,
+  `content_type.is_`/`.startswith`, `status.is_`/`.in_`, and `header(name).present`/`.is_`/
+  `.contains`. A `bytes` argument reads the raw body and a `str` one the decoded text, where a
+  body that does not decode answers False instead of raising. Each predicate is an ordinary
+  callable, so it mixes with existing functions and lambdas, and carries a label that reads in a
+  diagnostic.
 
 ## 0.2.0a7 - 2026-09-08
 

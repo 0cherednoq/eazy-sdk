@@ -26,12 +26,14 @@ from eazy_sdk.response import (
     Html,
     Json,
     MalformedResponseError,
+    NormalizedResponse,
     Parsed,
     ResponseContext,
     ResponseExtractor,
     StatusRange,
     Success,
     Text,
+    match,
 )
 from eazy_sdk.response.cases import (
     ResponseParser,
@@ -640,3 +642,127 @@ def test_annotated_payload_declares_the_result_type() -> None:
     assert envelope_payload_type(WithAnnotation) == (Page | None)
     assert envelope_payload_type(DataclassEnvelope) is None
     assert envelope_payload_type(Page) is None
+
+
+# --- 53.4: composable predicates over the raw response ----------------------------------------
+
+
+def _context(
+    payload: bytes,
+    media: str = "text/html",
+    code: int = 200,
+    headers: tuple[tuple[str, str], ...] = (),
+) -> ResponseContext[object]:
+    """A response without a call: a predicate reads the response and nothing else."""
+
+    response: NormalizedResponse[object] = NormalizedResponse(
+        code,
+        "https://api.example/thing",
+        "GET",
+        (("Content-Type", media), *headers),
+        payload,
+    )
+    return ResponseContext(response)
+
+
+def test_body_predicates_read_bytes_or_text() -> None:
+    """A bytes argument reads the raw body, a str argument reads the decoded text."""
+
+    assert match.body.startswith(b"%PDF-")(_context(PDF))
+    assert not match.body.startswith(b"%PDF-")(_context(CHALLENGE))
+    assert match.body.contains("pravocaptcha")(_context(b"<html>pravocaptcha</html>"))
+    assert match.body.contains(b"CAPTCHA", ignore_case=True)(_context(b"<i>captcha</i>"))
+    assert match.body.contains("КАПЧА", ignore_case=True)(_context("КаПчА".encode()))
+    assert match.body.is_empty()(_context(b""))
+    assert not match.body.is_empty()(_context(PDF))
+
+
+def test_str_argument_on_an_undecodable_body_is_false() -> None:
+    """A routing decision on a body that will not decode is a no, never a crashed call."""
+
+    undecodable = _context(b"\xff\xfe\x00 not utf-8", media="text/html; charset=utf-8")
+    assert match.body.contains("anything")(undecodable) is False
+    assert match.body.startswith("anything")(undecodable) is False
+    # The same marker as bytes still reads the raw body.
+    assert match.body.contains(b"not utf-8")(undecodable)
+
+
+def test_content_type_status_and_header_predicates() -> None:
+    assert match.content_type.is_("text/html")(_context(PDF, media="text/html; charset=utf-8"))
+    assert match.content_type.startswith("text/")(_context(PDF))
+    assert not match.content_type.startswith("application/")(_context(PDF))
+    assert match.status.is_(200)(_context(PDF))
+    assert match.status.in_(200, 299)(_context(PDF, code=204))
+    assert not match.status.in_(200, 299)(_context(PDF, code=404))
+    located = _context(PDF, headers=(("Location", "/next"),))
+    assert match.header("Location").present()(located)
+    assert match.header("Location").is_("/next")(located)
+    assert match.header("Location").contains("nex")(located)
+    assert not match.header("Retry-After").present()(located)
+
+
+def test_predicates_compose_with_and_or_not() -> None:
+    """The four kad predicates, written as expressions instead of four functions."""
+
+    is_pdf_body = match.body.startswith(b"%PDF-")
+    is_captcha = match.body.contains(b"pravocaptcha") | match.body.contains(b"recaptchatoken")
+    is_denied = match.body.contains(b"support@example.test")
+    is_regular = ~(is_captcha | is_denied) & match.content_type.startswith("text/html")
+
+    assert is_pdf_body(_context(PDF))
+    assert is_captcha(_context(b"<html>recaptchatoken</html>"))
+    assert is_denied(_context(BLOCKED))
+    assert is_regular(_context(b"<html>an ordinary page</html>"))
+    assert not is_regular(_context(CHALLENGE))
+    assert not is_regular(_context(PDF, media="application/pdf"))
+
+
+def test_a_predicate_mixes_with_a_plain_lambda() -> None:
+    """Sugar over ``ResponseCondition``, not a second type: the two combine either way."""
+
+    combined = match.body.startswith(b"%PDF-") & (
+        lambda context: context.response.status_code == 200
+    )
+    assert combined(_context(PDF))
+    assert not combined(_context(PDF, code=500))
+
+
+def test_predicate_label_reads_in_a_repr() -> None:
+    """A diagnostic names the criteria that were weighed, not a row of <lambda>."""
+
+    predicate = ~(match.body.startswith(b"%PDF-") | match.status.is_(204))
+    assert repr(predicate) == "<not (body startswith b'%PDF-' or status is 204)>"
+    assert match.body.contains("x", ignore_case=True).label == "body contains 'x' ignoring case"
+
+
+def test_body_matches_a_compiled_pattern() -> None:
+    import re
+
+    assert match.body.matches(re.compile(rb"%PDF-\d"))(_context(PDF))
+    assert match.body.matches(re.compile(r"pravo\w+"))(_context(CHALLENGE))
+    assert not match.body.matches(re.compile(r"nothing here"))(_context(CHALLENGE))
+
+
+def test_a_predicate_serves_as_a_case_condition() -> None:
+    """The point of the module: it is written straight into ``when=``."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[bytes]):
+        __http__ = Http.get(
+            "/document",
+            success={200: Bytes(media_type=None, when=match.body.startswith(b"%PDF-"))},
+            errors={
+                200: (
+                    Text(media_type=None, when=match.body.contains(b"pravocaptcha")),
+                    ChallengeRequired,
+                )
+            },
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with _serve(PDF, media="application/pdf") as client:
+        assert Service(client).fetch() == PDF
+    with _serve(CHALLENGE) as client, pytest.raises(ChallengeRequired):
+        Service(client).fetch()
