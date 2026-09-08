@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import AsyncIterator, Callable, Coroutine, Hashable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import (
     Any,
@@ -50,6 +50,7 @@ from eazy_sdk.operation import (
     _Inherit,
     generic_argument,
 )
+from eazy_sdk.pagination import Pagination, check_max_pages, next_changes, validate_declaration
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protocols import Envelope
@@ -223,6 +224,17 @@ class _BoundOperation[**P, T]:
         self._descriptor.check_request(request)
         return self._api._serialization.models.evolve(request, **changes)
 
+    # -- pagination --------------------------------------------------------------------
+
+    def _strategy(self, max_pages: int | None) -> Pagination[T]:
+        """The declared ``__pages__``, or D-52-04; ``max_pages`` is checked here too (D-52-06)."""
+
+        strategy = self._descriptor.pages
+        if strategy is None:
+            raise PlanError(f"pages() requires __pages__ on {self.Operation.__name__}")
+        check_max_pages(max_pages)
+        return strategy
+
     def _bind(self, *args: Any, **kwargs: Any) -> tuple[dict[str, object], CallOptions | None]:
         return self._descriptor._bind_arguments(self._api, *args, **kwargs)
 
@@ -272,6 +284,65 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         self, request: HttpOperation[T], /, *, options: CallOptions | None = None
     ) -> ResponseEnvelope[T, Any]:
         return await self._execute_with_response(self._values(request), options)
+
+    async def pages(
+        self,
+        *args: Any,
+        max_pages: int | None = None,
+        options: CallOptions | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[T]:
+        """Successive pages, from the request the arguments describe, through ``__pages__``.
+
+        Every page is one ordinary ``send()``; the strategy only decides the next request.
+        """
+
+        strategy = self._strategy(max_pages)
+        request = self.request(*args, **kwargs)
+        sent = 0
+        while max_pages is None or sent < max_pages:
+            result = await self.send(request, options=options)
+            sent += 1
+            yield result
+            changes = next_changes(strategy, request, result, fresh=len(strategy.items(result)))
+            if changes is None:
+                return
+            request = self.evolve(request, **changes)
+
+    async def items(
+        self,
+        *args: Any,
+        max_pages: int | None = None,
+        options: CallOptions | None = None,
+        key: Callable[[Any], Hashable] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Any]:
+        """The elements of successive pages, flattened; ``key=`` skips repeats across pages.
+
+        A page that contributes nothing new ends the iteration, which also bounds a server that
+        answers the last page again for every number past it.
+        """
+
+        strategy = self._strategy(max_pages)
+        request = self.request(*args, **kwargs)
+        seen: set[Hashable] = set()
+        sent = 0
+        while max_pages is None or sent < max_pages:
+            result = await self.send(request, options=options)
+            sent += 1
+            fresh = 0
+            for item in strategy.items(result):
+                if key is not None:
+                    mark = key(item)
+                    if mark in seen:
+                        continue
+                    seen.add(mark)
+                fresh += 1
+                yield item
+            changes = next_changes(strategy, request, result, fresh=fresh)
+            if changes is None:
+                return
+            request = self.evolve(request, **changes)
 
     async def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = await self._api._client._execute_operation(
@@ -338,6 +409,58 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
     ) -> ResponseEnvelope[T, Any]:
         return self._execute_with_response(self._values(request), options)
 
+    def pages(
+        self,
+        *args: Any,
+        max_pages: int | None = None,
+        options: CallOptions | None = None,
+        **kwargs: Any,
+    ) -> Iterator[T]:
+        """Successive pages, from the request the arguments describe, through ``__pages__``."""
+
+        strategy = self._strategy(max_pages)
+        request = self.request(*args, **kwargs)
+        sent = 0
+        while max_pages is None or sent < max_pages:
+            result = self.send(request, options=options)
+            sent += 1
+            yield result
+            changes = next_changes(strategy, request, result, fresh=len(strategy.items(result)))
+            if changes is None:
+                return
+            request = self.evolve(request, **changes)
+
+    def items(
+        self,
+        *args: Any,
+        max_pages: int | None = None,
+        options: CallOptions | None = None,
+        key: Callable[[Any], Hashable] | None = None,
+        **kwargs: Any,
+    ) -> Iterator[Any]:
+        """The elements of successive pages, flattened; ``key=`` skips repeats across pages."""
+
+        strategy = self._strategy(max_pages)
+        request = self.request(*args, **kwargs)
+        seen: set[Hashable] = set()
+        sent = 0
+        while max_pages is None or sent < max_pages:
+            result = self.send(request, options=options)
+            sent += 1
+            fresh = 0
+            for item in strategy.items(result):
+                if key is not None:
+                    mark = key(item)
+                    if mark in seen:
+                        continue
+                    seen.add(mark)
+                fresh += 1
+                yield item
+            changes = next_changes(strategy, request, result, fresh=fresh)
+            if changes is None:
+                return
+            request = self.evolve(request, **changes)
+
     def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = self._api._client._execute_operation(
             self._descriptor.resolve_for(self._api),
@@ -381,9 +504,11 @@ class _OperationDescriptor[**P, T]:
         accepts_options: bool = False,
         signature: inspect.Signature | None = None,
         synthesized: bool = False,
+        pages: Pagination[T] | None = None,
     ) -> None:
         self.operation_type = operation_type
         self.spec = spec
+        self.pages = pages
         self.accepts_options = accepts_options
         self.signature = signature
         self.synthesized = synthesized
@@ -704,7 +829,24 @@ def op(operation: Any, /) -> Any:
             f"operation class {operation.__name__} has no __http__; assign Http.get(...) "
             "or another verb"
         )
-    return _OperationDescriptor(operation, spec)
+    return _OperationDescriptor(operation, spec, pages=_pages_of(operation, spec))
+
+
+def _pages_of(operation: type[HttpOperation[Any]], spec: _HttpSpec) -> Pagination[Any] | None:
+    """The validated ``__pages__`` of an operation class, checked when ``op()`` runs."""
+
+    strategy = getattr(operation, "__pages__", None)
+    if strategy is None:
+        return None
+    names: list[str] = []
+    for cls in reversed(operation.__mro__):
+        for name in getattr(cls, "__annotations__", {}):
+            if not name.startswith("_") and name not in names:
+                names.append(name)
+    result_type = result_type_of(spec.success, generic_argument(operation, HttpOperation))
+    return validate_declaration(
+        strategy, operation_type=operation, field_names=names, result_type=result_type
+    )
 
 
 class _ApiBase:

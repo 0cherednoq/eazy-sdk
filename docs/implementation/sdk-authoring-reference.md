@@ -84,6 +84,43 @@ Repeated query keys не поддерживаются. Для collection нуж�
 tags: Annotated[list[str], Query("tag", codec=DelimitedScalarCodec(","))]
 ```
 
+## Pagination
+
+Стратегия страниц объявляется на классе операции атрибутом `__pages__` рядом с `__http__`;
+цикл живёт в библиотеке. `page=`/`size=` — python-имена полей операции (следующий запрос
+строится через `evolve()`), класс результата передаётся первым аргументом, чтобы лямбды были
+типизированы, а `op()` сверяет его с `HttpOperation[T]` при импорте.
+
+```python
+from eazy_sdk.pagination import Pages
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListDocuments(HttpOperation[DocumentsPage]):
+    __http__ = Http.get("/documents")
+    __pages__ = Pages.numbered(
+        DocumentsPage,
+        page="page",
+        size="per_page",
+        items=lambda r: r.items,
+        total_pages=lambda r: r.pages_count,
+    )
+
+    case_id: Query[str]
+    page: Query[int] = 1
+    per_page: Query[int] = 25
+
+for page in api.documents.pages(case_id=cid):                      # DocumentsPage
+    ...
+for doc in api.documents.items(case_id=cid, key=lambda d: d.id):  # elements, deduplicated
+    ...
+```
+
+Остановка, по порядку: пустая страница (или ни одного нового элемента при `key=`), достигнут
+`total_pages`, страница короче `size`, достигнут `max_pages=`. Первая страница — та, что в полях
+запроса. `options=` уходит в каждый `send()`. Обычный вызов операции не меняется. `Pages` не
+экспортируется из корня `eazy_sdk` (бюджет имён). Пока есть только `Pages.numbered`; план и
+остальные стратегии — `52-pagination.md`.
+
 ## Public request и private wire body
 
 Если caller-facing schema должна оставаться плоской, а protocol требует другой nested document,

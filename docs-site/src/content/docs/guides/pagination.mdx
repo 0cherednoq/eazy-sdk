@@ -1,0 +1,174 @@
+---
+title: Пагинация
+description: Стратегия страниц объявляется на классе операции через __pages__; pages() и items() на роутере обходят их без пользовательского цикла.
+sources:
+  - eazy_sdk.pagination
+draft: false
+api_fingerprint: "sha256:1b67ffcd2c25da23266ffb7281f0ce9cf5cf82a2d69279c34900ec44176de54a"
+---
+
+Сервис отдаёт список порциями, а вызывающему коду нужны все элементы. Обычно ради этого на
+роутере появляется метод-генератор с циклом, счётчиком страниц и условиями остановки. В Eazy SDK
+эти четыре факта объявляются на самой операции, а цикл живёт в библиотеке: `pages()` отдаёт
+страницы, `items()` — их элементы.
+
+## Короткий пример
+
+```python
+from dataclasses import dataclass
+
+import httpx
+from pydantic import BaseModel
+
+from eazy_sdk import Client, Http, HttpOperation, Query, SyncApi, op
+from eazy_sdk.pagination import Pages
+
+
+class Document(BaseModel):
+    id: str
+    title: str
+
+
+class DocumentsPage(BaseModel):
+    items: list[Document]
+    pages_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListDocuments(HttpOperation[DocumentsPage]):
+    __http__ = Http.get("/documents")
+    __pages__ = Pages.numbered(
+        DocumentsPage,
+        page="page",
+        size="per_page",
+        items=lambda r: r.items,
+        total_pages=lambda r: r.pages_count,
+    )
+
+    case_id: Query[str]
+    page: Query[int] = 1
+    per_page: Query[int] = 2
+
+
+class DocumentsApi(SyncApi):
+    documents = op(ListDocuments)
+
+
+DOCUMENTS = [("d-1", "Иск"), ("d-2", "Отзыв"), ("d-3", "Определение"), ("d-4", "Решение"), ("d-5", "Жалоба")]
+
+
+def server(request: httpx.Request) -> httpx.Response:
+    page = int(request.url.params["page"])
+    size = int(request.url.params["per_page"])
+    chunk = DOCUMENTS[(page - 1) * size : page * size]
+    return httpx.Response(
+        200,
+        json={
+            "items": [{"id": i, "title": t} for i, t in chunk],
+            "pages_count": -(-len(DOCUMENTS) // size),
+        },
+    )
+
+
+with Client.httpx(
+    base_url="https://api.court.example", transport=httpx.MockTransport(server)
+) as client:
+    api = DocumentsApi(client)
+
+    for page in api.documents.pages(case_id="A40-1/2026"):
+        print("страница:", [d.id for d in page.items])
+
+    print("всего:", [d.title for d in api.documents.items(case_id="A40-1/2026")])
+```
+
+```text
+страница: ['d-1', 'd-2']
+страница: ['d-3', 'd-4']
+страница: ['d-5']
+всего: ['Иск', 'Отзыв', 'Определение', 'Решение', 'Жалоба']
+```
+
+Обычный вызов `api.documents(case_id=..., page=2)` не меняется: `__pages__` читают только
+`pages()` и `items()`.
+
+## Что объявляет `Pages.numbered`
+
+| Аргумент | Что это | Обязателен |
+|---|---|---|
+| первый позиционный | класс результата операции, тот же, что в `HttpOperation[T]` | да |
+| `page=` | имя поля операции с номером страницы | да |
+| `items=` | функция от результата к списку элементов | да |
+| `size=` | имя поля операции с размером страницы | нет |
+| `total_pages=` | функция от результата к числу страниц | нет |
+
+`page=` и `size=` — это имена полей класса операции, а не имена параметров на проводе:
+следующий запрос строится через `evolve()`, как и вручную. Класс результата передаётся первым
+аргументом ради IDE: параметр лямбды `r` выводится как `DocumentsPage`, автодополнение по `r.`
+работает, а mypy проверяет, что `r.pages_count` действительно `int`. Если тип не совпадает с
+`HttpOperation[T]`, `op()` откажет при импорте:
+
+```text
+PlanError: ListDocuments.__pages__ declares result Document, the operation returns DocumentsPage
+```
+
+То же при опечатке в имени поля:
+
+```text
+PlanError: ListDocuments.__pages__ names unknown field 'pgae'; fields: case_id, page, per_page
+```
+
+## Как решается, есть ли следующая страница
+
+Правила применяются по порядку после каждой страницы; первое сработавшее останавливает обход.
+
+1. Страница не дала ни одного элемента.
+2. `total_pages=` объявлен, и текущий номер уже равен числу страниц.
+3. `size=` объявлен, и элементов на странице меньше размера.
+4. Иначе тот же запрос с номером страницы на единицу больше.
+
+В примере выше третья страница остановила обход по правилу 2, а без `total_pages=` её остановило
+бы правило 3: один элемент при `per_page=2`. Сервис без обоих признаков остановится по правилу 1,
+когда отдаст пустую страницу.
+
+Первая страница — та, что записана в полях запроса. `api.documents.pages(case_id=..., page=3)`
+начинает с третьей.
+
+## `items()`: элементы и повторы
+
+`items()` разворачивает страницы в один поток элементов. Если сервер после последней страницы
+отдаёт её же на любой следующий номер, правила выше не сработают: страница полная и не пустая.
+Для этого у `items()` есть `key=`:
+
+```python
+seen = [d.id for d in api.documents.items(case_id="A40-1/2026", key=lambda d: d.id)]
+```
+
+Элемент с уже виденным ключом пропускается, а страница, не давшая ни одного нового элемента,
+считается пустой и завершает обход по правилу 1. Так двадцатистрочный метод с `seen: set[str]`
+превращается в один аргумент.
+
+## Ограничение и параметры каждой страницы
+
+```python
+first_two = list(api.documents.pages(case_id="A40-1/2026", max_pages=2))
+```
+
+`max_pages=` ограничивает число запросов; `None` — до естественной остановки. `options=`
+передаётся каждому запросу страницы: каждая страница — это обычный `send()` операции, со всеми
+retry, middleware и защитами роутера.
+
+## Асинхронный роутер
+
+На `AsyncApi` те же методы отдают асинхронные генераторы:
+
+```python
+async for document in api.documents.items(case_id="A40-1/2026"):
+    ...
+```
+
+## Чего здесь нет
+
+- Стратегии `offset`, `cursor` и `next_url` — следующие шаги той же фазы; объявление будет
+  тем же `__pages__` с другой фабрикой `Pages.*`.
+- Декоратор `@api.get` не поддерживает `__pages__`: стратегии нужен класс с полями.
+- Тип элементов `items()` — `Any`: связанная операция знает тип страницы, но не тип элемента.

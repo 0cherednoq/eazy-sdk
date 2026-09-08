@@ -24,6 +24,9 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, Unpack, cast, get_args, get_origin
 
+# Imported at runtime, not under TYPE_CHECKING: ``get_type_hints`` on an operation class
+# resolves the ``__pages__`` annotation below, and a name it cannot find is a NameError.
+from eazy_sdk.pagination import Pagination
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 
 if TYPE_CHECKING:
@@ -61,6 +64,8 @@ class HttpOperation[T]:
 
     __slots__ = ()
     __http__: ClassVar[_HttpSpec]
+    __pages__: ClassVar[Pagination[Any]]
+    """Optional: how the operation pages, read by ``pages()``/``items()`` on the router."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

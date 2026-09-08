@@ -1,6 +1,6 @@
 # Eazy SDK rewrite status
 
-Updated: 2026-09-06.
+Updated: 2026-09-08.
 
 This file is evidence-driven: a phase is complete only when its documented exit criteria have
 implementation and verification evidence.
@@ -4664,3 +4664,51 @@ None for this remediation. One finding recorded rather than fixed, because it is
 review's scope: `compile_endpoint` runs on every operation call (no compiled-contract cache), and
 `_core_for` builds a fresh `ExecutionCore` per SDK call. Both are candidates for the performance
 phase.
+
+
+## Phase 52 — declarative pagination (2026-09-08)
+
+### State
+
+Active. 52.1 (`Pages.numbered`, `pages()`/`items()`, declaration checks, docs) is done; 52.2
+(`Pages.offset`), 52.3 (`Pages.cursor`) and the conditional 52.4 (`Pages.next_url`) are pending.
+Plan: `52-pagination.md`. Origin: the owner asked for a declarative way to write the paging
+generators that `op()`-only SDKs still needed as hand-written router methods; a broader
+composite-operation form (`Flow`/`Step`) was proposed and declined by the owner the same day
+(plan §10, D1). `unihttp` was checked and has no pagination; the strategy model follows
+Speakeasy's `x-speakeasy-pagination` (roles of request fields, paths into the response).
+
+### Delivered (52.1)
+
+- `eazy_sdk/pagination.py`: `NumberedPages[T]`, `Pages.numbered(result, *, page, items, size=None,
+  total_pages=None)`, `next_changes(strategy, request, result, fresh=)` (pure; rule order of plan
+  §3.4), `validate_declaration` (D-52-01..03), `check_max_pages` (D-52-06).
+- `HttpOperation.__pages__: ClassVar[Pagination[Any]]` annotation; imported at runtime because
+  `get_type_hints` on an operation class resolves it (a `TYPE_CHECKING` import was a `NameError`).
+- `op()` reads and validates `__pages__` at import against the annotated field names of the class
+  MRO and `result_type_of(success, generic)`; the descriptor carries `pages`.
+- `_BoundAsyncOperation` / `_BoundSyncOperation`: `pages(*args, max_pages=None, options=None,
+  **kwargs)` and `items(..., key=None, ...)`, each page an ordinary `request()`/`send()`/`evolve()`
+  cycle; a page contributing nothing new (after `key=`) ends the iteration (D-52-04 when no
+  `__pages__`).
+- Docs: `guides/pagination.mdx` (runnable example verified: output matches the page), card in
+  `guides/index.mdx`, "Pagination" section in `sdk-authoring-reference.md`, `CHANGELOG.md`
+  Unreleased, `README.md` phase note. The root export list is unchanged (`Pages` lives in
+  `eazy_sdk.pagination`, plan D3).
+
+### Verification evidence
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase52_pagination.py --timeout=120` | PASS: 26 passed. |
+| `uv run pytest -q --timeout=120` (full suite) | 1322 passed, 11 skipped, 2 failed: `plugins/openapi/tests/test_phase21_body_projection_codegen.py::test_generated_projection_import_types_and_executes_exact_wire_body[3.2.0]` and `plugins/openapi/tests/test_rewrite_generator.py::test_generated_session_factory_hides_runtime_plumbing_and_executes`. Both re-run green in isolation (4 passed) and as their two files together (48 passed, 61 s); they spawn generated-SDK subprocesses and are the load-sensitive tests already recorded for phase 50. Not caused by this change: neither touches `__pages__`, and the generated SDK imports through the same `op()`. |
+| `uv run mypy` | PASS: no issues in 345 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 67 pages fresh (new page fingerprinted). |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
+| docs example (`guides/pagination.mdx`, run as a script) | Output equals the page's `text` block. |
+
+### Remaining work / blockers
+
+52.2 `Pages.offset`, 52.3 `Pages.cursor`; 52.4 `Pages.next_url` only on the owner's confirmation
+(needs an absolute-URL send path). `items()` elements are typed `Any` (plan D6).

@@ -250,6 +250,12 @@
       "eazy_sdk_openapi.generator.generate_package": "sha256:1555308ad40543028bf782d0bd75b5e24b2b3908612a04ff14a3ea1b18546a62"
     }
   },
+  "guides/pagination.mdx": {
+    "fingerprint": "sha256:1b67ffcd2c25da23266ffb7281f0ce9cf5cf82a2d69279c34900ec44176de54a",
+    "symbols": {
+      "eazy_sdk.pagination": "sha256:2278936ed8774723f83f8a0d86c1abe24b35c610e9657b0bad272135fdea41ef"
+    }
+  },
   "guides/payload-crypto.mdx": {
     "fingerprint": "sha256:1ca897fcf483baa16619a7a70467dc11ebfff0aac70248b32279f8915da8451f",
     "symbols": {
