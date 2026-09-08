@@ -27,9 +27,10 @@ from eazy_sdk.response import (
     ResponseContext,
     ResponseExtractor,
     StatusRange,
+    Success,
     Text,
 )
-from eazy_sdk.response.cases import ResponseParser
+from eazy_sdk.response.cases import ResponseParser, _specificity
 
 BASE = "https://api.example"
 
@@ -229,3 +230,131 @@ def test_json_and_html_keep_their_when() -> None:
 
     assert Json(Payload, when=is_pdf).when is is_pdf
     assert Html(Payload, when=is_pdf).when is is_pdf
+
+
+# --- 53.2: a criterion outranks status precision ----------------------------------------------
+
+
+class Protection(SyncApi):
+    """A service declares its protection pages once, on a range, with conditions."""
+
+    errors: tuple[Error[str], ...] = (
+        Error(
+            StatusRange(200, 599),
+            Text(media_type=None),
+            exception=ChallengeRequired,
+            condition=is_challenge,
+        ),
+        Error(
+            StatusRange(200, 599),
+            Text(media_type=None),
+            exception=AccessBlocked,
+            condition=is_blocked,
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PlainDownload(HttpOperation[bytes]):
+    """No ``when=`` anywhere: the operation states only what it returns when all is well."""
+
+    __http__ = Http.get("/document", success={200: Bytes(media_type=None)})
+
+
+class PlainDocuments(Protection):
+    download = op(PlainDownload)
+
+
+def test_conditional_range_beats_unconditional_exact_status() -> None:
+    """The whole point of the phase: the service's protection case is no longer shadowed.
+
+    Before this order the success case won on status precision alone and a protection page came
+    back as a successful body, with no error raised anywhere.
+    """
+
+    with _serve(CHALLENGE) as client, pytest.raises(ChallengeRequired):
+        PlainDocuments(client).download()
+    with _serve(BLOCKED) as client, pytest.raises(AccessBlocked):
+        PlainDocuments(client).download()
+
+
+def test_the_same_declaration_still_returns_the_ordinary_body() -> None:
+    """A real payload does not satisfy either condition, so those cases are not candidates."""
+
+    with _serve(PDF, media="application/pdf") as client:
+        assert PlainDocuments(client).download() == PDF
+
+
+def test_exact_status_still_wins_between_two_conditional_cases() -> None:
+    """Once both cases state a criterion, status precision decides as it always did."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Narrow(HttpOperation[bytes]):
+        __http__ = Http.get(
+            "/document",
+            success={200: Bytes(media_type=None, when=lambda _context: True)},
+        )
+
+    class Service(Protection):
+        download = op(Narrow)
+
+    # The success case is conditional too, so its exact 200 outranks the service's range.
+    with _serve(CHALLENGE) as client:
+        assert Service(client).download() == CHALLENGE
+
+
+def test_unconditional_cases_keep_status_order() -> None:
+    """Between two cases that state nothing, the exact status is still the narrower one."""
+
+    from eazy_sdk.response.cases import DefaultStatus
+
+    exact: Error[Any] = Error(404, Text(media_type=None), exception=ChallengeRequired)
+    ranged: Error[Any] = Error(
+        StatusRange(400, 499), Text(media_type=None), exception=AccessBlocked
+    )
+    fallback: Error[Any] = Error(DefaultStatus(), Text(media_type=None), exception=AccessBlocked)
+    assert _specificity(exact) > _specificity(ranged) > _specificity(fallback)
+
+
+def test_operation_still_beats_service_on_a_full_tie() -> None:
+    """Precedence stays last: it breaks a tie, it never overtakes a criterion."""
+
+    operation: Error[Any] = Error(
+        404, Text(media_type=None), exception=ChallengeRequired, precedence=0
+    )
+    service: Error[Any] = Error(404, Text(media_type=None), exception=AccessBlocked, precedence=1)
+    assert _specificity(operation) > _specificity(service)
+
+
+def test_specificity_order_is_criterion_status_media_layer() -> None:
+    """The order itself, read straight off the tuple, so a reshuffle cannot pass unnoticed."""
+
+    conditional_range: Error[Any] = Error(
+        StatusRange(200, 599),
+        Text(media_type=None),
+        exception=ChallengeRequired,
+        condition=is_challenge,
+        precedence=1,
+    )
+    plain_exact: Success[Any] = Success(200, Bytes(media_type=None))
+
+    assert _specificity(conditional_range) == (1, 1, 0, -1)
+    assert _specificity(plain_exact) == (0, 2, 0, 0)
+    assert _specificity(conditional_range) > _specificity(plain_exact)
+
+
+def test_an_operation_overrides_a_service_condition_with_its_own() -> None:
+    """The documented escape hatch: the operation states its own criterion and wins on status."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Odd(HttpOperation[bytes]):
+        __http__ = Http.get(
+            "/document",
+            success={200: Bytes(media_type=None, when=is_challenge)},
+        )
+
+    class Service(Protection):
+        download = op(Odd)
+
+    with _serve(CHALLENGE) as client:
+        assert Service(client).download() == CHALLENGE

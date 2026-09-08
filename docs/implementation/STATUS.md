@@ -4747,7 +4747,7 @@ decorator form `@api.get` has no `__pages__` (plan D7).
 
 ### State
 
-Active. 53.1 (`when=` on every representation) is done; 53.2 (condition before status), 53.3
+Active. 53.1 (`when=` on every representation) and 53.2 (criterion before status) are done; 53.3
 (`Envelope` on the model plus `accept=`), 53.4 (`eazy_sdk.response.match`) and 53.5 (docs and the
 `kad` acceptance rewrite) are pending. Plan: `53-response-cases.md`. Origin: two issues written
 against 0.2.0a7 (`docs/eazy-sdk-v0.2.0a7-response-cases-api-issue.md`,
@@ -4765,15 +4765,27 @@ the arbitration order changes so a condition outranks status precision.
   media type and its own exception, so invariant I1 was not actually reachable. Recorded as a
   plan refinement in §9.
 
+### Delivered (53.2)
+
+- `_specificity` ranks `(criterion, status, media, layer)`; `_criterion_of` is the one place that
+  answers whether a case states a criterion, and 53.3 extends it to the two criteria decided
+  after parsing. The `_most_specific` docstring carries the reason the criterion comes first.
+- Predicted in the plan and confirmed: no existing arbitration test changed. All four in
+  `test_phase50_responses.py` compare cases that are equal on the criterion rank, so the next
+  element of the tuple decides exactly as before.
+- Breaking, recorded in CHANGELOG: an operation that owns a status against a conditional service
+  case must now state its own `when=`, which 53.1 made possible for every representation.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed. |
+| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 8 passed after 53.1; 15 after 53.2. |
+| `uv run pytest -q tests/unit/test_phase50_responses.py tests/rewrite/test_phase05_responses.py` | PASS: 39 passed, unchanged by the new order. |
 | `uv run ruff check`, `uv run mypy` (touched files) | PASS. |
 
 ### Remaining work / blockers
 
-53.2 through 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
+53.3 through 53.5. The acceptance criteria live in the plan's §7 and are measured on the `kad`
 consumer at `C:/Users/user/Desktop/parsing/kad`.
 

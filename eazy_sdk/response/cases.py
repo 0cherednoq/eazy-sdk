@@ -803,10 +803,18 @@ def _most_specific[TValue](
 ) -> list[tuple[ResponseCase[object], TValue]]:
     """Two cases can both parse a body; the more specific declaration wins.
 
-    Specific means, in order: an exact status over a range over ``DEFAULT``; an explicit media
-    type over a wildcard over none at all; a ``when=`` condition over none; and the layer that
-    declared the case — the operation over its service over the client. A tie between two
-    equally specific cases stays ambiguous, because nothing in the declaration decides it.
+    Specific means, in order: a case that states a criterion over one that states none; an exact
+    status over a range over ``DEFAULT``; an explicit media type over a wildcard over none at
+    all; and the layer that declared the case, the operation over its service over the client. A
+    tie between two equally specific cases stays ambiguous, because nothing in the declaration
+    decides it.
+
+    The criterion comes first because it is the narrower statement. "200 and the body is a
+    protection page" says more than "200", so a service that declares its protection pages once,
+    on a status range, is not silently outranked by every operation that declares a plain success
+    on an exact status. Before this order, such an operation won and the protection page was
+    parsed as a successful body. An operation that genuinely owns a status against a conditional
+    case says so with its own ``when=``, which every representation accepts.
     """
 
     if len(matches) < 2:
@@ -818,11 +826,22 @@ def _most_specific[TValue](
 
 def _specificity(case: ResponseCase[object]) -> tuple[int, int, int, int]:
     return (
+        0 if _criterion_of(case) is None else 1,
         _status_rank(case.status),
         _media_rank(case.response.media_type),
-        0 if case.condition is None else 1,
         -case.precedence,
     )
+
+
+def _criterion_of(case: ResponseCase[object]) -> object | None:
+    """What the case states beyond status and media, or ``None`` when it states nothing.
+
+    One rank for every kind of criterion: a case either narrows the responses it claims or it
+    does not. Today that is ``when=``, read from the case; phase 53.3 adds the two that are
+    decided after parsing.
+    """
+
+    return case.condition
 
 
 def _status_rank(selector: StatusSelector) -> int:
