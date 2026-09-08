@@ -67,6 +67,7 @@ class FakeFastJson:
     """A stand-in for a second JSON backend: same bytes as stdlib, different name."""
 
     name: str = "fake-fast"
+    readable: bool = True
 
     def supports(self, policy: JsonPolicy) -> bool:
         return True

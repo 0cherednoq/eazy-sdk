@@ -143,10 +143,19 @@ class JsonBackend(Protocol):
     operation's :class:`JsonPolicy`. A backend that cannot honour a policy says so through
     :meth:`supports`, and the operation is rejected at compile time rather than signed over
     bytes the server never agreed to.
+
+    ``readable`` is a separate question from writing: a backend that encodes correctly can
+    still decode lossily. ``orjson``, for instance, represents an integer wider than 64 bits
+    as a Python ``float`` rather than raising or keeping its precision, and would do so
+    silently for every response it read. A backend declares ``readable = False`` to say "do
+    not use me to parse a response" without needing to change how it encodes requests.
     """
 
     @property
     def name(self) -> str: ...
+
+    @property
+    def readable(self) -> bool: ...
 
     def supports(self, policy: JsonPolicy) -> bool: ...
 
@@ -167,6 +176,8 @@ class StdlibJson:
     """The standard library encoder, which can satisfy every policy this SDK can express."""
 
     name: str = "json"
+    readable: bool = True
+    """``json.loads`` keeps arbitrary-precision integers exactly; always safe to read with."""
 
     def supports(self, policy: JsonPolicy) -> bool:
         return True

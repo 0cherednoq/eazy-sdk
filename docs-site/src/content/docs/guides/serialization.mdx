@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.models
   - eazy_sdk.request.wire.JsonBackend
 draft: false
-api_fingerprint: "sha256:3673bf780bb46879d96ea074fcb361d1b0d1b5306b2dafa26354aade5c4963fa"
+api_fingerprint: "sha256:9755fa64051f9d4f46b426e40b70e7f3ac7fca9b7c9dd23f8d50a9021aa7fd03"
 ---
 
 Сериализация состоит из двух половин. Одна влияет на байты — кодек тела, `JsonPolicy`, проекция,
@@ -94,6 +94,7 @@ from eazy_sdk.request.wire import JsonPolicy
 
 class OrjsonBackend:
     name = "orjson"
+    readable = False  # см. предупреждение ниже — orjson не годится для чтения ответов
 
     def supports(self, policy: JsonPolicy) -> bool:
         return not policy.ensure_ascii and policy.separators == (",", ":")
@@ -120,6 +121,20 @@ JsonPolicy(ensure_ascii=True, ...), which the 'orjson' backend cannot produce
 
 Штатный `StdlibJson` удовлетворяет любой политике, которую можно выразить в SDK, поэтому менять
 его стоит только ради скорости.
+
+### Чтение ответа и `readable`
+
+`JsonBackend.readable` — отдельный от `dumps`/`supports` вопрос: годится ли бэкенд для *разбора*
+ответа. Ответ разбирается тем бэкендом, что настроен в `Serialization.json`, но только если он
+объявил `readable = True`; иначе используется штатный stdlib-декодер, независимо от того, чем
+кодируется тело запроса.
+
+**Предупреждение про `orjson`.** `orjson.loads()` представляет целое число шире 64 бит как
+`float`, **молча**, без ошибки: `orjson.loads(b"12345678901234567890123")` вернёт
+`1.2345678901234568e+22`, а не исходное значение. Если сервер отдаёт такие идентификаторы
+(снапшот-версии, некоторые распределённые ID), `orjson` как читающий бэкенд их незаметно
+испортит. Поэтому `OrjsonBackend` выше объявляет `readable = False`: тело запроса он кодирует
+(и делает это быстро), а ответы разбирает stdlib, для которого целые всегда точны.
 
 ## Документы
 

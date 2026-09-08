@@ -89,8 +89,19 @@ class ResponseContext[TRaw = object]:
 
     @cached_property
     def json(self) -> ParsedView[object]:
+        """The parsed body, read through the configured backend when it is safe to.
+
+        A backend that has not declared itself ``readable`` (plan 51-serialization-
+        performance.md, F4/R5 -- ``orjson`` silently loses precision on integers wider than
+        64 bits) is never used here regardless of what it is configured for writing: the
+        stdlib decoder is exact for every value this SDK's models can express, so it is the
+        one default a caller can trust without reading the backend's own caveats first.
+        """
+
+        backend = self.serialization.json
+        loader = backend if backend.readable else json_module
         try:
-            return ParsedView(json_module.loads(self.bytes))
+            return ParsedView(loader.loads(self.bytes))
         except Exception as exc:
             return ParsedView(error=exc)
 

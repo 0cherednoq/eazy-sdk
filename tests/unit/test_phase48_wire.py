@@ -453,6 +453,7 @@ class AsciiIncapableJson:
     """A stand-in for the real constraint: orjson cannot produce ``ensure_ascii=True``."""
 
     name: str = "ascii-incapable"
+    readable: bool = False
 
     def supports(self, policy: JsonPolicy) -> bool:
         return not policy.ensure_ascii
