@@ -25,7 +25,7 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.compile.http_operation import _OperationDeclaration
@@ -50,7 +50,13 @@ from eazy_sdk.operation import (
     _Inherit,
     generic_argument,
 )
-from eazy_sdk.pagination import Pagination, check_max_pages, next_changes, validate_declaration
+from eazy_sdk.pagination import (
+    NextUrl,
+    Pagination,
+    check_max_pages,
+    next_changes,
+    validate_declaration,
+)
 from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protocols import Envelope
@@ -235,6 +241,65 @@ class _BoundOperation[**P, T]:
         check_max_pages(max_pages)
         return strategy
 
+    def _next_page(
+        self,
+        strategy: Pagination[T],
+        request: HttpOperation[T],
+        result: T,
+        *,
+        fresh: int,
+        url: str,
+    ) -> tuple[HttpOperation[T], str | None] | None:
+        """The request and the URL of the next page, or ``None`` when the iteration is over.
+
+        A field strategy evolves the request and keeps the operation's own address; a link
+        strategy keeps the request and carries the link, resolved against ``url``, the address
+        the page just read actually came from.
+        """
+
+        changes = next_changes(strategy, request, result, fresh=fresh)
+        if changes is None:
+            return None
+        if isinstance(changes, NextUrl):
+            return request, self._absolute(changes.url, url)
+        return self.evolve(request, **changes), None
+
+    @staticmethod
+    def _absolute(link: str, previous: str) -> str:
+        """A link as the server wrote it, resolved against the URL of the page that gave it."""
+
+        return link if urlsplit(link).scheme else urljoin(previous, link)
+
+    def _at_url(
+        self, request: HttpOperation[T], url: str
+    ) -> tuple[_OperationDeclaration[T], dict[str, object]]:
+        """The declaration re-addressed to ``url`` verbatim: path and query fields drop out.
+
+        The link already encodes whatever the server wants in its path and query, so those
+        fields are removed from the declaration rather than re-applied on top of it; headers,
+        cookies and body fields still come from the request value.
+        """
+
+        declaration = self._descriptor.resolve_for(self._api)
+        fields = tuple(
+            field
+            for field in declaration.input_fields
+            if field.location not in (RequestLocation.PATH, RequestLocation.QUERY)
+        )
+        values = self._values(request)
+        kept = {
+            field.python_name: values[field.python_name]
+            for field in fields
+            if field.python_name in values
+        }
+        readdressed = replace(
+            declaration,
+            path=url,
+            input_fields=fields,
+            input_schema=replace(declaration.input_schema, fields=fields),
+        )
+        return readdressed, kept
+
     def _bind(self, *args: Any, **kwargs: Any) -> tuple[dict[str, object], CallOptions | None]:
         return self._descriptor._bind_arguments(self._api, *args, **kwargs)
 
@@ -273,9 +338,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
             serialization=self._api._serialization,
         )
 
-    async def send(
-        self, request: HttpOperation[T], /, *, options: CallOptions | None = None
-    ) -> T:
+    async def send(self, request: HttpOperation[T], /, *, options: CallOptions | None = None) -> T:
         """Send a request value built by :meth:`request` or :meth:`evolve`."""
 
         return await self._execute(self._values(request), options)
@@ -299,15 +362,18 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
 
         strategy = self._strategy(max_pages)
         request = self.request(*args, **kwargs)
+        url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
-            result = await self.send(request, options=options)
+            result, page_url = await self._send_page(request, url, options)
             sent += 1
             yield result
-            changes = next_changes(strategy, request, result, fresh=len(strategy.items(result)))
-            if changes is None:
+            step = self._next_page(
+                strategy, request, result, fresh=len(strategy.items(result)), url=page_url
+            )
+            if step is None:
                 return
-            request = self.evolve(request, **changes)
+            request, url = step
 
     async def items(
         self,
@@ -326,9 +392,10 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         strategy = self._strategy(max_pages)
         request = self.request(*args, **kwargs)
         seen: set[Hashable] = set()
+        url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
-            result = await self.send(request, options=options)
+            result, page_url = await self._send_page(request, url, options)
             sent += 1
             fresh = 0
             for item in strategy.items(result):
@@ -339,10 +406,32 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
                     seen.add(mark)
                 fresh += 1
                 yield item
-            changes = next_changes(strategy, request, result, fresh=fresh)
-            if changes is None:
+            step = self._next_page(strategy, request, result, fresh=fresh, url=page_url)
+            if step is None:
                 return
-            request = self.evolve(request, **changes)
+            request, url = step
+
+    async def _send_page(
+        self, request: HttpOperation[T], url: str | None, options: CallOptions | None
+    ) -> tuple[T, str]:
+        """One page and the URL it came from: ``send()``, or the request re-addressed to ``url``."""
+
+        if url is None:
+            envelope = await self.send_with_response(request, options=options)
+        else:
+            declaration, values = self._at_url(request, url)
+            envelope = cast(
+                ResponseEnvelope[T, Any],
+                await self._api._client._execute_operation(
+                    declaration,
+                    values,
+                    options=options,
+                    with_response=True,
+                    identity=self._api._scope,
+                    serialization=self._api._serialization,
+                ),
+            )
+        return envelope.value, envelope.response.url
 
     async def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = await self._api._client._execute_operation(
@@ -420,15 +509,18 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
 
         strategy = self._strategy(max_pages)
         request = self.request(*args, **kwargs)
+        url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
-            result = self.send(request, options=options)
+            result, page_url = self._send_page(request, url, options)
             sent += 1
             yield result
-            changes = next_changes(strategy, request, result, fresh=len(strategy.items(result)))
-            if changes is None:
+            step = self._next_page(
+                strategy, request, result, fresh=len(strategy.items(result)), url=page_url
+            )
+            if step is None:
                 return
-            request = self.evolve(request, **changes)
+            request, url = step
 
     def items(
         self,
@@ -443,9 +535,10 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         strategy = self._strategy(max_pages)
         request = self.request(*args, **kwargs)
         seen: set[Hashable] = set()
+        url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
-            result = self.send(request, options=options)
+            result, page_url = self._send_page(request, url, options)
             sent += 1
             fresh = 0
             for item in strategy.items(result):
@@ -456,10 +549,32 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
                     seen.add(mark)
                 fresh += 1
                 yield item
-            changes = next_changes(strategy, request, result, fresh=fresh)
-            if changes is None:
+            step = self._next_page(strategy, request, result, fresh=fresh, url=page_url)
+            if step is None:
                 return
-            request = self.evolve(request, **changes)
+            request, url = step
+
+    def _send_page(
+        self, request: HttpOperation[T], url: str | None, options: CallOptions | None
+    ) -> tuple[T, str]:
+        """One page and the URL it came from: ``send()``, or the request re-addressed to ``url``."""
+
+        if url is None:
+            envelope = self.send_with_response(request, options=options)
+        else:
+            declaration, values = self._at_url(request, url)
+            envelope = cast(
+                ResponseEnvelope[T, Any],
+                self._api._client._execute_operation(
+                    declaration,
+                    values,
+                    options=options,
+                    with_response=True,
+                    identity=self._api._scope,
+                    serialization=self._api._serialization,
+                ),
+            )
+        return envelope.value, envelope.response.url
 
     def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = self._api._client._execute_operation(
@@ -642,9 +757,7 @@ class _OperationDescriptor[**P, T]:
         spec = self.spec
         declared_security = spec.security
         security = (
-            defaults.security
-            if isinstance(declared_security, _Inherit)
-            else declared_security
+            defaults.security if isinstance(declared_security, _Inherit) else declared_security
         )
         declared_signing = spec.signing
         signing: tuple[RequestSignature, ...]
@@ -820,8 +933,7 @@ def op(operation: Any, /) -> Any:
         return operation.__publish__()
     if not issubclass(operation, HttpOperation):
         raise TypeError(
-            "op() expects a subclass of HttpOperation, RpcOperation, WsCall, WsSubscribe "
-            "or WsSend"
+            "op() expects a subclass of HttpOperation, RpcOperation, WsCall, WsSubscribe or WsSend"
         )
     spec = getattr(operation, "__http__", None)
     if not isinstance(spec, _HttpSpec):
@@ -871,12 +983,16 @@ class _ApiBase:
         self._serialization = serialization if serialization is not None else Serialization()
         self._resolved: dict[object, _OperationDeclaration[Any]] = {}
         if scope is None and identity is not None:
-            bind_session_lifecycle(self._scope, client, lambda scoped: type(self)(
-                scoped,
-                serialization=self._serialization,
-                defaults=self._defaults,
-                scope=self._scope,
-            ))
+            bind_session_lifecycle(
+                self._scope,
+                client,
+                lambda scoped: type(self)(
+                    scoped,
+                    serialization=self._serialization,
+                    defaults=self._defaults,
+                    scope=self._scope,
+                ),
+            )
 
 
 class AsyncApi(_ApiBase):

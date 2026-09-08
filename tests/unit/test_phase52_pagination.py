@@ -9,15 +9,26 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import httpx
 import pytest
 
-from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Query, SyncApi, op
+from eazy_sdk import (
+    UNSET,
+    AsyncApi,
+    Header,
+    Http,
+    HttpOperation,
+    Omittable,
+    Path,
+    Query,
+    SyncApi,
+    op,
+)
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.middleware import call_middleware
-from eazy_sdk.pagination import CursorPages, NumberedPages, Pages, next_changes
+from eazy_sdk.pagination import CursorPages, NextUrl, NumberedPages, Pages, next_changes
 from eazy_sdk.policies import CallOptions
 from tests._support.zapros_clients import client_from_httpx
 
@@ -686,3 +697,153 @@ def test_cursor_declaration_errors() -> None:
         Pages.cursor(Feed, cursor="after", items=lambda r: r.items, next_cursor=None)  # type: ignore[arg-type]
     assert isinstance(ListFeed.__pages__, CursorPages)
     assert ListFeed.__pages__.fields == ("after",)
+
+
+# --- 52.4: Pages.next_url -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Linked:
+    items: list[Document]
+    next: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListLinked(HttpOperation[Linked]):
+    """Path and query fields address the first page only; headers travel with every page."""
+
+    __http__ = Http.get("/v/{version}/documents")
+    __pages__ = Pages.next_url(Linked, items=lambda r: r.items, next_url=lambda r: r.next)
+
+    version: Path[str] = "1"
+    case_id: Query[str]
+    trace: Header[str] = "t-1"
+
+
+class LinkedApi(SyncApi):
+    linked = op(ListLinked)
+
+
+class AsyncLinkedApi(AsyncApi):
+    linked = op(ListLinked)
+
+
+LINKS: dict[str, tuple[Sequence[str], str | None]] = {
+    "/v/1/documents?case_id=c": (("a", "b"), "https://api.example/documents/next?token=t2"),
+    "/documents/next?token=t2": (("c",), "third?token=t3"),
+    "/documents/third?token=t3": (("d",), None),
+}
+
+
+def _linked_api(
+    links: dict[str, tuple[Sequence[str], str | None]],
+) -> tuple[LinkedApi, list[httpx.Request]]:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        ids, following = links[request.url.raw_path.decode()]
+        return httpx.Response(200, json={"items": [{"id": i} for i in ids], "next": following})
+
+    client = client_from_httpx(
+        httpx.Client(base_url="https://api.example", transport=httpx.MockTransport(handler))
+    )
+    return LinkedApi(client), seen
+
+
+def _linked(ids: Sequence[str], following: str | None) -> Linked:
+    return Linked(items=[Document(i) for i in ids], next=following)
+
+
+def test_next_url_stops_on_empty() -> None:
+    request = ListLinked(case_id="c")
+    assert next_changes(ListLinked.__pages__, request, _linked((), "x"), fresh=0) is None
+
+
+def test_next_url_stops_without_link() -> None:
+    request = ListLinked(case_id="c")
+    assert next_changes(ListLinked.__pages__, request, _linked(("a",), None), fresh=1) is None
+
+
+def test_next_url_answers_the_link() -> None:
+    request = ListLinked(case_id="c")
+    changes = next_changes(ListLinked.__pages__, request, _linked(("a",), "/n?t=2"), fresh=1)
+    assert changes == NextUrl("/n?t=2")
+
+
+def test_next_url_rejects_a_non_string_link() -> None:
+    request = ListLinked(case_id="c")
+    with pytest.raises(PlanError, match=r"next_url must return a non-empty str or None, got int"):
+        next_changes(ListLinked.__pages__, request, _linked(("a",), cast(Any, 2)), fresh=1)
+
+
+def test_next_url_sends_the_link_verbatim_and_keeps_headers() -> None:
+    """The link replaces path and query; the header field still travels; relative links resolve
+    against the page that returned them."""
+
+    api, seen = _linked_api(LINKS)
+    assert [d.id for d in api.linked.items(case_id="c", trace="t-9")] == ["a", "b", "c", "d"]
+    assert [str(request.url) for request in seen] == [
+        "https://api.example/v/1/documents?case_id=c",
+        "https://api.example/documents/next?token=t2",
+        "https://api.example/documents/third?token=t3",
+    ]
+    assert [request.headers["trace"] for request in seen] == ["t-9", "t-9", "t-9"]
+
+
+def test_next_url_relative_first_link_resolves_against_the_operation_url() -> None:
+    links: dict[str, tuple[Sequence[str], str | None]] = {
+        "/v/1/documents?case_id=c": (("a",), "more?token=t2"),
+        "/v/1/more?token=t2": (("b",), None),
+    }
+    api, seen = _linked_api(links)
+    assert [d.id for d in api.linked.items(case_id="c")] == ["a", "b"]
+    assert str(seen[1].url) == "https://api.example/v/1/more?token=t2"
+
+
+def test_next_url_follows_another_host() -> None:
+    links: dict[str, tuple[Sequence[str], str | None]] = {
+        "/v/1/documents?case_id=c": (("a",), "https://cdn.example/page/2"),
+        "/page/2": (("b",), None),
+    }
+    api, seen = _linked_api(links)
+    assert [d.id for d in api.linked.items(case_id="c")] == ["a", "b"]
+    assert str(seen[1].url) == "https://cdn.example/page/2"
+
+
+def test_next_url_pages_with_max_pages() -> None:
+    api, seen = _linked_api(LINKS)
+    pages = list(api.linked.pages(case_id="c", max_pages=2))
+    assert [[d.id for d in page.items] for page in pages] == [["a", "b"], ["c"]]
+    assert len(seen) == 2
+
+
+async def test_next_url_async() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        ids, following = LINKS[request.url.raw_path.decode()]
+        return httpx.Response(200, json={"items": [{"id": i} for i in ids], "next": following})
+
+    client = client_from_httpx(
+        httpx.AsyncClient(base_url="https://api.example", transport=httpx.MockTransport(handler))
+    )
+    api = AsyncLinkedApi(client)
+    assert [d.id async for d in api.linked.items(case_id="c")] == ["a", "b", "c", "d"]
+    assert len(seen) == 3
+
+
+def test_next_url_declaration() -> None:
+    strategy = Pages.next_url(Linked, items=lambda r: r.items, next_url=lambda r: r.next)
+    assert strategy.fields == ()
+    with pytest.raises(TypeError, match=r"next_url=\) must be callable"):
+        Pages.next_url(Linked, items=lambda r: r.items, next_url=None)  # type: ignore[arg-type]
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Mismatch(HttpOperation[Feed]):
+        __http__ = Http.get("/feed")
+        __pages__ = Pages.next_url(Linked, items=lambda r: r.items, next_url=lambda r: r.next)
+
+    with pytest.raises(PlanError, match=r"declares result Linked, the operation returns Feed"):
+        op(Mismatch)

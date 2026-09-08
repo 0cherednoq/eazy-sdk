@@ -121,7 +121,10 @@ for doc in api.documents.items(case_id=cid, key=lambda d: d.id):  # elements, de
 экспортируется из корня `eazy_sdk` (бюджет имён). `Pages.offset(Model, offset=, limit=, items=,
 total=)` адресует страницы смещением и двигает его на длину реально полученной страницы;
 `Pages.cursor(Model, cursor=, items=, next_cursor=)` кладёт в поле токен из предыдущего ответа
-и останавливается на `None`. План — `52-pagination.md`.
+и останавливается на `None`. `Pages.next_url(Model, items=, next_url=)` шлёт следующую страницу
+по ссылке из ответа как есть: path/query-поля операции к ней не добавляются, заголовки, cookies и
+тело — добавляются; относительная ссылка резолвится против фактического URL страницы. План —
+`52-pagination.md`.
 
 ## Public request и private wire body
 

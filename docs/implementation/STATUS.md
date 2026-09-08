@@ -4666,13 +4666,13 @@ review's scope: `compile_endpoint` runs on every operation call (no compiled-con
 phase.
 
 
-## Phase 52 — declarative pagination (2026-09-08)
+## Phase 52 — declarative pagination (2026-09-08, closed 2026-09-08)
 
 ### State
 
-Active. 52.1 (`Pages.numbered`, `pages()`/`items()`, declaration checks, docs), 52.2
-(`Pages.offset`) and 52.3 (`Pages.cursor`) are done. Only the conditional 52.4 (`Pages.next_url`)
-remains, and it waits for the owner's decision (plan §4.4).
+Complete. 52.1 (`Pages.numbered`, `pages()`/`items()`, declaration checks, docs), 52.2
+(`Pages.offset`), 52.3 (`Pages.cursor`) and 52.4 (`Pages.next_url`, confirmed by the owner the
+same day) are done.
 Plan: `52-pagination.md`. Origin: the owner asked for a declarative way to write the paging
 generators that `op()`-only SDKs still needed as hand-written router methods; a broader
 composite-operation form (`Flow`/`Step`) was proposed and declined by the owner the same day
@@ -4712,11 +4712,24 @@ Speakeasy's `x-speakeasy-pagination` (roles of request fields, paths into the re
   the token read from the previous result, `None` stops. Docs: section in
   `guides/pagination.mdx`, authoring reference, CHANGELOG.
 
+### Delivered (52.4)
+
+- `NextUrlPages[T]`, `Pages.next_url(result, *, items, next_url)`; `next_changes` answers a
+  `NextUrl` for it. On the bound operation, `_send_page` reads every page with
+  `with_response=True` so the strategy sees the URL the page actually came from; a link is
+  resolved against it (`urljoin`), and the next page is sent through `_at_url`: the declaration
+  with `path` replaced by the link and its PATH/QUERY fields removed from `input_fields` and
+  `input_schema`, so the link goes out verbatim while headers, cookies and body fields still come
+  from the request value. Verified by probe before implementing: the executor accepts the
+  re-addressed declaration and `_contract_url` passes an absolute path through.
+- Docs: section in `guides/pagination.mdx`, authoring reference, CHANGELOG; plan §4.4 rewritten
+  from "conditional" to what was built.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase52_pagination.py --timeout=120` | PASS: 26 passed after 52.1; 36 after 52.2; 43 after 52.3. |
+| `uv run pytest -q tests/unit/test_phase52_pagination.py --timeout=120` | PASS: 26 passed after 52.1; 36 after 52.2; 43 after 52.3; 53 after 52.4. |
 | `uv run pytest -q --timeout=120` (full suite) | 1322 passed, 11 skipped, 2 failed: `plugins/openapi/tests/test_phase21_body_projection_codegen.py::test_generated_projection_import_types_and_executes_exact_wire_body[3.2.0]` and `plugins/openapi/tests/test_rewrite_generator.py::test_generated_session_factory_hides_runtime_plumbing_and_executes`. Both re-run green in isolation (4 passed) and as their two files together (48 passed, 61 s); they spawn generated-SDK subprocesses and are the load-sensitive tests already recorded for phase 50. Not caused by this change: neither touches `__pages__`, and the generated SDK imports through the same `op()`. |
 | `uv run mypy` | PASS: no issues in 345 source files. |
 | `uv run ruff check` | PASS. |
@@ -4726,5 +4739,5 @@ Speakeasy's `x-speakeasy-pagination` (roles of request fields, paths into the re
 
 ### Remaining work / blockers
 
-52.4 `Pages.next_url` only on the owner's confirmation (needs an absolute-URL send path).
-`items()` elements are typed `Any` (plan D6).
+None for phase 52. Recorded, not pending: `items()` elements are typed `Any` (plan D6); the
+decorator form `@api.get` has no `__pages__` (plan D7).

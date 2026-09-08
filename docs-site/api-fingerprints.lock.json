@@ -251,9 +251,9 @@
     }
   },
   "guides/pagination.mdx": {
-    "fingerprint": "sha256:e8002b7bc57f2618a256c2285018f615e7b3b2a40a603d732b63ed2f54c5e53e",
+    "fingerprint": "sha256:6e7813bf02a0d0e2213da9125d4a5fc22e1f690c8dbe07307963b8d4f047b592",
     "symbols": {
-      "eazy_sdk.pagination": "sha256:b181803bc81faff121a289e09dbcc8692b478a23a4e7efaf5371786a2d124ddd"
+      "eazy_sdk.pagination": "sha256:3d4837d01ffd1de2ae571e4dce9a29f7f350efbb7afeaf20385b0d0eee6264f7"
     }
   },
   "guides/payload-crypto.mdx": {

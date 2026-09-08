@@ -37,7 +37,16 @@ from typing import Any
 
 from eazy_sdk.core.errors import PlanError
 
-__all__ = ["CursorPages", "NumberedPages", "OffsetPages", "Pages", "Pagination", "next_changes"]
+__all__ = [
+    "CursorPages",
+    "NextUrl",
+    "NextUrlPages",
+    "NumberedPages",
+    "OffsetPages",
+    "Pages",
+    "Pagination",
+    "next_changes",
+]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -135,7 +144,34 @@ class CursorPages[T]:
         return (self.cursor,)
 
 
-type Pagination[T] = NumberedPages[T] | OffsetPages[T] | CursorPages[T]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NextUrlPages[T]:
+    """Pages addressed by a link the previous page handed out.
+
+    The link is sent as it is: the operation's path and query fields are not re-applied to it,
+    since the server already encoded whatever it needs there. Headers, cookies and body fields
+    still come from the request value. A relative link is resolved against the URL of the page
+    that returned it; ``None`` from ``next_url`` means there is no following page.
+    """
+
+    result: type[T]
+    items: Callable[[T], Sequence[object]]
+    next_url: Callable[[T], str | None]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, type):
+            raise TypeError("Pages.next_url() expects the result class as its first argument")
+        if not callable(self.items):
+            raise TypeError("Pages.next_url(items=) must be callable")
+        if not callable(self.next_url):
+            raise TypeError("Pages.next_url(next_url=) must be callable")
+
+    @property
+    def fields(self) -> tuple[str, ...]:
+        return ()
+
+
+type Pagination[T] = NumberedPages[T] | OffsetPages[T] | CursorPages[T] | NextUrlPages[T]
 """Every strategy an operation may declare as ``__pages__``."""
 
 
@@ -178,6 +214,22 @@ class Pages:
     ) -> CursorPages[T]:
         return CursorPages(result=result, cursor=cursor, items=items, next_cursor=next_cursor)
 
+    @staticmethod
+    def next_url[T](
+        result: type[T],
+        *,
+        items: Callable[[T], Sequence[object]],
+        next_url: Callable[[T], str | None],
+    ) -> NextUrlPages[T]:
+        return NextUrlPages(result=result, items=items, next_url=next_url)
+
+
+@dataclass(frozen=True, slots=True)
+class NextUrl:
+    """What :func:`next_changes` answers for a link strategy: send the same request there."""
+
+    url: str
+
 
 def next_changes[T](
     strategy: Pagination[T],
@@ -185,8 +237,8 @@ def next_changes[T](
     result: T,
     *,
     fresh: int,
-) -> dict[str, object] | None:
-    """Field changes for the next request, or ``None`` when the iteration is over.
+) -> dict[str, object] | NextUrl | None:
+    """Field changes for the next request, a :class:`NextUrl`, or ``None`` when it is over.
 
     ``fresh`` is how many elements of this page the caller used: zero after ``key=``
     deduplication means the server has nothing new, even when the page itself is not empty.
@@ -200,7 +252,9 @@ def next_changes[T](
         return _next_numbered(strategy, request, result)
     if isinstance(strategy, OffsetPages):
         return _next_offset(strategy, request, result)
-    return _next_cursor(strategy, result)
+    if isinstance(strategy, CursorPages):
+        return _next_cursor(strategy, result)
+    return _next_link(strategy, result)
 
 
 def _int_field(request: object, name: str) -> int:
@@ -262,6 +316,20 @@ def _next_cursor[T](strategy: CursorPages[T], result: T) -> dict[str, object] | 
     return {strategy.cursor: token}
 
 
+def _next_link[T](strategy: NextUrlPages[T], result: T) -> NextUrl | None:
+    """2. no ``next_url`` in the result → stop; 3. the same request, sent to that link."""
+
+    link = strategy.next_url(result)
+    if link is None:
+        return None
+    if not isinstance(link, str) or not link:
+        raise PlanError(
+            f"{strategy.result.__name__}: next_url must return a non-empty str or None, "
+            f"got {type(link).__name__}"
+        )
+    return NextUrl(link)
+
+
 def validate_declaration(
     strategy: object,
     *,
@@ -272,7 +340,7 @@ def validate_declaration(
     """Check ``__pages__`` against the class it sits on; raise :class:`PlanError` at import."""
 
     name = operation_type.__name__
-    if not isinstance(strategy, NumberedPages | OffsetPages | CursorPages):
+    if not isinstance(strategy, NumberedPages | OffsetPages | CursorPages | NextUrlPages):
         raise PlanError(
             f"operation class {name}.__pages__ must be a Pages strategy, "
             f"got {type(strategy).__name__}"

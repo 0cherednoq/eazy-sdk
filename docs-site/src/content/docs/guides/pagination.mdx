@@ -4,7 +4,7 @@ description: Стратегия страниц объявляется на кл�
 sources:
   - eazy_sdk.pagination
 draft: false
-api_fingerprint: "sha256:e8002b7bc57f2618a256c2285018f615e7b3b2a40a603d732b63ed2f54c5e53e"
+api_fingerprint: "sha256:6e7813bf02a0d0e2213da9125d4a5fc22e1f690c8dbe07307963b8d4f047b592"
 ---
 
 Сервис отдаёт список порциями, а вызывающему коду нужны все элементы. Обычно ради этого на
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import UNSET, Client, Http, HttpOperation, Omittable, Query, SyncApi, op
+from eazy_sdk import UNSET, Client, Header, Http, HttpOperation, Omittable, Path, Query, SyncApi, op
 from eazy_sdk.pagination import Pages
 
 
@@ -228,6 +228,37 @@ class ListFeed(HttpOperation[Feed]):
 
 Чтобы начать с середины, передайте токен в вызов: `api.feed.items(case_id=..., after="c1")`.
 
+## Готовая ссылка: `Pages.next_url`
+
+Сервис, который отдаёт в ответе URL следующей страницы, объявляется без имён полей вовсе:
+только `items=` и `next_url=` — функция от результата к ссылке или `None`.
+
+```python
+class Listing(BaseModel):
+    items: list[Document]
+    next: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListListing(HttpOperation[Listing]):
+    __http__ = Http.get("/v/{version}/documents")
+    __pages__ = Pages.next_url(Listing, items=lambda r: r.items, next_url=lambda r: r.next)
+
+    version: Path[str] = "1"
+    case_id: Query[str]
+    trace: Header[str] = "sdk"
+```
+
+Первая страница уходит по обычному адресу операции. Каждая следующая уходит по ссылке как
+есть: путь и query-параметры операции к ней не добавляются, сервер уже закодировал в ссылке
+всё, что ему нужно. Заголовки, cookies и тело по-прежнему берутся из полей операции, поэтому
+`trace` уйдёт с каждой страницей. Относительная ссылка резолвится против фактического адреса
+страницы, которая её отдала. Ссылка на другой хост тоже допустима. Остановка, по порядку:
+
+1. Страница не дала ни одного элемента.
+2. `next_url=` вернул `None`.
+3. Иначе тот же запрос по новой ссылке.
+
 ## Асинхронный роутер
 
 На `AsyncApi` те же методы отдают асинхронные генераторы:
@@ -239,7 +270,5 @@ async for document in api.documents.items(case_id="A40-1/2026"):
 
 ## Чего здесь нет
 
-- Стратегия `next_url` (сервер отдаёт готовый URL следующей страницы) пока не объявляется:
-  ей нужен запрос по абсолютному URL вместо `path` операции.
 - Декоратор `@api.get` не поддерживает `__pages__`: стратегии нужен класс с полями.
 - Тип элементов `items()` — `Any`: связанная операция знает тип страницы, но не тип элемента.
