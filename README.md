@@ -4,7 +4,9 @@ Eazy SDK is a transport-independent runtime for typed HTTP and async WebSocket S
 WebSocket use separate lifecycle runtimes while sharing model adapters, typed cases, auth values,
 and protection primitives.
 
-> **Status:** `0.2.0a5` is an alpha release closing the a4 verification findings: proxy-aware transport identity, one identity per attempt, packaging fixes with CI, and documented protection contracts. Python 3.13 or
+> **Status:** `0.2.0a6` is an alpha release closing the phase-50 code review findings, phase 51
+> serialization performance (every response-parsing scenario 3.9x-8.3x faster, no wire-format
+> change), and a `Body` encoding namespace. Python 3.13 or
 > newer is required. Release artifacts are hosted on GitHub; PyPI publication is deferred.
 >
 > Alphas rename without deprecated aliases. The docs page `more/migration` lists every
@@ -12,15 +14,15 @@ and protection primitives.
 
 ```bash
 pip install \
-  "eazy-sdk[httpx,pydantic] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a5/eazy_sdk-0.2.0a5-py3-none-any.whl"
+  "eazy-sdk[httpx,pydantic] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a6/eazy_sdk-0.2.0a6-py3-none-any.whl"
 ```
 
 For WebSocket SDKs and AsyncAPI 3.0 generation:
 
 ```bash
 pip install \
-  "eazy-sdk[websocket] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a5/eazy_sdk-0.2.0a5-py3-none-any.whl" \
-  "eazy-sdk-asyncapi[yaml] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a5/eazy_sdk_asyncapi-0.2.0a5-py3-none-any.whl"
+  "eazy-sdk[websocket] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a6/eazy_sdk-0.2.0a6-py3-none-any.whl" \
+  "eazy-sdk-asyncapi[yaml] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a6/eazy_sdk_asyncapi-0.2.0a6-py3-none-any.whl"
 eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
 ```
 
