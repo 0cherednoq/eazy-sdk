@@ -4475,25 +4475,53 @@ their targets but not on them: what is left is F6 (adapter selection scanned lin
 the plan already assigns to 51.4 rather than 51.3. Recorded as plan §12, D8, with the condition
 that if 51.4 still leaves them short, 51.8 records a final decision under §9.
 
+### 51.4 — F6 done, F3 declined (2026-09-08, commit c4a3baf)
+
+Profiled `S1-dc` before starting (cProfile, cause-finding only, per §2.2): `_load`'s dispatch and
+`_select`'s linear adapter scan together cost roughly a third of total time -- above the 20%
+threshold in §5. `registry._select` now caches which adapter answered, by annotation for
+`adapter_for_type` and by `type(value)` for `adapter_for_value`, under the same rules as the
+field/load-plan caches.
+
+The second half of 51.4 -- skip `_normalize_dump`'s redundant walk when an adapter's `dump()`
+already returned a tree of primitives -- is declined, not deferred. `msgspec.to_builtins()` does
+return such a tree, empirically, but `PydanticModelAdapter.dump(mode="python")` returns raw
+`Decimal`/`datetime`/`bytes` untouched, and the dataclass/TypedDict adapters always do regardless
+of mode. Whether skipping the walk is safe therefore depends on the (adapter, mode) pair, and
+`mode` is a caller-supplied argument -- there is no way to decide this without either a new
+protocol method on every adapter (a public name beyond what plan §8, E6 allows) or a second
+execution path chosen per call (against P8). No honest property test can be written for a decision
+that isn't there to make, so plan §6's own escape hatch applies and the item is dropped.
+
+Measured (`results/04-adapter-select.json`, 5 runs, 18/18 valid, clean worktree at `c4a3baf`):
+G3 (`S1-dc`, ratio 8.1 -> 7.7), G6 (`L200-dc`, 4.3 -> 3.7) and G7 (`L200-td`, 13.6 -> 12.0) are now
+met. G1 (`S1-ms`, ratio 53.3), G2 (`S1-pd`, 16.4), G4 (`S1-td`, 16.3), G5 (`L200-ms`, ratio 10.0,
+abs 1.19 ms) and G8 (`REQ-ms`, 18.3 us) are not: what is left is the general `_load` dispatch
+parsing (`unwrap_annotated`/`unroll_alias`/`get_origin`/`get_args`) repeated on every recursive
+call, which F6 never touched. `BAD`/`SIGN`/`MULTI` remain 78-92% faster than baseline; G9 holds.
+
+Per §5, both trigger conditions for 51.6 (fast-path) are now true simultaneously: G1 is not met and
+`L200-ms` (1.19 ms) is still above 1.0 ms. 51.6 is not optional at this measurement -- it runs
+after the mandatory 51.5.
+
 ### Next executable increment
 
-51.4 — cache adapter selection by type in `registry._select` (F6), and revisit `_normalize_dump`
-under P1 (F3, only if a byte-identity property test can be written honestly first). Target
-metrics: G1, G5, G8, plus the G3/G4/G7 remainder from 51.3 (§12, D8) as a side effect of the same
-fix. Per §5, take a decomposition before starting.
+51.5 — forbid the combination of a non-stdlib JSON backend and a signature over the body at
+operation-compile time (F5), a correctness step inside the performance phase. Then 51.6 (fast-path
+bytes -> model for msgspec/pydantic, plan §6, triggered per the above) before 51.7.
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| `uv run python experiments/perf/harness.py --step 03 --runs 5` (51.3) | Green: 18/18 rows valid. |
-| `uv run pytest -q` | Green: 1277 passed, 11 skipped. |
-| `uv run mypy` | Green: no issues in 340 source files. |
+| `uv run python experiments/perf/harness.py --step 04 --runs 5` (51.4) | Green: 18/18 rows valid. |
+| `uv run pytest -q` | Green: 1290 passed, 11 skipped. |
+| `uv run mypy` | Green: no issues in 341 source files. |
 | `uv run ruff check` | Green. |
 
 ### Remaining work / blockers
 
-51.4 through 51.8. No blockers: every finding is reproduced by scripts recorded in the audit's
+51.5 through 51.8. No blockers: every finding is reproduced by scripts recorded in the audit's
 appendix B, and steps 51.1-51.5 change no bytes on the wire.
 
 
