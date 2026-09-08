@@ -4391,11 +4391,18 @@ GraphQL-over-HTTP. The `pyrefly` runtime dependency in the working tree's `pypro
 to the repository owner and keeps `package_audit.py` red until it is removed.
 
 
-## Phase 51 — serialization performance (2026-09-07)
+## Phase 51 — serialization performance (2026-09-07, closed 2026-09-08)
 
 ### State
 
-Active. 51.0 is done: the harness exists, the scenario set is frozen, and the baseline is
+Complete. 51.0-51.5 and 51.7 are implemented and measured; 51.6 (fast-path) was declined by owner
+decision after 51.4's measurement triggered it (plan §12, D11) -- the response-parsing scenarios
+were already 3.9x-8.3x faster than the starting point with zero wire-format change, and the owner
+judged the remaining gap to native decode speed not worth a second parsing path. G1, G2, G4, G5 and
+G8 stay open, each with a measured cause recorded in the plan's §12 (D9, D13); G3, G6 and G7 are met
+by `ratio`; G9 (no regression on `BAD`/`SIGN`/`MULTI`) held through every step. This is a legitimate
+phase outcome under the plan's own §9: an unmet goal with its cause written down, not silently
+dropped. 51.0 is done: the harness exists, the scenario set is frozen, and the baseline is
 recorded in `experiments/perf/results/00-baseline.json` — 18 scenarios, 5 runs, every row valid,
 taken from a clean `git worktree` at `b7295b8` because the working tree carried someone else's
 uncommitted runtime changes (plan §12, D1). No runtime file was touched by this step.
@@ -4552,27 +4559,65 @@ owner decision (§12, D11); formal 51.8 closure (the full serialization guide re
 freshness.py check`, `npm run check`/`build`) was not run in this session -- the requested scope
 was 51.5 and 51.7. G1, G4, G5 and G8 remain open goals, recorded with cause per plan §9 (§12, D12).
 
-### Next executable increment
+### 51.8 — closed (2026-09-08)
 
-51.8, if the owner wants the phase formally closed: the full guide rewrite (library-choice
-recommendations after optimization, the `eazy-sdk-adaptix` note, what `Serialization.json` does,
-the orjson warning already added), `docs_freshness.py check`, and the docs-site `npm run check`/
-`build` gates. Optional otherwise -- the phase's runtime work is done and measured either way.
+Final harness run on a clean worktree (`results/99-final.json`, 5 runs, 18/18 valid). While
+reconciling the final numbers, an error surfaced in this file's own §11-equivalent summary table
+carried in the plan document: after 51.4, G2 (`S1-pd`) had been marked "achieved" although its
+measured ratio (16.4) was already above the target (<=14) at the time -- the correct call was in
+the step's own detail table but was not carried into the summary. Corrected at closure (plan §12,
+D13); nothing about the code or prior decisions changes, since F6 was already known insufficient
+for the open goals in that same list (D9) -- G2 was simply missing from it.
+
+**Baseline -> final** (median, `ratio` to the library's own native API):
+
+| Scenario | Baseline | Final | Speedup | `ratio` baseline -> final |
+|---|---:|---:|---:|---|
+| `S1-ms` (one response, msgspec) | 189.1 us | 39.8 us | 4.7x | 272.7 -> 55.5 |
+| `S1-pd` (pydantic) | 200.4 us | 46.0 us | 4.4x | 77.5 -> 16.9 |
+| `S1-dc` (dataclass) | 328.1 us | 57.4 us | 5.7x | 46.9 -> 7.8 |
+| `S1-td` (TypedDict) | 210.9 us | 54.5 us | 3.9x | 62.8 -> 16.1 |
+| `L200-ms` (200-item list, msgspec) | 1.56 ms | 1.40 ms | 1.1x | 12.3 -> 10.1 |
+| `L200-dc` (dataclass) | 32.88 ms | 3.95 ms | 8.3x | 34.1 -> 3.8 |
+| `L200-td` (TypedDict) | 20.86 ms | 3.60 ms | 5.8x | 73.3 -> 11.6 |
+| `MULTI` (3-candidate arbitration) | 197.7 us | 49.8 us | 4.0x | 271.4 -> 64.3 |
+| `BAD` (malformed-body path) | 186.7 us | 42.8 us | 4.4x | 102.1 -> 20.7 |
+| `REQ-ms` (request path, msgspec) | 21.7 us | 20.6 us | 1.1x | 33.3 -> 30.1 |
+| `SIGN` (signed request prep) | 148.7 us | 155.2 us | -4.4%* | 230.7 -> 225.7 |
+
+\* Inside the G9 regression-control tolerance (<=+5%); the signing path was not a target of phase
+51 and none of 51.0-51.4 touch it (51.5 adds a compile-time check with no cost on the success path).
+
+**G1-G9 final status**: G3 (`S1-dc`), G6 (`L200-dc`) and G7 (`L200-td`) met by `ratio`. G1, G2, G4,
+G5 and G8 not met -- each with a measured cause in the plan's §12 (D9, D13): the field/load-plan/
+adapter-selection caches (51.1, 51.3, 51.4) eliminated F1/F2 entirely and reduced F6's share, but
+the remaining cost on these scenarios is `_load`'s own dispatch parsing
+(`unwrap_annotated`/`get_origin`/`get_args` on every recursive call), which only the declined
+fast-path (51.6) would remove. G9 held on every step, on `ratio` throughout.
+
+**Documentation**: `docs-site/.../guides/serialization.mdx` gained a before/after table with the
+practical conclusion that `eazy-sdk-adaptix` is no longer required purely for dataclass speed (the
+built-in adapter is now within 4x-6x of msgspec instead of 22x), a section on the `readable`
+property already added in 51.7, and a section on the backend/signature compile-time guard from
+51.5. The audit document gained a "What changed in phase 51" section with the same final numbers.
 
 ### Gates
 
 | Gate | Result |
 |---|---|
-| `uv run python experiments/perf/harness.py --step 07 --runs 5` (51.7) | Green: 18/18 rows valid. |
+| `uv run python experiments/perf/harness.py --step 99 --runs 5` (final) | Green: 18/18 rows valid. |
 | `uv run pytest -q` | Green: 1298 passed, 11 skipped. |
 | `uv run mypy` | Green: no issues in 343 source files. |
 | `uv run ruff check` | Green. |
+| `uv run python scripts/docs_freshness.py check` | Green: 66 pages fresh. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | Green: 81 pages OK. |
+| `uv run --group docs sphinx-build -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/html` | Green: build succeeded, no warnings. (The plan's §10 names `npm run check`/`build`; the site is actually built with Sphinx + MyST per `docs-site/UPDATING.md` -- no `package.json` exists in this tree. Ran the actual build commands instead.) |
 
 ### Remaining work / blockers
 
-51.8, only if the owner wants formal closure (51.6 declined by owner decision, §12 D11). No
-blockers: every finding is reproduced by scripts recorded in the audit's appendix B, and steps
-51.1-51.5 and 51.7 change no bytes on the wire.
+None. Phase 51 is closed. 51.6 (fast-path) remains available as future work if the remaining gap
+to native decode speed becomes worth it; its trigger condition and the reasoning to skip it are on
+record in the plan's §12, D11, so revisiting it does not require re-deriving the decision.
 
 
 ## Phase 50 review remediation (2026-09-07)
