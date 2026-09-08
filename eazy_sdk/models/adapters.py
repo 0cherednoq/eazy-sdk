@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 import types
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import MISSING, dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -27,6 +29,7 @@ from typing import (
     get_type_hints,
     is_typeddict,
 )
+from weakref import WeakKeyDictionary
 
 from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.sentinels import Unset
@@ -92,9 +95,48 @@ class ModelAdapter(Protocol):
         ...
 
 
+type FieldCache = WeakKeyDictionary[type, tuple[ModelField, ...]]
+
+
+def _new_field_cache() -> FieldCache | None:
+    """A per-registry field cache, or ``None`` when the environment asks for none.
+
+    The switch exists so the suite can be run twice, once each way, and prove that the cache
+    changes nothing but the time (plan §3, P4). It is deliberately not a parameter, an attribute
+    or a documented setting: an author who can turn the cache off in production has been given a
+    way to make their SDK slower and nothing else.
+    """
+
+    if os.environ.get("EAZY_SDK_NO_FIELD_CACHE") == "1":
+        return None
+    return WeakKeyDictionary()
+
+
+def _caches_fields(model: type) -> bool:
+    """Whether this model's fields are settled enough to remember.
+
+    A Pydantic model whose forward references have not resolved answers questions about its
+    fields provisionally: ``model_rebuild()`` can still change the answer. Everything else has
+    been decided by the time the class object exists.
+    """
+
+    return getattr(model, "__pydantic_complete__", True) is not False
+
+
 @dataclass(frozen=True, slots=True)
 class ModelAdapterRegistry:
     adapters: tuple[ModelAdapter, ...]
+    _fields: FieldCache | None = dataclasses.field(
+        default_factory=_new_field_cache, compare=False, repr=False, hash=False
+    )
+    """Field lists already read, keyed by the model class.
+
+    Excluded from ``compare`` and ``repr`` so that two registries with the same adapters stay
+    equal, keep the same hash, and read the same regardless of what either has been asked about.
+    Weak keys so a model class built at runtime -- ``pydantic.create_model`` in a test, a factory
+    in a plugin -- can still be collected; a registry must not be the reason a class outlives its
+    module.
+    """
 
     def with_adapter(self, adapter: ModelAdapter, *, first: bool = True) -> ModelAdapterRegistry:
         if any(item.name == adapter.name for item in self.adapters):
@@ -123,8 +165,44 @@ class ModelAdapterRegistry:
         return self._select(value, by_value=True, name=name)
 
     def fields(self, annotation: object, *, adapter: str | None = None) -> tuple[ModelField, ...]:
+        """The model's fields, read once per class and remembered.
+
+        Reading them means resolving the class's annotations, which is the single most expensive
+        thing the response path used to do per response -- and the answer depends only on the
+        class. Naming an adapter explicitly bypasses the cache: that asks a different question,
+        "what would this adapter say", and the answer is not the one worth remembering.
+        """
+
         base, _ = unwrap_annotated(annotation)
-        return self.adapter_for_type(base, name=adapter).fields(base)
+        cache = self._fields
+        if cache is None or adapter is not None or not isinstance(base, type):
+            return self.adapter_for_type(base, name=adapter).fields(base)
+        try:
+            remembered = cache.get(base)
+        except TypeError:
+            # A class that cannot be weakly referenced, which a few C types cannot be.
+            return self.adapter_for_type(base).fields(base)
+        if remembered is not None:
+            return remembered
+        # Outside the try: a failure to read the fields is raised, never remembered. An
+        # unresolved forward reference must keep failing until someone resolves it, and then
+        # start working, rather than fail once and forever.
+        read = self.adapter_for_type(base).fields(base)
+        if _caches_fields(base):
+            with suppress(TypeError):
+                cache[base] = read
+        return read
+
+    def clear_field_cache(self) -> None:
+        """Forget every field list read so far.
+
+        Nothing in the SDK needs this: replacing an adapter builds a new registry, so there is no
+        stale entry to invalidate. It exists for the case the cache cannot see -- a class edited
+        in place, in a notebook or a test -- and so that "how do I get rid of it" has an answer.
+        """
+
+        if self._fields is not None:
+            self._fields.clear()
 
     def dump(
         self,
