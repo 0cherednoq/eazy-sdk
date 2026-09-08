@@ -23,8 +23,7 @@ from eazy_sdk.dependencies import (
     dependency,
 )
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import BodyProjection
-from eazy_sdk.request.markers import JsonBody
+from eazy_sdk.request import Body, BodyProjection
 
 # --- what the SDK user configures once, not per call ------------------------------------
 
@@ -155,7 +154,7 @@ class RegisterUser(HttpOperation[RegisteredUser]):
         projection=BodyProjection(
             target=RegisterUserWire,
             using=RegisterUserProjection(),
-            encoding=JsonBody(),
+            encoding=Body.json(),
             name="register-user-v1",
         ),
     )

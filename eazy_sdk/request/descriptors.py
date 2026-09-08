@@ -61,6 +61,45 @@ class ReplayableStreamBody:
     content_type: str | None = None
 
 
+class Body:
+    """The public entry for body encodings: ``Body.json()``, ``Body.multipart(...)``.
+
+    Written at ``encoding=`` on a :class:`BodyProjection`. The root names ``JsonBody`` and
+    its siblings are the ``Annotated`` field markers, a different declaration: the classes
+    constructed here are the ones :mod:`eazy_sdk.request.markers` publishes.
+    """
+
+    __slots__ = ()
+
+    @staticmethod
+    def json(*, content_type: str = "application/json") -> JsonBody:
+        return JsonBody(content_type=content_type)
+
+    @staticmethod
+    def form(*, content_type: str = "application/x-www-form-urlencoded") -> FormBody:
+        return FormBody(content_type=content_type)
+
+    @staticmethod
+    def multipart(
+        *,
+        content_type: str = "multipart/form-data",
+        boundary: str | None = None,
+    ) -> MultipartBody:
+        return MultipartBody(content_type=content_type, boundary=boundary)
+
+    @staticmethod
+    def raw(
+        *,
+        content_type: str | None = None,
+        content_encoding: Literal["gzip", "deflate"] | None = None,
+    ) -> BytesBody:
+        return BytesBody(content_type=content_type, content_encoding=content_encoding)
+
+    @staticmethod
+    def stream(*, content_type: str | None = None) -> ReplayableStreamBody:
+        return ReplayableStreamBody(content_type=content_type)
+
+
 @dataclass(frozen=True, slots=True)
 class BodyProjection[TSource, TWire]:
     """Project caller-visible values into one private semantic wire body.

@@ -94,7 +94,7 @@ private wire model владеет реальной структурой body:
 from typing import TypedDict, Unpack
 
 from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import BodyProjection, JsonBody
+from eazy_sdk.request import Body, BodyProjection
 
 
 class RegisterUser(TypedDict):
@@ -117,7 +117,7 @@ class RegisterUser(HttpOperation[RegisteredUser]):
         projection=BodyProjection(
             target=RegisterUserWire,
             using=register_to_wire,
-            encoding=markers.JsonBody(),
+            encoding=Body.json(),
         ),
     )
 
@@ -185,7 +185,7 @@ Adaptix остаётся зависимостью приложения/SDK autho
 `Cookie` или другой обычный placement. Projected body нельзя смешивать с flat/root body в той же
 operation.
 
-Projection возвращает semantic wire document, а не bytes. `JsonBody`/form/multipart либо custom
+Projection возвращает semantic wire document, а не bytes. `Body.json()`/form/multipart либо custom
 `BodyCodec` кодирует уже validated target один раз. Retry, redirect, auth replay и protection
 reaction повторяют projection, encoding, crypto и signing.
 
@@ -195,7 +195,7 @@ Model conversion отделена от HTTP serialization. Registry по умо�
 dataclass, Pydantic v2 и msgspec Struct, сохраняет declaration order и используется request,
 response, response headers и HTML extraction.
 
-Serialization policy принадлежит самой модели. `JsonBody()`, `FormBody()` и `MultipartBody()`
+Serialization policy принадлежит самой модели. `Body.json()`, `Body.form()` и `Body.multipart()`
 объявляют placement/media type и не управляют aliases, defaults, unset или `None`. Pydantic adapter
 вызывает `model_dump(mode="json")`; msgspec adapter соблюдает `rename`, `omit_defaults`, tags и
 другие Struct options; plain dataclass включает все объявленные поля. Для другой dataclass policy

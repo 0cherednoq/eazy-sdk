@@ -3,8 +3,9 @@ title: JSON body
 description: Поля операции — это поля JSON-объекта; модель нужна только для вложенного документа.
 sources:
   - eazy_sdk.request.JsonBody
+  - eazy_sdk.request.Body
   - eazy_sdk.request.BodyProjection
-api_fingerprint: "sha256:3666ca4d8c34407bd109ecb15242c0df9a0c9d2f1dcaa7070781a95d12be6e18"
+api_fingerprint: "sha256:dca4bcce0eeb1c0bc2f0f7e7ef636bb4ca77e7b1d0fffbb0220386e312aff426"
 ---
 
 Плоский JSON object объявляется полями операции с маркером `JsonField`. Runtime проверяет поля и
@@ -58,7 +59,7 @@ msgspec и передавайте его одним полем с `markers.JsonB
 from dataclasses import dataclass
 
 from eazy_sdk import Http, HttpOperation, op
-from eazy_sdk.request import BodyProjection, markers
+from eazy_sdk.request import Body, BodyProjection
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RegisterUser(HttpOperation[Account]):
@@ -67,7 +68,7 @@ class RegisterUser(HttpOperation[Account]):
         projection=BodyProjection(
             target=RegisterUserWire,
             using=register_to_wire,
-            encoding=markers.JsonBody(),
+            encoding=Body.json(),
         ),
     )
 

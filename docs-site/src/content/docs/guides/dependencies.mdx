@@ -82,6 +82,7 @@ PlanError: injected header wire name collides with another slot: 'X-Device-Id'
 from typing import cast
 
 from eazy_sdk.dependencies import Injected, dependency
+from eazy_sdk.request import Body, BodyProjection
 
 DEVICE = dependency(DeviceContext, name="device")
 
@@ -102,7 +103,7 @@ class RegisterUser(HttpOperation[RegisteredUser]):
         "/register",
         requires=(DEVICE,),
         projection=BodyProjection(
-            target=RegisterUserWire, using=RegisterUserProjection(), encoding=JsonBody()
+            target=RegisterUserWire, using=RegisterUserProjection(), encoding=Body.json()
         ),
     )
 

@@ -19,6 +19,7 @@ from eazy_sdk.identity import Identity
 from eazy_sdk.operation import Http, HttpOperation
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.request import (
+    Body,
     BodyProjection,
     Cookie,
     FormBody,
@@ -60,6 +61,7 @@ __all__ = [
     "AsyncClient",
     "AsyncRoot",
     "Binding",
+    "Body",
     "BodyProjection",
     "Client",
     "ClientConfig",

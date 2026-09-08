@@ -15,8 +15,7 @@ from adaptix.conversion import get_converter, link_constant, link_function
 
 from eazy_sdk import Client, Http, HttpOperation, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
-from eazy_sdk.request import BodyProjection
-from eazy_sdk.request.markers import JsonBody
+from eazy_sdk.request import Body, BodyProjection
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +147,7 @@ class RegisterUser(HttpOperation[RegisteredUser]):
         projection=BodyProjection(
             target=RegisterUserWire,
             using=register_to_wire,
-            encoding=JsonBody(),
+            encoding=Body.json(),
             name="adaptix-register-user-v1",
         ),
     )

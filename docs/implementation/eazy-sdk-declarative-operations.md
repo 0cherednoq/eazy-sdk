@@ -364,8 +364,10 @@ class GetCaseDocumentsPage(HttpOperation[DocumentPageResponse], msgspec.Struct, 
 - Альтернатива, отвергнутая по бюджету имён: плоские `QueryNamed`, `HeaderNamed` и так далее.
   Это семь новых имён в корне при метрике, уже превышенной вдвое.
 - Соответствие именам unihttp: `Body` это `JsonField` для поля документа или `JsonBody` для
-  документа целиком, `File` это `Part`, `Raw` это `BytesBody`. Отдельного `Body` не вводим:
-  размещение тела задаётся кодеком, а `Wire.body` отвергнут в фазе 48 по той же причине.
+  документа целиком, `File` это `Part`, `Raw` это `BytesBody`. Отдельного placement-маркера `Body`
+  не вводим: размещение тела задаётся кодеком, а `Wire.body` отвергнут в фазе 48 по той же причине.
+  Имя `Body` в корне занято другим: это namespace кодировок (`Body.json()`, `Body.multipart()`) для
+  `encoding=` у `BodyProjection`, по образцу `Http.post`. Размещения он не задаёт.
 - Нужна typing-фикстура в `tests/typing/`, закрепляющая обе формы на mypy и pyright.
 
 ### 4.5. Представление модели: плоский вход для пользователя, сырой wire-документ для сервера
@@ -469,7 +471,7 @@ class CreateOrder(HttpOperation[OrderCreated]):
         "/api/v2/order/create",
         errors={400: OrderRejected, 401: SessionExpired},
         projection=BodyProjection(
-            target=CreateOrderWire, using=CreateOrderProjection(), encoding=JsonBody()
+            target=CreateOrderWire, using=CreateOrderProjection(), encoding=Body.json()
         ),
         requires=(DEVICE_ID,),
         security=SESSION_TOKEN_IN_BODY,        # session writer пишет в /token

@@ -4,7 +4,7 @@ description: Маркеры размещения, тела и представл
 sources:
   - eazy_sdk.request
   - eazy_sdk.core.errors.OperationBindingError
-api_fingerprint: "sha256:434c841ca04208d8d458ebd1a79c45c72e619aac3b88f413ba2b253516b9e3cb"
+api_fingerprint: "sha256:af671e932ca2a1c1ecddba9ff78379f311fd446770509647af6d70a42cec7565"
 ---
 
 Маркер размещает поле операции: `Path[T]` и `Annotated[T, markers.Path()]` — одна и та же
@@ -38,8 +38,8 @@ Caller передаёт `create(name="Ada")`; type checker видит конст
 Если публичные поля должны остаться плоскими, а сервер ждёт другой nested document, объявите
 `projection=BodyProjection(target=..., using=..., encoding=...)` в `__http__`. Источник — сама
 операция: поля без маркера и есть вход mapper-а. Mapper строит private target на каждой attempt,
-target проходит model adapter validation, и только после этого `JsonBody`, form/multipart или
-custom `BodyCodec` кодирует один semantic document. Mapper не получает client/transport state; если
+target проходит model adapter validation, и только после этого выбранный encoding — `Body.json()`,
+form/multipart или custom `BodyCodec` — кодирует один semantic document. Mapper не получает client/transport state; если
 ему нужны значения зависимостей, объявите `requires=` и второй параметр `using(source, injected)`.
 
 | Задача | Форма | Поведение отсутствующего значения |
@@ -74,6 +74,39 @@ custom `BodyCodec` кодирует один semantic document. Mapper не по
 | `Part(name=None)` | multipart/form-data | Одна part |
 | `BytesBody(...)` | заданный caller-ом | Buffered bytes |
 | `ReplayableStreamBody(...)` | заданный caller-ом | Повторно создаваемый stream |
+
+## Body encodings
+
+Имена выше — маркеры поля: `body: JsonBody[Payload]` размещает значение. Тот же контракт в
+`encoding=` у `BodyProjection` записывается через `Body` — один импорт на все форматы, как `Http`
+на все методы:
+
+| Encoding | Descriptor | Content type |
+|---|---|---|
+| `Body.json()` | `markers.JsonBody` | `application/json` |
+| `Body.form()` | `markers.FormBody` | form-urlencoded |
+| `Body.multipart(boundary=None)` | `markers.MultipartBody` | multipart/form-data |
+| `Body.raw(content_encoding=None)` | `markers.BytesBody` | заданный caller-ом |
+| `Body.stream()` | `markers.ReplayableStreamBody` | заданный caller-ом |
+
+```python
+from eazy_sdk import Body, BodyProjection, Http, HttpOperation
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterUser(HttpOperation[RegisteredUser]):
+    __http__ = Http.post(
+        "/register",
+        success={201: RegisteredUser},
+        projection=BodyProjection(
+            target=RegisterUserWire,
+            using=register_to_wire,
+            encoding=Body.json(),
+        ),
+    )
+```
+
+Каждый метод принимает `content_type=`, поэтому vendor media type объявляется на месте:
+`Body.json(content_type="application/vnd.api+json")`.
 
 `BodyProjection(...)` не является ещё одним body marker. Это связь публичных полей операции с
 private wire schema и одним из перечисленных encodings; смешивать projection с root/flat body

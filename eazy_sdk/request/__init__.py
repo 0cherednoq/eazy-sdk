@@ -15,7 +15,7 @@ from eazy_sdk.codecs import (
 )
 
 from . import markers
-from .descriptors import BodyProjection, MultipartPart, RequestBody
+from .descriptors import Body, BodyProjection, MultipartPart, RequestBody
 from .params import QueryString
 from .short import (
     BytesBody,
@@ -61,6 +61,7 @@ from .wire import (
 )
 
 __all__ = [
+    "Body",
     "BodyCodec",
     "BodyProjection",
     "BytesBody",
