@@ -31,6 +31,7 @@ from eazy_sdk.core import (
     OperationIdentity,
     OperationValues,
     PlanError,
+    RequestLocation,
     ScopeContext,
     TransportRequirement,
     TransportRequirements,
@@ -131,7 +132,12 @@ from eazy_sdk.request.prepared import (
     RequestPreparer,
     json_body_document,
 )
-from eazy_sdk.request.signatures import reserve_outputs, sign_prepared
+from eazy_sdk.request.signatures import (
+    CustomSignature,
+    DeclarativeSignature,
+    reserve_outputs,
+    sign_prepared,
+)
 from eazy_sdk.response import (
     NormalizedResponse,
     ResponseContext,
@@ -2150,6 +2156,16 @@ def _validate_serialization(
             f"operation {contract.operation_id!r} requires JSON encoding {policy!r}, which the "
             f"{serialization.json.name!r} backend cannot produce"
         )
+    if serialization.json.name != "json" and _signs_the_json_body(contract.signing):
+        raise BackendCapabilityError(
+            f"operation {contract.operation_id!r} signs its JSON body, but the "
+            f"{serialization.json.name!r} backend is configured for it: the signature base and "
+            "any body rewrite after inserting an output are always encoded by the stdlib "
+            "backend (plan 51-serialization-performance.md, F5), so a non-stdlib body encoding "
+            "would sign bytes different from the ones sent. Use the stdlib JSON backend for this "
+            "operation, or move the signature off the body, until the signing path accepts a "
+            "configured backend."
+        )
     responses = contract.responses
     for case in getattr(responses, "cases", ()):
         extractor = getattr(case.response, "extractor", None)
@@ -2164,6 +2180,30 @@ def _validate_serialization(
                 extractor.check_discriminating(model, serialization)
         except BackendCapabilityError as exc:
             raise BackendCapabilityError(f"operation {contract.operation_id!r}: {exc}") from exc
+
+
+def _signs_the_json_body(signing: tuple[DeclarativeSignature | CustomSignature, ...]) -> bool:
+    """Whether any declared signature reaches the JSON semantic body -- read or write.
+
+    ``JsonProjection`` (``reads == {"json"}``) rebuilds a view of the body through the
+    module-level ``dump_json``, which is always the stdlib encoder (``signatures.py``, around
+    ``JsonProjection.build``); a body output does the same to rewrite the whole body after
+    inserting the signature (``_apply_body_output``). A component that only reads the already-
+    produced bytes (``RequestComponent("body")``, ``BodyDigestComponent``) never re-encodes
+    anything and is not affected either way.
+    """
+
+    for signature in signing:
+        reads = (
+            signature.base.reads
+            if isinstance(signature, DeclarativeSignature)
+            else signature.read_set
+        )
+        if "json" in reads:
+            return True
+        if any(output.location is RequestLocation.BODY for output in signature.outputs):
+            return True
+    return False
 
 
 def _validate_mandatory_protections(
