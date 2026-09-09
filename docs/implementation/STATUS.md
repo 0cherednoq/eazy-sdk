@@ -4824,8 +4824,9 @@ consumer at `C:/Users/user/Desktop/parsing/kad`.
 
 ### State
 
-Active. 54.1 (the fallback after parsing) is done; 54.2 (`Const` and model tags), 54.3
-(`Payload[T]`), 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are pending.
+Active. 54.1 (the fallback after parsing) and 54.2 (`Const` and the tags a model declares) are
+done; 54.3 (`Payload[T]`), 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are
+pending.
 Plan: `54-response-tags.md`. Origin: the measurements in
 `docs/eazy-sdk-openapi-conditions-and-response-tags.md` — 16 public specifications (~65 MB, ~6300
 operations) contain zero `if`/`then`/`else`, zero `dependentSchemas` and zero `dependentRequired`,
@@ -4857,9 +4858,47 @@ change folded into 53.5.
 | `uv run pytest -q --timeout=120` (full suite, all nine testpaths) | PASS: 1397 passed, 11 skipped, 176 s. The openapi subprocess tests recorded as flaky for phases 50, 52 and 53 passed in this run. |
 | `uv run mypy`, `uv run ruff check` | PASS on the phase-54 change. Repo-wide they report one error each, both in the uncommitted 53.5 work in the tree (`tests/unit/test_phase53_response_cases.py`: RUF043 on a `match=` pattern at :853, and `"object" has no attribute "Success"` at :844). With those two files stashed: `ruff` all checks passed, `mypy` no issues in 348 files. Not touched here — that work belongs to phase 53. |
 
+### Delivered (54.2)
+
+- `eazy_sdk/response/markers.py`: `Const` (the constant a field must equal), `Tag` (one such
+  field read off a parsed value) and `tags_of`, which reads a model's tags once per class through
+  a `WeakKeyDictionary`, base classes included. `Const` is exported from `eazy_sdk.response`;
+  `Tag` and `tags_of` are not, so the entry point stays `from eazy_sdk.response import Const`.
+- The form is `Annotated[bool, Const(True)]` rather than `Literal[True]` because only the
+  annotation reaches every backend: measured, `Literal[True]` is impossible on msgspec (it takes
+  only None, integers and strings) and the dataclass and TypedDict adapters reject `Literal`
+  outright. A one-value `Literal` is read as the same statement where a backend does carry it, so
+  such a case ranks as stating a criterion instead of stating nothing.
+- A tag states a fact, never a verdict: it is read identically for a `Success` and an `Error`
+  case, and which of the two a body means is said by the dictionary it was declared in. That is
+  what `Envelope.succeeds` could not do — it answers "is this a success", and the same shape is a
+  success for one operation and a failure for another (Stripe returns `deleted_customer` with a
+  200).
+- `_criterion_of` gained the fourth spelling, so a tagged case ranks as conditional;
+  `_decide_parsed` requires every tag to hold and answers `NoMatch` when one does not, so the
+  other candidate gets the response. `accept=` still overrides what the model says about itself.
+- Types are compared as well as values: `1 == True` in Python, and a body carrying
+  `{"success": 1}` must not satisfy `Const(True)`. A field the tag names but the value does not
+  carry is a no, not an error.
+- D-54-01 (a constant the declared field can never hold) is raised where the tags are read, and
+  `_validate_response_declarations` in the executor reads every case model — the fallback
+  included — during preflight, so the typo is reported with the request still unsent.
+
+### Verification evidence
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase54_response_tags.py --timeout=120` | PASS: 4 passed after 54.1, 22 after 54.2, including one parametrized over dataclass, Pydantic, msgspec and TypedDict. With `eazy_sdk/response/cases.py` stashed, `test_fallback_is_used_when_the_criterion_rejects_every_candidate` fails with `UnexpectedResponseError`, so the test measures the fix. The tag tests are not vacuous either: with the same two cases untagged, both bodies come back `AmbiguousResponseOutcome` (`experiments/openapi_conditions/probe_untagged.py`). |
+| `uv run pytest -q --timeout=120` (full suite, all nine testpaths) | PASS: 1397 passed / 11 skipped after 54.1; 1415 passed / 11 skipped after 54.2, 180 s. The openapi subprocess tests recorded as flaky for phases 50, 52 and 53 passed in both runs. |
+| `uv run mypy`, `uv run ruff check` | PASS on the phase-54 change. Repo-wide each reports one error, both in the uncommitted 53.5 work in the tree (`tests/unit/test_phase53_response_cases.py`: RUF043 on a `match=` pattern at :853, and `"object" has no attribute "Success"` at :844). With those two files stashed: `ruff` all checks passed, `mypy` no issues. Not touched here — that work belongs to phase 53. |
+| `uv run python scripts/surface_count.py --total` | 438 before, 439 after: exactly the one declared name, `Const`. Measured by stashing the phase-54 files and re-running. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
+| `uv run python scripts/docs_freshness.py check` | **RED, expected**: `guides/responses/success.mdx (changed: eazy_sdk.response)`. The gate is asking for the documentation pass that the plan schedules as 54.5; the lock file it would rewrite is also carrying the uncommitted 53.5 edits, so it is left for that step rather than updated blind here. |
+
 ### Remaining work / blockers
 
-54.2 through 54.5. Note for 54.2: a tag written as `Literal[...]` is validated by the model
-backend, so a mismatch arrives as `Malformed`, not as `NoMatch`, and therefore does not reach the
-fallback the way `Const(...)` does. That asymmetry is a reason to document `Const` as the spelling
-to reach for, and it is recorded in the plan's §9.
+54.3 through 54.5, and with them the red `docs_freshness` gate above. Note for 54.5: a tag written
+as `Literal[...]` is validated by the model backend, so a mismatch arrives as `Malformed`, not as
+`NoMatch`, and therefore does not reach the fallback the way `Const(...)` does — a reason to
+document `Const` as the spelling to reach for. D-54-04 moved into 54.4: it lives in
+`_mapping.py`, which is carrying the uncommitted 53.5 work, and 54.4 rewrites that file anyway.

@@ -35,6 +35,7 @@ from eazy_sdk.models import ModelAdapterRegistry
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from .headers import Headers, _apply_header_sources
+from .markers import tags_of
 from .normalized import NormalizedResponse, cast_headers
 
 
@@ -865,19 +866,28 @@ def _decide_parsed(
     """
 
     accept = getattr(representation, "accept", None)
-    envelope = envelope_of(getattr(representation, "model", None))
+    model = getattr(representation, "model", None)
+    envelope = envelope_of(model)
+    # Outside the try: a tag that cannot be read is a broken declaration, and a declaration error
+    # must not arrive dressed as a malformed response.
+    tags = tags_of(model)
     try:
         if accept is not None:
-            # ``accept`` answers "does this case match", so it is read as written for both kinds.
+            # ``accept`` answers "does this case match", so it is read as written for both kinds,
+            # and it overrides what the model says about itself.
             if not accept(value):
                 return NoMatch()
-        # ``succeeds`` answers "is the envelope a success", so the error case wants the no.
-        elif (
-            envelope is not None
-            and envelope.succeeds is not None
-            and bool(envelope.succeeds(value)) != isinstance(case, Success)
-        ):
-            return NoMatch()
+        else:
+            # A tag states a fact about the body, so it reads the same for both kinds of case.
+            if any(not tag.holds(value) for tag in tags):
+                return NoMatch()
+            # ``succeeds`` answers "is the envelope a success", so the error case wants the no.
+            if (
+                envelope is not None
+                and envelope.succeeds is not None
+                and bool(envelope.succeeds(value)) != isinstance(case, Success)
+            ):
+                return NoMatch()
         if envelope is not None and envelope.payload is not None and isinstance(case, Success):
             return ParsedValue(envelope.payload(value))
     except Exception as exc:  # any failure of an author callable is Malformed, not a crash
@@ -977,8 +987,8 @@ def _criterion_of(case: ResponseCase[object]) -> object | None:
     """What the case states beyond status and media, or ``None`` when it states nothing.
 
     One rank for every kind of criterion: a case either narrows the responses it claims or it
-    does not. Three spellings reach here — ``when=`` on the case, decided before parsing, and
-    ``accept=`` or the model's ``__envelope__``, decided after it.
+    does not. Four spellings reach here — ``when=`` on the case, decided before parsing, and
+    ``accept=``, the tags the model declares, or the model's ``__envelope__``, decided after it.
     """
 
     if case.condition is not None:
@@ -986,7 +996,11 @@ def _criterion_of(case: ResponseCase[object]) -> object | None:
     accept: object | None = getattr(case.response, "accept", None)
     if accept is not None:
         return accept
-    envelope = envelope_of(getattr(case.response, "model", None))
+    model = getattr(case.response, "model", None)
+    tags = tags_of(model)
+    if tags:
+        return tags
+    envelope = envelope_of(model)
     if envelope is not None and envelope.succeeds is not None:
         return envelope.succeeds
     return None

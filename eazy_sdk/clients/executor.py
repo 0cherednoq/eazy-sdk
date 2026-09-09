@@ -153,6 +153,7 @@ from eazy_sdk.response.cases import (
     PreparedResponseExtractor,
     Success,
 )
+from eazy_sdk.response.markers import tags_of
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from ._decisions import (
@@ -795,6 +796,7 @@ class ExecutionCore:
 
         validate_profile(compiled.plan.requirements, self.runtime.handler_profile)
         _validate_serialization(contract, self.serialization)
+        _validate_response_declarations(contract)
         mandatory = _validate_mandatory_protections(
             contract,
             compiled,
@@ -2180,6 +2182,24 @@ def _validate_serialization(
                 extractor.check_discriminating(model, serialization)
         except BackendCapabilityError as exc:
             raise BackendCapabilityError(f"operation {contract.operation_id!r}: {exc}") from exc
+
+
+def _validate_response_declarations(contract: _OperationDeclaration[Any]) -> None:
+    """Read every response model's tags once, before a body can arrive.
+
+    A constant a field can never hold is a typo, and reading it here means the typo is reported
+    with the request still unsent instead of arriving as a response that matched nothing. The
+    fallback is read too: it is the case that answers when no other one did, so a broken
+    declaration there is the one least likely to be noticed.
+    """
+
+    responses = contract.responses
+    fallback = getattr(responses, "fallback", None)
+    cases = (*getattr(responses, "cases", ()), *((fallback,) if fallback is not None else ()))
+    for case in cases:
+        model = getattr(case.response, "model", None)
+        if model is not None:
+            tags_of(model)
 
 
 def _signs_the_json_body(signing: tuple[DeclarativeSignature | CustomSignature, ...]) -> bool:
