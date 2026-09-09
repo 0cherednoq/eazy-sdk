@@ -4858,9 +4858,10 @@ The `kad` acceptance of §7.1, moved to 54.5 (see State above). Nothing in the l
 
 ### State
 
-Active. 54.1 (the fallback after parsing), 54.2 (`Const` and the tags a model declares), 54.3
-(`Payload[T]`) and 54.4 (removal of `Envelope`) are done; 54.5 (the remaining documentation pass
-and the `kad` rewrite, which carries phase 53's §7.1 acceptance with it) is pending.
+Complete. 54.1 (the fallback after parsing), 54.2 (`Const` and the tags a model declares), 54.3
+(`Payload[T]`), 54.4 (removal of `Envelope`) and 54.5 (the CHANGELOG and the `kad` rewrite, which
+carried phase 53's §7.1 acceptance with it) are done, and every exit criterion of §7 has evidence
+below.
 Plan: `54-response-tags.md`. Origin: the measurements in
 `docs/eazy-sdk-openapi-conditions-and-response-tags.md` — 16 public specifications (~65 MB, ~6300
 operations) contain zero `if`/`then`/`else`, zero `dependentSchemas` and zero `dependentRequired`,
@@ -4991,12 +4992,78 @@ change folded into 53.5.
 | `uv run python scripts/docs_freshness.py check` | PASS: 67 pages fresh. Green again, having been red since 54.2. |
 | `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
 
+### Delivered (54.5)
+
+- `CHANGELOG.md` describes the net unreleased state: `Const` and `Payload` with the five checks
+  that run before a request, the `fallback=` fix, and the relaxed document guard. `Envelope` is
+  not mentioned at all — it was added and removed inside the same unreleased window, so naming it
+  would only confuse a reader of the release notes.
+- The `kad` consumer at `C:/Users/user/Desktop/parsing` is rewritten and its whole suite passes:
+  26 passed. `DocumentPageResponse` carries `Success: Annotated[bool, Const(True)]` and
+  `Result: Payload[DocumentPage]`; the new `KadFailure` carries `Const(False)`; `KadRequestFailed`
+  is declared once for the service in `responses.py` as `Error(StatusRange(200, 599),
+  Json(KadFailure), ...)`, so no operation repeats it. `api.py` has no `when=`, no `Success(...)`,
+  no `condition=` and no `_document_items`; `__pages__` now reads `DocumentPage` directly, because
+  the projection already made that the operation's result.
+- Found while doing it, and worth recording: `kad` was **not** in a working state before this
+  step. `api.py` referred to `is_regular_html`, `is_pdf`, `Success` and `_document_items` without
+  importing or defining any of them, and `errors.py` used a `TYPE_CHECKING`-only import in a class
+  base, so the package raised `NameError` on import. That is why phase 53's §7.1 was never
+  measured; it is measured now.
+- The consumer's `pyproject.toml` points `eazy-sdk` and `eazy-sdk-html` at this checkout
+  (`path = "A:/work/stardust/lib/RespLens", editable = true`) instead of the `v0.2.0a7` tag,
+  because tags do not exist in any release yet. It carries a comment saying to point it back at a
+  tag once the next release is cut. The consumer's changes are **not committed**: that repository
+  has its own staged, half-finished state that is not this phase's to touch.
+- A behaviour change the acceptance forced, and the reason for it: an all-optional document model
+  no longer has to carry its own `when=` when another case states a criterion that could claim the
+  same statuses. The guard's own justification was that such a model "would swallow every page it
+  is offered, including the error page of the case beside it" — and phase 53 settled exactly that,
+  because a case that states a criterion now outranks one that does not. Demanding the negation of
+  the service's own declaration on every operation was the boilerplate this phase set out to
+  remove. With no such case anywhere, the model is still refused: that failure mode is real.
+- Two of the consumer's fakes returned the envelope from a stubbed client; they now return the
+  page, which is what the SDK returns after the projection. That is the only churn the rewrite
+  cost its tests.
+
+### Verification evidence (54.5)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase54_response_tags.py --timeout=120` | PASS: 35 passed. |
+| `uv run pytest -q --timeout=120` (full suite) | PASS: 1416 passed, 11 skipped, 185 s. |
+| `uv run mypy`, `uv run ruff check` | PASS: 350 files, all checks passed. |
+| `uv run python scripts/surface_count.py --total` | 439: the 438 baseline plus `Const` and `Payload` minus `Envelope`. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 67 pages fresh. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
+| `uv run --python 3.14 pytest -q` in `C:/Users/user/Desktop/parsing` | PASS: 26 passed, against this checkout. |
+
+### Exit criteria
+
+Phase 54's §7.1: (1) `kad/models.py` has no `__envelope__` and no lambda — tags do the telling
+apart; (2) `CaseDocumentsPage` returns `DocumentPage`, and `Success`/`Message` are invisible to
+the caller; (3) an unsuccessful envelope raises `KadRequestFailed`, declared once on the service;
+(4) the protection page still raises `KadChallengeRequired`, fixed by the consumer's own
+`test_contracts.py` case over `project/validate_response/challenge.html`.
+
+Phase 53's §7.1, carried here: `responses.py` holds only `is_challenge` and `is_blocked` through
+`match`; `api.py` has no `when=`, no `Success(...)`, no `condition=`; `_document_items` is gone;
+the result is `DocumentPage`; the captcha page raises.
+
+Phase 54's §7.2: tests exist and are green; every check fires before the request goes out; tags
+work on all four backends through a parametrized test; `len(eazy_sdk.__all__)` is unchanged and
+`eazy_sdk.response.__all__` gained `Const` and `Payload` and lost `Envelope`; `Envelope` appears
+nowhere outside `eazy_sdk.protocols`, which is a different type with the same name; the gates
+above are green.
+
 ### Remaining work / blockers
 
-54.5: the `kad` rewrite, which also settles phase 53's §7.1, and a pass over the remaining
-examples and pages. Left open on purpose: `Responses[T]` types its `success=` parameter as
-representations of `T`, so the advanced form stops type-checking once a model projects to a
-payload (`Responses[Page](success=(Success(200, Json(PageEnvelope)),))`). Relaxing it to `Any`
-would match `errors=`, which is already `Error[Any]`, and would cost nothing in the dictionary
-form, where no checker ties the parameter to `HttpOperation[T]` anyway. It is a public generic,
-so it waits for a decision rather than being changed in passing.
+None in the phase. Two things it hands on. The consumer at `C:/Users/user/Desktop/parsing` now
+points at this checkout instead of a tag, because response tags are in no release yet; that pin
+goes back to a tag when the next one is cut, and the consumer's own changes are left uncommitted
+because that repository has a half-finished state of its own. And `Responses[T]` still types its
+`success=` parameter as representations of `T`, so the advanced form stops type-checking once a
+model projects to a payload (`Responses[Page](success=(Success(200, Json(PageEnvelope)),))`).
+Relaxing it to `Any` would match `errors=`, which is already `Error[Any]`, and would cost nothing
+in the dictionary form, where no checker ties the parameter to `HttpOperation[T]` anyway. It is a
+public generic, so it waits for a decision rather than being changed in passing.

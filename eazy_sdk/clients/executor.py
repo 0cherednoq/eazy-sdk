@@ -144,7 +144,13 @@ from eazy_sdk.response import (
     ResponseEnvelope,
     Responses,
 )
-from eazy_sdk.response._mapping import ErrorsSpec, error_cases, validate_responses
+from eazy_sdk.response._mapping import (
+    ErrorsSpec,
+    error_cases,
+    has_criterion,
+    statuses_overlap,
+    validate_responses,
+)
 from eazy_sdk.response.cases import (
     AttemptIdentity,
     HtmlExtractor,
@@ -2175,12 +2181,37 @@ def _validate_serialization(
             continue
         try:
             extractor.prepare(model, serialization)
-            if isinstance(extractor, HtmlExtractor) and case.condition is None:
-                # A document case with nothing required would swallow every page it is
-                # offered, including the error page of the case beside it.
+            if (
+                isinstance(extractor, HtmlExtractor)
+                and case.condition is None
+                and not _another_case_can_claim(responses, case)
+            ):
+                # A document case with nothing required would swallow every page it is offered,
+                # including the error page of the case beside it -- unless that error case
+                # states a criterion of its own, which since phase 53 outranks this one anyway.
                 extractor.check_discriminating(model, serialization)
         except BackendCapabilityError as exc:
             raise BackendCapabilityError(f"operation {contract.operation_id!r}: {exc}") from exc
+
+
+def _another_case_can_claim(responses: object, case: object) -> bool:
+    """Whether some other case states a criterion and could claim the same statuses.
+
+    Before phase 53 a document model with nothing required had to carry its own ``when=``,
+    because it would otherwise swallow the protection page declared beside it. The arbitration
+    order settled that: a case that states a criterion outranks one that does not, so the
+    service's own protection case takes that page. Where such a case exists, requiring the
+    negation of it on every success is the boilerplate the phase set out to remove.
+    """
+
+    fallback = getattr(responses, "fallback", None)
+    others = (*getattr(responses, "cases", ()), *((fallback,) if fallback is not None else ()))
+    return any(
+        other is not case
+        and has_criterion(cast(Any, other))
+        and statuses_overlap(cast(Any, other).status, cast(Any, case).status)
+        for other in others
+    )
 
 
 def _validate_response_declarations(contract: _OperationDeclaration[Any]) -> None:

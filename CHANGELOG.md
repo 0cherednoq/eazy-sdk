@@ -22,19 +22,27 @@ Added:
   field of a case except `precedence`, which authors never write.
 - An `errors=` entry pairs a factory with a written-out representation, not only with a model
   class: `errors={200: (Text(media_type=None, when=is_challenge), ChallengeRequired)}`.
-- `Envelope` in `eazy_sdk.response`: a model declares how its service envelope reads, as the class
-  attribute `__envelope__ = Envelope(succeeds=..., payload=...)`. `succeeds` answers whether the
-  envelope is a success, so a `Success` case matches when it says yes and an `Error` case when it
-  says no; one predicate declares both halves of a service that reports business failure inside a
-  200, and the failure becomes an ordinary `ApiError` instead of a hand-written check downstream.
-  `payload` projects the successful value, so the operation returns the payload while the envelope
-  stays a detail of the declaration; an error case keeps the whole envelope, where its message
-  lives. The declaration is a class attribute holding plain callables rather than a method,
-  because a `TypedDict` value is a plain `dict` and carries no methods; all four model libraries
-  are covered by one test.
+- `Const` and `Payload` in `eazy_sdk.response`: a response model states what its own body says
+  about itself. `Annotated[bool, Const(True)]` is the JSON Schema `const` written in Python — the
+  tag that tells a successful envelope from a failed one on the same 200, which is how Slack,
+  Stripe and Cloudflare all describe that case in their own specifications. A tag states a fact
+  and never a verdict, so it reads the same on a `Success` and on an `Error` case; which of the
+  two a body means is said by the dictionary the model was declared in, because only the
+  operation knows (Stripe answers 200 with `deleted_customer`, a success for a lookup and a
+  failure for a wait-until-active). `Payload[T]` marks the field the operation returns, so the
+  envelope stays a detail of the declaration and the result type is read from the annotation
+  rather than inferred. Values are compared with their types, because `1 == True` in Python. The
+  form is `Annotated` rather than `Literal` because only the annotation reaches every backend:
+  `Literal[True]` is impossible on msgspec and the dataclass and TypedDict adapters reject
+  `Literal` outright; a one-value `Literal` is read as the same statement where a backend does
+  carry it. Five checks run before the request is sent: a constant the field cannot hold, two
+  `Payload` fields on one model, `Payload` together with `unwrap=`, a projection that disagrees
+  with `HttpOperation[T]`, and one model claimed by a success and an error with nothing to tell
+  them apart.
 - `accept=` on `Json`, `Html`, `Extracted` and `Parsed`: decides on the parsed value and overrides
-  the model's own rule, for a model you cannot edit. It answers "does this case match", so unlike
-  `succeeds` it is read as written on both success and error cases.
+  the tags the model declares, for a model you cannot edit and for a condition that does not
+  reduce to equality. It answers "does this case match", so it is read as written on both success
+  and error cases.
 - `eazy_sdk.response.match`: composable predicates for `when=`, combined with `&`, `|` and `~`.
   `body.startswith`, `body.contains(..., ignore_case=)`, `body.matches`, `body.is_empty`,
   `content_type.is_`/`.startswith`, `status.is_`/`.in_`, and `header(name).present`/`.is_`/
@@ -42,6 +50,23 @@ Added:
   body that does not decode answers False instead of raising. Each predicate is an ordinary
   callable, so it mixes with existing functions and lambdas, and carries a label that reads in a
   diagnostic.
+
+Fixed:
+
+- `fallback=` answers a response every declared case declined. It was chosen before parsing, so a
+  service reporting failure inside a 2xx never reached it: the success case stayed a candidate on
+  the strength of its status, declined the body once its criterion saw it, and the call ended as
+  `UnexpectedResponseError`. The dictionary form had no workaround, because `errors=` refuses
+  `DEFAULT` precisely on the grounds that `fallback=` is where it belongs. A candidate that was
+  malformed still keeps its outcome: there the case did claim the response.
+
+Changed:
+
+- A document model with nothing required no longer has to carry its own `when=` when another case
+  states a criterion that could claim the same statuses. Since the arbitration order changed, the
+  service's own protection case wins that page on its own, so requiring the negation of it on
+  every success was boilerplate. With no such case anywhere, the model is still refused: it would
+  swallow every page it is offered.
 
 ## 0.2.0a7 - 2026-09-08
 

@@ -366,12 +366,12 @@ def _reject_indistinguishable_pairs(responses: Responses[Any], operation_id: str
 
     for success_case in responses.success:
         model = getattr(success_case.response, "model", None)
-        if model is None or _has_criterion(success_case):
+        if model is None or has_criterion(success_case):
             continue
         for error in responses.errors:
-            if getattr(error.response, "model", None) is not model or _has_criterion(error):
+            if getattr(error.response, "model", None) is not model or has_criterion(error):
                 continue
-            if not _statuses_overlap(success_case.status, error.status):
+            if not statuses_overlap(success_case.status, error.status):
                 continue
             name = _type_text(model)
             raise PlanError(
@@ -381,7 +381,9 @@ def _reject_indistinguishable_pairs(responses: Responses[Any], operation_id: str
             )
 
 
-def _has_criterion(case: Success[Any] | Error[Any]) -> bool:
+def has_criterion(case: Success[Any] | Error[Any]) -> bool:
+    """Whether a case narrows the responses it claims beyond status and media."""
+
     if case.condition is not None or getattr(case.response, "accept", None) is not None:
         return True
     return bool(tags_of(getattr(case.response, "model", None)))
@@ -397,7 +399,7 @@ def _agrees(payload: object, result: object | None) -> bool:
     return result is None or result is Any or result is object or payload == result
 
 
-def _statuses_overlap(left: StatusSelector, right: StatusSelector) -> bool:
+def statuses_overlap(left: StatusSelector, right: StatusSelector) -> bool:
     if isinstance(left, DefaultStatus) or isinstance(right, DefaultStatus):
         return True
     left_range = (left, left) if isinstance(left, int) else (left.start, left.end)

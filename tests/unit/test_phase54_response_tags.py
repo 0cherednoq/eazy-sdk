@@ -17,6 +17,7 @@ import httpx
 import msgspec
 import pydantic
 import pytest
+from eazy_sdk_html import CSS
 
 from eazy_sdk import Client, Http, HttpOperation, SyncApi, op
 from eazy_sdk.core.errors import PlanError
@@ -31,7 +32,10 @@ from eazy_sdk.response import (
     Payload,
     ResponseContext,
     Responses,
+    StatusRange,
     Success,
+    Text,
+    match,
 )
 from eazy_sdk.response.cases import (
     ErrorOutcome,
@@ -40,6 +44,7 @@ from eazy_sdk.response.cases import (
     _specificity,
 )
 from eazy_sdk.response.markers import PayloadField, Tag, payload_of, tags_of
+from eazy_sdk.serialization import BackendCapabilityError
 
 BASE = "https://slack.example"
 
@@ -576,3 +581,78 @@ def test_payload_applies_whichever_criterion_decided() -> None:
 
     with _serve({"success": False, "result": {"number": 7}, "message": None}) as client:
         assert Service(client).fetch() == Page(number=7)
+
+
+# --- 54.5: a document case beside a criterion needs no negation of it --------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Listing:
+    """Everything optional, like a real listing page: it extracts from any page it is handed."""
+
+    heading: Annotated[str | None, CSS("h1::text")] = None
+
+
+class ProtectionRequired(ApiError[str]):
+    """The service's own protection page, declared once for every operation."""
+
+
+LISTING_PAGE = b"<html><h1>Cases</h1></html>"
+CHALLENGE_PAGE = b"<html>captcha.execute()</html>"
+
+IS_CHALLENGE = match.body.contains(b"captcha.execute")
+
+
+def _serve_html(body: bytes) -> Client:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": "text/html"})
+
+    raw = httpx.Client(transport=httpx.MockTransport(handler), headers={}, cookies={})
+    return Client(base_url=BASE, handler=HttpxHandler(raw, owns_client=True))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Search(HttpOperation[Listing]):
+    __http__ = Http.get("/search")
+
+
+class ProtectedSearches(SyncApi):
+    errors: tuple[Error[str], ...] = (
+        Error(
+            StatusRange(200, 599),
+            Text(media_type=None),
+            exception=ProtectionRequired,
+            condition=IS_CHALLENGE,
+        ),
+    )
+
+    search = op(Search)
+
+
+class UnprotectedSearches(SyncApi):
+    search = op(Search)
+
+
+def test_a_document_case_needs_no_negation_of_the_criterion_beside_it() -> None:
+    """The protection page is claimed by the case that states a criterion, and nothing else.
+
+    Before this, an all-optional document model had to carry ``when=not_a_challenge`` — the
+    negation of the service's own declaration, written once per operation. Phase 53 made the
+    conditional case win on its own, so requiring that negation was boilerplate the guard
+    demanded and arbitration did not need.
+    """
+
+    with _serve_html(LISTING_PAGE) as client:
+        assert ProtectedSearches(client).search().heading == "Cases"
+    with _serve_html(CHALLENGE_PAGE) as client, pytest.raises(ProtectionRequired):
+        ProtectedSearches(client).search()
+
+
+def test_a_document_case_with_no_criterion_anywhere_is_still_refused() -> None:
+    """With nothing else to claim a page, an all-optional model would swallow every one."""
+
+    with (
+        _serve_html(LISTING_PAGE) as client,
+        pytest.raises(BackendCapabilityError, match="matches any document"),
+    ):
+        UnprotectedSearches(client).search()
