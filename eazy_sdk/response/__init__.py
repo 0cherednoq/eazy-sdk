@@ -28,6 +28,7 @@ from .cases import (
 from .headers import FromHeader, Headers, ResponseHeader
 from .markers import Const
 from .normalized import NormalizedResponse, RedirectInfo
+from .short import Payload
 
 __all__ = [
     "DEFAULT",
@@ -48,6 +49,7 @@ __all__ = [
     "MalformedResponseError",
     "NormalizedResponse",
     "Parsed",
+    "Payload",
     "RedirectInfo",
     "ResponseContext",
     "ResponseEnvelope",

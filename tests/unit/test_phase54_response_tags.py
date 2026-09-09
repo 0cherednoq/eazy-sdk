@@ -28,6 +28,7 @@ from eazy_sdk.response import (
     Json,
     MalformedResponseError,
     NormalizedResponse,
+    Payload,
     ResponseContext,
     Responses,
     Success,
@@ -38,7 +39,7 @@ from eazy_sdk.response.cases import (
     UnexpectedOutcome,
     _specificity,
 )
-from eazy_sdk.response.markers import Tag, tags_of
+from eazy_sdk.response.markers import PayloadField, Tag, payload_of, tags_of
 
 BASE = "https://slack.example"
 
@@ -375,3 +376,121 @@ def test_a_broken_tag_is_reported_before_the_request_is_sent() -> None:
         pytest.raises(PlanError, match="a str is not a int"),
     ):
         Service(client).broken()
+
+
+# --- 54.3: Payload[T] projects the envelope away -----------------------------------------------
+
+
+class Page(msgspec.Struct):
+    number: int
+
+
+class PageEnvelope(msgspec.Struct):
+    success: Annotated[bool, Const(True)]
+    result: Payload[Page]
+    message: str | None = None
+
+
+class PageFailure(msgspec.Struct):
+    success: Annotated[bool, Const(False)]
+    message: str
+
+
+class PageFailed(ApiError[PageFailure]):
+    """The failure keeps the whole envelope: its message lives there and nowhere else."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FetchPage(HttpOperation[Page]):
+    __http__ = Http.get(
+        "/page",
+        success={200: Json(PageEnvelope)},
+        errors={200: (Json(PageFailure), PageFailed)},
+    )
+
+
+class Pages(SyncApi):
+    fetch = op(FetchPage)
+
+
+def test_payload_becomes_the_operation_result() -> None:
+    """The envelope is a detail of the declaration; the call site sees the payload."""
+
+    body = {"success": True, "result": {"number": 7}, "message": None}
+    with _serve(body) as client:
+        assert Pages(client).fetch() == Page(number=7)
+
+
+def test_payload_is_not_applied_to_an_error() -> None:
+    """An ApiError reports the message, which lives in the envelope and not in the payload."""
+
+    with (
+        _serve({"success": False, "message": "case not found"}) as client,
+        pytest.raises(PageFailed) as raised,
+    ):
+        Pages(client).fetch()
+    assert raised.value.error == PageFailure(success=False, message="case not found")
+
+
+def test_payload_states_the_result_type() -> None:
+    """Read from the annotation, where the author already writes it."""
+
+    # ``Responses[Page]`` cannot be written here: once a model projects to the payload, the
+    # case's model is no longer the operation's result type, and no type checker ties the two.
+    # That is what D-54-03 is for, and why it is checked at runtime.
+    responses: Responses[object] = Responses(success=(Success(200, Json(PageEnvelope)),))
+    assert responses._result_type is Page
+    assert payload_of(PageEnvelope) == PayloadField("result", Page)
+
+
+def test_payload_type_is_checked_against_the_operation() -> None:
+    """D-54-01's sibling: a projection that disagrees with the operation is a typo, not a call."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Disagrees(HttpOperation[str]):
+        __http__ = Http.get("/page", success={200: Json(PageEnvelope)})
+
+    class Service(SyncApi):
+        fetch = op(Disagrees)
+
+    with (
+        _never_served() as client,
+        pytest.raises(PlanError, match="Payload is Page, the operation returns str"),
+    ):
+        Service(client).fetch()
+
+
+def test_two_payloads_on_one_model_are_refused() -> None:
+    """D-54-02."""
+
+    class TwoPayloads(msgspec.Struct):
+        result: Payload[Page]
+        data: Payload[Page]
+
+    with pytest.raises(PlanError, match=r"TwoPayloads declares Payload on 2 fields: result, data"):
+        payload_of(TwoPayloads)
+
+
+def test_unwrap_and_payload_together_are_refused() -> None:
+    """D-54-05: the pointer reads the payload before parsing, the marker after."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Both(HttpOperation[Page]):
+        __http__ = Http.get("/page", success={200: Json(PageEnvelope, unwrap="/result")})
+
+    class Service(SyncApi):
+        fetch = op(Both)
+
+    with (
+        _never_served() as client,
+        pytest.raises(PlanError, match="reads the payload before parsing"),
+    ):
+        Service(client).fetch()
+
+
+def _never_served() -> Client:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the request must not be sent")
+
+    raw = httpx.Client(transport=httpx.MockTransport(handler), headers={}, cookies={})
+    return Client(base_url=BASE, handler=HttpxHandler(raw, owns_client=True))

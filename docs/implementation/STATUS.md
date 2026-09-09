@@ -4824,8 +4824,8 @@ consumer at `C:/Users/user/Desktop/parsing/kad`.
 
 ### State
 
-Active. 54.1 (the fallback after parsing) and 54.2 (`Const` and the tags a model declares) are
-done; 54.3 (`Payload[T]`), 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are
+Active. 54.1 (the fallback after parsing), 54.2 (`Const` and the tags a model declares) and 54.3
+(`Payload[T]`) are done; 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are
 pending.
 Plan: `54-response-tags.md`. Origin: the measurements in
 `docs/eazy-sdk-openapi-conditions-and-response-tags.md` — 16 public specifications (~65 MB, ~6300
@@ -4884,20 +4884,45 @@ change folded into 53.5.
   `_validate_response_declarations` in the executor reads every case model — the fallback
   included — during preflight, so the typo is reported with the request still unsent.
 
+### Delivered (54.3)
+
+- `Payload` in `eazy_sdk/response/markers.py` with the short alias in the new
+  `eazy_sdk/response/short.py` (`Payload = Annotated[_T, markers.Payload()]`), the `TypeVar` form
+  phase 50 settled on for the request side: `get_type_hints(include_extras=True)` substitutes it,
+  so every reader sees one plain `Annotated`.
+- One annotation pass now reads both halves of what a model declares — `ModelDeclaration(tags,
+  payload)` — so the projection costs no second walk and shares the one cache entry per class.
+- The projection runs on a success case only; an error keeps the whole envelope, where the
+  message an `ApiError` reports lives. While `Envelope` is still in the tree the marker wins over
+  `Envelope.payload`: applying both would project a projection.
+- A missing field is read differently for the two markers, and deliberately: a tag's missing
+  field is a no (this is another case), a payload's missing field is malformed (the case already
+  claimed the response, and the model said the field would be there).
+- `_representation_result_type` reads the marker's annotation, so the result type is read where
+  the author writes it instead of being inferred from the return annotation of a lambda.
+- D-54-02 (two `Payload` fields) is raised by the reader; D-54-03 (the projection disagrees with
+  the operation) and D-54-05 (`unwrap=` and `Payload` together) join D-54-01 in preflight.
+- Measured while writing the tests: no type checker ties `Http.get(success=…)` to the operation's
+  own `HttpOperation[T]` — the parameter's type variable is free, so mypy infers it from the
+  argument and reports nothing. That is why D-54-03 has to exist at runtime. The one place a
+  checker does see the tie is the advanced form, `Responses[Page](success=(Success(200,
+  Json(PageEnvelope)),))`, which stops type-checking once a model projects; whether to relax that
+  parameter is a question for 54.4.
+
 ### Verification evidence
 
 | Command | Result |
 |---|---|
-| `uv run pytest -q tests/unit/test_phase54_response_tags.py --timeout=120` | PASS: 4 passed after 54.1, 22 after 54.2, including one parametrized over dataclass, Pydantic, msgspec and TypedDict. With `eazy_sdk/response/cases.py` stashed, `test_fallback_is_used_when_the_criterion_rejects_every_candidate` fails with `UnexpectedResponseError`, so the test measures the fix. The tag tests are not vacuous either: with the same two cases untagged, both bodies come back `AmbiguousResponseOutcome` (`experiments/openapi_conditions/probe_untagged.py`). |
-| `uv run pytest -q --timeout=120` (full suite, all nine testpaths) | PASS: 1397 passed / 11 skipped after 54.1; 1415 passed / 11 skipped after 54.2, 180 s. The openapi subprocess tests recorded as flaky for phases 50, 52 and 53 passed in both runs. |
+| `uv run pytest -q tests/unit/test_phase54_response_tags.py --timeout=120` | PASS: 4 passed after 54.1, 22 after 54.2, 28 after 54.3, including one parametrized over dataclass, Pydantic, msgspec and TypedDict. With `eazy_sdk/response/cases.py` stashed, `test_fallback_is_used_when_the_criterion_rejects_every_candidate` fails with `UnexpectedResponseError`, so the test measures the fix. The tag tests are not vacuous either: with the same two cases untagged, both bodies come back `AmbiguousResponseOutcome` (`experiments/openapi_conditions/probe_untagged.py`). |
+| `uv run pytest -q --timeout=120` (full suite, all nine testpaths) | PASS: 1397 passed / 11 skipped after 54.1; 1415 after 54.2; 1421 passed / 11 skipped after 54.3, 171 s. The openapi subprocess tests recorded as flaky for phases 50, 52 and 53 passed in every run. |
 | `uv run mypy`, `uv run ruff check` | PASS on the phase-54 change. Repo-wide each reports one error, both in the uncommitted 53.5 work in the tree (`tests/unit/test_phase53_response_cases.py`: RUF043 on a `match=` pattern at :853, and `"object" has no attribute "Success"` at :844). With those two files stashed: `ruff` all checks passed, `mypy` no issues. Not touched here — that work belongs to phase 53. |
-| `uv run python scripts/surface_count.py --total` | 438 before, 439 after: exactly the one declared name, `Const`. Measured by stashing the phase-54 files and re-running. |
+| `uv run python scripts/surface_count.py --total` | 438 before the phase, 439 after 54.2 (`Const`), 440 after 54.3 (`Payload`): exactly the declared names. The 54.2 delta was measured by stashing the phase files and re-running. |
 | `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
 | `uv run python scripts/docs_freshness.py check` | **RED, expected**: `guides/responses/success.mdx (changed: eazy_sdk.response)`. The gate is asking for the documentation pass that the plan schedules as 54.5; the lock file it would rewrite is also carrying the uncommitted 53.5 edits, so it is left for that step rather than updated blind here. |
 
 ### Remaining work / blockers
 
-54.3 through 54.5, and with them the red `docs_freshness` gate above. Note for 54.5: a tag written
+54.4 and 54.5, and with them the red `docs_freshness` gate above. Note for 54.5: a tag written
 as `Literal[...]` is validated by the model backend, so a mismatch arrives as `Malformed`, not as
 `NoMatch`, and therefore does not reach the fallback the way `Const(...)` does — a reason to
 document `Const` as the spelling to reach for. D-54-04 moved into 54.4: it lives in

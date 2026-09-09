@@ -35,7 +35,7 @@ from eazy_sdk.models import ModelAdapterRegistry
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from .headers import Headers, _apply_header_sources
-from .markers import tags_of
+from .markers import payload_of, tags_of
 from .normalized import NormalizedResponse, cast_headers
 
 
@@ -888,8 +888,14 @@ def _decide_parsed(
                 and bool(envelope.succeeds(value)) != isinstance(case, Success)
             ):
                 return NoMatch()
-        if envelope is not None and envelope.payload is not None and isinstance(case, Success):
-            return ParsedValue(envelope.payload(value))
+        if isinstance(case, Success):
+            # The projection runs on the success only: an error keeps the whole envelope, where
+            # the message and the code an ``ApiError`` reports live.
+            payload = payload_of(model)
+            if payload is not None:
+                return ParsedValue(payload.read(value))
+            if envelope is not None and envelope.payload is not None:
+                return ParsedValue(envelope.payload(value))
     except Exception as exc:  # any failure of an author callable is Malformed, not a crash
         return Malformed(exc)
     return ParsedValue(value)
@@ -904,6 +910,11 @@ def _representation_result_type(
         return bytes
     if isinstance(representation, Empty):
         return type(None)
+    payload = payload_of(representation.model)
+    if payload is not None:
+        # The marker states the type where the author already writes it, so the result type is
+        # read rather than inferred: an annotation, not the return of an unannotated lambda.
+        return payload.annotation
     payload_type = envelope_payload_type(representation.model)
     return representation.model if payload_type is None else payload_type
 

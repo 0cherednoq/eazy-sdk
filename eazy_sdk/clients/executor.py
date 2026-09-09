@@ -153,7 +153,7 @@ from eazy_sdk.response.cases import (
     PreparedResponseExtractor,
     Success,
 )
-from eazy_sdk.response.markers import tags_of
+from eazy_sdk.response.markers import payload_of, tags_of
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from ._decisions import (
@@ -2198,8 +2198,37 @@ def _validate_response_declarations(contract: _OperationDeclaration[Any]) -> Non
     cases = (*getattr(responses, "cases", ()), *((fallback,) if fallback is not None else ()))
     for case in cases:
         model = getattr(case.response, "model", None)
-        if model is not None:
-            tags_of(model)
+        if model is None:
+            continue
+        tags_of(model)
+        payload = payload_of(model)
+        if payload is None:
+            continue
+        if getattr(case.response, "unwrap", None) is not None:
+            raise PlanError(
+                f"operation {contract.operation_id!r}: Json(unwrap=...) reads the payload before "
+                f"parsing and {_declared_name(model)}.{payload.name} marks it after; declare one"
+            )
+        if isinstance(case, Success) and not _same_type(payload.annotation, contract.result_type):
+            raise PlanError(
+                f"operation {contract.operation_id!r}: Payload is "
+                f"{_declared_name(payload.annotation)}, the operation returns "
+                f"{_declared_name(contract.result_type)}"
+            )
+
+
+def _same_type(payload: object, result: object) -> bool:
+    """Whether a projection and the operation's own result type agree.
+
+    An operation that says nothing about its result type says nothing to disagree with, so the
+    marker is taken at its word; that is the raw-response and untyped-call shape.
+    """
+
+    return result is None or result is Any or result is object or payload == result
+
+
+def _declared_name(annotation: object) -> str:
+    return getattr(annotation, "__name__", None) or str(annotation).replace("typing.", "")
 
 
 def _signs_the_json_body(signing: tuple[DeclarativeSignature | CustomSignature, ...]) -> bool:
