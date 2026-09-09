@@ -11,7 +11,7 @@ from functools import cached_property, reduce
 from http.cookies import SimpleCookie
 from typing import Protocol, cast, runtime_checkable
 
-from eazy_sdk.core.errors import EazySdkError, PlanError
+from eazy_sdk.core.errors import EazySdkError
 from eazy_sdk.core.kernel import (
     AmbiguousCases,
     MalformedCase,
@@ -35,7 +35,7 @@ from eazy_sdk.models import ModelAdapterRegistry
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from .headers import Headers, _apply_header_sources
-from .markers import payload_of, tags_of
+from .markers import declaration_of, payload_of, tags_of
 from .normalized import NormalizedResponse, cast_headers
 
 
@@ -336,56 +336,6 @@ class _BoundHtmlExtractor:
 HTML_EXTRACTOR = HtmlExtractor()
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Envelope[TEnvelope = typing.Any, TPayload = typing.Any]:
-    """How to read a service envelope: whether it succeeded, and where its payload sits.
-
-    Declared on the model as the class attribute ``__envelope__``, never as a method: a
-    ``TypedDict`` value is a plain ``dict`` and carries no methods, so an attribute is the only
-    form every model library supports. It holds ordinary callables, so the rule can be as
-    involved as the service is.
-
-    ``succeeds`` answers "is this envelope a success". A :class:`Success` case matches when it
-    says yes, an :class:`Error` case when it says no, so one predicate declares both halves of
-    a service that reports business failure inside a 200.
-
-    ``payload`` is applied to the successful value only. An error case keeps the whole envelope,
-    because the message and the code an ``ApiError`` reports live there and nowhere else.
-
-    Both parameters default to ``Any`` so a rule written as a lambda needs no annotation at the
-    declaration site, where the model being declared cannot yet be named. A rule written as an
-    annotated function is inferred and checked as usual.
-    """
-
-    succeeds: Callable[[TEnvelope], bool] | None = None
-    payload: Callable[[TEnvelope], TPayload] | None = None
-
-    def __post_init__(self) -> None:
-        if self.succeeds is None and self.payload is None:
-            raise ValueError("Envelope() declares neither succeeds= nor payload=")
-        if self.succeeds is not None and not callable(self.succeeds):
-            raise TypeError("Envelope(succeeds=) must be callable")
-        if self.payload is not None and not callable(self.payload):
-            raise TypeError("Envelope(payload=) must be callable")
-
-
-def envelope_of(model: object) -> Envelope[object, object] | None:
-    """The ``__envelope__`` a model class declares, or ``None`` when it declares none.
-
-    An ordinary attribute lookup, so a service declares the rule once on a base class and every
-    envelope inherits it. Cheap enough to do per response: this walks the MRO in C, unlike the
-    annotation resolution phase 51 had to cache.
-    """
-
-    declared = getattr(model, "__envelope__", None)
-    if declared is None:
-        return None
-    if not isinstance(declared, Envelope):
-        name = getattr(model, "__name__", repr(model))
-        raise PlanError(f"{name}.__envelope__ must be an Envelope, got {type(declared).__name__}")
-    return cast(Envelope[object, object], declared)
-
-
 @dataclass(frozen=True, slots=True)
 class Json[T]:
     model: type[T] | None = None
@@ -394,7 +344,7 @@ class Json[T]:
     status: StatusSelector = 200
     when: ResponseCondition | None = None
     accept: Callable[[T], bool] | None = None
-    """Decides on the parsed value, overriding the model's own ``__envelope__`` when given."""
+    """Decides on the parsed value, overriding the tags the model declares when given."""
     unwrap: str | None = None
     """A JSON pointer (RFC 6901) to the payload inside a service envelope, applied first."""
 
@@ -867,35 +817,22 @@ def _decide_parsed(
 
     accept = getattr(representation, "accept", None)
     model = getattr(representation, "model", None)
-    envelope = envelope_of(model)
     # Outside the try: a tag that cannot be read is a broken declaration, and a declaration error
     # must not arrive dressed as a malformed response.
-    tags = tags_of(model)
+    declaration = declaration_of(model)
     try:
         if accept is not None:
             # ``accept`` answers "does this case match", so it is read as written for both kinds,
             # and it overrides what the model says about itself.
             if not accept(value):
                 return NoMatch()
-        else:
-            # A tag states a fact about the body, so it reads the same for both kinds of case.
-            if any(not tag.holds(value) for tag in tags):
-                return NoMatch()
-            # ``succeeds`` answers "is the envelope a success", so the error case wants the no.
-            if (
-                envelope is not None
-                and envelope.succeeds is not None
-                and bool(envelope.succeeds(value)) != isinstance(case, Success)
-            ):
-                return NoMatch()
-        if isinstance(case, Success):
+        # A tag states a fact about the body, so it reads the same for both kinds of case.
+        elif any(not tag.holds(value) for tag in declaration.tags):
+            return NoMatch()
+        if declaration.payload is not None and isinstance(case, Success):
             # The projection runs on the success only: an error keeps the whole envelope, where
             # the message and the code an ``ApiError`` reports live.
-            payload = payload_of(model)
-            if payload is not None:
-                return ParsedValue(payload.read(value))
-            if envelope is not None and envelope.payload is not None:
-                return ParsedValue(envelope.payload(value))
+            return ParsedValue(declaration.payload.read(value))
     except Exception as exc:  # any failure of an author callable is Malformed, not a crash
         return Malformed(exc)
     return ParsedValue(value)
@@ -913,27 +850,9 @@ def _representation_result_type(
     payload = payload_of(representation.model)
     if payload is not None:
         # The marker states the type where the author already writes it, so the result type is
-        # read rather than inferred: an annotation, not the return of an unannotated lambda.
+        # read rather than inferred.
         return payload.annotation
-    payload_type = envelope_payload_type(representation.model)
-    return representation.model if payload_type is None else payload_type
-
-
-def envelope_payload_type(model: object) -> object | None:
-    """What ``__envelope__.payload`` is annotated to return, when it is annotated at all.
-
-    An unannotated lambda says nothing, and then the operation's own ``HttpOperation[T]`` stays
-    the only statement of the result type.
-    """
-
-    envelope = envelope_of(model)
-    if envelope is None or envelope.payload is None:
-        return None
-    try:
-        hints = typing.get_type_hints(envelope.payload)
-    except Exception:  # an unresolvable annotation is simply no statement about the type
-        return None
-    return cast(object | None, hints.get("return"))
+    return representation.model
 
 
 DOCUMENT_MEDIA_TYPES = ("text/html", "application/xhtml+xml")
@@ -997,9 +916,9 @@ def _specificity(case: ResponseCase[object]) -> tuple[int, int, int, int]:
 def _criterion_of(case: ResponseCase[object]) -> object | None:
     """What the case states beyond status and media, or ``None`` when it states nothing.
 
-    One rank for every kind of criterion: a case either narrows the responses it claims or it
-    does not. Four spellings reach here — ``when=`` on the case, decided before parsing, and
-    ``accept=``, the tags the model declares, or the model's ``__envelope__``, decided after it.
+    Three spellings reach here, and they rank the same because they answer the same question:
+    ``when=`` on the case, decided before parsing, and ``accept=`` or the tags the model
+    declares, decided after it.
     """
 
     if case.condition is not None:
@@ -1007,14 +926,8 @@ def _criterion_of(case: ResponseCase[object]) -> object | None:
     accept: object | None = getattr(case.response, "accept", None)
     if accept is not None:
         return accept
-    model = getattr(case.response, "model", None)
-    tags = tags_of(model)
-    if tags:
-        return tags
-    envelope = envelope_of(model)
-    if envelope is not None and envelope.succeeds is not None:
-        return envelope.succeeds
-    return None
+    tags = tags_of(getattr(case.response, "model", None))
+    return tags or None
 
 
 def _status_rank(selector: StatusSelector) -> int:

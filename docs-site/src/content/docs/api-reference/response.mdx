@@ -3,7 +3,7 @@ title: Response API
 description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:d1d4b52fc2b16dd4c5b6c38ba1a08c2963e2283b940805741a97f1b86161d45b"
+api_fingerprint: "sha256:3d36f79f5c5212cb20c9899604ad7f4beea96bd74181106599bdd78d23562c44"
 ---
 
 ## Одна успешная case
@@ -104,7 +104,7 @@ Pyright. Для multi-model parser реализуйте advanced `ResponseParser
 - `AmbiguousResponseError` — совпало больше одной одинаково специфичной case. Специфичность
   считается так: заявленный критерий > его отсутствие, точный статус > диапазон > `DEFAULT`,
   явная медиа > wildcard > её отсутствие, кейс операции > кейс сервиса > кейс клиента. Критерий —
-  это `when=`, `accept=` или `__envelope__` модели.
+  это `when=`, `accept=` или теги, которые объявила модель.
 
 Parsing session создаётся один раз на response attempt, поэтому custom parser или extractor может
 кэшировать decoded document по identity.

@@ -4,7 +4,7 @@ description: Тип результата объявляет успешный с�
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
-api_fingerprint: "sha256:695b22939c6266e7b6a2f5758fb1c8996d6f7060e3d8a8b9a3ccd7262f307a39"
+api_fingerprint: "sha256:6f3256edda10e0cbb30db2e960bfbcdc041acd00e31b50ea261f07df5ee29d80"
 ---
 
 Тип результата операции — это и есть успешный случай. `HttpOperation[User]` означает «`200`,
@@ -127,74 +127,74 @@ class ShopApi(SyncApi):
 {"Success": false, "Result": null, "Message": "Дело не найдено"}
 ```
 
-Такой конверт читается не указателем, а правилом на самой модели. Модель объявляет атрибут
-`__envelope__`: `succeeds` отвечает, успешен ли конверт, `payload` говорит, где внутри лежит
-полезная нагрузка.
+Такой конверт различается не указателем, а тем, что модель сама говорит о своём теле. `Const`
+объявляет константу на поле — это `const` из JSON Schema, написанный на Python. `Payload`
+помечает поле, которое операция возвращает.
 
 ```python
 from dataclasses import dataclass
+from typing import Annotated
 
 from eazy_sdk import Http, HttpOperation, SyncApi, op
-from eazy_sdk.response import ApiError, Envelope, Json
+from eazy_sdk.response import ApiError, Const, Json, Payload
 
 @dataclass(frozen=True)
 class CaseFile:
     number: str
 
 @dataclass(frozen=True)
-class CaseEnvelope:
-    Result: CaseFile | None
-    Success: bool
+class CaseFound:
+    Success: Annotated[bool, Const(True)]
+    Result: Payload[CaseFile]
     Message: str | None = None
 
-    __envelope__ = Envelope(succeeds=lambda r: r.Success, payload=lambda r: r.Result)
+@dataclass(frozen=True)
+class CaseMissing:
+    Success: Annotated[bool, Const(False)]
+    Message: str
 
-class CaseNotFound(ApiError[CaseEnvelope]):
+class CaseNotFound(ApiError[CaseMissing]):
     pass
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetCase(HttpOperation[CaseFile]):
     __http__ = Http.get(
         "/cases",
-        success={200: Json(CaseEnvelope)},
-        errors={200: (Json(CaseEnvelope), CaseNotFound)},
+        success={200: Json(CaseFound)},
+        errors={200: (Json(CaseMissing), CaseNotFound)},
     )
 
 class CasesApi(SyncApi):
     get_case = op(GetCase)
 ```
 
-Один предикат объявляет обе половины: успешный случай совпадает, когда `succeeds` отвечает «да»,
-случай ошибки — когда «нет». Ответ с `"Success": false` поднимает `CaseNotFound` — обычный
-`ApiError`, который участвует в `errors=`, попадает в `ErrorSummary` и проходит через слои retry
-и защиты. Проверка `if not response.success: raise` в коде вызывающего больше не нужна.
+Тег — утверждение о теле, а не об исходе: «в этом ответе `Success` равно `false`». Успех это или
+ошибка, говорит словарь, в который положена модель, — и только он это и знает, потому что одна и
+та же форма для одной операции успех, а для другой неуспех. Поэтому тег читается одинаково на
+`success=` и на `errors=` и никогда не инвертируется.
 
-`payload` применяется только к успешному случаю, поэтому результат операции — `CaseFile`, а поля
+Ответ с `"Success": false` поднимает `CaseNotFound` — обычный `ApiError`, который участвует в
+`errors=`, попадает в `ErrorSummary` и проходит через слои retry и защиты. Проверка
+`if not response.Success: raise` в коде вызывающего больше не нужна.
+
+`Payload` применяется только к успешному случаю, поэтому результат операции — `CaseFile`, а поля
 `Success` и `Message` не видны вызывающему коду. Случай ошибки сохраняет весь конверт: `Message`
-живёт именно там, и `CaseNotFound.error.Message` его отдаёт.
+живёт именно там, и `CaseNotFound.error.Message` его отдаёт. Тип, объявленный маркером, сверяется
+с `HttpOperation[T]` при первом обращении к операции: расхождение — ошибка объявления, а не
+неожиданный результат в рантайме.
 
-Объявление — атрибут класса, а не метод, поэтому работает на всех четырёх библиотеках моделей.
-Для `TypedDict` меняется только способ доступа, потому что значение там действительно словарь:
+Форма — `Annotated`, а не `Literal`, потому что теги нужны на всех четырёх библиотеках моделей:
+`Literal[True]` невозможен на msgspec, который принимает в `Literal` только `None`, целые и
+строки, а адаптеры dataclass и TypedDict не поддерживают `Literal` вовсе. Там, где бэкенд
+`Literal` тянет, одноэлементный `Literal["customer"]` читается как тот же самый тег.
 
-```python
-__envelope__ = Envelope(succeeds=lambda r: r["Success"], payload=lambda r: r["Result"])
-```
+Значения сравниваются вместе с типами: в Python `1 == True`, поэтому тело `{"Success": 1}` тегу
+`Const(True)` не удовлетворяет.
 
-Правило хранит обычные вызываемые объекты, поэтому сложное условие пишется обычной функцией с
-аннотацией, а не языком выражений:
-
-```python
-def _succeeds(envelope: CaseEnvelope) -> bool:
-    return envelope.Success and envelope.Result is not None
-```
-
-Один и тот же объект `Envelope(...)` присваивается многим моделям, либо объявляется один раз в
-базовом классе и наследуется: чтение идёт обычным поиском атрибута.
-
-Если модель менять нельзя — например, она сгенерирована — то же решение принимает `accept=` на
+Условие, которое не сводится к равенству, и модель, которую нельзя менять, — это `accept=` на
 кейсе: `Json(ThirdParty, accept=lambda r: r.status == "ok")`. Он отвечает на другой вопрос,
 «подходит ли этот кейс», поэтому читается как написан и на успехе, и на ошибке, и переопределяет
-правило модели.
+теги модели.
 
 ## Одно объявление на много операций
 

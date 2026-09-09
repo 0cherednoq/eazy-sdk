@@ -32,9 +32,8 @@ from .cases import (
     StatusSelector,
     Success,
     Text,
-    envelope_of,
-    envelope_payload_type,
 )
+from .markers import payload_of, tags_of
 
 _REPRESENTATIONS = (Json, Html, Extracted, Parsed, Text, Bytes, Empty)
 _ERROR_BODIES = (type, *_REPRESENTATIONS)
@@ -302,25 +301,59 @@ def normalize_responses(
         if fallback is not None
         else None
     )
-    responses = Responses(success=successes, errors=failures, fallback=default)
-    _validate_envelopes(responses, result_type=result_type, operation_id=operation_id)
-    return responses
+    return Responses(success=successes, errors=failures, fallback=default)
 
 
-def _validate_envelopes(
+def validate_responses(
     responses: Responses[Any],
     *,
     result_type: object | None,
     operation_id: str,
 ) -> None:
-    """Two declaration errors an envelope can hide until the first response arrives.
+    """What the declaration alone already proves wrong, before a body can arrive.
 
-    Both are cheap and both are certain: nothing about the running service can make an
-    indistinguishable pair of cases distinguishable, or make a projection return another type.
+    Every check here is certain: nothing about the running service can make an indistinguishable
+    pair of cases distinguishable, make a projection return another type, or turn a constant the
+    field cannot hold into one it can. Reading the models here also means a tag that cannot be
+    read (D-54-01, D-54-02) is reported with the request still unsent.
     """
 
+    fallback = responses.fallback
+    cases = (*responses.cases, *((fallback,) if fallback is not None else ()))
+    for case in cases:
+        model = getattr(case.response, "model", None)
+        if model is None:
+            continue
+        _refuse_leftover_envelope(model)
+        payload = payload_of(model)  # raises on a constant or a projection the model cannot hold
+        if payload is None:
+            continue
+        if getattr(case.response, "unwrap", None) is not None:
+            raise PlanError(
+                f"operation {operation_id!r}: Json(unwrap=...) reads the payload before parsing "
+                f"and {_type_text(model)}.{payload.name} marks it after; declare one"
+            )
+        if isinstance(case, Success) and not _agrees(payload.annotation, result_type):
+            raise PlanError(
+                f"operation {operation_id!r}: Payload is {_type_text(payload.annotation)}, "
+                f"the operation returns {_type_text(result_type)}"
+            )
     _reject_indistinguishable_pairs(responses, operation_id)
-    _reject_payload_type_mismatch(responses, result_type, operation_id)
+
+
+def _refuse_leftover_envelope(model: object) -> None:
+    """``__envelope__`` was replaced by the two markers; a model still carrying one is silent.
+
+    Not a shim: the attribute is read by nothing any more, so a model that kept it would route
+    its responses by nothing at all. Saying so is the one thing left to do about it.
+    """
+
+    if getattr(model, "__envelope__", None) is None:
+        return
+    raise PlanError(
+        f"{_type_text(model)}.__envelope__: Envelope was replaced by Const(...) and Payload[...]; "
+        "declare the tag on the field that carries it and mark the field the operation returns"
+    )
 
 
 def _reject_indistinguishable_pairs(responses: Responses[Any], operation_id: str) -> None:
@@ -340,38 +373,28 @@ def _reject_indistinguishable_pairs(responses: Responses[Any], operation_id: str
                 continue
             if not _statuses_overlap(success_case.status, error.status):
                 continue
-            name = getattr(model, "__name__", repr(model))
+            name = _type_text(model)
             raise PlanError(
                 f"operation {operation_id!r}: {name} is declared for both success and error on "
-                f"{_status_text(success_case.status)}, and nothing tells the two apart; declare "
-                f"__envelope__ = Envelope(succeeds=...) on {name}, or accept= on one of the cases"
+                f"{_status_text(success_case.status)}, and nothing tells the two apart; add "
+                f"Const(...) to a field of {name}, or accept= on one of the cases"
             )
-
-
-def _reject_payload_type_mismatch(
-    responses: Responses[Any],
-    result_type: object | None,
-    operation_id: str,
-) -> None:
-    """An annotated projection that disagrees with what the operation says it returns."""
-
-    if result_type is None:
-        return
-    for case in responses.success:
-        declared = envelope_payload_type(getattr(case.response, "model", None))
-        if declared is None or declared == result_type:
-            continue
-        raise PlanError(
-            f"operation {operation_id!r}: Envelope.payload returns "
-            f"{_type_text(declared)}, the operation returns {_type_text(result_type)}"
-        )
 
 
 def _has_criterion(case: Success[Any] | Error[Any]) -> bool:
     if case.condition is not None or getattr(case.response, "accept", None) is not None:
         return True
-    envelope = envelope_of(getattr(case.response, "model", None))
-    return envelope is not None and envelope.succeeds is not None
+    return bool(tags_of(getattr(case.response, "model", None)))
+
+
+def _agrees(payload: object, result: object | None) -> bool:
+    """Whether a projection and the operation's own result type say the same thing.
+
+    An operation that states no result type states nothing to disagree with, which is the raw
+    and untyped call shape.
+    """
+
+    return result is None or result is Any or result is object or payload == result
 
 
 def _statuses_overlap(left: StatusSelector, right: StatusSelector) -> bool:
@@ -391,7 +414,7 @@ def _status_text(selector: StatusSelector) -> str:
 
 
 def _type_text(annotation: object) -> str:
-    return getattr(annotation, "__name__", None) or str(annotation)
+    return getattr(annotation, "__name__", None) or str(annotation).replace("typing.", "")
 
 
 def result_type_of(success: SuccessSpec | None, generic: object | None) -> object | None:

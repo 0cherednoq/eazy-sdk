@@ -4858,9 +4858,9 @@ The `kad` acceptance of §7.1, moved to 54.5 (see State above). Nothing in the l
 
 ### State
 
-Active. 54.1 (the fallback after parsing), 54.2 (`Const` and the tags a model declares) and 54.3
-(`Payload[T]`) are done; 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are
-pending.
+Active. 54.1 (the fallback after parsing), 54.2 (`Const` and the tags a model declares), 54.3
+(`Payload[T]`) and 54.4 (removal of `Envelope`) are done; 54.5 (the remaining documentation pass
+and the `kad` rewrite, which carries phase 53's §7.1 acceptance with it) is pending.
 Plan: `54-response-tags.md`. Origin: the measurements in
 `docs/eazy-sdk-openapi-conditions-and-response-tags.md` — 16 public specifications (~65 MB, ~6300
 operations) contain zero `if`/`then`/`else`, zero `dependentSchemas` and zero `dependentRequired`,
@@ -4954,10 +4954,49 @@ change folded into 53.5.
 | `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
 | `uv run python scripts/docs_freshness.py check` | **RED, expected**: `guides/responses/success.mdx (changed: eazy_sdk.response)`. The gate is asking for the documentation pass that the plan schedules as 54.5; the lock file it would rewrite is also carrying the uncommitted 53.5 edits, so it is left for that step rather than updated blind here. |
 
+### Delivered (54.4)
+
+- `Envelope`, `envelope_of` and `envelope_payload_type` are gone from `cases.py` and from the
+  package's exports. Nothing in `eazy_sdk/`, `tests/`, `examples/` or the documentation mentions
+  them any more. Surface: 440 → 439, which is the 438 baseline plus `Const` and `Payload` minus
+  `Envelope`.
+- Every declaration check now lives in one function, `validate_responses` in `_mapping.py`, called
+  from one place: the executor's preflight. Measured while deciding where to put it — compiling is
+  lazy, so nothing at all is checked at class creation or at `op()`; the first call is when a
+  declaration becomes real. That makes preflight and `normalize_responses` the same moment in
+  practice, and preflight sees strictly more: the RPC form goes through `rpc_responses` and never
+  reaches `normalize_responses`. It corrects the note in 54.2's journal, which read `_mapping.py`
+  as import-time.
+- D-54-06 is the only trace `Envelope` leaves: a model still carrying `__envelope__` is refused,
+  because nothing reads the attribute now and such a model would route its responses by nothing.
+  An error, not a shim.
+- D-54-04 now names the tag as the fix ("add `Const(...)` to a field of X, or `accept=` on one of
+  the cases"), and `_has_criterion` counts tags.
+- The phase-53 test file keeps its `accept=` coverage on a model with no rule of its own — that
+  keyword is not what this phase removes — and the three 53.5 tests that only an envelope could
+  satisfy left with it; their tag equivalents are in the phase-54 file.
+- Documentation: the "Конверт с бизнес-статусом" section of `guides/responses/success.mdx` is
+  rewritten around `Const` and `Payload`, `guides/responses/errors.mdx` gains a short section on
+  failure reported inside a 200, `api-reference/response.mdx` states the three spellings of a
+  criterion, and the four affected fingerprints are refreshed.
+
+### Verification evidence (54.4)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase54_response_tags.py tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 63 passed (33 + 30). |
+| `uv run pytest -q --timeout=120` (full suite) | PASS: 1414 passed, 11 skipped, 178 s. |
+| `uv run mypy`, `uv run ruff check` | PASS, repo-wide and with nothing set aside: 350 files, all checks passed. |
+| `uv run python scripts/surface_count.py --total` | 439. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 67 pages fresh. Green again, having been red since 54.2. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
+
 ### Remaining work / blockers
 
-54.4 and 54.5, and with them the red `docs_freshness` gate above. Note for 54.5: a tag written
-as `Literal[...]` is validated by the model backend, so a mismatch arrives as `Malformed`, not as
-`NoMatch`, and therefore does not reach the fallback the way `Const(...)` does — a reason to
-document `Const` as the spelling to reach for. D-54-04 moved into 54.4: it lives in
-`_mapping.py`, which is carrying the uncommitted 53.5 work, and 54.4 rewrites that file anyway.
+54.5: the `kad` rewrite, which also settles phase 53's §7.1, and a pass over the remaining
+examples and pages. Left open on purpose: `Responses[T]` types its `success=` parameter as
+representations of `T`, so the advanced form stops type-checking once a model projects to a
+payload (`Responses[Page](success=(Success(200, Json(PageEnvelope)),))`). Relaxing it to `Any`
+would match `errors=`, which is already `Error[Any]`, and would cost nothing in the dictionary
+form, where no checker ties the parameter to `HttpOperation[T]` anyway. It is a public generic,
+so it waits for a decision rather than being changed in passing.

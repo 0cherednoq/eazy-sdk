@@ -494,3 +494,85 @@ def _never_served() -> Client:
 
     raw = httpx.Client(transport=httpx.MockTransport(handler), headers={}, cookies={})
     return Client(base_url=BASE, handler=HttpxHandler(raw, owns_client=True))
+
+
+# --- 54.4: Envelope is gone, and the declaration checks read tags ------------------------------
+
+
+def test_envelope_is_gone_from_the_public_surface() -> None:
+    import eazy_sdk.response as response_package
+
+    assert "Envelope" not in response_package.__all__
+    assert not hasattr(response_package, "Envelope")
+
+
+def test_a_model_that_still_declares_an_envelope_is_refused() -> None:
+    """D-54-06: nothing reads ``__envelope__`` now, so a model keeping one routes by nothing."""
+
+    @dataclass(frozen=True)
+    class Leftover:
+        result: Page | None
+        success: bool
+
+        __envelope__ = object()
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Leftover]):
+        __http__ = Http.get("/page", success={200: Json(Leftover)})
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with (
+        _never_served() as client,
+        pytest.raises(PlanError, match="Envelope was replaced by Const"),
+    ):
+        Service(client).fetch()
+
+
+def test_one_model_on_both_sides_with_no_tag_is_refused() -> None:
+    """D-54-04, now naming the tag as the fix."""
+
+    @dataclass(frozen=True)
+    class Plain:
+        result: Page | None
+        success: bool
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Plain]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(Plain)},
+            errors={200: (Json(Plain), PageFailed)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with (
+        _never_served() as client,
+        pytest.raises(PlanError, match=r"add Const\(\.\.\.\) to a field of Plain"),
+    ):
+        Service(client).fetch()
+
+
+def test_a_tag_tells_the_pair_apart() -> None:
+    """Declaring what the diagnostic asks for is what clears it."""
+
+    body = {"success": True, "result": {"number": 7}, "message": None}
+    with _serve(body) as client:
+        assert Pages(client).fetch() == Page(number=7)
+
+
+def test_payload_applies_whichever_criterion_decided() -> None:
+    """``accept=`` replaces the criterion only; where the payload sits is still the model's."""
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Page]):
+        __http__ = Http.get("/page", success={200: Json(PageEnvelope, accept=lambda _r: True)})
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with _serve({"success": False, "result": {"number": 7}, "message": None}) as client:
+        assert Service(client).fetch() == Page(number=7)
