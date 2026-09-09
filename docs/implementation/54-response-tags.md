@@ -1,0 +1,356 @@
+# Фаза 54. Теги ответа: константа на поле вместо вердикта на модели
+
+Статус: план утверждён 2026-09-09 (владелец: «форма — `Annotated` + `Const(...)`; `Envelope`
+удалить целиком; фазу 53 закрыть как есть, завести 54»). Gates — в `STATUS.md`. Зависит от фазы 53
+(кейсы ответа, `when=`/`accept=`, порядок арбитража) и фазы 50 (маркеры-`Annotated` на стороне
+запроса, `op()`-проверки при импорте).
+
+Тип документа: authoritative implementation plan для Фазы 54. Источник — исследование
+`docs/eazy-sdk-openapi-conditions-and-response-tags.md` (замеры по 16 публичным спекам, разбор
+спецификаций JSON Schema 2020-12 и OpenAPI 3.1.1, пробы по четырём бэкендам моделей). Решения
+владельца и отвергнутые варианты — в §10.
+
+Мотивирующие сервисы: `kad.arbitr.ru` (конверт `{"Success", "Result", "Message"}` со статусом 200)
+и Slack Web API (`ok: true` против `ok: false`, оба со статусом 200) — второй важен тем, что это
+форма, в которой «успех и неуспех на одном статусе» описан у всех 174 методов спеки.
+
+---
+
+## 0. Как исполнять этот план автономно
+
+1. **Возобновление.** Первое действие новой сессии: прочитать §9 (журнал) и раздел `## Phase 54`
+   в `STATUS.md`. Первый шаг со статусом, отличным от `done`, — текущий.
+2. **Порядок шагов фиксирован**: 54.1 → 54.2 → 54.3 → 54.4 → 54.5. 54.1 независим от остальных и
+   идёт первым, потому что чинит дефект, который уже есть в master.
+3. **Каждый шаг — отдельный коммит** `Phase 54.N: <что сделано>` с тестами внутри.
+4. **Один путь исполнения.** Тег не добавляется рядом с `Envelope`, он его заменяет: к концу 54.4
+   в дереве не остаётся ни одного упоминания `Envelope`, `envelope_of`, `envelope_payload_type`.
+5. **Ни одного изменения запроса.** Фаза трогает только разбор ответа и кодоген её не касается
+   (см. §11: кодоген — отдельная фаза).
+6. **Проверки — при объявлении.** Всё, что видно по классу модели и по кейсам, проверяется при
+   импорте (`op()` / `normalize_responses`), а не при первом ответе.
+7. **Совместимость моделей.** Механизм обязан работать на всех четырёх бэкендах: dataclass,
+   Pydantic, msgspec, TypedDict. Измерено (§3.5): `Annotated[T, Const(v)]` грузится всеми
+   четырьмя, `Literal[True]` на msgspec невозможен, а адаптеры dataclass и TypedDict не
+   поддерживают `Literal` вообще.
+8. **При противоречии** между планом и кодом — записать в §9, выбрать вариант без второго пути,
+   продолжить. Останавливаться только если меняется публичный контракт.
+
+---
+
+## 1. Что не так
+
+### 1.1. На модели объявлен вердикт, а не факт
+
+`Envelope.succeeds` отвечает «этот конверт успешен» и инвертируется видом кейса (I5 фазы 53).
+«Успешен» — утверждение про исход вызова, а не про форму данных, и модель его знать не может.
+Измеренный контрпример: `deleted_customer` у Stripe приходит со статусом 200 на
+`GET /v1/customers/{id}` — для этой операции успех; для операции «дождись, пока клиент активен»
+тот же ответ — неуспех. Вердикт принадлежит объявлению операции, где он уже выражен тем, в какой
+словарь (`success=` или `errors=`) положена модель.
+
+### 1.2. Лямбда непрозрачна для всего, что вокруг
+
+`succeeds`/`payload` — обычные вызываемые объекты. Отсюда: в диагностике `<lambda>` вместо
+критерия; тип результата приходится доставать `get_type_hints` из аннотации возврата, а лямбда без
+аннотации не сообщает ничего (§3.6 фазы 53); из OpenAPI такое можно только сгенерировать текстом
+лямбды, а обратно в OpenAPI не вывести никак.
+
+### 1.3. Два зеркальных вопроса с похожими именами
+
+`Envelope.succeeds` инвертируется видом кейса, `accept=` — нет. D3/D5 фазы 53 признают риск и
+принимают его. После введения тега остаётся один вопрос — «равно ли поле константе» — и он
+одинаков для обоих видов кейса.
+
+### 1.4. `fallback=` не участвует, если критерий отверг всех кандидатов
+
+`Responses.inspect` выбирает fallback **до разбора** (`cases.py:719`), поэтому success-кейс на 200
+остаётся кандидатом, после разбора его критерий говорит «нет», `matches` пуст — и вызов
+заканчивается `UnexpectedResponseError` вместо объявленной ошибки. Проверено
+(`experiments/openapi_conditions/probe_fallback.py`, msgspec, 200 `{"ok": false, …}`):
+
+```
+fallback=Error(DEFAULT, Json(Failure))   ->  UnexpectedOutcome(attempted_models=('Ok',))
+errors=(Error(DEFAULT, Json(Failure)),)  ->  ErrorOutcome(error=Failure(ok=False, error='x'))
+```
+
+Это ровно форма Slack: ошибка объявлена под `default`, а приходит со статусом 200.
+
+---
+
+## 2. Инварианты
+
+- **I1.** Тег — утверждение о значении поля, а не об исходе: `Annotated[T, Const(value)]` читается
+  одинаково для `Success` и для `Error` и никогда не инвертируется.
+- **I2.** Кейс совпадает, если совпали **все** теги его модели. Несовпадение — `NoMatch`: тело
+  не сломано, оно про другой случай, и арбитраж продолжается другими кандидатами.
+- **I3.** Ранг критерия не меняется (I3 фазы 53): у кейса либо есть критерий, либо нет. Теги
+  модели — четвёртое написание критерия рядом с `when=`, `accept=`.
+- **I4.** Полезная нагрузка объявляется маркером `Payload[T]` ровно на одном поле модели и
+  применяется только к success-кейсу: ошибке нужен весь конверт, там живут `message` и код.
+- **I5.** Тип результата операции читается из `Payload[T]` статически и сверяется с
+  `HttpOperation[T]` при импорте. Никакого `get_type_hints` по лямбде в рантайме.
+- **I6.** Чтение аннотаций модели кешируется по типу. Урок фазы 51: дорог именно
+  `get_type_hints`, а не поиск атрибута.
+- **I7.** Механизм работает на всех четырёх бэкендах; тест параметризован по каждому.
+- **I8.** Ни одного второго способа: `Envelope` уходит из дерева целиком в 54.4.
+
+---
+
+## 3. Архитектура
+
+### 3.1. Модули
+
+| Модуль | Что меняется |
+|---|---|
+| `eazy_sdk/response/markers.py` (новый) | `Const` (метаданные `Annotated`), `Payload` (маркер поля), `tags_of(model)`, `payload_field_of(model)` с кешем по типу |
+| `eazy_sdk/response/short.py` (новый, приватный) | `Payload = Annotated[_T, markers.Payload()]` — форма фазы 50: `TypeVar` + `Annotated`, не PEP 695 `type` |
+| `eazy_sdk/response/cases.py` | `_criterion_of` читает теги; `_decide_parsed` проверяет теги и применяет `Payload`; `_representation_result_type` читает `Payload`; удаление `Envelope`, `envelope_of`, `envelope_payload_type`; fallback после разбора |
+| `eazy_sdk/response/_mapping.py` | диагностики переписаны на теги (D-53-04/05 → D-54-04/03) |
+| `eazy_sdk/response/__init__.py` | `+Const`, `+Payload`, `−Envelope` |
+
+### 3.2. Форма объявления
+
+```python target
+from typing import Annotated
+
+from eazy_sdk.response import Const, Payload
+
+
+class DocumentPageResponse(msgspec.Struct, rename={"result": "Result", "success": "Success"}):
+    success: Annotated[bool, Const(True)]
+    result: Payload[DocumentPage]
+    message: str | None = None
+
+
+class KadFailure(msgspec.Struct, rename={"success": "Success", "message": "Message"}):
+    success: Annotated[bool, Const(False)]
+    message: str
+```
+
+Операция объявляет вердикт словарной формой, как и раньше:
+
+```python target
+class CaseDocumentsPage(HttpOperation[DocumentPage]):
+    __http__ = Http.get("/Kad/CaseDocumentsPage", success={200: Json(DocumentPageResponse)})
+```
+
+Ошибка сервиса объявляется один раз на миксине сервиса и наследуется по MRO:
+
+```python target
+class KadService:
+    errors = {StatusRange(200, 599): (Json(KadFailure), KadRequestFailed)}
+```
+
+### 3.3. Сравнение значений
+
+Тег совпал, если `type(actual) is type(expected) and actual == expected`. Проверка типа
+обязательна: в Python `1 == True`, поэтому без неё тело `{"success": 1}` совпало бы с
+`Const(True)`, а `{"code": 0}` — с `Const(False)`. Допустимые константы: `str`, `int`, `float`,
+`bool`, `None` — то, что бывает в `const`/`enum` JSON Schema. Проверка типа константы против
+объявленного типа поля — при импорте (D-54-01).
+
+### 3.4. Порядок применения к разобранному значению
+
+`_decide_parsed` (фаза 53) получает четвёртую ветку. Порядок:
+
+1. `accept=` представления, если задан, — как есть, для обоих видов кейса;
+2. иначе теги модели: все должны совпасть, иначе `NoMatch`;
+3. `Payload`, если объявлен и кейс — success;
+4. исключение внутри любого шага — `Malformed` с этим исключением, не падение вызова.
+
+`accept=` остаётся переопределением для чужой модели и для условия, которое не сводится к
+равенству; когда он задан, теги не читаются — иначе получилось бы два критерия на один кейс.
+
+### 3.5. Измеренные факты, на которых стоит план
+
+`experiments/openapi_conditions/`, 2026-09-09.
+
+| Написание | dataclass | Pydantic | msgspec | TypedDict |
+|---|---|---|---|---|
+| `Annotated[bool, Const(True)]` | грузится | грузится | грузится | грузится |
+| `Literal["customer"]` | `UnsupportedModelTypeError` | работает | работает | `UnsupportedModelTypeError` |
+| `Literal[True]` | не поддержан | работает | **невозможен** (msgspec: Literal только None/int/str) | не поддержан |
+
+Что бэкенд проверяет сам: нет обязательного поля — ошибка у всех четырёх; неверный тип ловит
+только msgspec; лишнее поле отвергает только TypedDict. Отсюда: «разбор сам всё разрулит» — не
+контракт, различение обязано опираться на явный тег.
+
+`Literal` на поле означает то же самое и даёт **тот же ранг критерия** там, где бэкенд его тянет
+(54.2, R6 исследования). Причина не косметическая: без чтения `Literal` кейс с константным полем
+считался бы бескритериальным и по порядку фазы 53 проигрывал бы условному сервисному кейсу.
+Починка адаптеров dataclass/TypedDict под `Literal` — отдельная задача, в эту фазу не входит.
+
+### 3.6. Диагностики
+
+| Код | Текст (подстрока, которую проверяет тест) |
+|---|---|
+| D-54-01 | `Const(True) on X.success: a bool is not a str` |
+| D-54-02 | `X declares Payload on two fields: result, data` |
+| D-54-03 | `operation 'op': Payload is DocumentPage, the operation returns CaseFile` |
+| D-54-04 | `operation 'op': X is declared for both success and error on status 200, and nothing tells the two apart; add Const(...) to a field of X, or accept= on one of the cases` |
+| D-54-05 | `Json(unwrap=...) reads the payload before parsing, Payload after; declare one` |
+| D-54-06 | `X.__envelope__: Envelope was replaced by Const(...) and Payload[...]` |
+
+---
+
+## 4. Задачи
+
+### 4.1. 54.1 — fallback после разбора
+
+`Responses.inspect`: если после разбора `matches` пуст, `malformed` пуст и объявлен `fallback`,
+кандидатом становится fallback и разбирается обычным путём. Выбор fallback до разбора остаётся
+как есть (когда по статусу и медиа не подошло ничего). Тест — сценарий §1.4 целиком.
+
+### 4.2. 54.2 — `Const` и теги модели
+
+`markers.Const`, `tags_of(model)` с кешем; `_criterion_of` возвращает теги; `_decide_parsed`
+проверяет их по §3.3–3.4; чтение `Literal` как синонима; D-54-01, D-54-04. `Envelope` в этом шаге
+ещё жив, но новый путь уже полный.
+
+### 4.3. 54.3 — `Payload[T]`
+
+`markers.Payload` и алиас в `response/short.py`; `payload_field_of` с кешем; применение к
+success-кейсу; `_representation_result_type` читает маркер; D-54-02, D-54-03, D-54-05.
+
+### 4.4. 54.4 — удаление `Envelope`
+
+Удалить `Envelope`, `envelope_of`, `envelope_payload_type` и их экспорт; переписать
+`_validate_envelopes` в `_mapping.py` на теги; D-54-06 как единственный след (ошибка при импорте,
+не shim); вычистить тесты фазы 53, которые опирались на `Envelope`.
+
+### 4.5. 54.5 — документация и приёмка на `kad`
+
+`guides/responses/*` и `api-reference/response.mdx`: тег и `Payload` как основная форма, `accept=`
+— как переопределение для чужой модели, `when=` — для решений до разбора. Раздел «конверт на
+модели» переписывается целиком. `sdk-authoring-reference.md` — раздел про кейсы ответа.
+`CHANGELOG.md`: breaking (`Envelope` удалён, не входил в релизы), added (`Const`, `Payload`), fixed
+(fallback). Переписать `C:/Users/user/Desktop/parsing/kad` и проверить §7.1.
+
+---
+
+## 5. Тесты
+
+`tests/unit/test_phase54_response_tags.py`.
+
+**54.1**: `test_fallback_is_used_when_the_criterion_rejects_every_candidate`,
+`test_fallback_still_unused_when_a_case_matched`.
+
+**54.2**: `test_tag_splits_success_and_failure_on_one_status`,
+`test_tag_is_not_inverted_on_an_error_case`, `test_all_tags_must_match`,
+`test_true_does_not_match_one` (§3.3), `test_case_with_a_tag_ranks_as_conditional`,
+`test_literal_field_counts_as_a_tag`, `test_accept_overrides_the_tags`,
+`test_tags_work_on_dataclass_pydantic_msgspec_typeddict` (I7),
+`test_tags_inherited_from_a_base_class`, `test_annotations_are_read_once_per_model` (I6).
+
+**54.3**: `test_payload_becomes_the_operation_result`, `test_payload_is_not_applied_to_an_error`,
+`test_payload_type_is_checked_against_the_operation`, плюс по тесту на D-54-01..06.
+
+**54.4**: `test_envelope_is_gone_from_the_public_surface`,
+`test_declaring_envelope_fails_at_import`.
+
+**Регресс**: `tests/unit/test_phase53_response_cases.py` остаётся зелёным везде, кроме тестов
+`Envelope` (удаляются в 54.4); тесты арбитража фазы 53 не правятся — если какой-то покраснеет,
+это отклонение и оно записывается в §9.
+
+---
+
+## 6. Документация
+
+- `guides/responses/success.mdx`, `errors.mdx`, `api-reference/response.mdx`.
+- `docs/implementation/sdk-authoring-reference.md`, раздел «Кейсы ответа».
+- `CHANGELOG.md`.
+- `scripts/docs_freshness.py update` для затронутых страниц.
+
+---
+
+## 7. Exit criteria
+
+### 7.1. Приёмка на `kad`
+
+1. В `kad/models.py` нет `__envelope__` и ни одной лямбды: успех и неуспех различает
+   `Annotated[bool, Const(...)]`.
+2. Результат `CaseDocumentsPage` — `DocumentPage`; поля `Success`/`Message` вызывающему не видны.
+3. Неуспешный конверт поднимает `KadRequestFailed` (наследник `ApiError`), объявленный один раз
+   на сервисе.
+4. Страница капчи со статусом 200 по-прежнему даёт `KadChallengeRequired` (`when=` не тронут).
+
+### 7.2. Библиотека
+
+5. Все тесты §5 существуют и зелёные; §3.3 закреплён прямой проверкой.
+6. Диагностики §3.6 возникают при импорте.
+7. Теги и `Payload` работают на всех четырёх бэкендах (параметризованный тест).
+8. `len(eazy_sdk.__all__)` не изменился; `eazy_sdk.response.__all__` вырос ровно на `Const` и
+   `Payload` и уменьшился на `Envelope`.
+9. `Envelope` не встречается в `eazy_sdk/`, `docs-site/`, `examples/`, `tests/`.
+10. Gates §8 зелёные, `STATUS.md` заполнен.
+
+---
+
+## 8. Гейты
+
+- `uv run pytest -q tests/unit/test_phase54_response_tags.py`
+- `uv run pytest -q --timeout=120` (полный набор; 10-секундный таймаут ложно срабатывает на
+  Windows, см. STATUS фаз 50, 52, 53)
+- `uv run mypy`
+- `uv run ruff check`
+- `uv run python scripts/docs_freshness.py check`
+- `uv run python docs-site/scripts/validate_docs.py`
+- `uv run python scripts/surface_count.py --total` (рост ровно на объявленные имена)
+
+---
+
+## 9. Журнал и отклонения
+
+- 2026-09-09 — план написан по исследованию `docs/eazy-sdk-openapi-conditions-and-response-tags.md`.
+  Замеры (16 спек, четыре бэкенда, дефект fallback) выполнены до написания плана, скрипты — в
+  `experiments/openapi_conditions/`.
+- 2026-09-09 — 54.1 done. Один разбор кейса вынесен в `_CaseReading.read`, чтобы fallback читался
+  тем же путём, а не вторым; сессии декодеров живут там же, поэтому тело по-прежнему декодируется
+  один раз на все конкурирующие кейсы.
+  Взвешено и оставлено как в §4.1: fallback читается, только если пусты и `matches`, и `malformed`.
+  Альтернатива «только `matches` пуст» давала бы fallback шанс на теле, которое кейс уже забрал и не
+  смог прочитать: слабая модель fallback (все поля необязательные) превратила бы сломанный успешный
+  ответ в «сервис вернул ошибку», то есть в ровно ту тихую подмену случая, против которой сделана
+  фаза 53.
+  Следствие для 54.2, найденное здесь же: тег, написанный как `Literal[...]`, проверяет сам бэкенд,
+  поэтому несовпадение приходит как `Malformed`, а не `NoMatch`, и до fallback не доходит — в
+  отличие от `Const(...)`. Это довод документировать `Const` как основную форму, а `Literal` — как
+  синоним, работающий там, где бэкенд его тянет.
+
+---
+
+## 10. Решения и отвергнутые варианты
+
+- **D1. Форма тега — `Annotated[T, Const(value)]`** (решение владельца). Отвергнуты: класс-атрибут
+  `__tags__ = {"success": False}` (короче, но имя поля строкой и mypy молчит) и «только `Literal`,
+  а адаптеры починить» (булев тег на msgspec невозможен в принципе, а он самый частый в мире:
+  Slack `ok`, Stripe `deleted`, Cloudflare `success`, kad `Success`).
+- **D2. `Envelope` удаляется целиком** (решение владельца). Он не входил ни в один релиз (все
+  коммиты фазы 53 — после тега v0.2.0a7), покрывается тегом и `Payload` полностью и держит
+  асимметрию `succeeds`/`accept`. Вычисляемое условие уровня сервиса пишется как `accept=` на
+  кейсе — то есть в объявлении, потому что это опять вердикт, а не факт.
+- **D3. Момент — отдельная фаза 54** (решение владельца). Фаза 53 закрывается как есть, включая
+  53.5 с документацией про `Envelope`; 54.5 её переписывает. Цена принята сознательно.
+- **D4. `unwrap=` остаётся.** Это JSON-указатель до разбора для сервисов, у которых в конверте нет
+  ничего нужного. С `Payload` несовместим по построению (после `unwrap` модель не видит тега) —
+  и это теперь ошибка при импорте, D-54-05, а не только документация.
+- **D5. Тег читается только на полях верхнего уровня модели кейса.** Вложенный тег — это уже
+  условие о структуре, для которого есть `accept=`; поддерживать «пути» значит завести DSL,
+  отвергнутый в D8 фазы 53.
+- **DSL над разобранной моделью по-прежнему отвергнут.** Предложение фазы 54 — не язык выражений:
+  это константа рядом с полем, которую проверяет mypy и которая выводится из `const`/`enum` схемы
+  и обратно в схему.
+
+---
+
+## 11. Что идёт следом (не в этой фазе)
+
+Кодоген (`plugins/openapi`) — отдельная фаза: `const`/одноэлементный `enum` → `Const(...)`;
+`oneOf`/`anyOf` + `discriminator` → tagged union как тип модели (проверено: msgspec-союзы уже
+грузятся через `ModelAdapterRegistry`); неразрешимые союзы и `if`/`then`/`else` → запись в отчёт
+анализа; хинты `x-eazy-payload` / `x-eazy-error` для того, чего в спеке нет (где внутри конверта
+нагрузка и какой 2xx на самом деле неуспех). Таблица соответствий — §6 исследования.
+
+Отдельной задачей: адаптеры dataclass и TypedDict не поддерживают `Literal` (§3.5) — это наш
+пробел, не связанный с тегами.

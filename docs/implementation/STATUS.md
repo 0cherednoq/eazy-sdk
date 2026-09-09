@@ -4820,3 +4820,46 @@ Diagnostics D-53-04 and D-53-05 moved into 53.5 with the other declaration-time 
 need the operation id. The acceptance criteria live in the plan's §7 and are measured on the `kad`
 consumer at `C:/Users/user/Desktop/parsing/kad`.
 
+## Phase 54 — response tags: a constant on the field instead of a verdict on the model (2026-09-09)
+
+### State
+
+Active. 54.1 (the fallback after parsing) is done; 54.2 (`Const` and model tags), 54.3
+(`Payload[T]`), 54.4 (removal of `Envelope`) and 54.5 (docs and the `kad` rewrite) are pending.
+Plan: `54-response-tags.md`. Origin: the measurements in
+`docs/eazy-sdk-openapi-conditions-and-response-tags.md` — 16 public specifications (~65 MB, ~6300
+operations) contain zero `if`/`then`/`else`, zero `dependentSchemas` and zero `dependentRequired`,
+while the construct that actually separates a success from a failure on one status is a constant
+on a field. Owner decisions in the plan's §10: the tag is spelled `Annotated[T, Const(value)]`,
+`Envelope` is removed rather than kept beside it, and this is a phase of its own rather than a
+change folded into 53.5.
+
+### Delivered (54.1)
+
+- `Responses.inspect` reconsiders `fallback=` after parsing: when status and media selected
+  candidates and every one of them declined the body, the fallback is read the same way any other
+  case is. Before this it was reached only when status and media selected nothing at all, so a
+  service reporting failure inside a 2xx (Slack's shape: 174 of 174 methods) ended the call as
+  `UnexpectedResponseError`. The dictionary form had no workaround at all — `errors=` refuses
+  `DEFAULT` precisely because that is what `fallback=` is for.
+- A candidate that was malformed keeps its outcome: there the case did claim the response, and
+  answering with the fallback would report an API failure for what is a broken body or a wrong
+  declaration. This is the plan's §4.1 wording, kept after weighing the alternative in §9.
+- The read path moved into one place, `_CaseReading.read`, so the fallback is not a second
+  execution path; the decoder sessions live on the same object, so a body is still decoded once
+  however many cases compete for it.
+
+### Verification evidence
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase54_response_tags.py --timeout=120` | PASS: 4 passed. With `eazy_sdk/response/cases.py` stashed, `test_fallback_is_used_when_the_criterion_rejects_every_candidate` fails with `UnexpectedResponseError`, so the test measures the fix. |
+| `uv run pytest -q --timeout=120` (full suite, all nine testpaths) | PASS: 1397 passed, 11 skipped, 176 s. The openapi subprocess tests recorded as flaky for phases 50, 52 and 53 passed in this run. |
+| `uv run mypy`, `uv run ruff check` | PASS on the phase-54 change. Repo-wide they report one error each, both in the uncommitted 53.5 work in the tree (`tests/unit/test_phase53_response_cases.py`: RUF043 on a `match=` pattern at :853, and `"object" has no attribute "Success"` at :844). With those two files stashed: `ruff` all checks passed, `mypy` no issues in 348 files. Not touched here — that work belongs to phase 53. |
+
+### Remaining work / blockers
+
+54.2 through 54.5. Note for 54.2: a tag written as `Literal[...]` is validated by the model
+backend, so a mismatch arrives as `Malformed`, not as `NoMatch`, and therefore does not reach the
+fallback the way `Const(...)` does. That asymmetry is a reason to document `Const` as the spelling
+to reach for, and it is recorded in the plan's §9.

@@ -729,75 +729,24 @@ class Responses[T]:
                 if isinstance(model, type)
             ]
             return UnexpectedOutcome((), context, _forgotten_selectors_hint(by_status, context))
-        matches: list[tuple[ResponseCase[object], object]] = []
-        malformed: list[tuple[ResponseCase[object], Malformed]] = []
-        attempted: list[str] = []
-        attempted_types: list[type[object]] = []
-        parser_sessions: dict[int, BoundResponseParser] = {}
-        extractor_sessions: dict[int, BoundResponseExtractor] = {}
+        reading = _CaseReading()
         for case in candidates:
-            representation = case.response
-            if isinstance(representation, Text):
-                matches.append((case, context.response.text()))
-                continue
-            if isinstance(representation, Bytes):
-                matches.append((case, context.bytes))
-                continue
-            if isinstance(representation, Empty):
-                if context.bytes:
-                    malformed.append((case, Malformed(ValueError("expected empty body"))))
-                else:
-                    matches.append((case, None))
-                continue
-            model = representation.model
-            if model is None:
-                malformed.append(
-                    (case, Malformed(TypeError("response representation model is unresolved")))
-                )
-                continue
-            attempted.append(model.__name__)
-            attempted_types.append(model)
-            decoder: ResponseParser | ResponseExtractor
-            if isinstance(representation, Json | Html | Extracted):
-                extractor = representation.extractor
-                extractor_session = extractor_sessions.get(id(extractor))
-                if extractor_session is None:
-                    extractor_session = extractor.bind(context)
-                    extractor_sessions[id(extractor)] = extractor_session
-                primitive = extractor_session.extract(model)
-                if isinstance(primitive, ParsedValue):
-                    try:
-                        sourced = _apply_header_sources(
-                            model,
-                            primitive.value,
-                            context.headers,
-                            context.models,
-                        )
-                        result: ParseAttempt[object] = ParsedValue(
-                            context.models.load(model, sourced)
-                        )
-                    except Exception as exc:
-                        result = Malformed(exc)
-                else:
-                    result = primitive
-                decoder = extractor
-            else:
-                parser = representation.parser
-                parser_session = parser_sessions.get(id(parser))
-                if parser_session is None:
-                    parser_session = parser.bind(context)
-                    parser_sessions[id(parser)] = parser_session
-                result = parser_session.try_parse(model)
-                decoder = parser
-            if isinstance(result, ParsedValue):
-                decided = _decide_parsed(case, representation, result.value)
-                if isinstance(decided, ParsedValue):
-                    matches.append((case, decided.value))
-                elif isinstance(decided, Malformed):
-                    malformed.append((case, Malformed(decided.cause, decoder)))
-            elif isinstance(result, Malformed):
-                malformed.append((case, Malformed(result.cause, decoder)))
-        arbitration = arbitrate_cases(_most_specific(matches), malformed)
+            reading.read(case, context)
+        if (
+            not reading.matches
+            and not reading.malformed
+            and self.fallback is not None
+            and self.fallback not in candidates
+        ):
+            # Status and media selected these cases, and every one of them said "not this
+            # response" once it saw the body. A response no declared case claims is exactly what
+            # the fallback describes; before this it was reached only when status and media
+            # selected nothing at all, so a service that reports failure inside a 2xx ended the
+            # call as unexpected instead of as its own declared error. A candidate that was
+            # malformed keeps its outcome: there the case did claim the response and the body or
+            # the declaration is wrong, which the fallback must not paper over.
+            reading.read(self.fallback, context)
+        arbitration = arbitrate_cases(_most_specific(reading.matches), reading.malformed)
         if isinstance(arbitration, AmbiguousCases):
             return AmbiguousResponseOutcome(arbitration.cases, context)
         if isinstance(arbitration, SelectedCase):
@@ -818,8 +767,89 @@ class Responses[T]:
             )
         assert isinstance(arbitration, NoCaseMatch)
         return UnexpectedOutcome(
-            tuple(attempted), context, _forgotten_selectors_hint(attempted_types, context)
+            tuple(reading.attempted),
+            context,
+            _forgotten_selectors_hint(reading.attempted_types, context),
         )
+
+
+@dataclass(slots=True)
+class _CaseReading:
+    """What the declared cases made of one response body.
+
+    It exists so that a case is read in exactly one place: the fallback is read the same way as
+    any other case, whether it was chosen before parsing or after every candidate declined. The
+    decoder sessions are kept here for the same reason — a body is decoded once however many
+    cases compete for it.
+    """
+
+    matches: list[tuple[ResponseCase[object], object]] = field(default_factory=list)
+    malformed: list[tuple[ResponseCase[object], Malformed]] = field(default_factory=list)
+    attempted: list[str] = field(default_factory=list)
+    attempted_types: list[type[object]] = field(default_factory=list)
+    parser_sessions: dict[int, BoundResponseParser] = field(default_factory=dict)
+    extractor_sessions: dict[int, BoundResponseExtractor] = field(default_factory=dict)
+
+    def read(self, case: ResponseCase[object], context: ResponseContext[object]) -> None:
+        representation = case.response
+        if isinstance(representation, Text):
+            self.matches.append((case, context.response.text()))
+            return
+        if isinstance(representation, Bytes):
+            self.matches.append((case, context.bytes))
+            return
+        if isinstance(representation, Empty):
+            if context.bytes:
+                self.malformed.append((case, Malformed(ValueError("expected empty body"))))
+            else:
+                self.matches.append((case, None))
+            return
+        model = representation.model
+        if model is None:
+            self.malformed.append(
+                (case, Malformed(TypeError("response representation model is unresolved")))
+            )
+            return
+        self.attempted.append(model.__name__)
+        self.attempted_types.append(model)
+        decoder: ResponseParser | ResponseExtractor
+        if isinstance(representation, Json | Html | Extracted):
+            extractor = representation.extractor
+            extractor_session = self.extractor_sessions.get(id(extractor))
+            if extractor_session is None:
+                extractor_session = extractor.bind(context)
+                self.extractor_sessions[id(extractor)] = extractor_session
+            primitive = extractor_session.extract(model)
+            if isinstance(primitive, ParsedValue):
+                try:
+                    sourced = _apply_header_sources(
+                        model,
+                        primitive.value,
+                        context.headers,
+                        context.models,
+                    )
+                    result: ParseAttempt[object] = ParsedValue(context.models.load(model, sourced))
+                except Exception as exc:
+                    result = Malformed(exc)
+            else:
+                result = primitive
+            decoder = extractor
+        else:
+            parser = representation.parser
+            parser_session = self.parser_sessions.get(id(parser))
+            if parser_session is None:
+                parser_session = parser.bind(context)
+                self.parser_sessions[id(parser)] = parser_session
+            result = parser_session.try_parse(model)
+            decoder = parser
+        if isinstance(result, ParsedValue):
+            decided = _decide_parsed(case, representation, result.value)
+            if isinstance(decided, ParsedValue):
+                self.matches.append((case, decided.value))
+            elif isinstance(decided, Malformed):
+                self.malformed.append((case, Malformed(decided.cause, decoder)))
+        elif isinstance(result, Malformed):
+            self.malformed.append((case, Malformed(result.cause, decoder)))
 
 
 def _decide_parsed(
