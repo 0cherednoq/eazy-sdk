@@ -3,7 +3,7 @@ title: Response API
 description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:ce7a73d82608fdcde51fc5da572ee948694414b52f09b635c13841e5b802ac1c"
+api_fingerprint: "sha256:d1d4b52fc2b16dd4c5b6c38ba1a08c2963e2283b940805741a97f1b86161d45b"
 ---
 
 ## Одна успешная case
@@ -32,7 +32,7 @@ class UsersApi(AsyncApi):
 
 Семья читается из модели: модель с CSS/XPath-селекторами — документ, любая другая — JSON, `str` —
 текст, `bytes` — байты, `None` — пустое тело. Явные `Json(status=201)`, `Html(...)`, `Text()`
-нужны, когда важны статус, медиа-тип или условие `when=`.
+нужны, когда важны статус, медиа-тип или условие `when=`/`accept=`.
 
 ## Несколько случаев
 
@@ -102,8 +102,9 @@ Pyright. Для multi-model parser реализуйте advanced `ResponseParser
   кандидаты структурные, сообщение это называет;
 - `MalformedResponseError` — body не разобран выбранным parser/extractor;
 - `AmbiguousResponseError` — совпало больше одной одинаково специфичной case. Специфичность
-  считается так: точный статус > диапазон > `DEFAULT`, явная медиа > wildcard > её отсутствие,
-  `when=` > его отсутствие, кейс операции > кейс сервиса > кейс клиента.
+  считается так: заявленный критерий > его отсутствие, точный статус > диапазон > `DEFAULT`,
+  явная медиа > wildcard > её отсутствие, кейс операции > кейс сервиса > кейс клиента. Критерий —
+  это `when=`, `accept=` или `__envelope__` модели.
 
 Parsing session создаётся один раз на response attempt, поэтому custom parser или extractor может
 кэшировать decoded document по identity.

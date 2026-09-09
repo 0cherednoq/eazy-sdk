@@ -4747,9 +4747,14 @@ decorator form `@api.get` has no `__pages__` (plan D7).
 
 ### State
 
-Active. 53.1 (`when=` on every representation), 53.2 (criterion before status) and 53.3
-(`Envelope` on the model plus `accept=`) and 53.4 (`eazy_sdk.response.match`) are done; only 53.5
-(docs and the `kad` acceptance rewrite) is pending. Plan: `53-response-cases.md`. Origin: two issues written
+Closed as it stands, by the owner's decision of 2026-09-09: 53.1 (`when=` on every
+representation), 53.2 (criterion before status), 53.3 (`Envelope` on the model plus `accept=`),
+53.4 (`eazy_sdk.response.match`) and the library and documentation halves of 53.5 are done. The
+`kad` acceptance of 53.5's §7.1 is **not** done and moves to 54.5, which rewrites the same files
+again to tags — the owner chose to finish phase 53 as it stands and put the tags in phase 54, so
+rewriting that consumer twice buys nothing. What is still in `kad`: `when=is_regular_html` and
+`Success(200, Bytes(...), condition=is_pdf)` in `api.py`, and `_document_items` reading the
+envelope by hand. Plan: `53-response-cases.md`. Origin: two issues written
 against 0.2.0a7 (`docs/eazy-sdk-v0.2.0a7-response-cases-api-issue.md`,
 `docs/eazy-sdk-v0.2.0a7-accept-post-parse-issue.md`) and three owner decisions recorded in the
 plan's §10: `Envelope` lives in `eazy_sdk.response`, `accept=` stays as a per-case override, and
@@ -4813,12 +4818,41 @@ the arbitration order changes so a condition outranks status precision.
 | `uv run pytest -q plugins/openapi/tests --timeout=300` | PASS: 55 passed. `test_generated_session_factory_hides_runtime_plumbing_and_executes` failed once under a five-suite run and passed alone and in its own suite; this is the generated-SDK subprocess flake already recorded for phases 50 and 52, not a regression. |
 | `uv run ruff check`, `uv run mypy` (touched files) | PASS. |
 
+### Delivered (53.5)
+
+- Documentation: `guides/responses/success.mdx` carries the new arbitration order as a numbered
+  list and a whole section on an envelope with a business status, from the model rule to the
+  `TypedDict` spelling and the `accept=` override for a model that cannot be edited;
+  `guides/responses/errors.mdx` gains the error half; `api-reference/response.mdx`,
+  `getting-started/quickstart.mdx` and `guides/responses/html.mdx` follow the same order.
+  `sdk-authoring-reference.md` states the criterion → status → media → layer order and the
+  envelope rule.
+- D-53-04 and D-53-05 in `_mapping.py`, the two checks that were moved here from 53.3 because
+  they need the operation id: one model claimed by a success and an error on overlapping statuses
+  with nothing to tell the two apart, and an annotated `Envelope.payload` that disagrees with the
+  operation's own result type. The first is deliberately the narrow half of the shadowing check
+  the API issue asked for: it never fires on the ordinary pairing of a conditional service error
+  with a plain operation success, which is the pattern the phase exists to support.
+
+### Verification evidence (53.5)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase53_response_cases.py --timeout=120` | PASS: 42 passed. |
+| `uv run mypy` | PASS: no issues in 350 source files. |
+| `uv run ruff check` | PASS: all checks passed. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 82 pages. |
+| `uv run python scripts/docs_freshness.py check` | RED at the time of the commit, and not because of 53.5: `guides/responses/success.mdx` is stale against `eazy_sdk.response` as phases 54.2 and 54.3 left it (`Const`, `Payload`). 53.5's own fingerprint update is in the commit; the page is rewritten in 54.5, which is where the gate goes green. |
+
+Two declarations in the 53.5 tests were corrected before the commit, both mechanical: an
+`Envelope` written with `succeeds=lambda r: r.Success` beside an annotated `payload` cannot type
+check, because the annotated projection binds the envelope type to `object` and the class being
+declared cannot be named inside its own body — the test keeps only the projection, which is what
+it is about; and one `pytest.raises(match=...)` pattern became a raw string with the dot escaped.
+
 ### Remaining work / blockers
 
-53.5: documentation and the `kad` rewrite that the plan's §7.1 measures acceptance against.
-Diagnostics D-53-04 and D-53-05 moved into 53.5 with the other declaration-time checks, which
-need the operation id. The acceptance criteria live in the plan's §7 and are measured on the `kad`
-consumer at `C:/Users/user/Desktop/parsing/kad`.
+The `kad` acceptance of §7.1, moved to 54.5 (see State above). Nothing in the library is left.
 
 ## Phase 54 — response tags: a constant on the field instead of a verdict on the model (2026-09-09)
 

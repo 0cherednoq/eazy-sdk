@@ -4,7 +4,7 @@ description: Ожидаемые ответы API как типизированн
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
-api_fingerprint: "sha256:4fa1f9d745be55f23aadf2f018f4e6b24a38f26548f7a805c6b14a26adee8b96"
+api_fingerprint: "sha256:695b22939c6266e7b6a2f5758fb1c8996d6f7060e3d8a8b9a3ccd7262f307a39"
 ---
 
 ## Неправильный пароль
@@ -165,6 +165,43 @@ config = ClientConfig(errors={"api.shop.example": {503: AccessBlocked}})
 ```
 
 Это самый внешний слой: операция важнее сервиса, сервис важнее клиента.
+
+## Условия по телу ответа
+
+Статуса не всегда достаточно. Страница капчи и страница блокировки приходят с тем же `200`, что и
+нормальный ответ, и различаются только телом. Такое условие пишется в `when=`, а собирается из
+готовых предикатов:
+
+```python
+from eazy_sdk.response import Error, StatusRange, Text
+from eazy_sdk.response.match import body, content_type
+
+is_challenge = body.contains(b"captcha.execute") | body.contains(b'name="captchaToken"')
+is_blocked = body.contains(b"support@shop.example") | body.contains("Доступ заблокирован")
+
+class ShopApi(SyncApi):
+    errors = (
+        Error(StatusRange(200, 599), Text(media_type=None), exception=ChallengeRequired,
+              condition=is_challenge),
+        Error(StatusRange(200, 599), Text(media_type=None), exception=AccessBlocked,
+              condition=is_blocked),
+    )
+```
+
+Предикаты соединяются через `&`, `|` и `~`. Доступны `body.startswith`, `body.contains`,
+`body.matches`, `body.is_empty`, `content_type.is_`, `content_type.startswith`, `status.is_`,
+`status.in_` и `header(name).present`/`.is_`/`.contains`.
+
+Аргумент типа `bytes` сравнивается с сырым телом, аргумент типа `str` — с декодированным
+текстом, поэтому кириллический маркер пишется как есть, без `.encode()`. Тело, которое не
+декодируется, даёт `False`, а не исключение: решение о маршрутизации не должно ронять вызов.
+
+Предикат — обычный вызываемый объект, поэтому смешивается с готовыми функциями и лямбдами:
+`is_challenge & (lambda ctx: ctx.response.status_code == 200)`.
+
+Операциям при этом ничего писать не нужно. Случай с условием важнее случая без условия, поэтому
+объявленный на сервисе `is_challenge` выигрывает у обычного `success={200: ...}` любой операции,
+когда тело действительно оказалось страницей защиты.
 
 Ответ с неизвестным status/media type даёт `UnexpectedResponseError`; если тело пришло документной
 медиа, а все кандидаты — структурные модели, сообщение это называет. Валидный case с malformed

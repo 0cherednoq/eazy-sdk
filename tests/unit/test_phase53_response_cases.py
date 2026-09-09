@@ -766,3 +766,101 @@ def test_a_predicate_serves_as_a_case_condition() -> None:
         assert Service(client).fetch() == PDF
     with _serve(CHALLENGE) as client, pytest.raises(ChallengeRequired):
         Service(client).fetch()
+
+
+# --- 53.5: what the declaration alone already proves wrong ------------------------------------
+
+
+def test_one_model_on_both_sides_with_nothing_to_tell_them_apart_is_refused() -> None:
+    """The narrow half of the shadowing check: these two cases genuinely cannot be told apart."""
+
+    @dataclass(frozen=True)
+    class Plain:
+        Result: Page | None
+        Success: bool
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Plain]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(Plain)},
+            errors={200: (Json(Plain), RequestFailed)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with pytest.raises(PlanError, match="is declared for both success and error on status 200"):
+        Service(_serve(ENVELOPE_OK)).fetch()
+
+
+def test_the_ordinary_service_pairing_is_not_refused() -> None:
+    """The check must never fire on the pattern phase 53 exists to support."""
+
+    with _serve(CHALLENGE) as client, pytest.raises(ChallengeRequired):
+        PlainDocuments(client).download()
+
+
+def test_an_envelope_rule_tells_the_pair_apart() -> None:
+    """Declaring the rule is exactly what the diagnostic asks for, so it clears the error."""
+
+    service = _envelope_service(DataclassEnvelope)
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert service(client).fetch() == Page(number=7)
+
+
+def test_accept_on_one_case_also_tells_the_pair_apart() -> None:
+    @dataclass(frozen=True)
+    class Plain:
+        Result: Page | None
+        Success: bool
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[Plain]):
+        __http__ = Http.get(
+            "/page",
+            success={200: Json(Plain, accept=lambda r: r.Success)},
+            errors={200: (Json(Plain), RequestFailed)},
+        )
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert Service(client).fetch().Success is True
+
+
+def test_an_annotated_payload_that_disagrees_with_the_result_is_refused() -> None:
+    """The projection and ``HttpOperation[T]`` name the same type or the declaration is wrong."""
+
+    def to_page(envelope: object) -> Page:
+        return Page(number=1)
+
+    @dataclass(frozen=True)
+    class WrongPayload:
+        Result: Page | None
+        Success: bool
+
+        # Only the projection: what the criterion says is beside the point here, and naming the
+        # class being declared inside its own body is what an annotated rule cannot do.
+        __envelope__ = Envelope(payload=to_page)
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Fetch(HttpOperation[str]):
+        __http__ = Http.get("/page", success={200: Json(WrongPayload)})
+
+    class Service(SyncApi):
+        fetch = op(Fetch)
+
+    with pytest.raises(
+        PlanError, match=r"Envelope\.payload returns Page, the operation returns str"
+    ):
+        Service(_serve(ENVELOPE_OK)).fetch()
+
+
+def test_an_unannotated_payload_makes_no_claim_about_the_result() -> None:
+    """A lambda says nothing, so ``HttpOperation[T]`` stays the only statement and is believed."""
+
+    service = _envelope_service(DataclassEnvelope)
+    with _serve(ENVELOPE_OK, media="application/json") as client:
+        assert service(client).fetch() == Page(number=7)

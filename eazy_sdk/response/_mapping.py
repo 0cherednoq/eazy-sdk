@@ -32,6 +32,8 @@ from .cases import (
     StatusSelector,
     Success,
     Text,
+    envelope_of,
+    envelope_payload_type,
 )
 
 _REPRESENTATIONS = (Json, Html, Extracted, Parsed, Text, Bytes, Empty)
@@ -169,11 +171,7 @@ def error_case(
     if isinstance(spec, tuple):
         # The first element is the body: a model the family is read from, or a representation
         # written out when the error needs its own media type or ``when=``.
-        if (
-            len(spec) != 2
-            or not isinstance(spec[0], _ERROR_BODIES)
-            or not callable(spec[1])
-        ):
+        if len(spec) != 2 or not isinstance(spec[0], _ERROR_BODIES) or not callable(spec[1]):
             raise PlanError(
                 f"error entry for {status!r} in {operation_id!r} must be (Model, factory) "
                 "or (Representation, factory)"
@@ -304,7 +302,96 @@ def normalize_responses(
         if fallback is not None
         else None
     )
-    return Responses(success=successes, errors=failures, fallback=default)
+    responses = Responses(success=successes, errors=failures, fallback=default)
+    _validate_envelopes(responses, result_type=result_type, operation_id=operation_id)
+    return responses
+
+
+def _validate_envelopes(
+    responses: Responses[Any],
+    *,
+    result_type: object | None,
+    operation_id: str,
+) -> None:
+    """Two declaration errors an envelope can hide until the first response arrives.
+
+    Both are cheap and both are certain: nothing about the running service can make an
+    indistinguishable pair of cases distinguishable, or make a projection return another type.
+    """
+
+    _reject_indistinguishable_pairs(responses, operation_id)
+    _reject_payload_type_mismatch(responses, result_type, operation_id)
+
+
+def _reject_indistinguishable_pairs(responses: Responses[Any], operation_id: str) -> None:
+    """One model claimed by a success and an error on one status, with nothing to tell them apart.
+
+    This is the narrow half of the shadowing check the API issue asked for: it fires only where
+    the two cases genuinely cannot be told apart, never on the ordinary pairing of a conditional
+    service error with a plain operation success, which the phase-53 arbitration order handles.
+    """
+
+    for success_case in responses.success:
+        model = getattr(success_case.response, "model", None)
+        if model is None or _has_criterion(success_case):
+            continue
+        for error in responses.errors:
+            if getattr(error.response, "model", None) is not model or _has_criterion(error):
+                continue
+            if not _statuses_overlap(success_case.status, error.status):
+                continue
+            name = getattr(model, "__name__", repr(model))
+            raise PlanError(
+                f"operation {operation_id!r}: {name} is declared for both success and error on "
+                f"{_status_text(success_case.status)}, and nothing tells the two apart; declare "
+                f"__envelope__ = Envelope(succeeds=...) on {name}, or accept= on one of the cases"
+            )
+
+
+def _reject_payload_type_mismatch(
+    responses: Responses[Any],
+    result_type: object | None,
+    operation_id: str,
+) -> None:
+    """An annotated projection that disagrees with what the operation says it returns."""
+
+    if result_type is None:
+        return
+    for case in responses.success:
+        declared = envelope_payload_type(getattr(case.response, "model", None))
+        if declared is None or declared == result_type:
+            continue
+        raise PlanError(
+            f"operation {operation_id!r}: Envelope.payload returns "
+            f"{_type_text(declared)}, the operation returns {_type_text(result_type)}"
+        )
+
+
+def _has_criterion(case: Success[Any] | Error[Any]) -> bool:
+    if case.condition is not None or getattr(case.response, "accept", None) is not None:
+        return True
+    envelope = envelope_of(getattr(case.response, "model", None))
+    return envelope is not None and envelope.succeeds is not None
+
+
+def _statuses_overlap(left: StatusSelector, right: StatusSelector) -> bool:
+    if isinstance(left, DefaultStatus) or isinstance(right, DefaultStatus):
+        return True
+    left_range = (left, left) if isinstance(left, int) else (left.start, left.end)
+    right_range = (right, right) if isinstance(right, int) else (right.start, right.end)
+    return left_range[0] <= right_range[1] and right_range[0] <= left_range[1]
+
+
+def _status_text(selector: StatusSelector) -> str:
+    if isinstance(selector, int):
+        return f"status {selector}"
+    if isinstance(selector, StatusRange):
+        return f"status {selector.start}..{selector.end}"
+    return "the default status"
+
+
+def _type_text(annotation: object) -> str:
+    return getattr(annotation, "__name__", None) or str(annotation)
 
 
 def result_type_of(success: SuccessSpec | None, generic: object | None) -> object | None:
