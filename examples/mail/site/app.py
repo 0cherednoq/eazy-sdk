@@ -214,8 +214,9 @@ class MailSite:
         token = _cookie(request, "mail_session") or "session-1"
         return SiteResponse.html(200, _inbox_html(token, self.state.messages))
 
-    def _compose_page(self, _request: SiteRequest) -> SiteResponse:
-        return SiteResponse.html(200, _compose_html())
+    def _compose_page(self, request: SiteRequest) -> SiteResponse:
+        token = _cookie(request, "mail_session") or "session-1"
+        return SiteResponse.html(200, _compose_html(token))
 
     def _short_user(self, request: SiteRequest) -> SiteResponse:
         email = self._authorized_email(request)
@@ -404,18 +405,66 @@ def _inbox_html(token: str, messages: list[MailMessage]) -> str:
         "Входящие",
         f'<meta name="mail-token" content="{html.escape(token)}">'
         f'<main data-page="mailbox"><ul data-collection="messages">{rows}</ul>'
-        '<button data-action="more">Ещё</button></main>',
+        '<button data-action="more">Ещё</button></main>'
+        """<script>
+const token = document.querySelector('meta[name="mail-token"]').content;
+const more = document.querySelector('[data-action="more"]');
+more.addEventListener('click', async () => {
+  const response = await fetch('/api/v1/threads/status/smart?offset=2&limit=2', {
+    headers: {Authorization: `Bearer ${token}`},
+  });
+  const documentBody = await response.json();
+  const collection = document.querySelector('[data-collection="messages"]');
+  for (const message of documentBody.body.items) {
+    const item = document.createElement('li');
+    item.dataset.messageId = message.id;
+    const sender = document.createElement('b');
+    sender.textContent = message.sender;
+    item.append(sender, ` ${message.subject}`);
+    collection.append(item);
+  }
+  more.hidden = true;
+});
+</script>""",
     )
 
 
-def _compose_html() -> str:
+def _compose_html(token: str) -> str:
     return _page(
         "Новое письмо",
+        f'<meta name="mail-token" content="{html.escape(token)}">'
         '<main data-page="compose"><form data-composer>'
         '<input name="recipient" type="email"><input name="subject">'
         '<textarea name="body"></textarea><button type="submit">Отправить</button>'
         '</form><div role="status" hidden>Отправлено</div>'
-        '<dialog data-outcome="rejected">Адрес отклонён</dialog></main>',
+        '<dialog data-outcome="rejected">Адрес отклонён</dialog></main>'
+        """<script>
+const token = document.querySelector('meta[name="mail-token"]').content;
+const composer = document.querySelector('[data-composer]');
+const statusNode = document.querySelector('[role="status"]');
+const rejected = document.querySelector('[data-outcome="rejected"]');
+composer.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  statusNode.hidden = true;
+  if (rejected.open) rejected.close();
+  const fields = new FormData(composer);
+  const response = await fetch('/api/v1/messages/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Mail-Signature': 'mail-signature',
+    },
+    body: JSON.stringify(Object.fromEntries(fields)),
+  });
+  const documentBody = await response.json();
+  if (documentBody.status === 'recipient_rejected') {
+    rejected.showModal();
+  } else if (documentBody.body.outcome === 'sent') {
+    statusNode.hidden = false;
+  }
+});
+</script>""",
     )
 
 

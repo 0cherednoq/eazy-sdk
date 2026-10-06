@@ -5277,6 +5277,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   обновление сессии, три вида пагинации, проверку TLS-отпечатка, отправку с тремя исходами и
   соответствующие HTML-страницы. HTTPX и перехват браузерной страницы переводят свои запросы в
   один `SiteRequest`; капча и повтор также больше не используют отдельную имитацию сайта.
+- 56.4.2: новая `tutorial/index` отделяет форму настоящего почтового API от учебных добавлений,
+  даёт полные карты HTTP-ручек и браузерных признаков и объясняет общий `MailSite`. После слепой
+  проверки исправлены два старых hero-маршрута; кнопка подгрузки и композер получили рабочие
+  обработчики страницы. Шифрование честно ограничено HTTP-линией как клиентское преобразование.
 
 ### Commands run while planning
 
@@ -5476,6 +5480,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.4.2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 6 passed; HTML входа, входящих и композера использует общий `MailSite`. |
+| `uv run pytest -q tests/unit/test_phase56_example_domains.py tests/unit/test_phase56_docs_examples.py` | PASS: 7 passed; доменный ratchet и запускаемые примеры зелёные. |
+| `uv run mypy examples/mail` | PASS: no issues in 12 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/index.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 90 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| strict Sphinx build to `docs-site/_build/user-preview` | PASS: 90 sources, no warnings; preview served at `http://127.0.0.1:4321/`. |
+| fresh-agent blind review after corrections | PASS: provenance, routes, endpoint map, interactive page behavior and encryption boundary agree with the plan and implementation. |
+| combined phase-56 debt snapshots | EXPECTED RED: 28 passed, 2 failed; the remaining prose debt and test scaffolding are confined to pages assigned to 56.5-56.6 and the temporary legacy examples removed in 56.4.10. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5517,4 +5536,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.2–56.8. No blockers; next step is 56.4.2.
+56.4.3–56.8. No blockers; next step is 56.4.3.

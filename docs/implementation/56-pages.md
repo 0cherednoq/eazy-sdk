@@ -106,7 +106,7 @@
 |---|---|---|---|---|---|---|
 | `start/concepts` | 56.3 | ok | n/a | ok | ok | ok |
 | `start/next` | 56.3 | ok | n/a | ok | ok | ok |
-| `tutorial/index` | 56.4 |  |  |  |  |  |
+| `tutorial/index` | 56.4 | ok | n/a | ok | ok | ok |
 | `tutorial/login` | 56.4 |  |  |  |  |  |
 | `tutorial/login-failures` | 56.4 |  |  |  |  |  |
 | `tutorial/captcha` | 56.4 |  |  |  |  |  |

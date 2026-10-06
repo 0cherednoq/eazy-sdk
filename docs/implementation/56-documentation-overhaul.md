@@ -350,7 +350,7 @@ reference/        Справочник
 | 56.3.3 | `start/concepts` | строка в очереди заполнена | complete | пять ролей сверены с публичным API; 88-page strict build, humanizer и слепая проверка PASS | 2026-10-07 |
 | 56.3.4 | `start/next` с разделом про `llms.txt` | строка в очереди заполнена | complete | карта задач; проверенные `llms.txt`/`llms-full.txt`; 89-page strict build, humanizer и слепая проверка PASS | 2026-10-07 |
 | 56.4.1 | учебный сайт `examples/mail/site/` целиком | обе линии пробников работают на нём | complete | 13 focused tests; mypy/ruff; HTTP matrix and live Chromium login on one `MailSite` PASS | 2026-10-07 |
-| 56.4.2 | глава 1, что строим | строка в очереди заполнена | pending | | |
+| 56.4.2 | глава 1, что строим | строка в очереди заполнена | complete | 90-page strict build; provenance and both transport maps reviewed; humanizer and blind review PASS | 2026-10-07 |
 | 56.4.3 | главы 2 и 3, вход и его исходы, обе линии | шесть случаев подтверждены выводом в обеих линиях | pending | | |
 | 56.4.4 | глава 4, капча, обе линии | строка в очереди заполнена | pending | | |
 | 56.4.5 | глава 5, сессия, обе линии | строка в очереди заполнена | pending | | |

@@ -228,8 +228,16 @@ async def test_complete_teaching_site_serves_the_browser_tutorial() -> None:
         "https://mail.example/inbox/",
         headers={"cookie": session_cookie},
     )
-    _, _, composer = await visit("GET", "https://mail.example/compose/")
+    _, _, composer = await visit(
+        "GET",
+        "https://mail.example/compose/",
+        headers={"cookie": session_cookie},
+    )
     assert b'data-page="mailbox"' in inbox
     assert b'data-collection="messages"' in inbox
+    assert b"/api/v1/threads/status/smart?offset=2&amp;limit=2" not in inbox
+    assert b"/api/v1/threads/status/smart?offset=2&limit=2" in inbox
     assert b"data-composer" in composer
     assert b'data-outcome="rejected"' in composer
+    assert session_cookie.removeprefix("mail_session=").encode() in composer
+    assert b"/api/v1/messages/send" in composer
