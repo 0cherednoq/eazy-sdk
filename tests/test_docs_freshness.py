@@ -214,6 +214,24 @@ class TestUpdateCommand:
         assert set(lock) == {"guide.md"}
         assert set(lock["guide.md"].symbols) == {f"{FAKE_MODULE}.Client"}
 
+    def test_update_after_page_move_rekeys_the_lock(
+        self,
+        fake_module: types.ModuleType,
+        docs_tree: tuple[Path, Path],
+    ) -> None:
+        docs_dir, lock_file = docs_tree
+        page = _write_page(docs_dir, "old/guide.md", sources=[f"{FAKE_MODULE}.Client"])
+        assert _run(["update", "old/guide.md"], docs_dir, lock_file) == 0
+
+        moved = docs_dir / "new" / "guide.md"
+        moved.parent.mkdir()
+        page.rename(moved)
+
+        assert _run(["update", "new/guide.md"], docs_dir, lock_file) == 0
+        lock = docs_freshness.load_lock(lock_file)
+        assert set(lock) == {"new/guide.md"}
+        assert set(lock["new/guide.md"].symbols) == {f"{FAKE_MODULE}.Client"}
+
     def test_update_fails_on_missing_symbol_without_writing(
         self,
         fake_module: types.ModuleType,

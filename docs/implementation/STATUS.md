@@ -5211,6 +5211,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   HTTP- и браузерного роутеров по именованным меткам. Две группы вкладок используют общий
   `sync-group`; строгая сборка зелёная. Проверка в Chromium увидела кнопку копирования у обоих
   фрагментов и синхронное переключение обеих групп на «Браузер».
+- 56.0.7: после переноса freshness-страницы обновляется её новый относительный путь:
+  `uv run python scripts/docs_freshness.py update <новый/путь.mdx>`. Изолированный прогон и новый
+  тест доказывают, что `run_update()` отбрасывает старый ключ lock-файла и записывает новый.
 
 ### Commands run while planning
 
@@ -5253,6 +5256,17 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/literalinclude-tabs docs-site/_build/phase56-literalinclude` | PASS: 1 source, build succeeded without warnings. |
 | HTML inspection for `data-sync-group`, `LoginApi`, `LoginPortal`, `copybutton.js` | PASS: both tab sets use `transport`; both marked fragments and the copy-button runtime are present. |
 | Playwright CLI snapshot before and after clicking the first «Браузер» tab | PASS: each visible code block has «Скопировать в буфер»; both browser radios become checked and the second set shows «Браузерный вывод». The only console entry is the temporary server's missing `favicon.ico`. |
+
+### Verification evidence (56.0.7)
+
+| Command | Result |
+|---|---|
+| isolated `docs_freshness.py update` before and after `api-reference/auth.mdx → reference/api/auth.mdx` | PASS: resulting lock contains only `reference/api/auth.mdx`; JSON check reports `checked: 1`, `stale: []`. |
+| `uv run pytest -q tests/test_docs_freshness.py` | PASS: 10 passed, including `test_update_after_page_move_rekeys_the_lock`. |
+| `uv run mypy tests/test_docs_freshness.py` | PASS: no issues in 1 source file. |
+| `uv run ruff check tests/test_docs_freshness.py` | PASS: all checks passed. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
+| `git diff --check` | PASS. |
 | `git diff --check` | PASS. |
 
 ### Verification evidence (56.0.4)
@@ -5276,4 +5290,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.0.7–56.8. No blockers; next step is 56.0.7.
+56.1–56.8. No blockers; next step is 56.1.1.
