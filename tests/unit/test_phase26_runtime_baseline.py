@@ -77,9 +77,7 @@ def test_http_transition_trace_and_fingerprint_are_frozen_before_stage_extractio
     sync_requests: list[PreparedRequest] = []
     async_requests: list[PreparedRequest] = []
 
-    def sync_send(
-        request: PreparedRequest, *, options: EmitOptions
-    ) -> NormalizedResponse[object]:
+    def sync_send(request: PreparedRequest, *, options: EmitOptions) -> NormalizedResponse[object]:
         sync_requests.append(request)
         if len(sync_requests) == 1:
             raise TransportError("baseline", "emit", 1, OSError("retry"))

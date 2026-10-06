@@ -339,9 +339,7 @@ class _ConnectionMixin(_WsClientBase):
         )
         pending = self._pending.get(key) if key is not None else None
         correlation_subscription = (
-            self._subscriptions_by_correlation.get(
-                (self._protocol_namespace, message.correlation)
-            )
+            self._subscriptions_by_correlation.get((self._protocol_namespace, message.correlation))
             if message.correlation is not None
             else None
         )

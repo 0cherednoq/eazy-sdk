@@ -290,7 +290,7 @@ def test_simple_detector_preserves_match_no_match_malformed_and_unexpected_error
     )
     assert _inspect_signals((policy.signal,), context(200, b'{"ok":true}'), scope) is None
     assert isinstance(
-        _inspect_signals((policy.signal,), context(403, b'{}'), scope),
+        _inspect_signals((policy.signal,), context(403, b"{}"), scope),
         MalformedSignal,
     )
 
@@ -308,7 +308,7 @@ def test_simple_detector_preserves_match_no_match_malformed_and_unexpected_error
     )
     broken_policy = broken_guard.to_bundle().challenge_policies[0]
     with pytest.raises(ChallengeDetectionError) as captured:
-        _inspect_signals((broken_policy.signal,), context(403, b'{}'), scope)
+        _inspect_signals((broken_policy.signal,), context(403, b"{}"), scope)
     assert isinstance(captured.value.__cause__, RuntimeError)
     assert secret not in str(captured.value)
     assert secret not in repr(captured.value)

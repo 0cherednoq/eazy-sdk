@@ -1,0 +1,236 @@
+---
+title: Browser
+description: Публичный API eazy-sdk-browser — спека, роутер, клиент, карта, признаки, вход и сессия, драйвер.
+sources:
+  - eazy_sdk_browser
+api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
+---
+
+## Операция
+
+```python
+Browser.act(content, /, *, at=None, scope=None, frames=(), outcomes=None, errors=(),
+            inherit_errors=True, handlers=(), requires=(), operation_id=None, tags=())
+Browser.goto(url, /, *, wait="load", at=None, ...)            # переход без карты: TContent = None
+Browser.goto(url, content, /, *, wait="load", at=None, ...)   # переход с картой для исходов
+# остальные ключевые параметры goto — те же, что у act
+
+class BrowserOperation[TContent, TResult]:
+    __browser__: ClassVar[_BrowserSpec[TContent]]
+    async def act(self, content: TContent) -> None: ...
+```
+
+Операция — `@dataclass(frozen=True, slots=True, kw_only=True)`. `TContent` — карта элементов
+(`None` у перехода без карты), `TResult` — union исходов или `None`.
+
+## Роутер и клиент
+
+```python
+class AsyncBrowserApi:
+    errors: ClassVar[tuple[Failure, ...]] = ()
+    handlers: ClassVar[tuple[Handle, ...]] = ()
+    frames: ClassVar[tuple[str, ...]] = ()
+    def __init__(self, client: AsyncBrowserClient, *, defaults=None) -> None: ...
+
+AsyncBrowserClient(driver, *, base_url="", config=None, session=None, owns_driver=False)
+AsyncBrowserClient.without_session() -> AsyncBrowserClient   # тот же драйвер, база, конфиг
+BrowserClientConfig(timeout=5.0, element_timeout=5.0, response_timeout=5.0,
+                    navigation_timeout=30.0, auth_retries=1)
+BrowserCallOptions(timeout=None, element_timeout=None, response_timeout=None,
+                   navigation_timeout=None)
+await execute(operation, driver, *, base_url="", config=None, options=None)
+```
+
+`op(Operation)` из `eazy_sdk` публикует операцию на роутере: `portal.name(**fields,
+options=...)`, `portal.name.request(**fields)`, `portal.name.send(request)`. Правила
+`errors` операции стоят выше правил роутера; фреймы роутера — снаружи фреймов операции.
+Роутер ставится в `AsyncRoot` через `api_group(...)` и `bind(Router, client=AsyncBrowserClient(...))`.
+
+## Исходы
+
+```python
+outcomes(*cases: When, otherwise: Callable[[TContent], Awaitable[Z]]) -> Outcomes
+when(sign, *, then: Callable[[TContent], Awaitable[T]]) -> When
+when(sign, *, to: type[State]) -> When     # State(api: AsyncBrowserApi)
+```
+
+## Карта элементов
+
+| Маркер | Поле | Что даёт |
+|---|---|---|
+| `css(selector, *, timeout=None, frames=())` | `Element` | первый видимый узел |
+| `last(selector, ...)` | `Element` | последний узел |
+| `any_of(*selectors, ...)` | `Element` | первый найденный кандидат |
+| `each(locator)` | `Elements` | `count()`, `nth(i)`, `texts()`, `async for` |
+| `region(Card, root=locator)` | `Card` | подкарта внутри корня |
+| `template(*selectors, ...)` | `Template` | `row(name=...)`, значение по `CSS.escape` |
+| `template_text(*selectors, ...)` | `Template` | для `text="…"` и `:has-text("…")` |
+| `rich(locator)` | `RichText` | элемент плюс `set_html(html)`; нужен `Capability.rich_text` |
+| `ApiResponse(url_contains, decoder)` | `ApiValue[T]` | разобранный ответ API; нужен `Capability.network` |
+
+`Element`: `fill`, `click`, `hover`, `check`, `uncheck`, `select`, `press`, `text`, `value`,
+`attribute`, `visible`.
+
+## Признаки
+
+```python
+visible(locator)
+text.contains(fragment, *, ignore_case=True)
+url.contains(marker)
+url.matches(pattern)
+response.arrived(url_contains)   # Capability.network
+navigated()                      # Capability.navigation_events
+```
+
+Операторы: `|`, `&`, `~`. У признака есть `label` и `requires`.
+
+## Отказы и помехи
+
+```python
+Failure(when: Sign, exception: type[Exception] | Callable[[Observation], Awaitable[Exception]])
+text_of(locator) -> Callable[[Observation], Awaitable[str]]
+Handle(when: Sign, do: Action, once: bool = True)
+click(locator) -> Action
+```
+
+## Возможности
+
+```python
+class Capability(StrEnum):
+    network, session_state, page_requests, navigation_events, shadow_dom, rich_text
+
+BrowserProfile(name, **axes: CapabilityLevel)
+validate_profile(requires, profile)   # CapabilityMismatchError из eazy_sdk.handlers
+```
+
+## Вход и сессия
+
+```python
+BrowserLogin(*, service, cookies=(), expired=(), leeway=timedelta(seconds=30), clock=...)
+BrowserLogin.validate(state) -> bool
+BrowserLogin.is_expired(error) -> bool
+await BrowserLogin.sign_in(client, credentials) -> BrowserState
+await BrowserLogin.refresh(client, credentials, state) -> BrowserState
+BrowserLogin.session(credentials, *, store=None, identity="client") -> BrowserSession
+BrowserLoginContext(client).export_state()
+
+class SessionSource[TRevision](Protocol):          # что клиент знает о сессии
+    def is_expired(self, error: BaseException) -> bool: ...
+    async def ensure(self, client) -> TRevision: ...
+    async def renew(self, client, rejected: TRevision) -> TRevision | None: ...
+
+BrowserSession                                     # SessionSource без пула, один на контекст
+await BrowserSession.state(client) -> BrowserState
+
+await browser_cookie_auth(state, scheme, cookie_name, *, domain=None) -> Auth
+BrowserCookieBridge(cookie_name, domain=None).convert(state) -> HttpCookieSession
+CookieAuthAdopter(scheme).adopt(cookie_session) -> Auth
+```
+
+`BrowserLogin.session(...)` требует непустой `cookies`. Клиент с `session=` вызывает
+`ensure` перед операцией, а после отказа, для которого `is_expired` истинно, — `renew` и
+повтор, не больше `auth_retries` раз. `renew` вернул `None` — наружу уходит исходный отказ.
+
+## Состояние сессии
+
+```python
+class StateAware(Protocol):                        # драйвер с Capability.session_state
+    async def export_state(self) -> BrowserState: ...
+    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None: ...
+    def context_key(self) -> object: ...
+
+BrowserState(cookies=(), origins=())
+BrowserCookie(name, value, domain="", path="/", expires_at=None, secure=False,
+              http_only=False, same_site="")
+Origin(origin, items=())
+
+# eazy_sdk_browser.handlers.playwright
+to_storage_state(state) -> StorageState            # для browser.new_context(storage_state=…)
+from_storage_state(raw) -> BrowserState
+
+# eazy_sdk_browser.integrations.accounts
+BrowserSessions(workspace).load(account) -> BrowserState | None
+await BrowserSessions.save(account, state, *, expires_at=None)
+BrowserSessions.store(account) -> SessionStore[BrowserState]
+```
+
+localStorage в живой контекст не пишется: его задаёт `storage_state` при создании
+контекста. Куки в контекст кладёт только `BrowserSession`.
+
+## Драйвер playwright
+
+```python
+async with PlaywrightDriver(page, *, capture=DEFAULT_CAPTURE) as driver: ...
+
+# eazy_sdk_browser.handlers
+CapturePolicy(*, resource_types=frozenset({"xhr", "fetch", "document"}),
+              max_body_bytes=2 * 1024 * 1024, max_total_bytes=32 * 1024 * 1024)
+```
+
+Один драйвер на страницу; он отписывается сам, когда страница закрывается. `capture=None` —
+сеть не слушается, и профиль не обещает `Capability.network`. Тело больше `max_body_bytes`
+не читается: ответ лежит в буфере с `ResponseView.body_dropped=True`, а карта, которая его
+ждёт, бросает `ResponseMissingError` с причиной.
+
+## Драйвер Pydoll 3
+
+```python
+from eazy_sdk_browser.handlers.pydoll import PYDOLL_PROFILE, PydollDriver
+
+async with PydollDriver(tab, context_key=context, capture=DEFAULT_CAPTURE) as driver: ...
+```
+
+Адаптер принимает готовый нативный `pydoll.browser.tab.Tab` из `pydoll-python>=3,<4` и не
+закрывает его. `context_key` одинаков у вкладок одного контекста; без него создаётся безопасный
+page-local ключ. `capture=None` понижает только `network` до `UNSUPPORTED`.
+Один `Tab` не оборачивают двумя живыми адаптерами одновременно: перед повторным созданием
+вызывают `aclose()`, а в пуле используют один именованный `lease.attachment()`.
+
+| Ось | Уровень |
+|---|---|
+| `network` | `CAPTURE_VERIFIED` |
+| `session_state` | `BEST_EFFORT` — cookies контекста, localStorage текущего origin |
+| `page_requests` | `CAPTURE_VERIFIED` |
+| `navigation_events` | `CAPTURE_VERIFIED` |
+| `shadow_dom` | `UNSUPPORTED` |
+| `rich_text` | `CAPTURE_VERIFIED` |
+
+Pydoll работает с Chromium-based браузерами. Запуск браузера, контексты, proxy, identity,
+lease и retry задачи остаются внешней оркестрацией.
+
+## Ошибки
+
+| Класс | База | Когда |
+|---|---|---|
+| `BrowserDeclarationError` | `PlanError` | объявление собрано неверно (D-B-xx) |
+| `BrowserError` | `EazySdkError` | отказ во время сценария |
+| `PageError` | `BrowserError` | объявленный отказ страницы — база исключений SDK |
+| `NotReadyError` | `BrowserError` | условие готовности не выполнилось, правила отказа не объяснили |
+| `ElementNotFoundError` | `BrowserError` | ни один кандидат не нашёлся; `index` — номер узла коллекции |
+| `ResponseMissingError` | `BrowserError` | ответа API, на который ссылается карта, нет — или его тело больше лимита захвата (`reason`) |
+| `BrowserSessionError` | `BrowserError` | в сессии нет нужной куки или она истекла; объекту сессии принесли клиента из другого контекста |
+| `TransportError` | из `eazy_sdk.handlers` | драйвер отказал: закрытая страница, сеть, срок перехода |
+
+## Диагностики
+
+| Код | Что |
+|---|---|
+| D-B-01 | у операции нет `__browser__` |
+| D-B-02 | карта спеки не совпадает с параметром класса |
+| D-B-03 | поле карты без маркера |
+| D-B-04 | возможность, нужная карте или признакам, не объявлена — или объявлена и не используется |
+| D-B-05 | операция не frozen dataclass |
+| D-B-06 | браузерная операция опубликована не на `AsyncBrowserApi` |
+| D-B-07 | HTTP-операция опубликована на `AsyncBrowserApi` |
+| D-B-08 | тип результата класса не совпадает с union исходов |
+| D-B-09 | у операции-перехода есть `act` |
+| D-B-10 | `{имя}` в адресе перехода — не поле операции |
+
+## Тестовые драйверы
+
+`eazy_sdk_browser.testing`: `FakeDriver(present=, url=, text=, latency=, redirects=, pages=,
+counts=, values=, attributes=)` пишет действия в `log`; `NetworkFakeDriver`,
+`NavigatingFakeDriver`, `StatefulFakeDriver`, `FetchFakeDriver`, `RichTextFakeDriver` добавляют
+по одной возможности. Несколько `StatefulFakeDriver(context=FakeContext(...))` с общим
+`FakeContext` — вкладки одного контекста: общие куки и журнал `cookie_writes`; `LyingDriver`, `StatelessLiar`, `FetchLiar`, `RichTextLiar` обещают
+возможность в профиле без метода — для проверки адаптеров.

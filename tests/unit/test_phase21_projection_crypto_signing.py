@@ -207,9 +207,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
     captures: list[tuple[str, bytes, str]] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        captures.append(
-            (request.url.path, request.content, request.headers["x-body-signature"])
-        )
+        captures.append((request.url.path, request.content, request.headers["x-body-signature"]))
         if request.url.path == "/redirect":
             return httpx.Response(307, headers={"Location": "/redirected"})
         return httpx.Response(204)
@@ -224,9 +222,7 @@ async def test_projection_crypto_and_signature_are_fresh_on_managed_redirect() -
         handler=AsyncHttpxHandler(raw, owns_client=True),
         config=ClientConfig(resilience=Resilience(max_redirects=1)),
     ) as client:
-        await RedirectApi(client, identity=SECRET_KEY_IDENTITY).send(
-            card_number="4111", amount=50
-        )
+        await RedirectApi(client, identity=SECRET_KEY_IDENTITY).send(card_number="4111", amount=50)
 
     assert projections == [1, 2]
     assert cipher.attempts == [1, 2]
@@ -394,7 +390,8 @@ async def test_custom_compression_precedes_encoded_crypto_and_exact_signing() ->
             fallback=NO_CONTENT.fallback,
             crypto=crypto,
             signing=signature,
-            projection=projection, wire=Wire(encrypted=wire),
+            projection=projection,
+            wire=Wire(encrypted=wire),
         )
         async def send(self, *, card_number: str, amount: int) -> None:
             raise NotImplementedError
@@ -446,9 +443,7 @@ class SignedSource(TypedDict):
 
 
 class ManagedSignatureFields(TypedDict, total=False):
-    value: NotRequired[
-        Annotated[str, FromProtection(SIGNATURE_PROTECTION, "value")]
-    ]
+    value: NotRequired[Annotated[str, FromProtection(SIGNATURE_PROTECTION, "value")]]
 
 
 class ManagedSignedWire(TypedDict):

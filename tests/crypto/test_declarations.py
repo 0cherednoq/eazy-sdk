@@ -168,9 +168,7 @@ async def test_selector_resolves_model_aliases_and_transforms_before_model_load(
     )
     source = freeze_value({"payment_card": {"pan": "4111", "cvv": "123"}})
     encrypted = await encrypt_document(source, compiled.outbound_fields, context=context)
-    assert thaw_value(encrypted) == {
-        "payment_card": {"pan": "enc:4111", "cvv": "enc:123"}
-    }
+    assert thaw_value(encrypted) == {"payment_card": {"pan": "enc:4111", "cvv": "enc:123"}}
     decrypted = await decrypt_document(
         encrypted,
         compiled.inbound_fields,

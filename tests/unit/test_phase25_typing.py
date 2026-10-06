@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-POSITIVE = r'''# pyright: strict, reportUnknownVariableType=false
+POSITIVE = r"""# pyright: strict, reportUnknownVariableType=false
 from dataclasses import dataclass
 from typing import Annotated, TypedDict, Unpack, assert_type
 
@@ -61,10 +61,10 @@ async def proof(explicit: ExplicitApi, unpacked: UnpackedApi, root: Root) -> Non
     )
     assert_type(await unpacked.get_user(user_id=7), User)
     assert_type(root.users, ExplicitApi)
-'''
+"""
 
 
-NEGATIVE = r'''# pyright: strict
+NEGATIVE = r"""# pyright: strict
 from dataclasses import dataclass
 
 from eazy_sdk import AsyncApi, api
@@ -98,7 +98,7 @@ async def invalid(api_instance: UsersApi) -> None:
 @api.get("/typo", responze=Json())
 async def typo(self: AsyncApi) -> User:
     raise NotImplementedError
-'''
+"""
 
 
 def _run(checker: str, source: Path) -> subprocess.CompletedProcess[str]:

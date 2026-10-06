@@ -136,9 +136,7 @@ def test_crypto_extension_lowers_named_profile_without_algorithm_source(tmp_path
         ({"profile": "p", "wire": {"plaintextStatuses": [700]}}, "/plaintextStatuses"),
     ],
 )
-def test_crypto_extension_rejects_invalid_contract(
-    crypto: dict[str, object], pointer: str
-) -> None:
+def test_crypto_extension_rejects_invalid_contract(crypto: dict[str, object], pointer: str) -> None:
     document = specification("3.1.1")
     document["paths"]["/users/{user_id}"]["get"]["x-eazy-sdk-crypto"] = crypto
 
@@ -544,9 +542,7 @@ def test_input_is_the_only_parameter_declaration_and_normalizes_wire_names() -> 
     assert "user_id: Path[str]" in client
     assert "user_id_query: Annotated[Omittable[str], markers.Query('user_id')] = UNSET" in client
     assert "options_: Annotated[Omittable[int], markers.Query('options')] = UNSET" in client
-    assert (
-        "filter_name: Annotated[Omittable[str], markers.Query('filter[name]')] = UNSET" in client
-    )
+    assert "filter_name: Annotated[Omittable[str], markers.Query('filter[name]')] = UNSET" in client
     assert "getUser = op(GetUserRequest)" in client
     assert "parameters=" not in client
     assert "body=" not in client
@@ -768,9 +764,7 @@ def test_canonical_protection_flow_generates_typed_wire_injection(tmp_path: Path
     source = render_client(ir)
     assert "LOGIN_PROTECTION = SolverRequirement[Any, ProtectionResult]" in source
     assert "class LoginRequestBody(OpenAPIModel):" in source
-    assert "captcha_challenge" not in source.split(
-        "class _LoginProjectionTarget", 1
-    )[0]
+    assert "captcha_challenge" not in source.split("class _LoginProjectionTarget", 1)[0]
     assert "class _LoginProjectionTarget(OpenAPIModel):" in source
     assert "FromProtection(LOGIN_PROTECTION, 'challenge')" in source
     assert "class _LoginProjectionSource(TypedDict, total=False):" in source

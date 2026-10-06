@@ -1,0 +1,56 @@
+---
+title: Browser pool и Pydoll
+description: Подключение PydollDriver к PageLease без смешивания site-операций, контекстной сессии и retry задачи.
+sources:
+  - eazy_sdk_browser
+api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
+---
+
+`eazy_sdk_browser` исполняет одну декларативную site-операцию на готовой странице.
+`browser_pool` владеет процессами, контекстами, identity, proxy, вкладками, конкурентностью и
+повтором всей задачи. Граница проходит по `PageLease[Tab]`:
+
+```text
+BrowserPool[Pydoll] -> PageLease[Tab] -> page attachment PydollDriver
+                    -> AsyncBrowserClient -> site operation
+```
+
+## Attachment одной вкладки
+
+```python
+from eazy_sdk_browser import AsyncBrowserClient
+from eazy_sdk_browser.handlers.pydoll import PydollDriver as EazyPydollDriver
+
+async with pool.page(identity) as lease:
+    driver = await lease.attachment(
+        "eazy-sdk-browser:pydoll",
+        lambda tab: EazyPydollDriver(tab, context_key=lease.context),
+    )
+    sdk = PortalSdk(AsyncBrowserClient(driver, base_url=BASE_URL))
+    result = await sdk.orders.list()
+```
+
+Attachment создаётся один раз на тёплую вкладку. Когда пул выбрасывает или закрывает вкладку,
+он вызывает `PydollDriver.aclose()` ровно один раз. Адаптер снимает только свои CDP callback-и;
+вкладку, Network domain, браузер и контекст он не закрывает.
+
+## Сессия принадлежит контексту
+
+В pool-режиме не создавайте `BrowserSession` на каждую вкладку. Вход исполняет
+`browser_pool.SessionFlow`: он вызывает `BrowserLogin.sign_in()`, сохраняет context state и
+выдаёт вкладку уже в нужном контексте. `AsyncBrowserClient` внутри lease создаётся без
+`session=`.
+
+Classifier пула переводит объявленную ошибку `login.is_expired(error)` в
+`ErrorKind.session`. Пул выводит старый контекст, следующая попытка получает новый и снова
+проходит `SessionFlow.open()`. Retry одной Eazy-операции не должен конкурировать с retry задачи
+пула; после `lease.commit()` задача не повторяется.
+
+## Ограничения Pydoll
+
+- поддерживается `pydoll-python>=3,<4` и только Chromium-based браузеры;
+- `session_state=BEST_EFFORT`: cookies контекста плюс localStorage текущего origin;
+- запись localStorage выполняет владелец контекста до выдачи страницы;
+- shadow DOM в первой версии не объявлен;
+- `context_key=lease.context` обязателен, если несколько вкладок должны считаться одним
+  контекстом.

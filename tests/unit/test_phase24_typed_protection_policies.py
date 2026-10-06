@@ -138,7 +138,7 @@ def _response(request: PreparedRequest, status: int, body: bytes) -> NormalizedR
         status,
         request.url,
         "GET",
-        Headers((('content-type', 'application/json'),)),
+        Headers((("content-type", "application/json"),)),
         body,
     )
 
@@ -162,9 +162,7 @@ def _runtime(
         emit,
         "https://kad.test",
         challenge_policies=(selected,),
-        solver_bindings=SolverBindings(
-            bind_solver(selected.solver, solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(selected.solver, solver)),
     )
 
 
@@ -594,14 +592,10 @@ async def test_before_call_per_call_and_per_attempt_lifetimes(
         emit,
         "https://kad.test",
         before_call_policies=(policy,),
-        solver_bindings=SolverBindings(
-            bind_solver(BEFORE_SOLVER, solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(BEFORE_SOLVER, solver)),
     )
     client = BeforeProtectedApi(_AsyncClientCore(runtime))
-    result = await client.protected(
-        options=CallOptions(max_attempts=2, transport_retries=1)
-    )
+    result = await client.protected(options=CallOptions(max_attempts=2, transport_retries=1))
     assert result == {"ok": True}
     assert solver.calls == expected_solves
 

@@ -1,6 +1,5 @@
 """Async WebSocket protocol and runtime API."""
 
-
 from ._messages import (
     FrozenArray,
     FrozenObject,

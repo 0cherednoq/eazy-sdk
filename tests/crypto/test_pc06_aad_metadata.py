@@ -279,13 +279,9 @@ async def test_algorithm_may_return_only_declared_typed_outputs() -> None:
 
 @pytest.mark.asyncio
 async def test_input_lifetime_is_attempt_by_default_and_generation_cached_for_ws() -> None:
-    dependency = cast(
-        RequestDependency[int], RequestDependency.typed("counter", int, secret=True)
-    )
+    dependency = cast(RequestDependency[int], RequestDependency.typed("counter", int, secret=True))
     attempt_input = crypto_input(dependency)
-    connection_input = crypto_input(
-        dependency, scope=CryptoInputScope.CONNECTION
-    )
+    connection_input = crypto_input(dependency, scope=CryptoInputScope.CONNECTION)
     calls = 0
 
     class Provider:
@@ -297,9 +293,7 @@ async def test_input_lifetime_is_attempt_by_default_and_generation_cached_for_ws
     registry = DependencyRegistry()
     registry.register(dependency, Provider())
 
-    first, _ = await resolve_crypto_inputs(
-        (attempt_input,), registry, operation_id="op", attempt=1
-    )
+    first, _ = await resolve_crypto_inputs((attempt_input,), registry, operation_id="op", attempt=1)
     second, _ = await resolve_crypto_inputs(
         (attempt_input,), registry, operation_id="op", attempt=2
     )

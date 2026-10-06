@@ -44,9 +44,7 @@ from eazy_sdk.request.markers import JsonBody
 from eazy_sdk.response import Json, NormalizedResponse
 
 
-def client_from_httpx(
-    raw: httpx.AsyncClient, *, config: ClientConfig | None = None
-) -> AsyncClient:
+def client_from_httpx(raw: httpx.AsyncClient, *, config: ClientConfig | None = None) -> AsyncClient:
     return AsyncClient(
         base_url=str(raw.base_url),
         handler=AsyncHttpxHandler(raw, owns_client=True),
@@ -515,6 +513,7 @@ async def test_session_auth_login_and_refresh_persist_through_sql_store(
             cookies={},
         ),
     )
+
     class ProtectedSdk(SqlSdk):
         account = api_group(ProtectedApi)
 

@@ -103,9 +103,7 @@ class Serialization:
         if not isinstance(self.documents, tuple) or any(
             not isinstance(item, DocumentBackend) for item in self.documents
         ):
-            raise TypeError(
-                "Serialization.documents is a tuple of DocumentBackend implementations"
-            )
+            raise TypeError("Serialization.documents is a tuple of DocumentBackend implementations")
 
     def document_backend(
         self, media_type: str | None, *, operation_id: str

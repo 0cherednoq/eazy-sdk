@@ -159,9 +159,7 @@ def route_reader_message(
     complete_subscription: bool,
 ) -> ReaderRouteDecision:
     correlated_terminal = message.terminal_error is not None and message.correlation is not None
-    correlated_reply = (
-        message.kind is InboundMessageKind.REPLY and message.correlation is not None
-    )
+    correlated_reply = message.kind is InboundMessageKind.REPLY and message.correlation is not None
     discard_pending = pending_present and (correlated_terminal or correlated_reply)
     if correlated_terminal:
         if pending_open:

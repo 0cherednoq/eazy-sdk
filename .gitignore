@@ -73,5 +73,7 @@ mutants/
 # Local AI-assisted development notes and instructions
 *.md
 !plugins/*/README.md
+# Документация плагина — часть плагина, а не локальная заметка.
+!plugins/*/docs/*.md
 /.claude/
 /docs/

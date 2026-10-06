@@ -24,11 +24,7 @@ FORBIDDEN_IN_RUNTIME = (
 
 
 def _sources(*packages: str) -> list[Path]:
-    return [
-        path
-        for package in packages
-        for path in (ROOT / "eazy_sdk" / package).rglob("*.py")
-    ]
+    return [path for package in packages for path in (ROOT / "eazy_sdk" / package).rglob("*.py")]
 
 
 def test_no_second_execution_path() -> None:

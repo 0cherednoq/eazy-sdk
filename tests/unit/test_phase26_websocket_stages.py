@@ -148,11 +148,14 @@ def test_disconnect_and_recovery_plans_do_not_own_socket_io() -> None:
     )
     assert missing_channel.mode is RecoveryMode.RECOVER
     assert missing_channel.error == "protocol recovery requires a channel-routed subscription"
-    assert recovery_decision(
-        requested=True,
-        channel=ChannelKey("orders"),
-        token=None,
-    ).mode is RecoveryMode.RESUBSCRIBE
+    assert (
+        recovery_decision(
+            requested=True,
+            channel=ChannelKey("orders"),
+            token=None,
+        ).mode
+        is RecoveryMode.RESUBSCRIBE
+    )
     recovered = recovery_decision(
         requested=True,
         channel=ChannelKey("orders"),

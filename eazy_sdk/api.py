@@ -17,6 +17,7 @@ from typing import (
     Concatenate,
     ParamSpec,
     Protocol,
+    Self,
     TypeVar,
     Unpack,
     cast,
@@ -914,6 +915,19 @@ class _PublishesItself[TDescriptor](Protocol):
     def __publish__(cls) -> TDescriptor: ...
 
 
+@runtime_checkable
+class _ComposesItself(Protocol):
+    """A router of another transport, composed by a root but declared to it by nobody.
+
+    The root hands it the client it was bound to (``bind(Router, client=...)``) and asks
+    for an instance; service attributes, allowlists and address resolution are the
+    router's own business, in its own vocabulary.
+    """
+
+    @classmethod
+    def __compose__(cls, client: object) -> Self: ...
+
+
 @overload
 def op[TDescriptor](operation: type[_PublishesItself[TDescriptor]], /) -> TDescriptor: ...
 
@@ -1061,7 +1075,7 @@ class SyncApi(_ApiBase):
         )
 
 
-class _ApiGroup[TGroup: SyncApi | AsyncApi]:
+class _ApiGroup[TGroup]:
     def __init__(self, api_type: type[TGroup]) -> None:
         self.api_type = api_type
         self.name = ""
@@ -1088,13 +1102,29 @@ class _ApiGroup[TGroup: SyncApi | AsyncApi]:
         return cast(TGroup, build(self))
 
 
-def api_group[TGroupApi: SyncApi | AsyncApi](
-    api_type: type[TGroupApi],
-) -> _ApiGroup[TGroupApi]:
-    """Declare a lazily bound router member on an SDK root class."""
+@overload
+def api_group[TGroupApi: SyncApi | AsyncApi](api_type: type[TGroupApi]) -> _ApiGroup[TGroupApi]: ...
 
-    if not isinstance(api_type, type) or not issubclass(api_type, SyncApi | AsyncApi):
-        raise TypeError("api_group() requires a SyncApi or AsyncApi subclass")
+
+@overload
+def api_group[TForeign: _ComposesItself](api_type: type[TForeign]) -> _ApiGroup[TForeign]: ...
+
+
+def api_group(api_type: type[Any]) -> _ApiGroup[Any]:
+    """Declare a lazily bound router member on an SDK root class.
+
+    A router of another transport qualifies when it composes itself
+    (:class:`_ComposesItself`): the root binds it to a client and stays out of its
+    declaration.
+    """
+
+    if not isinstance(api_type, type) or not (
+        issubclass(api_type, SyncApi | AsyncApi) or isinstance(api_type, _ComposesItself)
+    ):
+        raise TypeError(
+            "api_group() requires a SyncApi or AsyncApi subclass, or a router that composes "
+            "itself (__compose__)"
+        )
     return _ApiGroup(api_type)
 
 

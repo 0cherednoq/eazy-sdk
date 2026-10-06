@@ -429,9 +429,7 @@ def test_sync_runtime_rejects_async_algorithm_before_network() -> None:
         config=ClientConfig(),
     )
     with pytest.raises(CryptoRuntimeMismatchError):
-        InvalidApi(client).create(
-            request=CreatePayment(card=Card(number="1", cvv="2"), amount=1)
-        )
+        InvalidApi(client).create(request=CreatePayment(card=Card(number="1", cvv="2"), amount=1))
     client.close()
     assert calls == 0
 
@@ -806,9 +804,7 @@ async def test_whole_payload_crypto_rejects_stream_without_buffering_or_network(
     try:
         with pytest.raises(CryptoStreamingUnsupportedError):
             await StreamApi(client).upload(
-                body=ReplayableBodyStream(
-                    lambda: BytesIO(b"secret-stream"), known_length=13
-                )
+                body=ReplayableBodyStream(lambda: BytesIO(b"secret-stream"), known_length=13)
             )
     finally:
         await client.aclose()

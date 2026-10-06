@@ -18,6 +18,7 @@ from eazy_sdk.api import (
     SyncApi,
     _ApiGroup,
     _AsyncClient,
+    _ComposesItself,
     _OperationDescriptor,
     _service_defaults_of,
     _ServiceDefaults,
@@ -80,8 +81,7 @@ def _reject_root_operations(cls: type[object]) -> None:
     for name in vars(cls):
         if isinstance(inspect.getattr_static(cls, name), _OperationDescriptor):
             raise TypeError(
-                f"SDK root {cls.__name__} declares operation {name!r}; "
-                "a root only composes routers"
+                f"SDK root {cls.__name__} declares operation {name!r}; a root only composes routers"
             )
 
 
@@ -108,6 +108,10 @@ class _RootBase:
                     groups[name] = value
         kind = cls._api_kind
         for name, group in groups.items():
+            if isinstance(group.api_type, _ComposesItself):
+                # A router of another transport: it composes itself over the client it
+                # is bound to, and its kind is its own concern.
+                continue
             if not issubclass(group.api_type, kind):
                 wanted = "async" if kind is AsyncApi else "sync"
                 raise TypeError(f"{wanted} API group {name!r} uses the wrong API kind")
@@ -176,12 +180,15 @@ class _RootBase:
         cached = self._instances.get(group.name)
         if cached is None:
             plan = self._plan[group.name]
-            cached = group.api_type(
-                cast(Any, plan.client),
-                serialization=self._serialization,
-                defaults=plan.defaults,
-                scope=self._scope,
-            )
+            if isinstance(group.api_type, _ComposesItself):
+                cached = cast(Any, group.api_type).__compose__(plan.client)
+            else:
+                cached = group.api_type(
+                    cast(Any, plan.client),
+                    serialization=self._serialization,
+                    defaults=plan.defaults,
+                    scope=self._scope,
+                )
             self._instances[group.name] = cached
         return cached
 
@@ -204,9 +211,7 @@ class SyncRoot(_RootBase):
         identity: Identity | None = None,
         serialization: Serialization | None = None,
     ) -> None:
-        super().__init__(
-            client, bindings=bindings, identity=identity, serialization=serialization
-        )
+        super().__init__(client, bindings=bindings, identity=identity, serialization=serialization)
 
     @classmethod
     def from_handler(
@@ -232,9 +237,7 @@ class SyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(
-            client, bindings=bindings, identity=identity, serialization=serialization
-        )
+        root = cls(client, bindings=bindings, identity=identity, serialization=serialization)
         root._owned = (client,)
         return root
 
@@ -269,9 +272,7 @@ class AsyncRoot(_RootBase):
         identity: Identity | None = None,
         serialization: Serialization | None = None,
     ) -> None:
-        super().__init__(
-            client, bindings=bindings, identity=identity, serialization=serialization
-        )
+        super().__init__(client, bindings=bindings, identity=identity, serialization=serialization)
 
     @classmethod
     def from_handler(
@@ -297,9 +298,7 @@ class AsyncRoot(_RootBase):
             owns_handler=owns_handler,
             profile=profile,
         )
-        root = cls(
-            client, bindings=bindings, identity=identity, serialization=serialization
-        )
+        root = cls(client, bindings=bindings, identity=identity, serialization=serialization)
         root._owned = (client,)
         return root
 
@@ -345,12 +344,15 @@ def _resolve_plan(
     plan: dict[str, _GroupPlan] = {}
     for name, group in root_type._root_groups.items():
         router = group.api_type
-        candidates = [
-            binding for binding in bindings if binding.target in router.__mro__
-        ]
+        candidates = [binding for binding in bindings if binding.target in router.__mro__]
         candidates.sort(key=lambda binding: router.__mro__.index(binding.target))
         used.update(binding.target for binding in candidates)
         client = _most_specific(router, candidates, "client") or default_client
+        if isinstance(router, _ComposesItself):
+            # Its service declaration is not ours to read: no HTTP defaults, no HTTP
+            # resolution. Only the client is the root's decision.
+            plan[name] = _GroupPlan(client, root_type._root_defaults)
+            continue
         address = _most_specific(router, candidates, "base_url")
         defaults = root_type._root_defaults.extend(router._service_defaults)
         if address is not None:

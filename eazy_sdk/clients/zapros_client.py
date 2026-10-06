@@ -371,7 +371,8 @@ def _require(module: str, extra: str) -> Any:
         return importlib.import_module(module)
     except ImportError as exc:
         raise ImportError(
-            f"{module} is not installed; install it with `pip install \"eazy-sdk[{extra}]\"`"
+            f'{module} is not installed; install it with `pip install "eazy-sdk[{extra}]"`'
         ) from exc
+
 
 __all__ = ["AsyncClient", "Client"]

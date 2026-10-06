@@ -39,9 +39,7 @@ def test_projection_flows_through_the_same_compiler_pass_sequence() -> None:
 
     compiled: Any = cast(Any, ProjectionApi.operation).resolve().compile()
 
-    input_pass, writer_pass, graph_pass, response_pass, fingerprint_pass = (
-        compiled.pass_diagnostics
-    )
+    input_pass, writer_pass, graph_pass, response_pass, fingerprint_pass = compiled.pass_diagnostics
     assert input_pass.item_count == 1
     assert writer_pass.details == ("signature-paths:0",)
     assert graph_pass.details == ("bind", "body.projection", "prepare")

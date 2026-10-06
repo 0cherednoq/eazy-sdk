@@ -336,9 +336,7 @@ def test_async_bound_prepare_has_the_same_stop_before_emit_boundary() -> None:
         raise AssertionError("prepare must stop before handler emission")
 
     client = _AsyncClientCore(ExecutionRuntime(CAPABILITIES, emit, "https://api.test"))
-    prepared = asyncio.run(
-        AsyncPrepareApi(client).create.prepare(body={"name": "Ada"})
-    )
+    prepared = asyncio.run(AsyncPrepareApi(client).create.prepare(body={"name": "Ada"}))
 
     assert sends == 0
     assert prepared.target == "/users?page=1"
@@ -403,9 +401,7 @@ def test_full_prepare_does_not_commit_managed_protection_state() -> None:
         lambda *args, **kwargs: None,
         "https://api.test",
         before_call_policies=(policy,),
-        solver_bindings=SolverBindings(
-            bind_solver(requirement, solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(requirement, solver)),
     )
     prepared = asyncio.run(
         ManagedApi(_AsyncClientCore(runtime)).managed.prepare(
@@ -494,8 +490,7 @@ def test_standard_and_arbitrary_http_methods_share_one_decorator_path() -> None:
         "propfind_resource": "PROPFIND",
     }
     assert {
-        name: inspect.getattr_static(MethodApi, name).declaration.method
-        for name in expected
+        name: inspect.getattr_static(MethodApi, name).declaration.method for name in expected
     } == expected
 
     with pytest.raises(ValueError, match="invalid HTTP method token"):
@@ -517,8 +512,7 @@ def test_kad_shaped_direct_signature_projects_defaults_without_forwarding_wrappe
         None,
     )
     assert all(
-        item.kind is inspect.Parameter.KEYWORD_ONLY
-        for item in signature.parameters.values()
+        item.kind is inspect.Parameter.KEYWORD_ONLY for item in signature.parameters.values()
     )
 
     prepared = asyncio.run(operation.prepare())

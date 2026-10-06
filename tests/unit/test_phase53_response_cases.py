@@ -637,5 +637,3 @@ def test_accept_on_one_case_also_tells_the_pair_apart() -> None:
 
     with _serve(ENVELOPE_OK, media="application/json") as client:
         assert Service(client).fetch().Success is True
-
-

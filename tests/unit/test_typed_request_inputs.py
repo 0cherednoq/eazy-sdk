@@ -72,7 +72,7 @@ class UnpackedBodyApi(SyncApi):
         self,
         *,
         owner_id: Annotated[int, Path()],
-        user_id: Annotated[int, JsonField('userId')],
+        user_id: Annotated[int, JsonField("userId")],
         title: Annotated[str, JsonField()],
         body: Annotated[str, JsonField()],
         summary: Annotated[str | None, JsonField()] = None,
@@ -129,8 +129,7 @@ def test_unpacks_typed_dict_fields_into_the_operation_shape() -> None:
 
     assert tuple(compiled.input_slots) == ("owner_id", "user_id", "title", "body", "summary")
     assert tuple(
-        (field.python_name, field.wire_name, field.required)
-        for field in compiled.input_fields
+        (field.python_name, field.wire_name, field.required) for field in compiled.input_fields
     ) == (
         ("owner_id", "owner_id", True),
         ("user_id", "userId", True),

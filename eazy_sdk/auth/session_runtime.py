@@ -345,7 +345,6 @@ class _SessionModel:
         )
 
 
-
 def session_auth[TCredentials, TSession](
     session_model: type[TSession],
     *,
@@ -532,8 +531,7 @@ def _validate_auth_service(service: object) -> bool:
     acquire = getattr(service, "acquire", _MISSING_SERVICE_METHOD)
     if acquire is _MISSING_SERVICE_METHOD:
         raise SessionConfigurationError(
-            f"auth service {service_name} must define "
-            "async acquire(credentials, context)"
+            f"auth service {service_name} must define async acquire(credentials, context)"
         )
     _validate_async_service_method(
         service_name,

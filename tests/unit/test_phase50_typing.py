@@ -125,7 +125,7 @@ async def async_proof(orders: AsyncOrders) -> None:
 '''
 
 
-NEGATIVE = r'''# pyright: strict
+NEGATIVE = r"""# pyright: strict
 from dataclasses import dataclass
 
 from eazy_sdk import UNSET, Http, HttpOperation, Omittable, Path, Query, SyncApi, op
@@ -155,7 +155,7 @@ def invalid(orders: Orders) -> None:
     GetOrder(order_id="1", page="x")  # Omittable[int] does not accept str
     GetOrder(order_id="1", locale=UNSET)  # UNSET needs Omittable
     orders.get_order.send(orders.get_order.request(order_id=1))  # wrong argument type again
-'''
+"""
 
 
 def _run(checker: str, source: Path) -> subprocess.CompletedProcess[str]:

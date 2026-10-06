@@ -249,8 +249,4 @@ def _call(
             raise NotImplementedError
 
     auth_api = AuthApi(client, identity=identity)
-    return (
-        auth_api.auth()
-        if authorization is None
-        else auth_api.auth(authorization=authorization)
-    )
+    return auth_api.auth() if authorization is None else auth_api.auth(authorization=authorization)

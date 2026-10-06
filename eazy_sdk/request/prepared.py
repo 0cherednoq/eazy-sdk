@@ -385,19 +385,19 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
     }
     query = _apply_order(
         groups[RequestLocation.QUERY],
-        getattr(order, 'query', None),
+        getattr(order, "query", None),
         "query",
         compiled.wire_names,
     )
     headers = _apply_order(
         groups[RequestLocation.HEADER],
-        getattr(order, 'header', None),
+        getattr(order, "header", None),
         "header",
         compiled.wire_names,
     )
     cookies = _apply_order(
         groups[RequestLocation.COOKIE],
-        getattr(order, 'cookie', None),
+        getattr(order, "cookie", None),
         "cookie",
         compiled.wire_names,
     )
@@ -411,13 +411,13 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
     if projection is not None:
         body_layout = BodyLayout(
             projection.encoding,
-            getattr(order, 'body', None),
+            getattr(order, "body", None),
             projected=True,
         )
     elif flat_body_slots:
         body_slots = _apply_order(
             flat_body_slots,
-            getattr(order, 'body', None),
+            getattr(order, "body", None),
             "body",
             compiled.wire_names,
         )
@@ -433,7 +433,7 @@ def compile_layout[T](compiled: CompiledContract[T]) -> RequestLayout:
         descriptor = compiled.descriptors[body_slots[0]] if body_slots else None
         body_layout = BodyLayout(
             descriptor,
-            getattr(order, 'body', None),
+            getattr(order, "body", None),
             slots=body_slots,
         )
     return RequestLayout(
@@ -781,9 +781,7 @@ def _body(
         value = _body_value(layout, values, descriptors, wire_names, operation_id)
     if isinstance(descriptor, JsonBody):
         semantic = (
-            _to_json_value(value, models=models)
-            if not has_document_override
-            else document_override
+            _to_json_value(value, models=models) if not has_document_override else document_override
         )
         semantic = _order_mapping(semantic, layout.field_order)
         content = json.dumps(semantic, layout.json, default=_json_default)

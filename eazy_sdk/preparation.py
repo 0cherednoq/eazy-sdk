@@ -67,9 +67,7 @@ class PreparedCall:
         headers = tuple(
             PreparedValue(
                 field.name.decode("ascii", errors="replace"),
-                _REDACTED
-                if field.sensitive
-                else field.value.decode("utf-8", errors="replace"),
+                _REDACTED if field.sensitive else field.value.decode("utf-8", errors="replace"),
                 field.sensitive,
             )
             for field in view.headers
@@ -77,9 +75,7 @@ class PreparedCall:
         cookies = tuple(
             PreparedValue(
                 cookie.name.decode("ascii", errors="replace"),
-                _REDACTED
-                if cookie.sensitive
-                else cookie.value.decode("utf-8", errors="replace"),
+                _REDACTED if cookie.sensitive else cookie.value.decode("utf-8", errors="replace"),
                 cookie.sensitive,
             )
             for cookie in view.cookies
@@ -89,11 +85,7 @@ class PreparedCall:
         encoded = None
         if not view.body.sensitive and isinstance(request.body, BufferedBody):
             encoded = request.body.content
-        prefix = (
-            request.scheme.decode("ascii")
-            + "://"
-            + request.authority.decode("ascii")
-        )
+        prefix = request.scheme.decode("ascii") + "://" + request.authority.decode("ascii")
         return cls(
             method=request.method.decode("ascii"),
             url=prefix + target,

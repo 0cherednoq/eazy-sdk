@@ -97,9 +97,7 @@ def projection_specification(version: str) -> dict[str, Any]:
 
 def generation_config(module: str = "projection_application") -> GenerationConfig:
     return GenerationConfig(
-        projections=(
-            ProjectionImport("register-user", f"{module}:register_to_wire"),
-        )
+        projections=(ProjectionImport("register-user", f"{module}:register_to_wire"),)
     )
 
 
@@ -218,9 +216,7 @@ async def test_generated_projection_import_types_and_executes_exact_wire_body(
     finally:
         sys.path.remove(str(tmp_path))
         for name in tuple(sys.modules):
-            if name in {package_name, application_module} or name.startswith(
-                f"{package_name}."
-            ):
+            if name in {package_name, application_module} or name.startswith(f"{package_name}."):
                 del sys.modules[name]
 
 
@@ -285,9 +281,7 @@ def test_standard_request_without_projection_stays_wire_shaped() -> None:
         ),
     ],
 )
-def test_projection_extension_rejects_invalid_contract(
-    mutate: Any, pointer: str
-) -> None:
+def test_projection_extension_rejects_invalid_contract(mutate: Any, pointer: str) -> None:
     spec = projection_specification("3.1.1")
     projection = spec["paths"]["/register"]["post"]["x-eazy-sdk"]["projection"]
     mutate(projection)

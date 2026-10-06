@@ -357,9 +357,7 @@ def test_invalid_method_signatures_fail_during_class_creation() -> None:
                 errors=USER_RESPONSES.errors,
                 fallback=USER_RESPONSES.fallback,
             )
-            async def get_user(
-                self, *, other: Annotated[int, Path()]
-            ) -> User:
+            async def get_user(self, *, other: Annotated[int, Path()]) -> User:
                 raise NotImplementedError
 
     with pytest.raises(TypeError, match="options must be keyword-only"):
@@ -424,8 +422,8 @@ async def test_mandatory_protection_verifies_and_injects_multiple_fields_atomica
                 ProtectionBundle(
                     operation_protections=(flow,),
                     solver_bindings=SolverBindings(
-                            bind_solver(LOGIN_PROTECTION, FakeSolver()),
-                        ),
+                        bind_solver(LOGIN_PROTECTION, FakeSolver()),
+                    ),
                 ),
             ),
         ),
@@ -459,13 +457,13 @@ async def test_missing_protection_solver_fails_before_acquire_or_main_network() 
             security=Security(
                 ProtectionBundle(
                     operation_protections=(
-                            protection_flow(
-                                LOGIN_PROTECTION,
-                                acquire=ProtectionApi.acquire,
-                                solve=True,
-                                verify=ProtectionApi.verify,
-                            ),
+                        protection_flow(
+                            LOGIN_PROTECTION,
+                            acquire=ProtectionApi.acquire,
+                            solve=True,
+                            verify=ProtectionApi.verify,
                         ),
+                    ),
                 ),
             ),
         ),
@@ -498,8 +496,8 @@ async def test_acquire_only_csrf_flow_injects_before_the_main_operation() -> Non
             security=Security(
                 ProtectionBundle(
                     operation_protections=(
-                            protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
-                        ),
+                        protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+                    ),
                 ),
             ),
         ),
@@ -556,16 +554,16 @@ async def test_mandatory_protection_injects_nested_target_paths() -> None:
             security=Security(
                 ProtectionBundle(
                     operation_protections=(
-                            protection_flow(
-                                LOGIN_PROTECTION,
-                                acquire=ProtectionApi.acquire,
-                                solve=True,
-                                verify=ProtectionApi.verify,
-                            ),
+                        protection_flow(
+                            LOGIN_PROTECTION,
+                            acquire=ProtectionApi.acquire,
+                            solve=True,
+                            verify=ProtectionApi.verify,
                         ),
+                    ),
                     solver_bindings=SolverBindings(
-                            bind_solver(LOGIN_PROTECTION, FakeSolver()),
-                        ),
+                        bind_solver(LOGIN_PROTECTION, FakeSolver()),
+                    ),
                 ),
             ),
         ),
@@ -651,8 +649,8 @@ async def test_projection_cannot_prepopulate_a_reserved_private_path() -> None:
             security=Security(
                 ProtectionBundle(
                     operation_protections=(
-                            protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
-                        ),
+                        protection_flow(CSRF_PROTECTION, acquire=ProtectionApi.csrf),
+                    ),
                 ),
             ),
         ),

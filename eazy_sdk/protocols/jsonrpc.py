@@ -80,9 +80,7 @@ class JsonRpc:
             return Malformed(RpcEnvelopeError("JSON-RPC response must be an object"))
         identifier = raw.get("id")
         correlation = (
-            CorrelationKey(str(identifier))
-            if identifier is not None and str(identifier)
-            else None
+            CorrelationKey(str(identifier)) if identifier is not None and str(identifier) else None
         )
         if "error" in raw:
             return ParsedValue(

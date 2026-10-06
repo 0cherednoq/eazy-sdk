@@ -29,6 +29,8 @@ websocket = ["zapros[websocket]==0.16.0"]
 html = ["eazy-sdk-html>=0.2.0a7,<0.3"]
 accounts = ["eazy-sdk-accounts>=0.2.0a7,<0.3"]
 sqlmodel = ["eazy-sdk-sqlmodel>=0.2.0a7,<0.3"]
+# Браузерные SDK. В `all` не входит: драйвер тянет за собой сам браузер.
+browser = ["eazy-sdk-browser>=0.2.0a7,<0.3"]
 all = ["pydantic>=2", "msgspec>=0.21.1", "httpx>=0.27", "requests>=2.31", "curl_cffi>=0.7", "zapros[websocket]==0.16.0", "eazy-sdk-sqlmodel>=0.2.0a7,<0.3", "eazy-sdk-html>=0.2.0a7,<0.3", "eazy-sdk-accounts>=0.2.0a7,<0.3"]
 msgspec = [
     "msgspec>=0.21.1",
@@ -64,6 +66,11 @@ dev = [
   "eazy-sdk-html",
   "eazy-sdk-xml",
   "eazy-sdk-adaptix",
+  "eazy-sdk-browser",
+  "playwright>=1.55",
+  "pydoll-python>=3,<4",
+  "import-linter>=2.3",
+  "complexipy>=6.2",
   "ipykernel>=7.2.0",
   "zapros[pyreqwest,websocket]==0.16.0",
   "msgspec==0.21.1",
@@ -98,6 +105,7 @@ members = [
   "plugins/accounts",
   "plugins/adaptix",
   "plugins/asyncapi",
+  "plugins/browser",
   "plugins/html",
   "plugins/openapi",
   "plugins/presets",
@@ -115,6 +123,7 @@ eazy-sdk-accounts = { workspace = true }
 eazy-sdk-html = { workspace = true }
 eazy-sdk-xml = { workspace = true }
 eazy-sdk-adaptix = { workspace = true }
+eazy-sdk-browser = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["eazy_sdk"]
@@ -131,6 +140,7 @@ testpaths = [
   "plugins/accounts/tests",
   "plugins/adaptix/tests",
   "plugins/html/tests",
+  "plugins/browser/tests",
   "plugins/asyncapi/tests",
   "plugins/openapi/tests",
   "plugins/presets/tests",
@@ -138,7 +148,7 @@ testpaths = [
   "plugins/xml/tests",
 ]
 addopts = "--import-mode=importlib --strict-markers -p no:cacheprovider --basetemp=.test-tmp/pytest --ignore=tests/fixtures/openapi_consumer/consumer_sdk -m 'not auth_conformance'"
-timeout = 10
+timeout = 120
 filterwarnings = [
   "error",
   # curl_cffi uses a selector helper thread with Proactor on Windows. This is emitted by the
@@ -148,6 +158,7 @@ filterwarnings = [
 markers = [
   "unit: fast isolated behaviour tests without real sockets",
   "integration: localhost HTTP/socket tests across component boundaries",
+  "contract: adapter conformance to the capability profile it declares",
   "live_network: opt-in tests against public third-party network services",
   "auth_conformance: OAuth2/OIDC protocol tests against the optional local IAM server",
   "property: Hypothesis tests for stable invariants",
@@ -157,7 +168,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["eazy_sdk", "eazy_sdk_asyncapi", "eazy_sdk_openapi"]
+source = ["eazy_sdk", "eazy_sdk_asyncapi", "eazy_sdk_openapi", "eazy_sdk_browser"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -182,17 +193,211 @@ target-version = "py313"
 # Notebooks are doc artifacts (generated, thin reuse of the .py examples); don't lint them.
 extend-exclude = [
   ".test-tmp",
+  # Пробник типизатора: намеренные ошибки, предмет проверки, а не её объект.
+  "plugins/browser/probe",
   "examples/notebooks",
   "tests/fixtures/openapi_consumer/consumer_sdk",
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+preview = true
+explicit-preview-rules = true
+select = [
+  "E", "W",      # pycodestyle
+  "F",           # pyflakes
+  "I",           # сортировка импортов
+  "UP",          # устаревший синтаксис
+  "B",           # bugbear: явные ошибки
+  "ASYNC",       # async-ошибки
+  "T20",         # запрет print
+  "DTZ",         # datetime без timezone
+  "BLE",         # blind except
+  "S",           # bandit: безопасность
+  "SIM",         # упрощение кода
+  "RET",         # лишние ветки return
+  "C4",          # comprehensions
+  "RUF",         # правила Ruff
+  "ANN",         # обязательные типы
+  "FIX",         # запрет TODO/FIXME/HACK
+  "ERA",         # закомментированный код
+  "C901",        # цикломатическая сложность McCabe
+  "PLR0913",     # не более пяти аргументов
+  "PLR1702",     # вложенность блоков (preview-правило)
+  "PTH",         # pathlib вместо os.path
+  "N",           # pep8-naming
+  "FURB",        # модернизация устаревших паттернов
+  "PERF",        # O(n²) и прочая расточительность
+  "SLF",         # доступ к чужим private-членам
+  "D",           # докстринги публичного API
+]
+ignore = [
+  "E501",    # длину строк контролирует форматер
+  "RUF001", "RUF002", "RUF003",  # кириллица в строках и комментариях
+  "D203", "D213",  # конфликтующие альтернативы выбранного стиля докстрингов
+  "D105", "D107",  # магия и __init__ описываются докстрингом класса, а не своим
+  # D102: методы протоколов и адаптеров описаны докстрингом класса. Требовать свой
+  # на каждый — плодить «Кликнуть по элементу», то есть ровно тот шум, от которого
+  # библиотека и уходит. Классы (D101) и функции (D103) остаются.
+  "D102",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-nested-blocks = 3
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 
 [tool.ruff.lint.per-file-ignores]
-# Gallery examples bootstrap sys.path before importing shared fixtures (_shared/_burp),
-# so module-level imports legitimately follow a statement.
-"examples/**" = ["E402"]
+# Список долга: правила, которые код ещё не проходит. Он только сокращается —
+# это условие приёмки шага 3 (`plugins/browser/docs/MERGE.md` §10). Новый код,
+# включая `plugins/browser`, держит полный набор с первого дня.
+"eazy_sdk/**/*.py" = ["ANN401", "ASYNC109", "BLE001", "C401", "C409", "C901", "D100", "D101", "D103", "D104", "D202", "D401", "N801", "N802", "N818", "PERF401", "PERF402", "PERF403", "PLR0913", "PLR1702", "S101", "S311", "SLF001"]
+"tests/**/*.py" = ["ANN001", "ANN202", "ANN401", "BLE001", "C402", "C416", "C901", "D100", "D101", "D103", "D104", "D202", "D205", "D209", "D401", "DTZ001", "N801", "N805", "N818", "PERF401", "PLR0913", "PLR1702", "S101", "S102", "S105", "S106", "S107", "S301", "S324", "S603", "SLF001", "T201"]
+"scripts/**/*.py" = ["BLE001", "C901", "D103", "D202", "D401", "PERF401", "PLR1702", "S603", "S607", "T201"]
+"examples/**/*.py" = ["D101", "D103", "D202", "I001", "PLR0913", "S101", "T201"]
+"docs-site/**/*.py" = ["D103", "T201"]
+"plugins/accounts/**/*.py" = ["ANN401", "D100", "D101", "D103", "D202", "N802", "PERF401", "PLR0913", "PLR1702", "S101", "S105", "S311", "S603"]
+"plugins/adaptix/**/*.py" = ["ANN401", "D101", "D103", "D202", "S101"]
+"plugins/asyncapi/**/*.py" = ["C409", "D100", "D101", "D103", "PLR1702", "S101", "S603", "T201"]
+"plugins/html/**/*.py" = ["ANN401", "D100", "D101", "D103", "D202", "S101", "S105", "S603"]
+"plugins/openapi/**/*.py" = ["ANN401", "ASYNC221", "C401", "C901", "D100", "D101", "D103", "D202", "D401", "PERF401", "PLR0913", "PLR1702", "RET504", "S101", "S106", "S603", "T201"]
+"plugins/presets/**/*.py" = ["ANN401", "D100", "D101", "D103", "FURB167", "PLR0913", "S101"]
+"plugins/sqlmodel/**/*.py" = ["ANN001", "ANN002", "ANN201", "ANN202", "ANN401", "BLE001", "C901", "D100", "D101", "D103", "D202", "PERF401", "PLR0913", "RET504", "S101", "S105", "T201"]
+"plugins/xml/**/*.py" = ["BLE001", "D100", "D101", "D103", "PLR1702", "S101", "S314"]
+# Тесты браузера: `assert` в тесте — инструмент, а не глухая проверка;
+# докстринги и аннотации там тоже не несут смысла.
+"plugins/browser/tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "SLF001", "ARG", "FIX", "D"]
+
+# ---------- Архитектурные контракты ----------
+#
+# Границы держатся проверкой, а не договорённостью. Первые два контракта переехали
+# вместе с браузерной библиотекой; вторые два появились ради слияния и отвечают на
+# главный его риск — что ядро начнёт обрастать понятиями надстройки.
+
+[tool.importlinter]
+root_packages = ["eazy_sdk", "eazy_sdk_browser", "eazy_sdk_accounts"]
+include_external_packages = true
+
+# Ядро браузера не знает ни одного драйвера: связь только через адаптер.
+[[tool.importlinter.contracts]]
+name = "browser-core-does-not-know-drivers"
+type = "forbidden"
+source_modules = [
+  "eazy_sdk_browser.api",
+  "eazy_sdk_browser.client",
+  "eazy_sdk_browser.conditions",
+  "eazy_sdk_browser.content",
+  "eazy_sdk_browser.driver",
+  "eazy_sdk_browser.errors",
+  "eazy_sdk_browser.failures",
+  "eazy_sdk_browser.fetch",
+  "eazy_sdk_browser.interceptors",
+  "eazy_sdk_browser.locators",
+  "eazy_sdk_browser.login",
+  "eazy_sdk_browser.navigation",
+  "eazy_sdk_browser.network",
+  "eazy_sdk_browser.operations",
+  "eazy_sdk_browser.outcomes",
+  "eazy_sdk_browser.profile",
+  "eazy_sdk_browser.rich_text",
+  "eazy_sdk_browser.session",
+  "eazy_sdk_browser.spec",
+  "eazy_sdk_browser.state",
+]
+forbidden_modules = ["playwright", "selenium", "camoufox", "pydoll"]
+
+# Ядро браузера не знает и о необязательных интеграциях: разбор ответа и хранилище
+# приходят протоколом, а не импортом. Само ядро `eazy_sdk` ему доступно: ошибки,
+# профиль возможностей и шкала уровней — общие, плагин не заводит своих.
+[[tool.importlinter.contracts]]
+name = "browser-core-does-not-know-integrations"
+type = "forbidden"
+source_modules = [
+  "eazy_sdk_browser.api",
+  "eazy_sdk_browser.client",
+  "eazy_sdk_browser.conditions",
+  "eazy_sdk_browser.content",
+  "eazy_sdk_browser.driver",
+  "eazy_sdk_browser.errors",
+  "eazy_sdk_browser.failures",
+  "eazy_sdk_browser.fetch",
+  "eazy_sdk_browser.interceptors",
+  "eazy_sdk_browser.locators",
+  "eazy_sdk_browser.login",
+  "eazy_sdk_browser.navigation",
+  "eazy_sdk_browser.network",
+  "eazy_sdk_browser.operations",
+  "eazy_sdk_browser.outcomes",
+  "eazy_sdk_browser.profile",
+  "eazy_sdk_browser.rich_text",
+  "eazy_sdk_browser.session",
+  "eazy_sdk_browser.spec",
+  "eazy_sdk_browser.state",
+]
+forbidden_modules = [
+  "eazy_sdk_accounts",
+  "eazy_sdk_browser.integrations",
+  "eazy_sdk_browser.handlers",
+]
+
+# Ядро браузера не владеет жизненным циклом сессии: он живёт в одном модуле `session`
+# (один объект на контекст), а клиент знает только протокол `SessionSource`. `login`
+# сюда не входит — он импортирует `session` лениво, в `BrowserLogin.session()`. Имена
+# `SessionLifecycle` и `asyncio.Lock` вне `session.py` проверяет `tests/test_layers.py`.
+[[tool.importlinter.contracts]]
+name = "browser-core-does-not-orchestrate"
+type = "forbidden"
+source_modules = [
+  "eazy_sdk_browser.api",
+  "eazy_sdk_browser.client",
+  "eazy_sdk_browser.conditions",
+  "eazy_sdk_browser.content",
+  "eazy_sdk_browser.driver",
+  "eazy_sdk_browser.errors",
+  "eazy_sdk_browser.failures",
+  "eazy_sdk_browser.fetch",
+  "eazy_sdk_browser.interceptors",
+  "eazy_sdk_browser.locators",
+  "eazy_sdk_browser.navigation",
+  "eazy_sdk_browser.network",
+  "eazy_sdk_browser.operations",
+  "eazy_sdk_browser.outcomes",
+  "eazy_sdk_browser.profile",
+  "eazy_sdk_browser.rich_text",
+  "eazy_sdk_browser.spec",
+  "eazy_sdk_browser.state",
+]
+forbidden_modules = ["eazy_sdk_browser.session"]
+
+# Зависимость односторонняя: браузер знает про HTTP, HTTP про браузер — никогда.
+# Без этого контракта слияние кончилось бы тем, ради чего его и не делают.
+[[tool.importlinter.contracts]]
+name = "http-core-does-not-know-the-browser"
+type = "forbidden"
+source_modules = ["eazy_sdk"]
+forbidden_modules = ["eazy_sdk_browser", "playwright", "selenium", "camoufox", "pydoll"]
+
+# «Транспортно нейтрально» — проверяемое утверждение, а не похвала: общий слой не
+# знает ни запроса zapros, ни браузера. Сегодня это так, и должно таким остаться.
+[[tool.importlinter.contracts]]
+name = "shared-storage-is-transport-neutral"
+type = "forbidden"
+source_modules = ["eazy_sdk_accounts.storage"]
+forbidden_modules = ["zapros", "eazy_sdk_browser", "playwright", "selenium"]
+
+# ---------- Когнитивная сложность ----------
+#
+# Пока считается только по браузерному плагину. По `eazy_sdk` порог 15 сейчас
+# нарушают 62 функции — это тот же долг, что и в списке ruff выше, и гасится так же.
+
+[tool.complexipy]
+paths = ["plugins/browser/eazy_sdk_browser"]
+max-complexity-allowed = 15
 
 [tool.mypy]
 python_version = "3.13"
@@ -200,6 +405,6 @@ strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 files = ["eazy_sdk", "tests", "plugins", "scripts", "examples"]
-exclude = ["tests/fixtures/openapi_consumer/consumer_sdk"]
+exclude = ["tests/fixtures/openapi_consumer/consumer_sdk", "plugins/browser/probe"]
 # Lets tests do `import docs_freshness` (they add scripts/ to sys.path at runtime).
 mypy_path = ["scripts", "plugins/openapi", "plugins/xml"]

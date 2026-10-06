@@ -33,9 +33,7 @@ def load_document(path: Path) -> Mapping[str, Any]:
 def projection_import(value: str) -> ProjectionImport:
     requirement, separator, implementation = value.partition("=")
     if not separator or not requirement or not implementation:
-        raise argparse.ArgumentTypeError(
-            "projection must use REQUIREMENT=MODULE:ATTRIBUTE"
-        )
+        raise argparse.ArgumentTypeError("projection must use REQUIREMENT=MODULE:ATTRIBUTE")
     try:
         return ProjectionImport(requirement, implementation)
     except ValueError as exc:

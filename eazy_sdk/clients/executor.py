@@ -443,9 +443,7 @@ class _ProtectionLockRegistry:
     pays after the in-flight one finishes.
     """
 
-    _entries: dict[_ProtectionCacheKey, _ProtectionLockEntry] = field(
-        default_factory=dict
-    )
+    _entries: dict[_ProtectionCacheKey, _ProtectionLockEntry] = field(default_factory=dict)
     _guard: threading.Lock = field(default_factory=threading.Lock)
 
     @asynccontextmanager
@@ -1024,9 +1022,7 @@ class ExecutionCore:
                 fingerprint,
                 rejected=rejected,
             )
-            return state, (
-                (committed_key, state) if committed_key is not None else None
-            )
+            return state, ((committed_key, state) if committed_key is not None else None)
         call_states.pop(policy.identity, None)
         solution = await solve()
         state = _new_managed_state(self.runtime, solution, fingerprint)
@@ -1057,9 +1053,7 @@ class ExecutionCore:
                 if self.runtime._protection_state.get(rejected_key) is rejected_state:
                     self.runtime._protection_state.pop(rejected_key, None)
             cached = self.runtime._protection_state.get(key)
-            if cached is not None and _managed_state_valid(
-                cached, persistence.mode, fingerprint
-            ):
+            if cached is not None and _managed_state_valid(cached, persistence.mode, fingerprint):
                 return cached, key
             self.runtime._protection_state.pop(key, None)
             solution = await acquire()
@@ -1521,9 +1515,7 @@ class _AttemptRun[T]:
             if before_emit is None:
                 continue
             decision = before_emit(
-                PreparedAttemptContext(
-                    self.compiled.plan.operation, state.number, attempt.request
-                )
+                PreparedAttemptContext(self.compiled.plan.operation, state.number, attempt.request)
             )
             if isinstance(decision, Fail):
                 raise decision.error
@@ -1554,9 +1546,7 @@ class _AttemptRun[T]:
                 continue
             decision = await _maybe_await(
                 hook(
-                    AttemptTransportErrorContext(
-                        self.compiled.plan.operation, state.number, error
-                    )
+                    AttemptTransportErrorContext(self.compiled.plan.operation, state.number, error)
                 )
             )
             if isinstance(decision, Fail):
@@ -1828,9 +1818,7 @@ class _RequestBuild:
                 self.values,
                 models=self.run_context.core.serialization.models,
             )
-        correlation = (
-            CorrelationKey(self.state.correlation) if self.state.correlation else None
-        )
+        correlation = CorrelationKey(self.state.correlation) if self.state.correlation else None
         self.document = thaw_value(
             envelope.build_outbound(
                 contract.discriminator, freeze_value(payload), correlation=correlation
@@ -2055,9 +2043,7 @@ def _managed_state_valid(
     mode: ProtectionPersistenceMode,
     fingerprint: str | None,
 ) -> bool:
-    return _identity_matches(state, fingerprint) and _solution_is_shareable(
-        state.solution, mode
-    )
+    return _identity_matches(state, fingerprint) and _solution_is_shareable(state.solution, mode)
 
 
 def _protection_cache_key(
@@ -2068,9 +2054,7 @@ def _protection_cache_key(
 ) -> _ProtectionCacheKey:
     if isinstance(policy, _CompiledChallengePolicy):
         challenge_identity = (
-            policy.challenge_identity(challenge)
-            if policy.challenge_identity is not None
-            else None
+            policy.challenge_identity(challenge) if policy.challenge_identity is not None else None
         )
     else:
         challenge_identity = None
@@ -2126,11 +2110,7 @@ def _find_shared_state(
 ) -> tuple[_ProtectionCacheKey, _ManagedProtectionState] | None:
     if not _is_shared(policy.persistence.mode):
         return None
-    solver = (
-        runtime.solver_bindings.get(policy.solver)
-        if policy.solver is not None
-        else None
-    )
+    solver = runtime.solver_bindings.get(policy.solver) if policy.solver is not None else None
     prefix = _protection_cache_prefix(runtime, policy, solver)
     candidates: list[tuple[_ProtectionCacheKey, _ManagedProtectionState]] = []
     for key, state in tuple(runtime._protection_state.items()):
@@ -2307,8 +2287,7 @@ def _validate_mandatory_protections(
         result_type = _flow_result_type(flow, acquire, verify, solvers)
         if not _result_has_field(result_type, writer.result_field, models):
             raise TypeError(
-                f"{'.'.join(writer.path)}: protection result has no field "
-                f"{writer.result_field!r}"
+                f"{'.'.join(writer.path)}: protection result has no field {writer.result_field!r}"
             )
     return _MandatoryPreparation(tuple(flows), writers)
 
@@ -2420,7 +2399,6 @@ def _resolve_http_crypto(
     return profile, selected_wire
 
 
-
 def _validate_crypto_body(compiled: Any, profile: PayloadCrypto) -> None:
     """The document crypto encrypts must be one semantic JSON body it can replay."""
 
@@ -2504,12 +2482,8 @@ def _compile_http_crypto(
     if selected is None:
         return None
     profile, wire = selected
-    if any(
-        item.scope is CryptoInputScope.CONNECTION for item in profile.inputs
-    ):
-        raise CryptoConfigurationError(
-            "HTTP crypto accepts only operation-scoped inputs"
-        )
+    if any(item.scope is CryptoInputScope.CONNECTION for item in profile.inputs):
+        raise CryptoConfigurationError("HTTP crypto accepts only operation-scoped inputs")
     validate_crypto_runtime(profile, allow_async=allow_async)
     _validate_crypto_body(compiled, profile)
     _validate_crypto_metadata(compiled, profile, wire)
@@ -2520,7 +2494,9 @@ def _compile_http_crypto(
         outbound_model=(
             compiled.body_projection.target
             if compiled.body_projection is not None
-            else root_body.annotation if root_body is not None else None
+            else root_body.annotation
+            if root_body is not None
+            else None
         ),
         inbound_models=_http_inbound_models(compiled.contract),
         json=compiled.contract.wire.json_policy,

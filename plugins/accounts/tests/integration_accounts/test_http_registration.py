@@ -317,9 +317,7 @@ async def test_http_registration_uses_existing_executor_signing_and_session_life
         SignupCredentials,
         service=RegistrationService(),
         store=registration_store,
-        context_factory=lambda: HttpRegistrationContext(
-            RegistrationSdk(client, signing_identity)
-        ),
+        context_factory=lambda: HttpRegistrationContext(RegistrationSdk(client, signing_identity)),
         session_lifecycle=session_lifecycle,
     )
     result = await flow.create(
@@ -403,9 +401,7 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
         SignupCredentials,
         service=CookieRegistrationService(now),
         store=store,
-        context_factory=lambda: HttpRegistrationContext(
-            RegistrationSdk(client, cookie_identity)
-        ),
+        context_factory=lambda: HttpRegistrationContext(RegistrationSdk(client, cookie_identity)),
         session_lifecycle=auth,
     )
 

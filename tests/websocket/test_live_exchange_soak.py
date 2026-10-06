@@ -88,9 +88,7 @@ class ExchangeProtocol:
         if not isinstance(raw, dict):
             return Malformed(ProtocolEnvelopeError("exchange envelope must be an object"))
         discriminator = self._discriminator(raw)
-        return ParsedValue(
-            ProtocolMessage(InboundMessageKind.MESSAGE, discriminator, envelope)
-        )
+        return ParsedValue(ProtocolMessage(InboundMessageKind.MESSAGE, discriminator, envelope))
 
     def classify_close(self, code: int | None) -> CloseDisposition:
         return CloseDisposition.NORMAL if code == 1000 else CloseDisposition.RECONNECT

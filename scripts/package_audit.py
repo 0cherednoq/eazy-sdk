@@ -32,6 +32,7 @@ PACKAGES = {
     ),
     "eazy_sdk_xml": ("eazy_sdk_xml/py.typed", "plugins/xml/pyproject.toml"),
     "eazy_sdk_adaptix": ("eazy_sdk_adaptix/py.typed", "plugins/adaptix/pyproject.toml"),
+    "eazy_sdk_browser": ("eazy_sdk_browser/py.typed", "plugins/browser/pyproject.toml"),
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +64,9 @@ DISTRIBUTION_IMPORTS = {
     "eazy-sdk-xml": ("eazy_sdk_xml",),
     "eazy-sdk-adaptix": ("eazy_sdk_adaptix",),
     "adaptix": ("adaptix",),
+    "playwright": ("playwright",),
+    "pydoll-python": ("pydoll",),
+    "eazy-sdk-browser": ("eazy_sdk_browser",),
 }
 
 FORBIDDEN_CORE = (
@@ -201,6 +205,9 @@ OPTIONAL_MODULES = {
     "eazy_sdk/handlers/httpx.py": "httpx",
     "eazy_sdk/handlers/requests.py": "requests",
     "eazy_sdk/handlers/curl_cffi.py": "curl-cffi",
+    "eazy_sdk_browser/handlers/playwright.py": "playwright",
+    "eazy_sdk_browser/handlers/pydoll.py": "pydoll",
+    "eazy_sdk_browser/integrations/accounts.py": "accounts",
 }
 
 
@@ -294,10 +301,7 @@ def audit(directory: Path) -> None:
                 failures.append(f"{wheel.name}: missing packaged LICENSE text")
             classifiers = metadata.get_all("Classifier", [])
             failures.extend(_import_failures(wheel.name, package, names, metadata, archive))
-            if (
-                "a" in expected_version
-                and "Development Status :: 3 - Alpha" not in classifiers
-            ):
+            if "a" in expected_version and "Development Status :: 3 - Alpha" not in classifiers:
                 failures.append(f"{wheel.name}: alpha release is missing the Alpha classifier")
             if package == "eazy_sdk":
                 failures.extend(
@@ -331,9 +335,7 @@ def audit(directory: Path) -> None:
                     continue
                 source = archive.read(name).decode("utf-8")
                 if name in FORBIDDEN_PHASE21_PATHS and "wire_body" in source:
-                    failures.append(
-                        f"{wheel.name}: removed wire_body operation path in {name}"
-                    )
+                    failures.append(f"{wheel.name}: removed wire_body operation path in {name}")
                 for fragment in FORBIDDEN_PHASE17_SOURCE:
                     if fragment in source:
                         failures.append(
@@ -375,11 +377,7 @@ def audit(directory: Path) -> None:
                 failures.extend(
                     f"{sdist.name}: contains legacy path {path}"
                     for path in FORBIDDEN_CORE
-                    if any(
-                        name.endswith(f"/{path}")
-                        or f"/{path}" in name
-                        for name in names
-                    )
+                    if any(name.endswith(f"/{path}") or f"/{path}" in name for name in names)
                 )
                 failures.extend(
                     f"{sdist.name}: missing phase-29 path {path}"
@@ -396,8 +394,7 @@ def audit(directory: Path) -> None:
                     for fragment in FORBIDDEN_PHASE29_SOURCE:
                         if fragment in source:
                             failures.append(
-                                f"{sdist.name}: removed phase-29 API {fragment!r} "
-                                f"in {member.name}"
+                                f"{sdist.name}: removed phase-29 API {fragment!r} in {member.name}"
                             )
 
     if failures:

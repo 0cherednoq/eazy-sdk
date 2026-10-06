@@ -396,9 +396,7 @@ def test_omittable_without_default_rejected() -> None:
         page: Query[Omittable[int]]
 
     with pytest.raises(PlanError) as captured:
-        inspect_operation_input(
-            Op, operation_id="Op", path="/x", models=default_model_adapters()
-        )
+        inspect_operation_input(Op, operation_id="Op", path="/x", models=default_model_adapters())
     assert "input field 'page' in 'Op' is Omittable but has no default; give it UNSET" in str(
         captured.value
     )

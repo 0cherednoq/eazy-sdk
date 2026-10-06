@@ -213,9 +213,7 @@ def test_sync_and_async_clients_use_the_same_core() -> None:
         async_trace.append(phase)
 
     sync_client = _SyncClientCore(ExecutionRuntime(CAPABILITIES, sync_emit, "https://api.test"))
-    async_client = _AsyncClientCore(
-        ExecutionRuntime(CAPABILITIES, async_emit, "https://api.test")
-    )
+    async_client = _AsyncClientCore(ExecutionRuntime(CAPABILITIES, async_emit, "https://api.test"))
     sync_value = ItemsApi(sync_client, identity=Identity(observer=sync_observer)).items(page=2)
     async_value = asyncio.run(
         AsyncItemsApi(async_client, identity=Identity(observer=async_observer)).items(page=2)
@@ -449,9 +447,7 @@ def test_response_reaction_rebuilds_and_resigns_the_request() -> None:
         emit,
         "https://api.test",
         challenge_policies=(policy,),
-        solver_bindings=SolverBindings(
-            bind_solver(requirement, Solver())
-        ),
+        solver_bindings=SolverBindings(bind_solver(requirement, Solver())),
     )
 
     assert execute_sync(

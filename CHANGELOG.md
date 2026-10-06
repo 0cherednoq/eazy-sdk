@@ -17,6 +17,10 @@ Breaking:
 
 Added:
 
+- Native `PydollDriver` for `pydoll-python>=3,<4` in `eazy_sdk_browser.handlers.pydoll`.
+  It adapts an externally owned `Tab`, shares bounded response capture and browser-side fetch
+  semantics with Playwright, and deliberately leaves browser/context/tab ownership, identity,
+  proxy, concurrency and task retries to an orchestration layer such as `browser_pool`.
 - `when=` on `Text`, `Bytes`, `Empty`, `Extracted` and `Parsed`, the five response
   representations that lacked it. The dict form of `success=`/`errors=` now expresses every
   field of a case except `precedence`, which authors never write.

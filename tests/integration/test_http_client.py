@@ -90,7 +90,8 @@ def test_query_headers_and_manual_cookies_round_trip(
 ) -> None:
     raw = httpx.Client(base_url=http_server.url, headers={}, cookies={})
     with client_from_httpx(raw) as client:
-        response = client.request("GET",
+        response = client.request(
+            "GET",
             "/echo",
             params={"tag": "a,b", "empty": "", "unicode": "привет"},
             headers={"X-Test": "value"},

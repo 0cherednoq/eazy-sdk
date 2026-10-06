@@ -198,10 +198,7 @@ def test_a_model_built_at_runtime_is_collected() -> None:
     registry = default_model_adapters()
     registry.clear_field_cache()
 
-    models = [
-        pydantic.create_model(f"Generated{index}", value=(int, ...))
-        for index in range(200)
-    ]
+    models = [pydantic.create_model(f"Generated{index}", value=(int, ...)) for index in range(200)]
     for generated in models:
         registry.fields(generated)
     assert len(registry._fields or ()) == 200

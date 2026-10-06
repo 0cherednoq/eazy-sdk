@@ -194,9 +194,9 @@ def test_the_policies_reach_no_transport() -> None:
 
 
 def test_no_executor_method_is_longer_than_eighty_lines() -> None:
-    source = pathlib.Path(
-        inspect.getfile(sys.modules["eazy_sdk.clients.executor"])
-    ).read_text(encoding="utf-8")
+    source = pathlib.Path(inspect.getfile(sys.modules["eazy_sdk.clients.executor"])).read_text(
+        encoding="utf-8"
+    )
     long_ones = [
         (node.name, node.end_lineno - node.lineno + 1)
         for node in ast.walk(ast.parse(source))

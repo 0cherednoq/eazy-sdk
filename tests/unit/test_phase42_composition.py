@@ -128,9 +128,10 @@ def test_bind_client_sends_one_router_through_another_transport() -> None:
         headers={"Content-Type": "application/json"},
         content=b'{"url":"payments"}',
     )
-    with Client(base_url=MAIN, handler=main) as main_client, Client(
-        base_url=PAY, handler=payments
-    ) as payments_client:
+    with (
+        Client(base_url=MAIN, handler=main) as main_client,
+        Client(base_url=PAY, handler=payments) as payments_client,
+    ):
         sdk = ShopSdk(main_client, bindings=(bind(CardApi, client=payments_client),))
         sdk.books.get(book_id=1)
         sdk.card.get()

@@ -414,21 +414,16 @@ def audit() -> list[str]:
                         f"removed phase-17 API text {text_fragment}: {path.relative_to(ROOT)}"
                     )
             for match in DIRECT_HTTP_DECORATOR_IMPORT.finditer(text):
-                direct_import_names = set(
-                    re.findall(r"\b[A-Za-z_]\w*\b", match.group(1))
-                )
+                direct_import_names = set(re.findall(r"\b[A-Za-z_]\w*\b", match.group(1)))
                 direct = sorted(direct_import_names & HTTP_DECORATOR_NAMES)
                 if direct:
                     failures.append(
-                        "direct HTTP decorator import remains "
-                        f"{direct}: {path.relative_to(ROOT)}"
+                        f"direct HTTP decorator import remains {direct}: {path.relative_to(ROOT)}"
                     )
             if LEGACY_FACTORY_OPTION.search(text):
                 failures.append(f"legacy client factory option: {path.relative_to(ROOT)}")
             if "wire_body=" in text:
-                failures.append(
-                    f"removed wire_body decorator remains: {path.relative_to(ROOT)}"
-                )
+                failures.append(f"removed wire_body decorator remains: {path.relative_to(ROOT)}")
 
     for module_name, names in HIDDEN_PUBLIC_SYMBOLS.items():
         module = importlib.import_module(module_name)

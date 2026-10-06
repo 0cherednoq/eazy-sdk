@@ -241,8 +241,7 @@ async def test_binding_diagnostics_are_structured_and_do_not_expose_values() -> 
         "phase": "bind",
     }
     assert json.dumps(invalid.value.as_dict(), sort_keys=True) == (
-        '{"code": "invalid_value", "field": "page", '
-        '"operation_id": "search", "phase": "bind"}'
+        '{"code": "invalid_value", "field": "page", "operation_id": "search", "phase": "bind"}'
     )
     for error in (invalid.value, unknown.value):
         assert secret not in str(error)

@@ -110,13 +110,16 @@ def test_candidate_derives_a_stable_name_for_plain_and_generated_callables() -> 
     )
 
     assert projection.fingerprint_name.endswith(":_to_wire")
-    assert BodyProjection(
-        dict[str, object],
-        _to_wire,
-        ProofJsonBody(),
-        name="register-v1",
-        source=RegisterUser,
-    ).fingerprint_name == "register-v1"
+    assert (
+        BodyProjection(
+            dict[str, object],
+            _to_wire,
+            ProofJsonBody(),
+            name="register-v1",
+            source=RegisterUser,
+        ).fingerprint_name
+        == "register-v1"
+    )
 
     first_adaptix = get_converter(RegisterUser, RegisterUser)
     second_adaptix = get_converter(RegisterUser, RegisterUser)
@@ -171,7 +174,7 @@ def _run_checker(checker: str, source: Path) -> subprocess.CompletedProcess[str]
     )
 
 
-POSITIVE_TYPING = r'''# pyright: strict, reportUnknownVariableType=false
+POSITIVE_TYPING = r"""# pyright: strict, reportUnknownVariableType=false
 from collections.abc import Callable
 from typing import TypedDict, assert_type
 
@@ -314,10 +317,10 @@ async def call_async(register_async: AsyncRegisterCall) -> None:
         last_name="Smith",
     )
     assert_type(result, RegisterUserWire)
-'''
+"""
 
 
-NEGATIVE_TYPING = r'''# pyright: strict
+NEGATIVE_TYPING = r"""# pyright: strict
 from typing import TypedDict
 
 from eazy_sdk.request import BodyProjection
@@ -391,7 +394,7 @@ async def invalid_async(register: AsyncRegisterCall) -> None:
         last_name="Smith",
         unknown="value",
     )
-'''
+"""
 
 
 @pytest.mark.parametrize("checker", ["mypy", "basedpyright"])

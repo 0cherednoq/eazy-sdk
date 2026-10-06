@@ -49,6 +49,7 @@ MODELS = [DataclassItem, PydanticItem, MsgspecItem]
 def _instance(model: type[object]) -> object:
     return model(identifier=1, name="x")  # type: ignore[call-arg]
 
+
 CACHING = ModelAdapterRegistry(default_model_adapters().adapters)._adapters_by_type is not None
 """Whether this run has the cache on (P4): the suite must pass either way."""
 
@@ -203,9 +204,7 @@ def test_an_ambiguous_type_is_not_cached() -> None:
         def supports_type(self, annotation: object) -> bool:
             return annotation is Ambiguous
 
-    registry = default_model_adapters().with_adapter(
-        _AlsoClaimsDataclasses(name="dataclass-also")
-    )
+    registry = default_model_adapters().with_adapter(_AlsoClaimsDataclasses(name="dataclass-also"))
 
     with pytest.raises(AmbiguousModelAdapterError):
         registry.adapter_for_type(Ambiguous)

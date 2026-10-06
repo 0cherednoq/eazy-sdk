@@ -41,9 +41,7 @@ def operation(value: object, *more: object) -> RequestScope:
         source = declaration if declaration is not None else item
         operation_id = getattr(source, "operation_id", item)
         if not isinstance(operation_id, str) or not operation_id:
-            raise TypeError(
-                "operation scope requires an operation id or decorated API method"
-            )
+            raise TypeError("operation scope requires an operation id or decorated API method")
         identities.append(operation_id)
     return RequestScope(operation_ids=frozenset(identities))
 
@@ -148,9 +146,7 @@ class Guard[TChallenge]:
             raise ValueError("pass either expires_in or expires_at, not both")
         if expires_in is not None:
             delta = (
-                expires_in
-                if isinstance(expires_in, timedelta)
-                else timedelta(seconds=expires_in)
+                expires_in if isinstance(expires_in, timedelta) else timedelta(seconds=expires_in)
             )
             if delta <= timedelta(0):
                 raise ValueError("expires_in must be positive")
@@ -204,4 +200,3 @@ __all__: list[str] = [
     "host",
     "operation",
 ]
-

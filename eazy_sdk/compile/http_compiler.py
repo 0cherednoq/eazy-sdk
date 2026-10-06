@@ -100,6 +100,7 @@ class EndpointLike(Protocol):
 
     @property
     def operation_type(self) -> type[object] | None: ...
+
     """The class the fields were read from; ``None`` for a raw client call."""
 
     @property
@@ -626,9 +627,7 @@ def _finish_writer_pass(
         mapped = {id(writer.requirement) for writer in private_wire_writers}
         declared = {id(requirement) for requirement in declared_protections}
         if mapped != declared:
-            raise PlanError(
-                "body projection protection writers do not match operation protections"
-            )
+            raise PlanError("body projection protection writers do not match operation protections")
     signature_plan = compile_signatures(tuple(getattr(layout.contract, "signing", ())))
     body_signature_paths = (
         _compile_body_signature_paths(
@@ -826,10 +825,7 @@ def _compile_fingerprint_pass(
             f"{writer.result_field}"
             for writer in writers.private_wire_writers
         ),
-        *(
-            f"managed-private:{'.'.join(writer.path)}"
-            for writer in writers.private_body_writers
-        ),
+        *(f"managed-private:{'.'.join(writer.path)}" for writer in writers.private_body_writers),
         *(f"body-signature:{'.'.join(path)}" for path in writers.body_signature_paths),
     )
     context = (
@@ -938,14 +934,10 @@ def _reserve_private_bindings(
                 output[target] = slot
                 continue
             if not isinstance(target, PrivateBinding):
-                raise PlanError(
-                    f"unsupported private binding target: {type(target).__name__}"
-                )
+                raise PlanError(f"unsupported private binding target: {type(target).__name__}")
             location = RequestLocation(target.location.value)
             canonical_name = (
-                target.name.casefold()
-                if location is RequestLocation.HEADER
-                else target.name
+                target.name.casefold() if location is RequestLocation.HEADER else target.name
             )
             destination = (location, canonical_name)
             if destination in destinations:
@@ -967,12 +959,9 @@ def _reserve_private_bindings(
                         else tuple(descriptors[slot] for slot in body_field_slots.values())
                     )
                     if not body_descriptors or not all(
-                        isinstance(item, JsonBody | JsonField)
-                        for item in body_descriptors
+                        isinstance(item, JsonBody | JsonField) for item in body_descriptors
                     ):
-                        raise PlanError(
-                            "private body bindings currently require a JSON body"
-                        )
+                        raise PlanError("private body bindings currently require a JSON body")
                 slot = cast(
                     ValueSlot[object],
                     ValueSlot(
@@ -1070,13 +1059,9 @@ def _compile_private_wire_writers(
                 *validation_path,
                 field.validation_name or field.name,
             )
-            sources = tuple(
-                item for item in field.metadata if isinstance(item, FromProtection)
-            )
+            sources = tuple(item for item in field.metadata if isinstance(item, FromProtection))
             if len(sources) > 1:
-                raise PlanError(
-                    f"{'.'.join(field_path)}: multiple FromProtection writers"
-                )
+                raise PlanError(f"{'.'.join(field_path)}: multiple FromProtection writers")
             if sources:
                 source = sources[0]
                 writers.append(
@@ -1128,9 +1113,7 @@ def _compile_body_signature_paths(
     if not outputs:
         return ()
     if not isinstance(projection.encoding, JsonBody | FormBody):
-        raise PlanError(
-            "projected body signature outputs require JsonBody or FormBody encoding"
-        )
+        raise PlanError("projected body signature outputs require JsonBody or FormBody encoding")
     paths = tuple(_body_output_path(output) for output in outputs)
     if isinstance(projection.encoding, FormBody) and any(len(path) != 1 for path in paths):
         raise PlanError("form body signature outputs must select one top-level target field")
@@ -1225,18 +1208,14 @@ def _read_pointers(component: object) -> tuple[str, ...]:
     if isinstance(component, JsonProjection):
         return tuple(component.include or ())
     return tuple(
-        pointer
-        for part in getattr(component, "parts", ())
-        for pointer in _read_pointers(part)
+        pointer for part in getattr(component, "parts", ()) for pointer in _read_pointers(part)
     )
 
 
 def _pointer_tokens(pointer: str) -> tuple[str, ...]:
     if not pointer.startswith("/") or pointer == "/":
         raise PlanError(f"signature pointer {pointer!r} must select a body field")
-    return tuple(
-        token.replace("~1", "/").replace("~0", "~") for token in pointer[1:].split("/")
-    )
+    return tuple(token.replace("~1", "/").replace("~0", "~") for token in pointer[1:].split("/"))
 
 
 def _validate_body_writer_paths(
@@ -1261,9 +1240,7 @@ def _validate_overlapping_paths(
         for other in paths[index + 1 :]:
             common = min(len(path), len(other))
             if path[:common] == other[:common]:
-                raise PlanError(
-                    f"{owner} paths overlap: {'.'.join(path)} and {'.'.join(other)}"
-                )
+                raise PlanError(f"{owner} paths overlap: {'.'.join(path)} and {'.'.join(other)}")
 
 
 def _encrypted_name(contract: object) -> str:

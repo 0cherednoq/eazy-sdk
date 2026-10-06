@@ -696,9 +696,7 @@ def _insert_json_output(
         elif isinstance(nested, Mapping):
             copied = dict(nested)
         else:
-            raise PlanError(
-                f"JSON signature output cannot traverse {'.'.join(path)!r}"
-            )
+            raise PlanError(f"JSON signature output cannot traverse {'.'.join(path)!r}")
         current[component] = copied
         current = copied
     terminal = path[-1]

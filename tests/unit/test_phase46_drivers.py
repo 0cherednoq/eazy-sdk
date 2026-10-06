@@ -193,9 +193,9 @@ def test_the_retry_backoff_of_a_synchronous_call_needs_no_loop() -> None:
 
 
 def test_the_drivers_hold_no_decision_logic() -> None:
-    source = pathlib.Path(
-        inspect.getfile(sys.modules["eazy_sdk.driver"])
-    ).read_text(encoding="utf-8")
+    source = pathlib.Path(inspect.getfile(sys.modules["eazy_sdk.driver"])).read_text(
+        encoding="utf-8"
+    )
     for decision in ("RetryTransition", "RedirectTransition", "AttemptState", "budget"):
         assert decision not in source, decision
 
@@ -207,7 +207,7 @@ def test_the_websocket_runtime_stays_asynchronous_on_purpose() -> None:
 
     assert not hasattr(websocket, "WsClient")
     assert hasattr(websocket, "AsyncWsClient")
-    source = pathlib.Path(
-        inspect.getfile(sys.modules["eazy_sdk.websocket.runtime"])
-    ).read_text(encoding="utf-8")
+    source = pathlib.Path(inspect.getfile(sys.modules["eazy_sdk.websocket.runtime"])).read_text(
+        encoding="utf-8"
+    )
     assert "run_sync" not in source

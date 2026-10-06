@@ -30,6 +30,14 @@ jobs:
         run: uv run ruff check
       - name: Mypy
         run: uv run mypy
+      - name: Import contracts
+        run: uv run lint-imports
+      - name: Cognitive complexity
+        run: uv run complexipy --plain --failed
+      # Браузерные тесты пропускаются без Chromium, а не падают, — но тогда они ничего
+      # и не проверяют. Ставим браузер, чтобы адаптер был проверен настоящим движком.
+      - name: Chromium for the browser plugin
+        run: uv run playwright install --with-deps chromium
       - name: Tests
         run: uv run pytest -q
       - name: Absence audit
@@ -64,3 +72,27 @@ jobs:
           name: dist
           path: dist/ci
           if-no-files-found: error
+
+  pydoll:
+    name: pydoll (${{ matrix.requirement }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        requirement: ["pydoll-python==3.0.0", "pydoll-python>=3,<4"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Sync workspace
+        run: uv sync --locked
+      - name: Select Pydoll version
+        run: uv pip install "${{ matrix.requirement }}"
+      - name: Chromium for the browser plugin
+        run: uv run playwright install --with-deps chromium
+      - name: Native Pydoll adapter
+        run: >
+          uv run pytest -q plugins/browser/tests/test_pydoll_handler.py
+          plugins/browser/tests/test_driver_contract.py -k pydoll

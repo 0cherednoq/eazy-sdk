@@ -126,10 +126,14 @@ async def test_projection_and_codec_are_fresh_once_per_retry_attempt() -> None:
 
     assert result.ok
     assert projections == [1, 2]
-    assert documents == captures == [
-        {"envelope": {"value": "visible"}, "attempt": 1},
-        {"envelope": {"value": "visible"}, "attempt": 2},
-    ]
+    assert (
+        documents
+        == captures
+        == [
+            {"envelope": {"value": "visible"}, "attempt": 1},
+            {"envelope": {"value": "visible"}, "attempt": 2},
+        ]
+    )
 
 
 async def test_projection_is_fresh_on_managed_redirect() -> None:
@@ -154,7 +158,12 @@ async def test_projection_is_fresh_on_managed_redirect() -> None:
     await _execute(
         BodyProjection(NestedWire, to_wire, JsonBody(), source=PublicBody),
         handler,
-        config=ClientConfig(resilience=Resilience( auth_retries=0, max_redirects=1, )),
+        config=ClientConfig(
+            resilience=Resilience(
+                auth_retries=0,
+                max_redirects=1,
+            )
+        ),
     )
 
     assert projection_calls == 2
@@ -193,9 +202,7 @@ async def test_standard_json_and_custom_codec_receive_the_same_semantic_document
         custom_handler,
     )
 
-    assert standard == custom == [
-        {"envelope": {"value": "visible"}, "attempt": 7}
-    ]
+    assert standard == custom == [{"envelope": {"value": "visible"}, "attempt": 7}]
 
 
 @dataclass

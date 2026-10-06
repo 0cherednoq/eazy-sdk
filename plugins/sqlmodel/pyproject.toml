@@ -20,7 +20,7 @@ dependencies = [
   "eazy-sdk>=0.2.0a7,<0.3",
   "eazy-sdk-accounts>=0.2.0a7,<0.3",
   "sqlmodel>=0.0.22",
-  "sqlalchemy>=2",
+  "sqlalchemy[asyncio]>=2",
   "pydantic>=2",
   "aiosqlite>=0.20",
 ]

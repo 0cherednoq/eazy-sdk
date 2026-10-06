@@ -97,10 +97,7 @@ class ProjectionImport:
             or not attribute.isidentifier()
             or keyword.iskeyword(attribute)
             or not module
-            or any(
-                not part.isidentifier() or keyword.iskeyword(part)
-                for part in module.split(".")
-            )
+            or any(not part.isidentifier() or keyword.iskeyword(part) for part in module.split("."))
         ):
             raise ValueError(
                 "projection implementation must use a static 'module:attribute' import"
@@ -196,9 +193,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
     )
     for requirement, implementation in projection_imports.items():
         module, attribute = implementation.split(":", 1)
-        lines.append(
-            f"from {module} import {attribute} as {_projection_import_name(requirement)}"
-        )
+        lines.append(f"from {module} import {attribute} as {_projection_import_name(requirement)}")
     if projection_imports:
         lines.append("")
     if ir.session_auth is not None:
@@ -293,9 +288,7 @@ def render_client(ir: OpenAPIIR, *, config: GenerationConfig | None = None) -> s
 def _crypto_registry(ir: OpenAPIIR) -> list[str]:
     operations = tuple(operation for operation in ir.operations if operation.crypto is not None)
     required = tuple(
-        dict.fromkeys(
-            operation.crypto.profile for operation in operations if operation.crypto
-        )
+        dict.fromkeys(operation.crypto.profile for operation in operations if operation.crypto)
     )
     rules: list[str] = []
     for operation in operations:
@@ -310,9 +303,7 @@ def _crypto_registry(ir: OpenAPIIR) -> list[str]:
             ),
         }[crypto.direction]
         trailing_comma = "," if len(directions) == 1 else ""
-        direction_expression = (
-            f"frozenset(({', '.join(directions)}{trailing_comma}))"
-        )
+        direction_expression = f"frozenset(({', '.join(directions)}{trailing_comma}))"
         wire = crypto.wire
         rules.extend(
             [
@@ -776,9 +767,7 @@ def render_signatures(ir: OpenAPIIR) -> str:
     return "\n".join(lines)
 
 
-def _projection_imports(
-    ir: OpenAPIIR, config: GenerationConfig
-) -> dict[str, str]:
+def _projection_imports(ir: OpenAPIIR, config: GenerationConfig) -> dict[str, str]:
     configured: dict[str, str] = {}
     for item in config.projections:
         if item.requirement in configured:
@@ -862,8 +851,7 @@ def generate_package(
                 "from .client import AsyncAPI, SyncAPI, crypto_registry\n\n"
                 '__all__ = ["AsyncAPI", "SyncAPI", "crypto_registry"]\n'
                 if any(operation.crypto is not None for operation in ir.operations)
-                else "from .client import AsyncAPI, SyncAPI\n\n"
-                '__all__ = ["AsyncAPI", "SyncAPI"]\n'
+                else 'from .client import AsyncAPI, SyncAPI\n\n__all__ = ["AsyncAPI", "SyncAPI"]\n'
             ),
         )
         destination = output_directory / package_name
@@ -1003,9 +991,7 @@ def _request_field_names(operation: OperationIR) -> list[str]:
     identities = [(item.location, item.name) for item in operation.parameters]
     if operation.request_body is not None:
         if operation.protections or operation.body_projection is not None:
-            identities.extend(
-                ("body", item.name) for item in _projection_source_fields(operation)
-            )
+            identities.extend(("body", item.name) for item in _projection_source_fields(operation))
         else:
             identities.append(("body", "body"))
     return _normalize_request_identities(identities)
@@ -1051,7 +1037,6 @@ def _operation_errors(operation: OperationIR, model_bindings: Mapping[str, str])
             [f"class {name}(ApiError[{_type(model, model_bindings)}]):", "    pass", "", ""]
         )
     return lines
-
 
 
 def _operation_request_model(
@@ -1214,9 +1199,7 @@ def _operation_body_model(operation: OperationIR, model_bindings: Mapping[str, s
         lines.extend(["", ""])
         source_fields = _projection_source_fields(operation)
         source_names = _request_field_names(operation)[len(operation.parameters) :]
-        lines.append(
-            f"class {_projection_source_model_name(operation)}(TypedDict, total=False):"
-        )
+        lines.append(f"class {_projection_source_model_name(operation)}(TypedDict, total=False):")
         for field, python_name in zip(source_fields, source_names, strict=True):
             annotation = _type(field.type_expression, model_bindings)
             required = (
@@ -1334,13 +1317,8 @@ def _projection_source_fields(operation: OperationIR) -> tuple[Any, ...]:
         return operation.body_projection.source_fields
     body = operation.request_body
     fields = () if body is None or body.wire_fields is None else body.wire_fields
-    managed = {
-        output.target
-        for use in operation.protections
-        for output in use.outputs
-    }
+    managed = {output.target for use in operation.protections for output in use.outputs}
     return tuple(field for field in fields if field.name not in managed)
-
 
 
 def _http_spec(
@@ -1501,7 +1479,6 @@ def _protection_uses(operation: OperationIR) -> str:
 
 def _protection_constant(name: str) -> str:
     return _constant(name)
-
 
 
 def _method(

@@ -179,6 +179,8 @@ def decide_response[T](stage: ResponseDecisionInput[T]) -> ResponseDecision[T]:
         return TerminalResponse(outcome.value, stage.response)
     assert outcome is not None
     return RejectedResponse(outcome)
+
+
 def _require_idempotent(idempotent: bool, source: str) -> None:
     if not idempotent:
         raise UnsafeReplayError(f"{source} requires an idempotent operation")
@@ -226,9 +228,7 @@ def _project_body[T](
     source = _projection_source(compiled, values)
     try:
         using = cast(Any, projection.using)
-        projected = (
-            using(source, injected) if compiled.projection_arity >= 2 else using(source)
-        )
+        projected = using(source, injected) if compiled.projection_arity >= 2 else using(source)
     except Exception:
         raise OperationBindingError(
             code="projection_failed",
@@ -275,8 +275,7 @@ def _project_body[T](
         for path in compiled.body_signature_paths:
             if isinstance(document, Mapping) and _wire_path_present(document, path):
                 raise WriterConflictError(
-                    "body projection and signature output collide at "
-                    f"{'.'.join(path)!r}"
+                    f"body projection and signature output collide at {'.'.join(path)!r}"
                 )
         return document
     except WriterConflictError:
@@ -334,8 +333,7 @@ def _write_private_wire_value(
 ) -> None:
     if wire_path != path and _wire_path_present(document, wire_path):
         raise WriterConflictError(
-            "body projection and private wire writer collide at "
-            f"{'.'.join(wire_path)!r}"
+            f"body projection and private wire writer collide at {'.'.join(wire_path)!r}"
         )
     current = document
     for component in path[:-1]:
@@ -347,8 +345,7 @@ def _write_private_wire_value(
             continue
         if not isinstance(nested, Mapping):
             raise WriterConflictError(
-                "private wire writer cannot traverse occupied path "
-                f"{'.'.join(wire_path)!r}"
+                f"private wire writer cannot traverse occupied path {'.'.join(wire_path)!r}"
             )
         copied = dict(nested)
         current[component] = copied
@@ -356,8 +353,7 @@ def _write_private_wire_value(
     terminal = path[-1]
     if terminal in current:
         raise WriterConflictError(
-            "body projection and private wire writer collide at "
-            f"{'.'.join(wire_path)!r}"
+            f"body projection and private wire writer collide at {'.'.join(wire_path)!r}"
         )
     current[terminal] = copy.deepcopy(value)
 

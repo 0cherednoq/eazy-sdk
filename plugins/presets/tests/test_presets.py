@@ -48,10 +48,10 @@ from eazy_sdk.response import (
 
 FIXTURES = Path(__file__).with_name("fixtures")
 
+
 def _required[T](value: T | None) -> T:
     assert value is not None
     return value
-
 
 
 class SyncRecaptchaApi(SyncApi):
@@ -149,9 +149,7 @@ def test_cloudflare_uses_definitive_documented_header_not_status() -> None:
 def test_cloudflare_unknown_variant_stays_a_match_and_secrets_are_redacted() -> None:
     guard = cloudflare.challenge_pages(scope=host("api.test"))
     scope = ScopeContext("https", "api.test", "/", "GET", OperationIdentity("get"))
-    matched = _inspect_signals(
-        (guard.signal,), challenge_context(b"<html>new mode</html>"), scope
-    )
+    matched = _inspect_signals((guard.signal,), challenge_context(b"<html>new mode</html>"), scope)
     assert isinstance(matched, SignalMatch)
     challenge = cast(cloudflare.CloudflareChallenge, matched.value)
     assert challenge.kind is cloudflare.CloudflareChallengeKind.UNKNOWN
@@ -286,9 +284,7 @@ def test_widget_unknown_oversized_and_custom_parser_paths() -> None:
             cloudflare.TurnstileChallenge("custom", cloudflare.TurnstileMode.MANAGED)
         )
 
-    replaced = preset.replace_parser(
-        callable_parser(cloudflare.TurnstileChallenge, parse_custom)
-    )
+    replaced = preset.replace_parser(callable_parser(cloudflare.TurnstileChallenge, parse_custom))
     custom = _inspect_signals(
         (replaced.signal,),
         challenge_context(fixture("turnstile_managed.html"), marker=None),
@@ -353,9 +349,7 @@ async def test_v3_before_call_solves_and_applies_before_first_send(client_type: 
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        solver_bindings=SolverBindings(
-            bind_solver(_required(preset.solver), solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(_required(preset.solver), solver)),
     )
     client = client_type(runtime)
     if client_type is _AsyncClientCore:
@@ -403,9 +397,7 @@ async def test_preclearance_until_expiry_is_session_scoped_singleflight() -> Non
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        solver_bindings=SolverBindings(
-            bind_solver(_required(preset.solver), solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(_required(preset.solver), solver)),
     )
     client = _AsyncClientCore(runtime)
     api = AsyncClearanceApi(client)
@@ -467,9 +459,7 @@ def test_challenge_page_reaction_rebuilds_cookie_before_replay() -> None:
         emit,
         "https://api.test",
         challenge_policies=(preset,),
-        solver_bindings=SolverBindings(
-            bind_solver(_required(preset.solver), solver)
-        ),
+        solver_bindings=SolverBindings(bind_solver(_required(preset.solver), solver)),
     )
     result = GuardedApi(_SyncClientCore(runtime)).guarded(options=CallOptions(max_attempts=2))
     assert result == {"ok": True}
@@ -485,9 +475,7 @@ def test_with_protection_is_immutable_and_rejects_duplicate_policy_identity() ->
     assert configured.bundle.challenge_policies == (preset,)
     assert configured.bundle.solver_bindings == ()
     with pytest.raises(ValueError, match="duplicate protection policy identity"):
-        configured.with_protection(
-            cloudflare.challenge_pages(scope=host("other.test"))
-        )
+        configured.with_protection(cloudflare.challenge_pages(scope=host("other.test")))
 
 
 @pytest.mark.asyncio
@@ -556,9 +544,7 @@ def test_incompatible_application_is_rejected_before_solver_or_transport() -> No
         emit,
         "https://api.test",
         before_call_policies=(preset,),
-        solver_bindings=SolverBindings(
-            bind_solver(_required(preset.solver), Solver())
-        ),
+        solver_bindings=SolverBindings(bind_solver(_required(preset.solver), Solver())),
     )
     with pytest.raises(PlanError, match="private binding conflicts"):
         IncompatibleApi(_SyncClientCore(runtime)).protected()

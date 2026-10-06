@@ -261,7 +261,8 @@ async def test_oidc_authorization_code_userinfo_and_refresh_round_trip(
         cookies={},
         follow_redirects=False,
     ) as authorization_client:
-        authorization = await authorization_client.request("GET",
+        authorization = await authorization_client.request(
+            "GET",
             "/oauth/authorize",
             params={
                 "client_id": client_id,

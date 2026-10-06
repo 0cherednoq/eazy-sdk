@@ -211,7 +211,7 @@ def test_operation_base_before_basemodel_is_still_refused() -> None:
 # --- one status, several shapes: a list, never a tuple --------------------------------
 
 
-SEVERAL_SHAPES = r'''# pyright: strict
+SEVERAL_SHAPES = r"""# pyright: strict
 from dataclasses import dataclass
 
 from eazy_sdk import Http, HttpOperation
@@ -235,7 +235,7 @@ class Listed(HttpOperation[OrderV1]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Tupled(HttpOperation[OrderV1]):
     __http__ = Http.get("/orders", success={200: (OrderV1, OrderV2)})
-'''
+"""
 
 
 def test_a_tuple_of_shapes_is_rejected_by_the_checker() -> None:

@@ -177,9 +177,7 @@ def _read_envelope_path(root: FrozenValue, path: tuple[str, ...]) -> object:
     current = thaw_value(root)
     for component in path:
         if not isinstance(current, dict) or component not in current:
-            raise CryptoConfigurationError(
-                f"missing WebSocket crypto metadata: {'.'.join(path)}"
-            )
+            raise CryptoConfigurationError(f"missing WebSocket crypto metadata: {'.'.join(path)}")
         current = current[component]
     return current
 

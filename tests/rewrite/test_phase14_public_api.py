@@ -445,8 +445,10 @@ async def test_session_auth_refreshes_a_selected_session_after_401_and_replays()
     )
 
     response = await _protected_call(
-        client, auth.scheme, identity=Identity(auth=(auth,), key_provider=key_provider),
-        signing=(signature,)
+        client,
+        auth.scheme,
+        identity=Identity(auth=(auth,), key_provider=key_provider),
+        signing=(signature,),
     )
     await client.aclose()
 
@@ -988,7 +990,12 @@ async def test_retry_policy_safe_retries_status_with_bounded_deterministic_backo
         sleep=sleep,
         random_source=lambda: 0.5,
     )
-    config = ClientConfig(resilience=Resilience( retry=policy, auth_retries=0, ))
+    config = ClientConfig(
+        resilience=Resilience(
+            retry=policy,
+            auth_retries=0,
+        )
+    )
     identity = Identity(observer=lambda phase, value: observed.append((phase, value)))
     client = client_from_httpx(
         httpx.AsyncClient(
@@ -1047,7 +1054,12 @@ async def test_retry_none_emits_exactly_once() -> None:
             headers={},
             cookies={},
         ),
-        config=ClientConfig(resilience=Resilience( retry=RetryPolicy.none(), auth_retries=0, )),
+        config=ClientConfig(
+            resilience=Resilience(
+                retry=RetryPolicy.none(),
+                auth_retries=0,
+            )
+        ),
     )
     response = await _protected_call(client, None)
     await client.aclose()

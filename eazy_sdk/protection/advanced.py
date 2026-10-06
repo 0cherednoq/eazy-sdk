@@ -443,15 +443,11 @@ def per_attempt() -> ProtectionPersistence:
     return ProtectionPersistence(ProtectionPersistenceMode.PER_ATTEMPT)
 
 
-def until_expiry(
-    *, scope: ProtectionStateKey = _CLIENT_STATE_KEY
-) -> ProtectionPersistence:
+def until_expiry(*, scope: ProtectionStateKey = _CLIENT_STATE_KEY) -> ProtectionPersistence:
     return ProtectionPersistence(ProtectionPersistenceMode.UNTIL_EXPIRY, scope)
 
 
-def until_rejected(
-    *, scope: ProtectionStateKey = _CLIENT_STATE_KEY
-) -> ProtectionPersistence:
+def until_rejected(*, scope: ProtectionStateKey = _CLIENT_STATE_KEY) -> ProtectionPersistence:
     return ProtectionPersistence(ProtectionPersistenceMode.UNTIL_REJECTED, scope)
 
 
@@ -883,9 +879,7 @@ def solution_fields[TSolution](
         (body, private_body),
     ):
         if destinations is not None:
-            targets.extend(
-                factory(name, field=field) for name, field in destinations.items()
-            )
+            targets.extend(factory(name, field=field) for name, field in destinations.items())
     if cookie_set is not None:
         if not isinstance(cookie_set, PrivateCookieSetBinding):
             raise ProtectionConfigurationError(
@@ -1008,9 +1002,7 @@ def _detector_model[TChallenge](
         return cast(type[TChallenge], object)
     annotation = hints.get("return")
     candidates = (
-        get_args(annotation)
-        if get_origin(annotation) in {Union, UnionType}
-        else (annotation,)
+        get_args(annotation) if get_origin(annotation) in {Union, UnionType} else (annotation,)
     )
     for candidate in candidates:
         if isinstance(candidate, type) and candidate is not type(None):

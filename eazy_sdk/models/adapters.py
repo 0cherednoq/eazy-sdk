@@ -561,8 +561,7 @@ def _compile_loader(annotation: object, registry: ModelAdapterRegistry) -> Plann
             if not isinstance(value, Mapping):
                 raise ModelAdapterError(f"expected mapping, got {type(value).__name__}")
             return {
-                reg._load(key_type, key): reg._load(item_type, item)
-                for key, item in value.items()
+                reg._load(key_type, key): reg._load(item_type, item) for key, item in value.items()
             }
 
         return _dict
@@ -879,9 +878,7 @@ class TypedDictModelAdapter:
         registry: ModelAdapterRegistry,
     ) -> object:
         if not isinstance(value, Mapping):
-            raise ModelAdapterError(
-                f"expected mapping for TypedDict, got {type(value).__name__}"
-            )
+            raise ModelAdapterError(f"expected mapping for TypedDict, got {type(value).__name__}")
         return dict(value)
 
     def load[T](

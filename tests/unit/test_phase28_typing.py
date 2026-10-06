@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-POSITIVE = r'''# pyright: strict
+POSITIVE = r"""# pyright: strict
 from dataclasses import dataclass
 from typing import assert_type
 
@@ -110,10 +110,10 @@ advanced_policy = challenge_policy(
     replay=safe_method(),
 )
 assert_type(advanced_policy, ChallengePolicy[Challenge, Clearance])
-'''
+"""
 
 
-NEGATIVE = r'''# pyright: strict
+NEGATIVE = r"""# pyright: strict
 from eazy_sdk import ClientConfig
 from eazy_sdk.protection import SolveContext
 from eazy_sdk.protection import ResponseSignal
@@ -131,7 +131,7 @@ class BadSolver:
 
 guard = cloudflare.challenge_pages(scope=host("api.example"), solver=BadSolver())
 config = ClientConfig().with_protection(object())
-'''
+"""
 
 
 def _run(checker: str, source: Path) -> subprocess.CompletedProcess[str]:

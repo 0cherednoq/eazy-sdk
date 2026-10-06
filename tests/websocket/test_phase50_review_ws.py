@@ -90,6 +90,5 @@ async def test_a_real_http_operation_is_still_refused() -> None:
             get_order = op(GetOrder)
 
     assert str(failure.value) == (
-        "HTTP operation get_order is published on Mixed; "
-        "an AsyncWsApi carries WebSocket operations"
+        "HTTP operation get_order is published on Mixed; an AsyncWsApi carries WebSocket operations"
     )

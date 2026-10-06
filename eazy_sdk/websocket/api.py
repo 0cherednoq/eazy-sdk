@@ -131,14 +131,10 @@ class _WsOperationDescriptor[TApi, **P, T]:
         return replace(
             self.declaration,
             crypto=(
-                defaults.crypto
-                if isinstance(declared_crypto, _InheritCrypto)
-                else declared_crypto
+                defaults.crypto if isinstance(declared_crypto, _InheritCrypto) else declared_crypto
             ),
             encrypted=(
-                defaults.encrypted
-                if isinstance(declared_wire, _InheritCrypto)
-                else declared_wire
+                defaults.encrypted if isinstance(declared_wire, _InheritCrypto) else declared_wire
             ),
             crypto_inherit=self.crypto is _INHERIT_CRYPTO and defaults.crypto is None,
         )

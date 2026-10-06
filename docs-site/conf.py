@@ -6,9 +6,9 @@ import tomllib
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_METADATA = tomllib.loads(
-    (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-)["project"]
+PROJECT_METADATA = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+    "project"
+]
 
 project = "Eazy SDK"
 author = "Eazy SDK contributors"

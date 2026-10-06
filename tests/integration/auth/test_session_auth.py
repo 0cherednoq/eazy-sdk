@@ -147,7 +147,8 @@ class ScopedAuthSdk:
         return f"{self._origin}{path}" if self._origin else path
 
     async def login_bearer(self, credentials: LoginCredentials) -> BearerSession:
-        response = await self._client.request("POST",
+        response = await self._client.request(
+            "POST",
             self._url("/session/login"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -163,7 +164,8 @@ class ScopedAuthSdk:
         return BearerSession(access_token, refresh_token)
 
     async def login_cookie(self, credentials: LoginCredentials) -> CookieSession:
-        response = await self._client.request("POST",
+        response = await self._client.request(
+            "POST",
             self._url("/session/login"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -176,7 +178,8 @@ class ScopedAuthSdk:
         return CookieSession(session_ids[0])
 
     async def login_bearer_from_headers(self, credentials: LoginCredentials) -> BearerSession:
-        response = await self._client.request("POST",
+        response = await self._client.request(
+            "POST",
             self._url("/session/login-header"),
             json={"username": credentials.username, "password": credentials.password},
         )
@@ -190,7 +193,8 @@ class ScopedAuthSdk:
         return BearerSession(access_token, refresh_token)
 
     async def refresh_bearer(self, session: BearerSession) -> BearerSession:
-        response = await self._client.request("POST",
+        response = await self._client.request(
+            "POST",
             self._url("/session/refresh"),
             json={"refresh_token": session.refresh_token},
         )

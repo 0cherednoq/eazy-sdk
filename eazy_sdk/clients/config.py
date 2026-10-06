@@ -129,16 +129,13 @@ class ClientConfig:
         written: dict[str, str] = {}
         for host in self.errors:
             if not isinstance(host, str) or not host or ":" in host:
-                raise TypeError(
-                    f"ClientConfig.errors key {host!r} must be a host without a port"
-                )
+                raise TypeError(f"ClientConfig.errors key {host!r} must be a host without a port")
             # A request is matched against the lowercase hostname, so two spellings of one
             # host are two answers to the same question.
             key = host.lower()
             if key in written:
                 raise TypeError(
-                    f"ClientConfig.errors names host {key!r} twice: "
-                    f"{written[key]!r} and {host!r}"
+                    f"ClientConfig.errors names host {key!r} twice: {written[key]!r} and {host!r}"
                 )
             written[key] = host
 

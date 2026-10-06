@@ -73,6 +73,11 @@ operation class, `pages()`/`items()` on the bound operation, every page an ordin
 condition ranked above status precision in arbitration, and a service envelope declared on the
 model (`__envelope__ = Envelope(succeeds=..., payload=...)`) so a business failure inside a 200
 becomes an ordinary `ApiError`.
+[Phase 54](54-response-tags.md) replaces that temporary model-level verdict with response facts:
+`Const(...)` tags select the case and `Payload[T]` names the value returned to the caller.
+[Phase 55](55-pydoll-browser-adapter.md) adds a native Pydoll 3 page adapter to
+`eazy_sdk_browser`; browser processes, contexts, leases, proxies and task retries remain owned by
+an external orchestration layer such as `browser_pool`.
 
 ## Цель
 

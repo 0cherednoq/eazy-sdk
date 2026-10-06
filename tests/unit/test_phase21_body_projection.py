@@ -107,9 +107,7 @@ def test_public_projection_compiles_unplaced_source_as_logical_slots() -> None:
     assert compiled.input_fields[0].is_projection_source
     assert tuple(descriptor.signature.parameters) == ("self", "value")
     phase_kinds = tuple(node.kind for node in compiled.plan.phases)
-    assert phase_kinds.index(PlanNodeKind.BODY_PROJECTION) < phase_kinds.index(
-        PlanNodeKind.PREPARE
-    )
+    assert phase_kinds.index(PlanNodeKind.BODY_PROJECTION) < phase_kinds.index(PlanNodeKind.PREPARE)
 
 
 def test_projection_source_can_be_a_structural_subset_of_public_input() -> None:

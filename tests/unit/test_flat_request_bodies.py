@@ -65,6 +65,8 @@ class BodyApi(SyncApi):
         request: Annotated[FlatJsonRequest, JsonBody()],
     ) -> object:
         raise NotImplementedError
+
+
 def _compiled(name: str, *, body_order: tuple[str, ...] | None = None) -> CompiledContract[Any]:
     descriptor = getattr(BodyApi, name)
     declaration = descriptor.resolve()
@@ -108,9 +110,7 @@ def test_flat_json_omits_absent_optional_field() -> None:
 
 
 def test_typed_dict_root_body_is_validated_and_serialized_as_a_mapping() -> None:
-    body = _buffered(
-        _prepare("typed_dict_body", {"request": {"name": "Ada", "count": 2}})
-    )
+    body = _buffered(_prepare("typed_dict_body", {"request": {"name": "Ada", "count": 2}}))
     assert body.content == b'{"name":"Ada","count":2}'
 
     compiled = _compiled("typed_dict_body")

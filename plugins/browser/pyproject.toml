@@ -1,0 +1,42 @@
+# Браузерный плагин Eazy SDK. Проверки запускаются из корня репозитория.
+
+[project]
+name = "eazy-sdk-browser"
+version = "0.2.0a7"
+description = "Declarative browser SDKs over any driver: playwright, selenium, camoufox, pydoll."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Eazy SDK contributors" }]
+keywords = ["sdk", "browser", "playwright", "selenium", "page-object", "declarative"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+# Ядро плагина не зависит ни от одного драйвера: транспорт приходит адаптером.
+# Ядро eazy-sdk обязательно: ошибки, профиль возможностей и его шкала — общие.
+dependencies = ["eazy-sdk>=0.2.0a7,<0.3", "zapros==0.16.0"]
+
+[project.optional-dependencies]
+playwright = ["playwright>=1.55"]
+camoufox = ["camoufox>=0.4"]
+selenium = ["selenium>=4.25"]
+pydoll = ["pydoll-python>=3,<4"]
+# Аккаунты и сессии в общем хранилище: вход не переписывается в каждом SDK.
+accounts = ["eazy-sdk-accounts>=0.2.0a7,<0.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["eazy_sdk_browser"]
+
+[tool.uv.sources]
+eazy-sdk = { workspace = true }
+eazy-sdk-accounts = { workspace = true }

@@ -41,13 +41,9 @@ from eazy_sdk.serialization import BackendCapabilityError, Serialization
 BASE = "https://sign.test"
 KEY = SigningKeyRequirement("sign")
 
-READS_JSON_BODY = hmac_sha256(
-    key=KEY, base=canonical_json(), output=header_output("X-Signature")
-)
+READS_JSON_BODY = hmac_sha256(key=KEY, base=canonical_json(), output=header_output("X-Signature"))
 WRITES_JSON_BODY = hmac_sha256(key=KEY, base=path(), output=body_output("sig"))
-NO_BODY_SIGNATURE = hmac_sha256(
-    key=KEY, base=body_digest(), output=header_output("X-Signature")
-)
+NO_BODY_SIGNATURE = hmac_sha256(key=KEY, base=body_digest(), output=header_output("X-Signature"))
 
 
 class Receipt(BaseModel):

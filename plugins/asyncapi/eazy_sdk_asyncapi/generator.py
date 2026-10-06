@@ -216,9 +216,7 @@ def _render_crypto_registry(ir: AsyncAPIIR) -> list[str]:
     operations = tuple(operation for operation in ir.operations if operation.crypto is not None)
     required = tuple(
         dict.fromkeys(
-            str(operation.crypto["profile"])
-            for operation in operations
-            if operation.crypto
+            str(operation.crypto["profile"]) for operation in operations if operation.crypto
         )
     )
     rules: list[str] = []
@@ -235,9 +233,7 @@ def _render_crypto_registry(ir: AsyncAPIIR) -> list[str]:
             ),
         }[direction]
         trailing_comma = "," if len(directions) == 1 else ""
-        direction_expression = (
-            f"frozenset(({', '.join(directions)}{trailing_comma}))"
-        )
+        direction_expression = f"frozenset(({', '.join(directions)}{trailing_comma}))"
         wire = cast(Mapping[str, Any], crypto["wire"])
         rules.extend(
             [

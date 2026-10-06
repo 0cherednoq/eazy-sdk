@@ -39,9 +39,7 @@ class Identity:
             raise TypeError("Identity.auth is a tuple of configured Auth bindings")
         if any(not isinstance(item, Auth) for item in self.auth):
             raise TypeError("Identity.auth accepts only configured Auth bindings")
-        if self.dependencies is not None and not isinstance(
-            self.dependencies, DependencyRegistry
-        ):
+        if self.dependencies is not None and not isinstance(self.dependencies, DependencyRegistry):
             raise TypeError("Identity.dependencies must be a DependencyRegistry")
 
 
@@ -64,9 +62,7 @@ def _identity_scope(identity: Identity | None) -> _IdentityScope:
     for binding in identity.auth:
         for scheme, provider in binding._runtime_providers()._entries():
             if providers.get(scheme) is not None:
-                raise PlanError(
-                    f"identity registers {scheme.diagnostic_name!r} twice"
-                )
+                raise PlanError(f"identity registers {scheme.diagnostic_name!r} twice")
             providers.register(scheme, provider)
     return _IdentityScope(
         providers,

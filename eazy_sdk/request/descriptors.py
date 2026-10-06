@@ -123,8 +123,7 @@ class BodyProjection[TSource, TWire]:
             JsonBody | FormBody | MultipartBody | BodyCodec,
         ):
             raise TypeError(
-                "body projection encoding must be JsonBody, FormBody, MultipartBody, "
-                "or BodyCodec"
+                "body projection encoding must be JsonBody, FormBody, MultipartBody, or BodyCodec"
             )
         if self.name is not None and not self.name:
             raise ValueError("body projection name must not be empty")

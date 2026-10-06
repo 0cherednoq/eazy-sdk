@@ -8,10 +8,7 @@ from pathlib import Path
 
 import pytest
 
-PAGE = (
-    Path(__file__).resolve().parents[2]
-    / "docs-site/src/content/docs/more/migration.mdx"
-)
+PAGE = Path(__file__).resolve().parents[2] / "docs-site/src/content/docs/more/migration.mdx"
 ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|")
 
 

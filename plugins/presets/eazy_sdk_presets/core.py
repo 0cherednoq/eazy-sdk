@@ -53,9 +53,7 @@ class PresetChallengePolicy(ChallengePolicy[Any, Any]):
     def to_bundle(self) -> ProtectionBundle:
         return ProtectionBundle(
             challenge_policies=(self,),
-            solver_bindings=(
-                (self.solver_binding,) if self.solver_binding is not None else ()
-            ),
+            solver_bindings=((self.solver_binding,) if self.solver_binding is not None else ()),
         )
 
     def replace_parser(self, parser: Any) -> PresetChallengePolicy:
@@ -69,9 +67,9 @@ class PresetChallengePolicy(ChallengePolicy[Any, Any]):
 
     def extend_detection(self, predicate: Any) -> PresetChallengePolicy:
         def combined(context: Any) -> bool:
-            return (
-                self.signal.prefilter is None or self.signal.prefilter(context)
-            ) and bool(predicate(context))
+            return (self.signal.prefilter is None or self.signal.prefilter(context)) and bool(
+                predicate(context)
+            )
 
         return replace(
             self,
@@ -96,9 +94,7 @@ class PresetBeforeCallPolicy(BeforeCallPolicy[Any, Any]):
     def to_bundle(self) -> ProtectionBundle:
         return ProtectionBundle(
             before_call_policies=(self,),
-            solver_bindings=(
-                (self.solver_binding,) if self.solver_binding is not None else ()
-            ),
+            solver_bindings=((self.solver_binding,) if self.solver_binding is not None else ()),
         )
 
     def replace_application(self, target: PrivateBindings[Any]) -> PresetBeforeCallPolicy:

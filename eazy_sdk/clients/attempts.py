@@ -164,14 +164,10 @@ class TransportRetryPolicy:
             if outcome.retries_configured:
                 from eazy_sdk.clients.base import UnsafeReplayError
 
-                return Fail(
-                    UnsafeReplayError("retry policy requires an idempotent operation")
-                )
+                return Fail(UnsafeReplayError("retry policy requires an idempotent operation"))
             return Fail(outcome.error)
         if state.budgets.transport <= 0:
-            return Continue(
-                state.next("transport-retry", reason="middleware proposed a replay")
-            )
+            return Continue(state.next("transport-retry", reason="middleware proposed a replay"))
         return Continue(
             state.next(
                 "transport-retry",
@@ -195,9 +191,7 @@ class ResponseRetryPolicy:
         consumes_transport: bool,
     ) -> Decision[Any]:
         if not consumes_transport:
-            return Continue(
-                state.next(kind, reason="middleware proposed a replay"), patch=patch
-            )
+            return Continue(state.next(kind, reason="middleware proposed a replay"), patch=patch)
         return Continue(
             state.next(
                 kind,

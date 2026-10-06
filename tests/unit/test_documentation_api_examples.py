@@ -138,9 +138,7 @@ def _assert_supported_operation_style(tree: ast.AST, location: str) -> int:
         checked += 1
         positional = [*node.args.posonlyargs, *node.args.args]
         positional_request_parameters = [
-            argument.arg
-            for argument in positional[1:]
-            if argument.arg != "options"
+            argument.arg for argument in positional[1:] if argument.arg != "options"
         ]
         assert not positional_request_parameters, (
             f"{location}:{node.lineno} stores request fields as positional parameters: "
@@ -151,13 +149,10 @@ def _assert_supported_operation_style(tree: ast.AST, location: str) -> int:
                 f"{location}:{node.lineno} variadic request input must be Unpack[TypedDict]"
             )
             direct_request_parameters = [
-                argument.arg
-                for argument in node.args.kwonlyargs
-                if argument.arg != "options"
+                argument.arg for argument in node.args.kwonlyargs if argument.arg != "options"
             ]
             assert not direct_request_parameters, (
-                f"{location}:{node.lineno} mixes direct request fields with "
-                "Unpack[TypedDict]"
+                f"{location}:{node.lineno} mixes direct request fields with Unpack[TypedDict]"
             )
     return checked
 

@@ -69,9 +69,7 @@ class SyncProtectedApi(SyncApi):
 
 
 def _challenge(request: Request, body: bytes = b'{"revision":1}') -> Response:
-    return Response(
-        403, [("Content-Type", "application/json")], content=body, request=request
-    )
+    return Response(403, [("Content-Type", "application/json")], content=body, request=request)
 
 
 def _ok(request: Request) -> Response:
@@ -160,14 +158,17 @@ def test_policies_are_validating_dataclasses_not_protocols() -> None:
     assert isinstance(policy, ChallengePolicy)
     assert policy.signal.model is Challenge
     assert not hasattr(ChallengePolicy, "_is_runtime_protocol")
-    assert advanced.challenge_policy(
-        scope=policy.scope,
-        signal=policy.signal,
-        solver=policy.solver,
-        apply=policy.apply,
-        persistence=policy.persistence,
-        replay=policy.replay,
-    ).identity == "phase32.guard"
+    assert (
+        advanced.challenge_policy(
+            scope=policy.scope,
+            signal=policy.signal,
+            solver=policy.solver,
+            apply=policy.apply,
+            persistence=policy.persistence,
+            replay=policy.replay,
+        ).identity
+        == "phase32.guard"
+    )
     with pytest.raises(ValueError, match="identity"):
         ChallengePolicy(
             identity="",

@@ -1,6 +1,6 @@
 # Eazy SDK rewrite status
 
-Updated: 2026-09-08.
+Updated: 2026-10-07.
 
 This file is evidence-driven: a phase is complete only when its documented exit criteria have
 implementation and verification evidence.
@@ -37,6 +37,24 @@ implementation and verification evidence.
 | 27 | complete | EX-00–EX-03: 23-name extension SPI, author reference, alpha metadata correction and full release evidence. | None. |
 | 28 | complete | AP-00–AP-07: tracked workspace metadata, per-attempt identity, capability/identity preflight, immutable bundles, replay/public cleanup, bounded locks, docs and all release gates pass. | None. |
 | 29 | complete | AS-00–AS-06: high-level guard builder, session-owned affinity, identity/capability removal, 19-name public API, 49-name advanced SPI, migrated presets/docs and all release gates. | None. |
+| 55 | complete | Native Pydoll 3 adapter, shared live contract suite, bounded capture, state/fetch/lifecycle support, wheel isolation and `browser_pool` acceptance all have current-checkout evidence. | None. |
+
+## Phase 55 planning record (2026-10-06)
+
+State: `complete`; final implementation and verification evidence is recorded below.
+
+Completed planning evidence:
+
+- `55-pydoll-browser-adapter.md` fixes the supported Pydoll major, native `Tab` boundary,
+  capability profile, lifecycle ownership, increments, tests, exit criteria and release gates;
+- the local `browser_pool` Pydoll driver and official Pydoll repository/guides were inspected as
+  implementation references;
+- `git diff --check -- docs/implementation/README.md docs/implementation/STATUS.md` passed;
+- `$env:UV_CACHE_DIR = (Resolve-Path '.uv-cache').Path; uv run python
+  scripts/docs_freshness.py check` passed: `OK: 71 page(s) fresh`.
+
+Remaining work: none; increments 55.0 through 55.8 and the concrete downstream gate are
+recorded in the final phase section below.
 
 ## Production authoring audit remediation planning (2026-09-01)
 
@@ -5010,8 +5028,8 @@ change folded into 53.5.
   importing or defining any of them, and `errors.py` used a `TYPE_CHECKING`-only import in a class
   base, so the package raised `NameError` on import. That is why phase 53's §7.1 was never
   measured; it is measured now.
-- The consumer's `pyproject.toml` points `eazy-sdk` and `eazy-sdk-html` at this checkout
-  (`path = "A:/work/stardust/lib/RespLens", editable = true`) instead of the `v0.2.0a7` tag,
+- The consumer's `pyproject.toml` points `eazy-sdk` and `eazy-sdk-html` at the current checkout
+  (editable) instead of the `v0.2.0a7` tag,
   because tags do not exist in any release yet. It carries a comment saying to point it back at a
   tag once the next release is cut. The consumer's changes are **not committed**: that repository
   has its own staged, half-finished state that is not this phase's to touch.
@@ -5067,3 +5085,120 @@ model projects to a payload (`Responses[Page](success=(Success(200, Json(PageEnv
 Relaxing it to `Any` would match `errors=`, which is already `Error[Any]`, and would cost nothing
 in the dictionary form, where no checker ties the parameter to `HttpOperation[T]` anyway. It is a
 public generic, so it waits for a decision rather than being changed in passing.
+
+## Phase 55 — native Pydoll 3 browser adapter (2026-10-07)
+
+### State
+
+Complete. Increments 55.0 through 55.8 and all twelve exit criteria in
+`55-pydoll-browser-adapter.md` have implementation and current-state evidence below.
+
+### Delivered
+
+- `eazy_sdk_browser.handlers.pydoll` adapts an externally owned native Pydoll 3 `Tab`. It owns
+  only its callback ids, response buffer and body-reading tasks; it never starts or closes the
+  browser, context or tab and never disables a domain another attachment may use. The optional
+  backend remains out of both core export surfaces.
+- `PYDOLL_PROFILE` declares verified network, page-request, navigation and rich-text support,
+  `BEST_EFFORT` session state and unsupported shadow DOM. `capture=None` lowers only network.
+- `PydollElement` and `PydollDriver` implement CSS/XPath and the two portable text selectors,
+  visible candidate ordering, first/last/collections, nested cross-origin iframes, every element
+  action, three navigation waits, main-document navigation events, cookies with attributes,
+  current-origin localStorage, browser-side fetch in the root or iframe and rich-text events.
+  Dynamic attributes are read from the live DOM rather than Pydoll's construction-time snapshot.
+- `find()` enforces one monotonic hard deadline around all candidate probes. Missing-node Pydoll
+  probes remain non-waiting, while transport/closed-tab failures become `TransportError`.
+- `_response_buffer.py` and `_page_fetch.py` are shared by Playwright and Pydoll, so mark/eviction
+  and page-fetch encoding have one implementation. Capture correlates response/finish events,
+  filters resources before body reads, enforces declared, actual and total byte limits, preserves
+  monotonic positions and retains dropped-body metadata.
+- `test_driver_contract.py` is one real-Chromium suite for both adapters. It covers structural
+  protocols, selector dialect and ordering, actions/events, all load states, same-document
+  navigation, cross-origin iframe search/fetch, cookies/localStorage/context identity, binary and
+  redirected fetch, network capture limits, one-deadline search and idempotent non-owning close.
+  Pydoll-only tests retain API-version, foreign-callback and closed-tab assertions.
+- `eazy-sdk-browser[pydoll]` pins `pydoll-python>=3,<4`; package auditing understands both browser
+  drivers and the accounts integration. The browser distribution directly declares Zapros because
+  its public integration module imports it. CI runs the Pydoll suite at 3.0.0 and the current `<4`.
+- The isolated extras gate exposed an existing async SQLAlchemy packaging hole; the SQLModel
+  plugin now declares `sqlalchemy[asyncio]>=2`, so a clean wheel install receives `greenlet`.
+- README, site guide/reference, the dedicated browser-pool ownership guide and changelog state the
+  native-Tab boundary, Chromium-only backend, supported major, honest capability limits and the
+  split between task/context orchestration and one declarative Eazy site operation.
+- `C:/Users/user/Desktop/browser_pool/tests/acceptance_eazy_sdk_browser.py` exercises a real
+  `BrowserPool(PydollDriver)`: native `Tab`, cached page attachment across warm leases, exactly-once
+  attachment close, login from `SessionFlow`, session-error classification, context replacement,
+  relogin/retry and the no-retry-after-commit boundary. It is intentionally an explicit optional
+  consumer test rather than part of browser-pool's default discovery.
+
+### Verification evidence
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q plugins/browser/tests/test_pydoll_handler.py` | PASS: 4 passed, no skip, real Pydoll 3 Chromium. |
+| `uv run pytest -q plugins/browser/tests/test_driver_contract.py` | PASS: 8 passed, the same four scenarios on Playwright and Pydoll. |
+| `uv run pytest -q plugins/browser/tests tests/unit/test_foreign_routers.py` | PASS: 229 passed. |
+| `uv run pytest -q` | PASS: 1645 passed, 11 skipped, 378.30 s. Repository timeout is 120 seconds, matching the established full-suite gate and preventing Windows localhost/codegen load from becoming a false 10-second failure. |
+| `uv run mypy` | PASS: no issues in 403 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run ruff format --check` | PASS: 405 files formatted. The required repository-wide formatter mechanically updated the pre-existing browser-merge worktree without changing behavior. |
+| `uv run complexipy --plain --failed` | PASS: no failed complexity entries. |
+| `uv run lint-imports` | PASS: 5 contracts kept, 0 broken. |
+| `uv run basedpyright plugins/browser/probe/typing_probe.py` | EXPECTED diagnostic probe: 3 intentional errors, 2 warnings and 18 type notes at the documented negative lines; the probe is deliberately outside normal type gates and exits non-zero by design. |
+| `uv lock --check` | PASS: 206 packages resolved. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
+| `uv run python docs-site/scripts/validate_docs.py` | PASS: 87 pages. `docs-site` has no `package.json`, so the conditional npm check/build gates do not apply. |
+| `uv build --all-packages --out-dir dist/phase55` | PASS: 10 current-checkout wheel/sdist pairs. |
+| `uv run python scripts/package_audit.py dist/phase55` | PASS: metadata, licenses, typing markers, optional-import dependencies, Zapros boundary and absence rules. |
+| `uv run python scripts/extras_smoke.py dist/phase55` | PASS: all 17 isolated extras, including core-only browser and `browser-pydoll`. |
+| In a fresh `.test-tmp/phase55-browser-pool-final` venv: install `"eazy-sdk-browser[pydoll]==0.2.0a7"` and `"C:/Users/user/Desktop/browser_pool[testing,pydoll]"` with `--find-links dist/phase55`; after the final build, `uv pip install --python ... --reinstall --no-deps dist/phase55/eazy_sdk-0.2.0a7-py3-none-any.whl dist/phase55/eazy_sdk_browser-0.2.0a7-py3-none-any.whl`; then that interpreter's `python -m pytest -q C:/Users/user/Desktop/browser_pool/tests/acceptance_eazy_sdk_browser.py` | PASS: both Eazy packages loaded from the isolated venv's `site-packages`; final run 1 passed in 16.75 s against the rebuilt wheels. |
+| YAML parse of `.github/workflows/ci.yml`; `git diff --check` | PASS. |
+
+### Exit criteria
+
+1. Runtime protocol assertions in the shared live suite prove `Driver`, `NavigationAware`,
+   `NetworkAware`, `StateAware`, `FetchAware` and `RichTextAware`.
+2. Profile levels are asserted against the corresponding live behavior; shadow DOM remains
+   `UNSUPPORTED` and no parity beyond the tested contract is documented.
+3. The parameterized common suite is green for Playwright and Pydoll (8 tests total).
+4. Both Pydoll live modules run without a module-wide skip on the installed Pydoll 3 backend.
+5. Shared and backend-specific timing tests prove one hard deadline for `any_of`.
+6. Binary bodies, declared/actual oversize behavior, image resource filtering and total-budget
+   eviction are exercised on both backends; Pydoll also has its focused evidence.
+7. Shared close tests and Pydoll's foreign-callback test prove idempotence, callback ownership,
+   task draining and that the external tab remains open.
+8. The core-only browser wheel installs/imports in an isolated venv without Pydoll.
+9. The Pydoll extra installs from the current wheel and imports the explicit adapter module.
+10. The concrete downstream wheel acceptance covers every lease/session/retry item in §5.3.
+11. Documentation and this status record the tested limitations and ownership boundary.
+12. Focused, core, architecture, documentation, package and downstream gates have the evidence
+    above; the only non-zero command is the intentionally negative type probe with its exact
+    expected diagnostics.
+
+### Remaining work / blockers
+
+None in phase 55.
+
+## Phase 56 — documentation overhaul (planned 2026-10-07)
+
+State: `active`, nothing implemented yet. Plan: [56-documentation-overhaul.md](56-documentation-overhaul.md).
+Page queue: [56-pages.md](56-pages.md) (87 existing pages, 31 new).
+
+The owner accepted all decisions on 2026-10-07 and added two: every tutorial topic is shown for
+both HTTP and browser on one teaching mail site, and the domain is `example` everywhere with no
+tie to a real service (plan §1). Step-level progress lives in the plan's "Состояние" table
+(§8.2); this section receives one entry per closed stage.
+
+### Completed exit criteria
+
+None.
+
+### Commands run while planning
+
+- `python ~/.claude/skills/humanizer-ru/scripts/lint.py` over the prose of the plan and of the
+  page queue: 0 errors.
+- No pytest, mypy, ruff or Sphinx run: planning only, no code or page was changed.
+
+### Remaining work / blockers
+
+All of 56.0–56.8. No blockers; next step is 56.0.1.

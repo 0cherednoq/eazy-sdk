@@ -42,6 +42,21 @@ CHECKS: dict[str, tuple[str, str]] = {
         "eazy-sdk[sqlmodel]=={version}",
         "import eazy_sdk_sqlmodel",
     ),
+    # Ядро плагина ставится без драйвера: это его главное свойство, и проверять его
+    # надо установкой, а не утверждением в README. Ядро eazy-sdk ему нужно — ошибки
+    # и профиль возможностей общие.
+    "browser": (
+        "eazy-sdk[browser]=={version}",
+        "import eazy_sdk_browser; from eazy_sdk_browser import css, visible; "
+        "assert visible(css('button')).label == 'visible button'",
+    ),
+    "browser-pydoll": (
+        "eazy-sdk-browser[pydoll]=={version}",
+        "from importlib.metadata import version\n"
+        "from eazy_sdk_browser.handlers.pydoll import PydollDriver\n"
+        "assert version('pydoll-python').split('.', 1)[0] == '3'\n"
+        "assert PydollDriver.__module__ == 'eazy_sdk_browser.handlers.pydoll'",
+    ),
     "httpx": (
         "eazy-sdk[httpx]=={version}",
         "from eazy_sdk import Client; Client.httpx(base_url='https://example.test').close()",

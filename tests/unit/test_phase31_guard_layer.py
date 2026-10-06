@@ -176,11 +176,14 @@ def test_guard_defaults_lower_to_session_scoped_until_rejected() -> None:
     assert policy.replay.max_replays == 1
     assert policy.scope == host("phase31.test")
     assert Guard.scope == RequestScope()  # whole-client default scope
-    assert isinstance(challenge_guard(
-        detect=detect_revision,
-        solver=lambda challenge, context: {"token": "x"},
-        apply=solution_fields(cookies={"clearance": "token"}),
-    ), _ChallengeGuard)
+    assert isinstance(
+        challenge_guard(
+            detect=detect_revision,
+            solver=lambda challenge, context: {"token": "x"},
+            apply=solution_fields(cookies={"clearance": "token"}),
+        ),
+        _ChallengeGuard,
+    )
 
 
 @pytest.mark.asyncio
@@ -260,11 +263,15 @@ def test_challenge_guard_infers_name_from_the_detector() -> None:
         def detect(self, response: ResponseContext[object]) -> Challenge | None:
             return None
 
-    (policy,) = challenge_guard(
-        detect=Detector().detect,
-        solver=lambda challenge, context: {"token": "x"},
-        apply=solution_fields(cookies={"clearance": "token"}),
-    ).to_bundle().challenge_policies
+    (policy,) = (
+        challenge_guard(
+            detect=Detector().detect,
+            solver=lambda challenge, context: {"token": "x"},
+            apply=solution_fields(cookies={"clearance": "token"}),
+        )
+        .to_bundle()
+        .challenge_policies
+    )
     assert policy.identity == "Detector"
 
     with pytest.raises(ProtectionConfigurationError, match="cannot be inferred"):

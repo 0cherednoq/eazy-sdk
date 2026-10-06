@@ -137,8 +137,12 @@ class Server:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        self.calls.append((f"{request.url.scheme}://{request.url.host}{path}",
-                           request.headers.get("Authorization", "")))
+        self.calls.append(
+            (
+                f"{request.url.scheme}://{request.url.host}{path}",
+                request.headers.get("Authorization", ""),
+            )
+        )
         if path in {"/session/login", "/session/refresh"}:
             self.issued += 1
             expires = datetime(2030, 1, 1, tzinfo=UTC) + timedelta(hours=1)
@@ -151,9 +155,7 @@ class Server:
                 },
             )
         if self.expire_first and request.headers.get("Authorization") == "Bearer access-1":
-            return httpx.Response(
-                401, headers={"WWW-Authenticate": 'Bearer error="invalid_token"'}
-            )
+            return httpx.Response(401, headers={"WWW-Authenticate": 'Bearer error="invalid_token"'})
         return httpx.Response(200, json={"path": path})
 
 

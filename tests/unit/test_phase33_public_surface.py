@@ -86,8 +86,23 @@ def test_quickstart_needs_one_import_block_and_no_handler_assembly() -> None:
         assert store.products.image(product_id=42) == b"PNG"
         assert store.products is store.products
     assert client._closed
-    for name in ("Path", "Query", "Header", "JsonBody", "Json", "Http", "HttpOperation", "op",
-                 "Html", "JsonField", "UNSET", "Omittable", "Cookie", "FormBody", "BodyProjection"):
+    for name in (
+        "Path",
+        "Query",
+        "Header",
+        "JsonBody",
+        "Json",
+        "Http",
+        "HttpOperation",
+        "op",
+        "Html",
+        "JsonField",
+        "UNSET",
+        "Omittable",
+        "Cookie",
+        "FormBody",
+        "BodyProjection",
+    ):
         assert name in eazy_sdk.__all__, name
     # Phase 50: the case classes left the root for ``eazy_sdk.response`` (name budget).
     for name in ("Responses", "Success", "Error"):
@@ -102,9 +117,7 @@ def test_quickstart_needs_one_import_block_and_no_handler_assembly() -> None:
 async def test_async_factory_and_owning_root_close_exactly_once() -> None:
     transport = httpx.MockTransport(_respond)
     raw = httpx.AsyncClient(transport=transport)
-    async with AsyncStoreSdk(
-        AsyncClient.httpx(base_url="https://store.test", client=raw)
-    ) as store:
+    async with AsyncStoreSdk(AsyncClient.httpx(base_url="https://store.test", client=raw)) as store:
         assert await store.products.products(q="x") == [Product(id=1, title="one")]
     # The handler borrowed the caller's httpx client, so it stays open.
     assert not raw.is_closed
@@ -195,10 +208,24 @@ def test_client_config_groups_protection_into_one_bundle() -> None:
     assert not ClientConfig().bundle
     parameters = inspect.signature(ClientConfig).parameters
     assert {"resilience", "security", "hooks"} <= set(parameters)
-    for removed in ("operation_protections", "before_call_policies", "challenge_policies",
-                    "solver_bindings", "challenge_solvers", "operation_protection_solvers",
-                    "auth", "key_provider", "dependencies", "observer",
-                    "protection", "guards", "retry", "timeout", "models", "profile"):
+    for removed in (
+        "operation_protections",
+        "before_call_policies",
+        "challenge_policies",
+        "solver_bindings",
+        "challenge_solvers",
+        "operation_protection_solvers",
+        "auth",
+        "key_provider",
+        "dependencies",
+        "observer",
+        "protection",
+        "guards",
+        "retry",
+        "timeout",
+        "models",
+        "profile",
+    ):
         assert removed not in parameters
     resilience = inspect.signature(Resilience).parameters
     assert {"retry", "auth_retries", "max_redirects", "timeout", "rate_limiter"} == set(resilience)
