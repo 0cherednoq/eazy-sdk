@@ -489,6 +489,15 @@
       "eazy_sdk_accounts": "sha256:7bfa8ea59f833c6193aeb45b613ab4c91b52efff10acb138a3afccb2ba388827"
     }
   },
+  "start/concepts.mdx": {
+    "fingerprint": "sha256:f0cc4b8392a733223058020faf2df208a90ecd1efbfe1258a2bf4e8ad75bf922",
+    "symbols": {
+      "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
+      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
+      "eazy_sdk.root": "sha256:afd5e3a108e2a7a1549e191eb1f731070fb813cb9338e7a51c93594d2337a167"
+    }
+  },
   "start/quickstart.mdx": {
     "fingerprint": "sha256:fdfdc4cae1dd399ea8dbb68dabe121b6857289dc4f607a69aefd96d9a1260481",
     "symbols": {

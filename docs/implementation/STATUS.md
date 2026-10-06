@@ -5263,6 +5263,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   одинаковый вывод проверяет pytest. Страница отделяет команды установки в проект читателя от
   запуска примеров из корня репозитория и объясняет локальный учебный сайт. Humanizer и слепая
   проверка завершились без замечаний.
+- 56.3.3: новая `start/concepts` разделяет пять публичных ролей: операция описывает вызов,
+  роутер группирует контракт сервиса, клиент доставляет байты, корень собирает роутеры, а
+  `Identity` хранит данные вызывающей стороны. Таблица даёт короткую карту, следующие разделы
+  уточняют владение ресурсами и необязательность корня и `Identity`. Страница добавлена в
+  оглавление и раздел «Начало работы»; учебного кода на ней нет, поэтому примеры отмечены `n/a`.
 
 ### Commands run while planning
 
@@ -5420,6 +5425,19 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | fresh-agent blind review after two revisions | PASS; repository prerequisites and `Client` ownership are explicit. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.3.3)
+
+| Command | Result |
+|---|---|
+| audit against `humanizer-ru/references/patterns.md` | PASS: одна связка из паттерна 3 исправлена; outline соответствует жанру страницы понятий, рефлексивного хвоста нет. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/concepts.mdx` | PASS: 0 errors, 0 warnings. |
+| phase-56 prose snapshot, code-block snapshot and domain tests | PASS: 3 passed; новая страница не добавила долг. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 88 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| strict Sphinx build to `docs-site/_build/phase56-concepts-final` | PASS: 88 sources, no warnings. |
+| fresh-agent blind review | PASS on technical ownership, first-reader clarity, navigation and prose. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5461,4 +5479,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.3.3–56.8. No blockers; next step is 56.3.3.
+56.3.4–56.8. No blockers; next step is 56.3.4.

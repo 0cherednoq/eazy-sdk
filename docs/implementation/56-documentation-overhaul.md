@@ -347,7 +347,7 @@ reference/        Справочник
 | 56.2.6 | обёртка для линтера навыка: вырезает frontmatter, код, директивы | запуск по одной странице даёт отчёт | complete | `scripts/lint_docs_prose.py`; start/index report: 0 errors, 0 warnings; pytest/mypy/ruff PASS | 2026-10-07 |
 | 56.3.1 | `start/installation` | строка в очереди заполнена | complete | concise install path, package table, verified imports, zero prose debt, strict build and blind review PASS | 2026-10-07 |
 | 56.3.2 | `start/quickstart` на почте, вкладки по библиотеке моделей | строка в очереди заполнена | complete | три запуска совпали с выводом; mypy/ruff, humanizer, строгая сборка и слепая проверка PASS | 2026-10-07 |
-| 56.3.3 | `start/concepts` | строка в очереди заполнена | pending | | |
+| 56.3.3 | `start/concepts` | строка в очереди заполнена | complete | пять ролей сверены с публичным API; 88-page strict build, humanizer и слепая проверка PASS | 2026-10-07 |
 | 56.3.4 | `start/next` с разделом про `llms.txt` | строка в очереди заполнена | pending | | |
 | 56.4.1 | учебный сайт `examples/mail/site/` целиком | обе линии пробников работают на нём | pending | | |
 | 56.4.2 | глава 1, что строим | строка в очереди заполнена | pending | | |
