@@ -5203,6 +5203,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.0.4: браузерный пробник объявляет три отдельные операции с исходами `to=`. Состояния
   `PasswordStep`, `OtpStep` и `Mailbox` хранят роутер, а `typed_login()` фиксирует точный тип
   каждого перехода обычными присваиваниями. Долг ядра не нужен: mypy сохраняет всю цепочку.
+- 56.0.5: `examples/mail/site/` содержит одну чистую функцию
+  `mail_site(SiteRequest) -> SiteResponse`. `handle_httpx()` и `intercept_page()` только переводят
+  типы своих транспортов; тест отправляет один запрос обоими путями и получает одинаковые статус,
+  content type и тело. HTTP-пробники переведены на этот общий сайт.
 
 ### Commands run while planning
 
@@ -5226,6 +5230,17 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 1 passed. |
 | `uv run mypy examples/mail/http/login_probe.py tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 2 source files. |
 | `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
+
+### Verification evidence (56.0.5)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.login_probe` | PASS: the six outcomes still come from the shared site. |
+| `uv run python -m examples.mail.http.captcha_probe` | PASS: the captcha replay still reaches the shared site after clearance. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 4 passed, including equal HTTP-handler and page-interception responses. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 8 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
+| `git diff --check` | PASS. |
 | `git diff --check` | PASS. |
 
 ### Verification evidence (56.0.4)
@@ -5249,4 +5264,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.0.5–56.8. No blockers; next step is 56.0.5.
+56.0.6–56.8. No blockers; next step is 56.0.6.

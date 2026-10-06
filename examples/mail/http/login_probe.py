@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from collections.abc import Callable
 from typing import Annotated
@@ -12,6 +11,8 @@ import httpx
 from eazy_sdk import Client, Http, HttpOperation, JsonField, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.response import ApiError, Const, Error, Json, Payload
+
+from examples.mail.site import handle_httpx
 
 BASE_URL = "https://mail.example"
 WRONG_INPUT = "wrong"
@@ -149,41 +150,9 @@ class LoginApi(LoginService, SyncApi):
     otp = op(SubmitOtp)
 
 
-def teaching_site(request: httpx.Request) -> httpx.Response:
-    """Temporary request-to-response function; step 56.0.5 shares it with the browser probe."""
-
-    body = json.loads(request.content)
-    if request.url.path == "/login/identify":
-        email = body["email"]
-        if email == "missing@mail.example":
-            return _failure("account_not_found", "Account does not exist")
-        if email == "blocked@mail.example":
-            return _failure("account_blocked", "Account is blocked")
-        if email == "captcha@mail.example":
-            return _failure("captcha_required", "Solve the challenge")
-        return _success({"login_id": "login-1"})
-    if request.url.path == "/login/password":
-        if body["password"] == WRONG_INPUT:
-            return _failure("wrong_password", "Password is incorrect")
-        return _success({"login_id": body["login_id"], "destination": "***-42"})
-    if request.url.path == "/login/otp":
-        if body["code"] != "123456":
-            return _failure("wrong_code", "Code is incorrect")
-        return _success({"access_token": "session-1"})
-    return httpx.Response(404)
-
-
-def _success(result: dict[str, str]) -> httpx.Response:
-    return httpx.Response(200, json={"ok": True, "result": result})
-
-
-def _failure(code: str, message: str) -> httpx.Response:
-    return httpx.Response(200, json={"ok": False, "code": code, "message": message})
-
-
 def _client() -> Client:
     raw = httpx.Client(
-        transport=httpx.MockTransport(teaching_site),
+        transport=httpx.MockTransport(handle_httpx),
         headers={},
         cookies={},
     )

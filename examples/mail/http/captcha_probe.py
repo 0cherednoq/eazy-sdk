@@ -17,7 +17,9 @@ from eazy_sdk.protection import (
 )
 from eazy_sdk.response import ResponseContext
 
-from .login_probe import LoginApi, VALID_INPUT, teaching_site
+from examples.mail.site import handle_httpx
+
+from .login_probe import LoginApi, VALID_INPUT
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +56,7 @@ class CaptchaSite:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.path != "/login/password":
-            return teaching_site(request)
+            return handle_httpx(request)
         cookie = request.headers.get("Cookie")
         self.password_requests.append(cookie)
         if "login_clearance=solved" not in (cookie or ""):
@@ -62,7 +64,7 @@ class CaptchaSite:
                 403,
                 json={"kind": "captcha", "site_key": "mail-login"},
             )
-        return teaching_site(request)
+        return handle_httpx(request)
 
 
 def main() -> None:
