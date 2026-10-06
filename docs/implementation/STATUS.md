@@ -5232,6 +5232,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   `examples/README.md` фиксирует уникальные парные метки `# region docs: <имя>` и
   `# endregion docs: <имя>`, запрет вложенности и включение через `literalinclude`. Два пробных
   фрагмента имеют ровно по одной паре, проходят Ruff и собираются строгим Sphinx-пробником.
+- 56.2.2: pytest автоматически находит запускаемые модули в `examples/mail/` и единственные
+  блоки `example-output` в страницах и пробниках. Каждый модуль запускается отдельным процессом,
+  обязан завершиться без stderr, а stdout сравнивается с блоком `text` целиком. Оба текущих
+  HTTP-пробника зарегистрированы и совпадают с опубликованным выводом.
 
 ### Commands run while planning
 
@@ -5312,6 +5316,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/literalinclude-tabs docs-site/_build/phase56-literalinclude` | PASS: both renamed regions included, no warnings. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_docs_probes.py` | PASS: 7 passed; both runnable modules have one output block and exact stdout matches. |
+| `uv run mypy tests/unit/test_phase56_docs_examples.py` | PASS: no issues. |
+| `uv run ruff check tests/unit/test_phase56_docs_examples.py` | PASS. |
+| strict Sphinx build of `docs-site/probes/literalinclude-tabs` | PASS: output-contract comments and text blocks render without warnings. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5353,4 +5367,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.2–56.8. No blockers; next step is 56.2.2.
+56.2.3–56.8. No blockers; next step is 56.2.3.

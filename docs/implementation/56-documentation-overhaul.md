@@ -340,7 +340,7 @@ reference/        Справочник
 | 56.1.3 | новые `toctree`, `nav_links`, ссылки `{doc}` | все страницы в оглавлении, строгая сборка зелёная | complete | 87 sources in the new tree; strict build PASS; top navigation rendered; old doc routes absent | 2026-10-07 |
 | 56.1.4 | гейты документации после переноса | `validate_docs.py` и `docs_freshness.py check` зелёные | complete | validator: 87 pages; freshness: 72 pages; lock rekeyed with identical fingerprints | 2026-10-07 |
 | 56.2.1 | раскладка `examples/mail/` и метки фрагментов | каталоги созданы, соглашение о метках записано в `examples/README.md` | complete | `site/`, `http/`, `browser/`; paired Ruff-safe regions documented; strict include probe PASS | 2026-10-07 |
-| 56.2.2 | тест: каждый файл примера запускается, вывод сверяется с блоком страницы | тест в `pytest`, на пробниках зелёный | pending | | |
+| 56.2.2 | тест: каждый файл примера запускается, вывод сверяется с блоком страницы | тест в `pytest`, на пробниках зелёный | complete | runnable-module discovery + `example-output` blocks; 2 modules matched; focused suite 7 passed | 2026-10-07 |
 | 56.2.3 | проверка: `assert` и обвязка в блоках кода страниц | тест красный на старых страницах, список сохранён | pending | | |
 | 56.2.4 | проверка прозы: длинное тире, английские абзацы | тест красный на старых страницах, список сохранён | pending | | |
 | 56.2.5 | проверка доменов: только `example` в `docs-site/` и `examples/` | тест зелёный | pending | | |
