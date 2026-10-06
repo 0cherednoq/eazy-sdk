@@ -5207,6 +5207,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   `mail_site(SiteRequest) -> SiteResponse`. `handle_httpx()` и `intercept_page()` только переводят
   типы своих транспортов; тест отправляет один запрос обоими путями и получает одинаковые статус,
   content type и тело. HTTP-пробники переведены на этот общий сайт.
+- 56.0.6: пробная страница `docs-site/probes/literalinclude-tabs/index.mdx` включает фрагменты
+  HTTP- и браузерного роутеров по именованным меткам. Две группы вкладок используют общий
+  `sync-group`; строгая сборка зелёная. Проверка в Chromium увидела кнопку копирования у обоих
+  фрагментов и синхронное переключение обеих групп на «Браузер».
 
 ### Commands run while planning
 
@@ -5241,6 +5245,14 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 8 source files. |
 | `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
 | `git diff --check` | PASS. |
+
+### Verification evidence (56.0.6)
+
+| Command | Result |
+|---|---|
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/literalinclude-tabs docs-site/_build/phase56-literalinclude` | PASS: 1 source, build succeeded without warnings. |
+| HTML inspection for `data-sync-group`, `LoginApi`, `LoginPortal`, `copybutton.js` | PASS: both tab sets use `transport`; both marked fragments and the copy-button runtime are present. |
+| Playwright CLI snapshot before and after clicking the first «Браузер» tab | PASS: each visible code block has «Скопировать в буфер»; both browser radios become checked and the second set shows «Браузерный вывод». The only console entry is the temporary server's missing `favicon.ico`. |
 | `git diff --check` | PASS. |
 
 ### Verification evidence (56.0.4)
@@ -5264,4 +5276,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.0.6–56.8. No blockers; next step is 56.0.6.
+56.0.7–56.8. No blockers; next step is 56.0.7.

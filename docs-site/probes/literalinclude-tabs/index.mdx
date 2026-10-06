@@ -1,0 +1,43 @@
+---
+title: Пробник фрагментов во вкладках
+---
+
+::::{tab-set}
+:sync-group: transport
+
+:::{tab-item} HTTP
+:sync: http
+
+```{literalinclude} ../../../examples/mail/http/login_probe.py
+:language: python
+:start-after: "# docs: http-login-router-start"
+:end-before: "# docs: http-login-router-end"
+```
+:::
+
+:::{tab-item} Браузер
+:sync: browser
+
+```{literalinclude} ../../../examples/mail/browser/login_probe.py
+:language: python
+:start-after: "# docs: browser-login-router-start"
+:end-before: "# docs: browser-login-router-end"
+```
+:::
+::::
+
+::::{tab-set}
+:sync-group: transport
+
+:::{tab-item} HTTP
+:sync: http
+
+HTTP-вывод
+:::
+
+:::{tab-item} Браузер
+:sync: browser
+
+Браузерный вывод
+:::
+::::

@@ -144,10 +144,12 @@ class SubmitOtp(HttpOperation[Session]):
     code: JsonField[str]
 
 
+# docs: http-login-router-start
 class LoginApi(LoginService, SyncApi):
     identify = op(Identify)
     password = op(SubmitPassword)
     otp = op(SubmitOtp)
+# docs: http-login-router-end
 
 
 def _client() -> Client:
