@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
@@ -17,7 +17,7 @@ from eazy_sdk.protection import (
 )
 from eazy_sdk.response import ResponseContext
 
-from examples.mail.site import handle_httpx
+from examples.mail.site import MailSite, handle_httpx
 
 from .login_probe import LoginApi, VALID_INPUT
 
@@ -50,28 +50,11 @@ class LoginCaptchaGuard(Guard[LoginCaptcha]):
         return self.solution(cookies={"login_clearance": "solved"})
 
 
-@dataclass(slots=True)
-class CaptchaSite:
-    password_requests: list[str | None] = field(default_factory=list)
-
-    def __call__(self, request: httpx.Request) -> httpx.Response:
-        if request.url.path != "/login/password":
-            return handle_httpx(request)
-        cookie = request.headers.get("Cookie")
-        self.password_requests.append(cookie)
-        if "login_clearance=solved" not in (cookie or ""):
-            return httpx.Response(
-                403,
-                json={"kind": "captcha", "site_key": "mail-login"},
-            )
-        return handle_httpx(request)
-
-
 def main() -> None:
-    site = CaptchaSite()
+    site = MailSite()
     guard = LoginCaptchaGuard()
     raw = httpx.Client(
-        transport=httpx.MockTransport(site),
+        transport=httpx.MockTransport(lambda request: handle_httpx(request, site)),
         headers={},
         cookies={},
     )
@@ -80,12 +63,12 @@ def main() -> None:
         config=ClientConfig(security=Security.of(guard)),
     ) as client:
         login = LoginApi(client)
-        password_step = login.identify(email="ada@mail.example")
+        password_step = login.identify(email="captcha@mail.example")
         next_step = login.password(login_id=password_step.login_id, password=VALID_INPUT)
 
     print(f"challenge solved: {guard.solved[0]}")
-    print(f"password requests: {len(site.password_requests)}")
-    print(f"replay cookie: {site.password_requests[1]}")
+    print(f"password requests: {len(site.state.password_cookies)}")
+    print(f"replay cookie: {site.state.password_cookies[1]}")
     print(f"next step: {type(next_step).__name__}")
 
 

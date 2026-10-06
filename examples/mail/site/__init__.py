@@ -1,96 +1,28 @@
-"""Transport-neutral teaching site shared by the HTTP and browser examples."""
+"""Transport adapters for the shared teaching mail site."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 
-REJECTED_INPUT = "wrong"
+from .app import MailSite, SiteRequest, SiteResponse, SiteState
 
-
-@dataclass(frozen=True, slots=True)
-class SiteRequest:
-    method: str
-    path: str
-    headers: tuple[tuple[str, str], ...] = ()
-    body: bytes = b""
-
-    def json(self) -> dict[str, object]:
-        value = json.loads(self.body)
-        if not isinstance(value, dict):
-            raise ValueError("the teaching site accepts JSON objects")
-        return value
-
-
-@dataclass(frozen=True, slots=True)
-class SiteResponse:
-    status: int
-    headers: tuple[tuple[str, str], ...] = ()
-    body: bytes = b""
-
-    @classmethod
-    def json(cls, status: int, document: object) -> SiteResponse:
-        return cls(
-            status,
-            (("content-type", "application/json"),),
-            json.dumps(document, separators=(",", ":")).encode(),
-        )
+_SITE = MailSite()
 
 
 def mail_site(request: SiteRequest) -> SiteResponse:
-    """Return one deterministic teaching response without knowing the caller's transport."""
+    """Serve one request through the default in-memory teaching site."""
 
-    if request.method == "GET" and request.path == "/messages/42":
-        return SiteResponse.json(
-            200,
-            {
-                "id": 42,
-                "sender": "ada@mail.example",
-                "subject": "Планы на пятницу",
-            },
-        )
-    if request.method == "POST":
-        return _login_site(request)
-    return SiteResponse.json(405, {"message": "Method not allowed"})
+    return _SITE(request)
 
 
-def _login_site(request: SiteRequest) -> SiteResponse:
-    body = request.json()
-    if request.path == "/login/identify":
-        email = body["email"]
-        if email == "missing@mail.example":
-            return _failure("account_not_found", "Account does not exist")
-        if email == "blocked@mail.example":
-            return _failure("account_blocked", "Account is blocked")
-        if email == "captcha@mail.example":
-            return _failure("captcha_required", "Solve the challenge")
-        return _success({"login_id": "login-1"})
-    if request.path == "/login/password":
-        if body["password"] == REJECTED_INPUT:
-            return _failure("wrong_password", "Password is incorrect")
-        return _success({"login_id": body["login_id"], "destination": "***-42"})
-    if request.path == "/login/otp":
-        if body["code"] != "123456":
-            return _failure("wrong_code", "Code is incorrect")
-        return _success({"access_token": "session-1"})
-    return SiteResponse.json(404, {"message": "Not found"})
+def handle_httpx(request: httpx.Request, site: MailSite | None = None) -> httpx.Response:
+    """Adapt an HTTP client request to the transport-neutral teaching site."""
 
-
-def handle_httpx(request: httpx.Request) -> httpx.Response:
-    """Adapt an HTTP client request to the same transport-neutral teaching site."""
-
-    response = mail_site(
-        SiteRequest(
-            method=request.method,
-            path=request.url.path,
-            headers=tuple(request.headers.items()),
-            body=request.content,
-        )
-    )
+    target = _SITE if site is None else site
+    response = target(_site_request(request.method, str(request.url), request.headers, request.content))
     return httpx.Response(
         response.status,
         headers=dict(response.headers),
@@ -118,16 +50,17 @@ class PageRoute(Protocol):
     ) -> None: ...
 
 
-async def intercept_page(route: PageRoute) -> None:
-    """Adapt a browser route to the same transport-neutral teaching site."""
+async def intercept_page(route: PageRoute, site: MailSite | None = None) -> None:
+    """Adapt an intercepted browser request to the same teaching site."""
 
     request = route.request
-    response = mail_site(
-        SiteRequest(
-            method=request.method,
-            path=urlsplit(request.url).path,
-            headers=tuple(request.headers.items()),
-            body=request.post_data_buffer or b"",
+    target = _SITE if site is None else site
+    response = target(
+        _site_request(
+            request.method,
+            request.url,
+            request.headers,
+            request.post_data_buffer or b"",
         )
     )
     await route.fulfill(
@@ -137,19 +70,29 @@ async def intercept_page(route: PageRoute) -> None:
     )
 
 
-def _success(result: dict[str, object]) -> SiteResponse:
-    return SiteResponse.json(200, {"ok": True, "result": result})
-
-
-def _failure(code: str, message: str) -> SiteResponse:
-    return SiteResponse.json(200, {"ok": False, "code": code, "message": message})
+def _site_request(
+    method: str,
+    url: str,
+    headers: httpx.Headers | dict[str, str],
+    body: bytes,
+) -> SiteRequest:
+    parsed = urlsplit(url)
+    return SiteRequest(
+        method=method,
+        path=parsed.path,
+        query=tuple(parse_qsl(parsed.query, keep_blank_values=True)),
+        headers=tuple(headers.items()),
+        body=body,
+    )
 
 
 __all__ = [
+    "MailSite",
     "PageRequest",
     "PageRoute",
     "SiteRequest",
     "SiteResponse",
+    "SiteState",
     "handle_httpx",
     "intercept_page",
     "mail_site",

@@ -37,74 +37,93 @@ class Session:
 
 @dataclass(frozen=True, slots=True)
 class PasswordStepResponse:
-    ok: Annotated[bool, Const(True)]
-    result: Payload[PasswordStep]
+    status: Annotated[str, Const("ok")]
+    body: Payload[PasswordStep]
 
 
 @dataclass(frozen=True, slots=True)
 class OtpStepResponse:
-    ok: Annotated[bool, Const(True)]
-    result: Payload[OtpStep]
+    status: Annotated[str, Const("ok")]
+    body: Payload[OtpStep]
 
 
 @dataclass(frozen=True, slots=True)
 class SessionResponse:
-    ok: Annotated[bool, Const(True)]
-    result: Payload[Session]
+    status: Annotated[str, Const("ok")]
+    body: Payload[Session]
 
 
 @dataclass(frozen=True, slots=True)
-class WrongPasswordBody:
-    ok: Annotated[bool, Const(False)]
+class WrongPasswordDetails:
     code: Annotated[str, Const("wrong_password")]
     message: str
 
 
 @dataclass(frozen=True, slots=True)
-class AccountNotFoundBody:
-    ok: Annotated[bool, Const(False)]
+class AccountNotFoundDetails:
     code: Annotated[str, Const("account_not_found")]
     message: str
 
 
 @dataclass(frozen=True, slots=True)
-class AccountBlockedBody:
-    ok: Annotated[bool, Const(False)]
+class AccountBlockedDetails:
     code: Annotated[str, Const("account_blocked")]
     message: str
 
 
 @dataclass(frozen=True, slots=True)
-class WrongCodeBody:
-    ok: Annotated[bool, Const(False)]
+class WrongCodeDetails:
     code: Annotated[str, Const("wrong_code")]
     message: str
 
 
 @dataclass(frozen=True, slots=True)
-class CaptchaRequiredBody:
-    ok: Annotated[bool, Const(False)]
-    code: Annotated[str, Const("captcha_required")]
-    message: str
+class WrongPasswordResponse:
+    status: Annotated[str, Const("wrong_password")]
+    body: Payload[WrongPasswordDetails]
 
 
-class WrongPassword(ApiError[WrongPasswordBody]):
+@dataclass(frozen=True, slots=True)
+class AccountNotFoundResponse:
+    status: Annotated[str, Const("account_not_found")]
+    body: Payload[AccountNotFoundDetails]
+
+
+@dataclass(frozen=True, slots=True)
+class AccountBlockedResponse:
+    status: Annotated[str, Const("account_blocked")]
+    body: Payload[AccountBlockedDetails]
+
+
+@dataclass(frozen=True, slots=True)
+class WrongCodeResponse:
+    status: Annotated[str, Const("wrong_code")]
+    body: Payload[WrongCodeDetails]
+
+
+@dataclass(frozen=True, slots=True)
+class CaptchaRequiredResponse:
+    kind: Annotated[str, Const("captcha")]
+    site_key: str
+
+
+class WrongPassword(ApiError[WrongPasswordResponse]):
     pass
 
 
-class AccountNotFound(ApiError[AccountNotFoundBody]):
+class AccountNotFound(ApiError[AccountNotFoundResponse]):
     pass
 
 
-class AccountBlocked(ApiError[AccountBlockedBody]):
+class AccountBlocked(ApiError[AccountBlockedResponse]):
     pass
 
 
-class WrongCode(ApiError[WrongCodeBody]):
+class WrongCode(ApiError[WrongCodeResponse]):
     pass
 
 
-class CaptchaRequired(ApiError[CaptchaRequiredBody]):
+class CaptchaRequired(ApiError[CaptchaRequiredResponse]):
     pass
 
 
@@ -113,11 +132,11 @@ class LoginService:
 
     base_url = BASE_URL
     errors = (
-        Error(200, Json(WrongPasswordBody), exception=WrongPassword),
-        Error(200, Json(AccountNotFoundBody), exception=AccountNotFound),
-        Error(200, Json(AccountBlockedBody), exception=AccountBlocked),
-        Error(200, Json(WrongCodeBody), exception=WrongCode),
-        Error(200, Json(CaptchaRequiredBody), exception=CaptchaRequired),
+        Error(200, Json(WrongPasswordResponse), exception=WrongPassword),
+        Error(200, Json(AccountNotFoundResponse), exception=AccountNotFound),
+        Error(200, Json(AccountBlockedResponse), exception=AccountBlocked),
+        Error(200, Json(WrongCodeResponse), exception=WrongCode),
+        Error(403, Json(CaptchaRequiredResponse), exception=CaptchaRequired),
     )
 
 
@@ -194,7 +213,10 @@ def main() -> None:
         )
         _print_error(
             "captcha",
-            lambda: login.identify(email="captcha@mail.example"),
+            lambda: login.password(
+                login_id=login.identify(email="captcha@mail.example").login_id,
+                password=VALID_INPUT,
+            ),
         )
 
 

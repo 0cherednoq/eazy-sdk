@@ -5272,6 +5272,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   интеграциями и справочником. Отдельный раздел объясняет разницу между генерируемыми
   `llms.txt` и `llms-full.txt` и даёт рабочие ссылки на корень сайта. Ссылки проверены в HTML,
   оба файла созданы той же строгой сборкой. Учебного кода нет, поэтому примеры отмечены `n/a`.
+- 56.4.1: `examples/mail/site/` теперь содержит один `MailSite` с общим состоянием аккаунтов,
+  сессий, входящих и отправленных писем. Он обслуживает конверты API, вход в три шага, капчу,
+  обновление сессии, три вида пагинации, проверку TLS-отпечатка, отправку с тремя исходами и
+  соответствующие HTML-страницы. HTTPX и перехват браузерной страницы переводят свои запросы в
+  один `SiteRequest`; капча и повтор также больше не используют отдельную имитацию сайта.
 
 ### Commands run while planning
 
@@ -5457,6 +5462,20 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | fresh-agent blind review and post-fix rendered-link recheck | PASS. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.4.1)
+
+| Command | Result |
+|---|---|
+| first focused pytest after the site expansion | RED: 3 failed, 7 passed; nested identical error discriminators were ambiguous and a headerless JSON probe was treated as a form. Both causes were fixed. |
+| focused pytest after moving captcha into `MailSite` | RED: 2 failed, 10 passed; the probe still selected the ordinary account. It now selects `captcha@mail.example`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 13 passed; HTTP route matrix, browser pages, exact example output and domain ratchet are green. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 14 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
+| Playwright CLI live Chromium flow against a temporary adapter for `MailSite` | PASS: identify, password and OTP forms reached `/inbox/`; snapshot showed messages and `mail_session=session-ada`. Temporary server, browser and artifacts removed. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 89 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5498,4 +5517,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.1–56.8. No blockers; next step is 56.4.1.
+56.4.2–56.8. No blockers; next step is 56.4.2.
