@@ -5236,6 +5236,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   блоки `example-output` в страницах и пробниках. Каждый модуль запускается отдельным процессом,
   обязан завершиться без stderr, а stdout сравнивается с блоком `text` целиком. Оба текущих
   HTTP-пробника зарегистрированы и совпадают с опубликованным выводом.
+- 56.2.3: проверка fenced-блоков кода различает пять видов учебной обвязки: `assert`,
+  `MockTransport`, recording handler, `route.fulfill` и классы серверов-заглушек. Исходный список
+  сохранён в `56-code-block-debt.txt`: 19 мест на 6 страницах. Snapshot-тест зелёный, нулевой
+  гейт намеренно красный до переписывания этих страниц.
 
 ### Commands run while planning
 
@@ -5326,6 +5330,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build of `docs-site/probes/literalinclude-tabs` | PASS: output-contract comments and text blocks render without warnings. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.3)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_docs_code_blocks.py::test_code_block_debt_snapshot_is_current` | PASS: the recorded 19-line baseline exactly matches the scanner. |
+| `uv run pytest -q tests/unit/test_phase56_docs_code_blocks.py::test_docs_code_blocks_have_no_test_scaffolding` | EXPECTED RED: 19 findings across 6 legacy pages; exact page, line and rule reported. |
+| `uv run mypy tests/unit/test_phase56_docs_code_blocks.py` | PASS: no issues. |
+| `uv run ruff check tests/unit/test_phase56_docs_code_blocks.py` | PASS. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5367,4 +5381,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.3–56.8. No blockers; next step is 56.2.3.
+56.2.4–56.8. No blockers; next step is 56.2.4.
