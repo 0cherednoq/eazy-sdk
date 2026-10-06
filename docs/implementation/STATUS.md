@@ -5225,6 +5225,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   «Интеграции», временного раздела примеров и «Справочника». Все 87 текущих страниц входят в
   дерево, включая два прежних сироты. Внутренние документные маршруты и четыре верхние ссылки
   переведены на новую структуру; чистая строгая сборка завершилась без предупреждений.
+- 56.1.4: валидатор принимает содержимое и frontmatter всех 87 страниц после переноса.
+  Freshness-lock переведён со старых путей на новые для всех 72 отслеживаемых страниц; набор
+  отпечатков и записей символов до и после переноса совпадает, итоговая проверка зелёная.
 
 ### Commands run while planning
 
@@ -5285,6 +5288,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | generated navigation inspection | PASS: «Руководство», «Интеграции», «Архитектура» and «API» render with their new targets. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.1.4)
+
+| Command | Result |
+|---|---|
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: content and frontmatter valid for 87 pages. |
+| `uv run python scripts/docs_freshness.py update` | PASS: 72 tracked pages rekeyed to their new paths. |
+| old/new lock comparison | PASS: 72 entries before and after; the multiset of fingerprints and symbol hashes is identical. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5326,4 +5339,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.1.4–56.8. No blockers; next step is 56.1.4.
+56.2.1–56.8. No blockers; next step is 56.2.1.
