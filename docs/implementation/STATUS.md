@@ -5240,6 +5240,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   `MockTransport`, recording handler, `route.fulfill` и классы серверов-заглушек. Исходный список
   сохранён в `56-code-block-debt.txt`: 19 мест на 6 страницах. Snapshot-тест зелёный, нулевой
   гейт намеренно красный до переписывания этих страниц.
+- 56.2.4: проверка прозы исключает frontmatter, код, директивы, параметры директив и ссылки,
+  после чего считает длинные тире и полностью английские абзацы. Исходный snapshot фиксирует
+  402 тире на 40 страницах и 79 английских абзацев на 10 страницах. Нулевой гейт намеренно
+  красный; snapshot-тест зелёный.
 
 ### Commands run while planning
 
@@ -5340,6 +5344,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run ruff check tests/unit/test_phase56_docs_code_blocks.py` | PASS. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.4)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_docs_prose.py::test_prose_debt_snapshot_is_current` | PASS: per-page counts match `56-prose-debt.txt`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_prose.py::test_docs_prose_has_no_em_dashes_or_english_paragraphs` | EXPECTED RED: 402 em dashes on 40 pages and 79 English paragraphs on 10 pages. |
+| `uv run mypy tests/unit/test_phase56_docs_prose.py` | PASS: no issues. |
+| `uv run ruff check tests/unit/test_phase56_docs_prose.py` | PASS. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5381,4 +5395,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.4–56.8. No blockers; next step is 56.2.4.
+56.2.5–56.8. No blockers; next step is 56.2.5.
