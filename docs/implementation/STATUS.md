@@ -5244,6 +5244,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   после чего считает длинные тире и полностью английские абзацы. Исходный snapshot фиксирует
   402 тире на 40 страницах и 79 английских абзацев на 10 страницах. Нулевой гейт намеренно
   красный; snapshot-тест зелёный.
+- 56.2.5: доменный ratchet сканирует учебные литералы в `docs-site/src/content/docs` и
+  `examples`, но не принимает внешние справочные ссылки Markdown за адрес примера. Новые адреса
+  разрешены только на `.example` и зарезервированных `example.com/.net/.org`. Тест зелёный на
+  точном исходном списке из 47 старых литералов; список должен опустеть вместе с миграцией страниц
+  и старых примеров.
 
 ### Commands run while planning
 
@@ -5354,6 +5359,15 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run ruff check tests/unit/test_phase56_docs_prose.py` | PASS. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.5)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_example_domains.py` | PASS: current 47-item legacy baseline matches exactly; any new non-example teaching domain fails the test. |
+| `uv run mypy tests/unit/test_phase56_example_domains.py` | PASS: no issues. |
+| `uv run ruff check tests/unit/test_phase56_example_domains.py` | PASS. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5395,4 +5409,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.5–56.8. No blockers; next step is 56.2.5.
+56.2.6–56.8. No blockers; next step is 56.2.6.
