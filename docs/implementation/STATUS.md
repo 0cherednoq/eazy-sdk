@@ -5258,6 +5258,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   uv и pip, показывает настоящий вывод версии и содержит точную команду установки Chromium.
   Учебных фрагментов на странице нет, поэтому столбец примеров отмечен `n/a`. Аудит структуры и
   паттернов не нашёл лишних разделов или AI-slop; повторная слепая проверка завершилась `PASS`.
+- 56.3.2: `start/quickstart` получает письмо из `mail.example` и показывает одну операцию во
+  вкладках Pydantic, dataclass и msgspec. Все фрагменты включаются из запускаемых файлов, а их
+  одинаковый вывод проверяет pytest. Страница отделяет команды установки в проект читателя от
+  запуска примеров из корня репозитория и объясняет локальный учебный сайт. Humanizer и слепая
+  проверка завершились без замечаний.
 
 ### Commands run while planning
 
@@ -5400,6 +5405,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | fresh-agent blind review after revisions | PASS; the first review's four issues and the follow-up's two issues were resolved. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.3.2)
+
+| Command | Result |
+|---|---|
+| три команды `uv run python -m examples.mail.http.quickstart_{pydantic,dataclass,msgspec}` | PASS: каждая напечатала `ada@mail.example: Планы на пятницу`. |
+| phase-56 output, prose snapshot, code-block snapshot and domain tests | PASS: 9 passed; опубликованный вывод всех трёх файлов совпал. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 12 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_examples.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/quickstart.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 87 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
+| strict Sphinx build to `docs-site/_build/phase56-quickstart-final` | PASS: 87 sources, no warnings. |
+| fresh-agent blind review after two revisions | PASS; repository prerequisites and `Client` ownership are explicit. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5441,4 +5461,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.3.2–56.8. No blockers; next step is 56.3.2.
+56.3.3–56.8. No blockers; next step is 56.3.3.

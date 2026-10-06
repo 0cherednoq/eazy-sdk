@@ -51,7 +51,7 @@
 | `clients/requests` | `integrations/http/requests` | ok |  |  |  | n/a |
 | `getting-started/index` | `start/index` | ok |  |  |  |  |
 | `getting-started/installation` | `start/installation` | ok | n/a | ok | ok | ok |
-| `getting-started/quickstart` | `start/quickstart` | ok |  |  |  |  |
+| `getting-started/quickstart` | `start/quickstart` | ok | ok | ok | ok | ok |
 | `guides/browser/browser-pool` | `integrations/browser/browser-pool` | ok |  |  |  | n/a |
 | `guides/browser/index` | `integrations/browser/index` | ok |  |  |  | n/a |
 | `guides/browser/login` | `integrations/browser/login` | ok |  |  |  | n/a |

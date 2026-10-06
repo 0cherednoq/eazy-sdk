@@ -44,8 +44,21 @@ class SiteResponse:
 def mail_site(request: SiteRequest) -> SiteResponse:
     """Return one deterministic teaching response without knowing the caller's transport."""
 
-    if request.method != "POST":
-        return SiteResponse.json(405, {"message": "Method not allowed"})
+    if request.method == "GET" and request.path == "/messages/42":
+        return SiteResponse.json(
+            200,
+            {
+                "id": 42,
+                "sender": "ada@mail.example",
+                "subject": "Планы на пятницу",
+            },
+        )
+    if request.method == "POST":
+        return _login_site(request)
+    return SiteResponse.json(405, {"message": "Method not allowed"})
+
+
+def _login_site(request: SiteRequest) -> SiteResponse:
     body = request.json()
     if request.path == "/login/identify":
         email = body["email"]

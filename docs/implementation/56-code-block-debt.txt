@@ -16,5 +16,3 @@ reference/api/testing.mdx:41: recording-handler
 reference/api/testing.mdx:43: recording-handler
 reference/api/testing.mdx:52: assert
 reference/api/testing.mdx:53: assert
-start/quickstart.mdx:46: assert
-start/quickstart.mdx:54: mock-transport

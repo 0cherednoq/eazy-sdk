@@ -1,6 +1,6 @@
 ---
 title: Быстрый старт
-description: Объявите GET-метод SDK и получите проверенную Pydantic-модель.
+description: Объявите первый метод почтового SDK и получите типизированное письмо.
 sources:
   - eazy_sdk.api
   - eazy_sdk.Client
@@ -9,88 +9,120 @@ sources:
 api_fingerprint: "sha256:fdfdc4cae1dd399ea8dbb68dabe121b6857289dc4f607a69aefd96d9a1260481"
 ---
 
-За пять минут соберём метод SDK интернет-магазина: запросим товар по ID и получим проверенный
-`Product`.
+Получим письмо `42` из учебного сервиса `mail.example`. Выберите библиотеку моделей, которую уже
+использует проект. Объявление HTTP-операции и вызов SDK во всех трёх вариантах одинаковы.
 
-## Установите Eazy SDK
+Команды установки ниже относятся к вашему проекту. Команды запуска проверяют готовые файлы из
+репозитория Eazy SDK: клонируйте репозиторий и выполняйте их из его корня. Эти файлы подключены к
+локальному учебному сайту, поэтому не отправляют запросы во внешнюю сеть.
 
-```bash
-uv add "eazy-sdk[httpx,pydantic]"
+:::::{tab-set}
+:sync-group: model-library
+
+::::{tab-item} Pydantic
+:sync: pydantic
+
+Установите зависимости командой `uv add "eazy-sdk[httpx,pydantic]"`.
+
+```{literalinclude} ../../../../../examples/mail/http/quickstart_pydantic.py
+:language: python
+:start-after: "# region docs: quickstart-pydantic"
+:end-before: "# endregion docs: quickstart-pydantic"
 ```
 
-## Создайте `quickstart.py`
+`Message` наследует `BaseModel` и запрещает изменение полей после проверки ответа.
 
-```python
-from dataclasses import dataclass
-
-import httpx
-from pydantic import BaseModel
-
-from eazy_sdk import Client, Http, HttpOperation, Path, SyncApi, op
-
-class Product(BaseModel):
-    id: int
-    title: str
-    price: int
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetProduct(HttpOperation[Product]):
-    __http__ = Http.get("/v1/products/{product_id}")
-
-    product_id: Path[int]
-
-class StoreApi(SyncApi):
-    product = op(GetProduct)
-
-def store(request: httpx.Request) -> httpx.Response:
-    assert request.url.path == "/v1/products/42"
-    return httpx.Response(
-        200,
-        json={"id": 42, "title": "Mechanical keyboard", "price": 12900},
-    )
-
-with Client.httpx(
-    base_url="https://api.store.example",
-    transport=httpx.MockTransport(store),
-) as client:
-    product = StoreApi(client).product(product_id=42)
-    print(product.title, product.price)
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/quickstart_pydantic.py
+:language: python
 ```
+:::
 
-`MockTransport` изображает сервер, поэтому пример работает без сети. В SDK уберите `transport=`:
-`Client.httpx()` сам создаст `httpx.Client`, а `Client(base_url=...)` без аргументов использует
-стандартный сетевой handler Zapros.
+Запуск: `uv run python -m examples.mail.http.quickstart_pydantic`.
 
-## Запустите
-
-```bash
-uv run python quickstart.py
-```
-
+<!-- example-output: examples.mail.http.quickstart_pydantic -->
 ```text
-Mechanical keyboard 12900
+ada@mail.example: Планы на пятницу
+```
+::::
+
+::::{tab-item} dataclass
+:sync: dataclass
+
+Стандартной библиотеке нужен только HTTP-клиент: `uv add "eazy-sdk[httpx]"`.
+
+```{literalinclude} ../../../../../examples/mail/http/quickstart_dataclass.py
+:language: python
+:start-after: "# region docs: quickstart-dataclass"
+:end-before: "# endregion docs: quickstart-dataclass"
 ```
 
-Операция — это класс. `Path[int]` подставил `42` в URL, а `HttpOperation[Product]` сказал, что
-успешный ответ — это `Product`: семья ответа выведена из модели, объявлять `Json(...)` не нужно.
-`op(GetProduct)` публикует класс на роутере, и `store.product(...)` показывает в IDE ровно
-конструктор класса — с типами полей и их значениями по умолчанию.
+`@dataclass(frozen=True, slots=True)` даёт неизменяемую модель без внешней зависимости.
 
-`Http` объявляет все стандартные глаголы — `Http.get`, `Http.post`, `Http.put`, `Http.patch`,
-`Http.delete`, `Http.head`, `Http.options`, `Http.trace`, — а `Http.request(method, path)`
-принимает любой валидный HTTP token. Ту же операцию можно объявить короткой формой — декоратором
-`@api.get(...)`, который синтезирует такой же класс; обе формы разобраны на странице
-{doc}`Объявление операции </guide/requests/declarative>`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/quickstart_dataclass.py
+:language: python
+```
+:::
 
-Для POST/PUT объявите поля тела маркером `JsonField` — они станут полями того же класса, с
-обычными Python-значениями по умолчанию. Если внешний API требует nested JSON, не добавляйте
-caller-у wrapper dict: `BodyProjection` связывает поля операции с private wire schema и повторяет
-mapping/validation/encoding на каждой retry или redirect attempt (см.
-{doc}`Представление запроса </guide/requests/representation>`).
+Запуск: `uv run python -m examples.mail.http.quickstart_dataclass`.
 
-Один роутер живёт прямо на клиенте: `StoreApi(client)`. Когда роутеров несколько, соберите их
-в корень `SyncRoot`/`AsyncRoot` через `api_group(...)`; адрес каждого сервиса при этом объявляет
-сам роутер — см. {doc}`Мультисервисный SDK </guide/multi-service>`.
+<!-- example-output: examples.mail.http.quickstart_dataclass -->
+```text
+ada@mail.example: Планы на пятницу
+```
+::::
 
-Продолжите со {doc}`сквозным примером SDK магазина </more/examples/store-sdk>`. Там этот метод вырастает
-в клиент с JSON body, ошибками API, авторизацией, подписью, шифрованием и WebSocket.
+::::{tab-item} msgspec
+:sync: msgspec
+
+Установите зависимости командой `uv add "eazy-sdk[httpx,msgspec]"`.
+
+```{literalinclude} ../../../../../examples/mail/http/quickstart_msgspec.py
+:language: python
+:start-after: "# region docs: quickstart-msgspec"
+:end-before: "# endregion docs: quickstart-msgspec"
+```
+
+`msgspec.Struct` проверяет ответ и создаёт неизменяемый объект `Message`.
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/quickstart_msgspec.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.quickstart_msgspec`.
+
+<!-- example-output: examples.mail.http.quickstart_msgspec -->
+```text
+ada@mail.example: Планы на пятницу
+```
+::::
+:::::
+
+## Что произошло
+
+`GetMessage` хранит описание GET-запроса. Поле `message_id: Path[int]` принимает число от
+вызывающего кода и подставляет его в `/messages/{message_id}`. Тип
+`HttpOperation[Message]` выбирает модель успешного ответа.
+
+Библиотека моделей меняет только объявление `Message`.
+
+`MailApi` публикует операцию под именем `message` и задаёт адрес сервиса. Вызов
+`MailApi(client).message(message_id=42)` имеет ту же сигнатуру, что и класс `GetMessage`, поэтому
+редактор кода знает имя и тип аргумента до запуска программы.
+
+Функция `quickstart_client()` подключает пример к локальному учебному сайту из репозитория. В
+прикладном SDK приложение создаёт `Client`, а роутер получает его готовым. Выбор HTTPX,
+Requests или curl_cffi не меняет объявление операции.
+
+## Следующий запрос
+
+Для POST добавьте поля тела с маркером `JsonField`. Вложенную структуру внешнего JSON собирает
+`BodyProjection`; вызывающему коду по-прежнему передаются обычные именованные аргументы. Эти
+механизмы разобраны в {doc}`руководстве по запросам </guide/requests/index>`.
+
+Когда методов станет несколько, объедините роутеры в корень SDK. Дальше можно изучить
+{doc}`структуру запросов </guide/requests/index>`, {doc}`HTTP-интеграции </integrations/http/index>`
+или {doc}`всё руководство </guide/index>`.
