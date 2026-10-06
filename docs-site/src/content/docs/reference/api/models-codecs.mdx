@@ -12,7 +12,7 @@ Eazy SDK поддерживает dataclass из стандартной библ
 Одна и та же модель работает в `JsonBody()`, `FormBody()`, `MultipartBody()`, `Json(Model)`,
 `Html(Model)` и `Extracted(Model, ...)`. Для другой model library реализуйте `ModelAdapter` и
 передайте registry в `Serialization(models=…)` на корне SDK (см.
-{doc}`Бэкенды сериализации </guides/serialization>`).
+{doc}`Бэкенды сериализации </integrations/models/index>`).
 
 ## Что именно расширять
 
@@ -55,7 +55,7 @@ dependency во время использования соответствующ
 
 Выберите один вариант. Здесь намеренно показан вложенный document (`profile`): плоское тело
 объявляется полями самой операции с маркером `JsonField`, как описано в
-{doc}`JSON body </guides/requests/json>`.
+{doc}`JSON body </guide/requests/json>`.
 Во всех трёх примерах вложенная request-модель сериализуется в JSON, а response-модель создаётся
 из JSON-ответа.
 

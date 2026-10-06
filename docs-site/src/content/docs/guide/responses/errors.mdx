@@ -210,7 +210,7 @@ class ShopApi(SyncApi):
 модели: `Annotated[bool, Const(False)]` на модели ошибки и `Const(True)` на модели успеха. Такая
 ошибка становится обычным `ApiError`: участвует в `errors=`, попадает в `ErrorSummary` и проходит
 через retry и защиту. Подробно — в разделе «Конверт с бизнес-статусом» на странице
-{doc}`успешных ответов </guides/responses/success>`.
+{doc}`успешных ответов </guide/responses/success>`.
 
 Ответ с неизвестным status/media type даёт `UnexpectedResponseError`; если тело пришло документной
 медиа, а все кандидаты — структурные модели, сообщение это называет. Валидный case с malformed

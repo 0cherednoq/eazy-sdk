@@ -51,7 +51,7 @@ does not own a reader loop, reconnect policy, callback registry, or transport ad
 Operation extension `x-eazy-sdk-crypto` stores only a named profile and frame policy. When it is
 present, the package exports `crypto_registry(profiles)`; application code supplies handwritten
 `PayloadCrypto` objects through `WsClientConfig`. See
-{doc}`payload crypto for HTTP and WebSocket </guides/payload-crypto>`.
+{doc}`payload crypto for HTTP and WebSocket </guide/encryption>`.
 
 ## Объявите операцию классом
 
@@ -114,7 +114,7 @@ HTTP-роутер не принимает WebSocket-операцию, а `AsyncW
 `GraphqlTransportWsProtocol` implements the `graphql-transport-ws` envelopes. Само понятие
 конверта — `Envelope`, `ProtocolMessage`, `CorrelationKey`, `ChannelKey`, `ControlKind` — живёт
 в `eazy_sdk.protocols` и не является WebSocket-специфичным: тот же конверт описывает HTTP-сервис,
-у которого имя метода лежит в теле (см. {doc}`Протоколы и конверты </guides/protocols>`).
+у которого имя метода лежит в теле (см. {doc}`Протоколы и конверты </guide/protocols>`).
 `WsProtocol` — это `Envelope` плюс то, что есть только у соединения: фреймы, коды закрытия,
 восстановление и отмена. Configure `connection_init` as protocol auth and require
 `connection_ack` before application operations:

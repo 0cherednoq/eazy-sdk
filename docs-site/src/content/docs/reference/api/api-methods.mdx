@@ -47,7 +47,7 @@ HTTP-параметры объявляйте keyword-only (`kw_only=True`): у �
 
 `@api.get(...)` синтезирует ровно такой же frozen-класс — он доступен как
 `UsersApi.get_user.Operation`. Отличия двух форм и когда какая уместна — на странице
-{doc}`Объявление операции </guides/requests/declarative>`.
+{doc}`Объявление операции </guide/requests/declarative>`.
 
 ## Ответ операции
 
@@ -82,7 +82,7 @@ class UsersApi(AsyncApi):
 
 Ошибки операции складываются с `errors` роутера; `inherit_errors=False` отключает наследование.
 При совпадении статуса выигрывает случай, объявленный ближе к операции. Подробности — в
-{doc}`Ошибки API </guides/responses/errors>`.
+{doc}`Ошибки API </guide/responses/errors>`.
 
 ## Namespace `api` и `Http`
 
@@ -167,7 +167,7 @@ UnexpectedResponseError: GetUser received an undocumented response: 404 applicat
 Роутер объявляет `base_url`, `security`, `signing`, `crypto`, `wire`, `errors`, `unwrap`,
 `protocol`, `signed` и `allow` обычными атрибутами класса; они наследуются по MRO, поэтому общий
 для нескольких роутеров сервис описывается обычным базовым классом (см. {doc}`Мультисервисный SDK
-</guides/multi-service>`).
+</guide/multi-service>`).
 
 ## `fallback`, `inherit_errors` и `raw_response`
 
@@ -197,7 +197,7 @@ PlanError: errors= in 'getUser' cannot use DEFAULT; declare fallback= instead
 ## Запрос как значение
 
 Связанная операция умеет строить запрос, менять его и отправлять — см. {doc}`Запрос как значение
-</guides/requests/values>`:
+</guide/requests/values>`:
 
 ```python
 request = users.get_user.request(user_id=42)

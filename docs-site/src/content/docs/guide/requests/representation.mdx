@@ -22,7 +22,7 @@ api_fingerprint: "sha256:54a7404be509baa411341b7b010bd8cd638230231be283f4fcc7749
 
 Правило, которое их разделяет: **всё, что влияет на байты, — контракт; всё, что не влияет, —
 реализация.** Контракт объявляется на операции (и наследуется от роутера и миксина сервиса),
-реализация — один раз на корне SDK (см. {doc}`Бэкенды сериализации </guides/serialization>`).
+реализация — один раз на корне SDK (см. {doc}`Бэкенды сериализации </integrations/models/index>`).
 
 ## Конвейер
 
@@ -316,13 +316,13 @@ adaptix-конвертером вместо ручной функции, — `ex
 
 :::{note} Что не место проекции
 Access token, session, CSRF-токен и решение CAPTCHA в проекцию не попадают: у них есть свои
-механизмы — {doc}`авторизация </auth/index>`, {doc}`dependencies </guides/dependencies>`,
-`Inject` и {doc}`protection </guides/protection/index>`. Проекция описывает форму документа, а не
+механизмы — {doc}`авторизация </guide/auth/index>`, {doc}`dependencies </guide/dependencies>`,
+`Inject` и {doc}`protection </guide/protection>`. Проекция описывает форму документа, а не
 добывает значения.
 :::
 
 Значение зависимости, которому не нужна проекция, кладётся прямо в поле запроса —
-`Inject(markers.Header("X-Device-Id"), source)` (см. {doc}`Dependencies </guides/dependencies>`).
+`Inject(markers.Header("X-Device-Id"), source)` (см. {doc}`Dependencies </guide/dependencies>`).
 
 ## Wire на операции
 
@@ -377,4 +377,4 @@ store = Store(client, serialization=Serialization(models=registry))
 парсер строит документ для извлечения по селекторам. Клиент об этом не знает: клиент доставляет
 байты, а не решает, как они выглядят. Несовместимость обнаруживается при компиляции операции:
 бэкенд, неспособный выдать байты `JsonPolicy`, и парсер, не понимающий язык селектора, отвергаются
-до сети. Полный список бэкендов — в {doc}`Бэкендах сериализации </guides/serialization>`.
+до сети. Полный список бэкендов — в {doc}`Бэкендах сериализации </integrations/models/index>`.

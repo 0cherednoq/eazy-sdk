@@ -160,7 +160,7 @@ None`) читается как «не объявлено» и наследова
 
 Что **не** наследуется от сервиса: успешные случаи (они задают тип результата, а он —
 часть сигнатуры операции; как убрать повтор, см.
-{doc}`Успешный ответ </guides/responses/success>`), `protections`, `requires`/`inject`,
+{doc}`Успешный ответ </guide/responses/success>`), `protections`, `requires`/`inject`,
 `idempotent`.
 
 ## Что объявляет роутер, что клиент
@@ -221,7 +221,7 @@ dialog = await sdk.portal.open_create_company()
 
 Сессия принадлежит не транспорту, а вызывающей стороне: `identity=` на корне обслуживает все его
 роутеры — и когда сервисы делят клиент, и когда у каждого свой (см.
-{doc}`Session auth </auth/session>`).
+{doc}`Session auth </guide/auth/session>`).
 
 ```python
 sdk = ShopSdk(main, identity=Identity(auth=(SHOP_SESSION.configure(...),)))

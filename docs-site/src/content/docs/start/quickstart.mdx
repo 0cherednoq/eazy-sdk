@@ -80,17 +80,17 @@ Mechanical keyboard 12900
 `Http.delete`, `Http.head`, `Http.options`, `Http.trace`, — а `Http.request(method, path)`
 принимает любой валидный HTTP token. Ту же операцию можно объявить короткой формой — декоратором
 `@api.get(...)`, который синтезирует такой же класс; обе формы разобраны на странице
-{doc}`Объявление операции </guides/requests/declarative>`.
+{doc}`Объявление операции </guide/requests/declarative>`.
 
 Для POST/PUT объявите поля тела маркером `JsonField` — они станут полями того же класса, с
 обычными Python-значениями по умолчанию. Если внешний API требует nested JSON, не добавляйте
 caller-у wrapper dict: `BodyProjection` связывает поля операции с private wire schema и повторяет
 mapping/validation/encoding на каждой retry или redirect attempt (см.
-{doc}`Представление запроса </guides/requests/representation>`).
+{doc}`Представление запроса </guide/requests/representation>`).
 
 Один роутер живёт прямо на клиенте: `StoreApi(client)`. Когда роутеров несколько, соберите их
 в корень `SyncRoot`/`AsyncRoot` через `api_group(...)`; адрес каждого сервиса при этом объявляет
-сам роутер — см. {doc}`Мультисервисный SDK </guides/multi-service>`.
+сам роутер — см. {doc}`Мультисервисный SDK </guide/multi-service>`.
 
 Продолжите со {doc}`сквозным примером SDK магазина </more/examples/store-sdk>`. Там этот метод вырастает
 в клиент с JSON body, ошибками API, авторизацией, подписью, шифрованием и WebSocket.

@@ -178,12 +178,12 @@ names = await Portal(client).list_companies(options=BrowserCallOptions(timeout=2
 
 ## Дальше
 
-- [Исходы и отказы](/guides/browser/outcomes) — признаки страницы, правила отказа, помехи.
-- [Вход и сессия](/guides/browser/login) — `BrowserLogin`, хранилище аккаунтов и мост в
+- [Исходы и отказы](/integrations/browser/outcomes) — признаки страницы, правила отказа, помехи.
+- [Вход и сессия](/integrations/browser/login) — `BrowserLogin`, хранилище аккаунтов и мост в
   HTTP-клиент.
-- [Browser pool и Pydoll](/guides/browser/browser-pool) — кто владеет вкладкой, контекстом,
+- [Browser pool и Pydoll](/integrations/browser/browser-pool) — кто владеет вкладкой, контекстом,
   сессией и retry.
-- [API Reference](/api-reference/browser) — публичные классы и диагностики D-B-xx.
+- [API Reference](/reference/api/browser) — публичные классы и диагностики D-B-xx.
 
 Полный сценарий портала — форма, ответ API, HTTP- и браузерный роутер в одном `AsyncRoot` —
 лежит в `examples/browser_portal.py`.

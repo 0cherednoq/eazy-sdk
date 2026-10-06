@@ -19,49 +19,49 @@ hero:
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Объявление операции
-:link: /guides/requests/declarative
+:link: /guide/requests/declarative
 :link-type: doc
 
 Класс операции и декоратор как короткая форма.
 :::
 :::{grid-item-card} Запросы
-:link: /guides/requests/index
+:link: /guide/requests/index
 :link-type: doc
 
 Path, query, headers, cookies или body.
 :::
 :::{grid-item-card} Ответы
-:link: /guides/responses/index
+:link: /guide/responses/index
 :link-type: doc
 
 Успешная модель, ошибка API или HTML.
 :::
 :::{grid-item-card} Клиенты
-:link: /clients/index
+:link: /integrations/http/index
 :link-type: doc
 
 HTTPX, Requests или curl_cffi.
 :::
 :::{grid-item-card} Мультисервисный SDK
-:link: /guides/multi-service
+:link: /guide/multi-service
 :link-type: doc
 
 Несколько сервисов, роутеры и `bind()`.
 :::
 :::{grid-item-card} Подпись
-:link: /signing
+:link: /guide/signing
 :link-type: doc
 
 Добавьте HMAC-подпись к готовому запросу.
 :::
 :::{grid-item-card} Шифрование
-:link: /guides/payload-crypto
+:link: /guide/encryption
 :link-type: doc
 
 Шифруйте поля или всё тело до отправки.
 :::
 :::{grid-item-card} Бэкенды сериализации
-:link: /guides/serialization
+:link: /integrations/models/index
 :link-type: doc
 
 Модели, JSON и парсеры документов.
@@ -73,25 +73,25 @@ HTTPX, Requests или curl_cffi.
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Авторизация
-:link: /auth/index
+:link: /guide/auth/index
 :link-type: doc
 
 Выберите схему доступа к API.
 :::
 :::{grid-item-card} Login
-:link: /auth/login
+:link: /guide/auth/login
 :link-type: doc
 
 Получите session по credentials.
 :::
 :::{grid-item-card} Регистрация
-:link: /auth/registration
+:link: /integrations/accounts/registration
 :link-type: doc
 
 Создайте аккаунт.
 :::
 :::{grid-item-card} Verification
-:link: /auth/verification
+:link: /integrations/accounts/verification
 :link-type: doc
 
 Подтвердите созданный аккаунт.
@@ -103,37 +103,37 @@ HTTPX, Requests или curl_cffi.
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Dependencies
-:link: /guides/dependencies
+:link: /guide/dependencies
 :link-type: doc
 
 Передайте вычисляемые значения в запрос.
 :::
 :::{grid-item-card} Пагинация
-:link: /guides/pagination
+:link: /guide/pagination
 :link-type: doc
 
 Объявите страницы на операции, обходите их через `pages()` и `items()`.
 :::
 :::{grid-item-card} Middleware
-:link: /guides/middleware
+:link: /guide/middleware
 :link-type: doc
 
 Добавьте обработчик вызова клиента.
 :::
 :::{grid-item-card} Retry
-:link: /guides/reliability/retry
+:link: /guide/reliability/retry
 :link-type: doc
 
 Повторите запрос после временной ошибки.
 :::
 :::{grid-item-card} Redirect
-:link: /guides/reliability/redirect
+:link: /guide/reliability/redirect
 :link-type: doc
 
 Ограничьте число переходов.
 :::
 :::{grid-item-card} Rate limit
-:link: /guides/reliability/rate-limit
+:link: /guide/reliability/rate-limit
 :link-type: doc
 
 Ограничьте частоту запросов.
@@ -145,25 +145,25 @@ HTTPX, Requests или curl_cffi.
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Protection
-:link: /guides/protection/index
+:link: /guide/protection
 :link-type: doc
 
 Cloudflare, Turnstile или reCAPTCHA.
 :::
 :::{grid-item-card} OpenAPI
-:link: /guides/openapi
+:link: /integrations/generators/openapi
 :link-type: doc
 
 Сгенерируйте SDK из schema.
 :::
 :::{grid-item-card} SQLModel
-:link: /guides/sqlmodel
+:link: /integrations/accounts/sqlmodel
 :link-type: doc
 
 Сохраните аккаунты в базе данных.
 :::
 :::{grid-item-card} XML
-:link: /guides/xml
+:link: /integrations/documents/xml
 :link-type: doc
 
 Отправьте XML body.
@@ -175,25 +175,25 @@ Cloudflare, Turnstile или reCAPTCHA.
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Браузерный SDK
-:link: /guides/browser/index
+:link: /integrations/browser/index
 :link-type: doc
 
 Операция страницы, роутер и клиент поверх Playwright или Pydoll 3.
 :::
 :::{grid-item-card} Browser pool и Pydoll
-:link: /guides/browser/browser-pool
+:link: /integrations/browser/browser-pool
 :link-type: doc
 
 Владение вкладкой, контекстной сессией и retry без смешивания слоёв.
 :::
 :::{grid-item-card} Исходы и отказы
-:link: /guides/browser/outcomes
+:link: /integrations/browser/outcomes
 :link-type: doc
 
 Признаки страницы, правила отказа и помехи.
 :::
 :::{grid-item-card} Вход и сессия
-:link: /guides/browser/login
+:link: /integrations/browser/login
 :link-type: doc
 
 Вход через браузер и та же сессия у HTTP-клиента.

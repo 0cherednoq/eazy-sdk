@@ -72,7 +72,7 @@ POST
 
 Последняя строка является SHA-256 от bytes
 `{"amount":"49.90","currency":"EUR"}`. Полный код правила подписи, API-метода и key provider
-находится в {doc}`руководстве по подписи запросов </signing>`.
+находится в {doc}`руководстве по подписи запросов </guide/signing>`.
 
 При retry, redirect или auth refresh Eazy SDK заново готовит request и считает новую подпись.
 Timestamp и nonce должны появиться до signing через auth, dependency или attempt contribution.

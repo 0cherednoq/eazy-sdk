@@ -10,13 +10,13 @@ freshness: false
 ::::{grid} 1 1 2 2
 :gutter: 2
 :::{grid-item-card} Установка
-:link: /getting-started/installation
+:link: /start/installation
 :link-type: doc
 
 Установите библиотеку с нужным HTTP-клиентом.
 :::
 :::{grid-item-card} Первый запрос
-:link: /getting-started/quickstart
+:link: /start/quickstart
 :link-type: doc
 
 Объявите GET-метод и получите Pydantic-модель.
@@ -28,13 +28,13 @@ freshness: false
 Пройдите путь от GET до auth, HMAC, crypto и WebSocket.
 :::
 :::{grid-item-card} Авторизация
-:link: /auth/index
+:link: /guide/auth/index
 :link-type: doc
 
 Basic, Bearer, JWT, API key, cookie или login flow.
 :::
 :::{grid-item-card} OpenAPI
-:link: /guides/openapi
+:link: /integrations/generators/openapi
 :link-type: doc
 
 Сгенерируйте SDK из OpenAPI schema.
@@ -46,98 +46,79 @@ Basic, Bearer, JWT, API key, cookie или login flow.
 :caption: Начало работы
 :maxdepth: 2
 
-getting-started/index
-getting-started/installation
-getting-started/quickstart
-guides/index
+start/index
+start/installation
+start/quickstart
 ```
 
 ```{toctree}
 :hidden:
-:caption: Авторизация
-:maxdepth: 2
-
-auth/index
-auth/basic
-auth/bearer
-auth/jwt
-auth/api-key
-auth/cookie
-auth/combined
-auth/login
-auth/session
-auth/refresh
-auth/registration
-auth/verification
-```
-
-```{toctree}
-:hidden:
-:caption: Запросы и ответы
+:caption: Руководство
 :maxdepth: 3
 
-guides/requests/index
-guides/requests/declarative
-guides/requests/path
-guides/requests/query
-guides/requests/headers
-guides/requests/cookies
-guides/requests/json
-guides/requests/form
-guides/requests/multipart
-guides/requests/bytes
-guides/requests/representation
-guides/requests/values
-guides/serialization
-guides/protocols
-guides/responses/index
-guides/responses/success
-guides/responses/errors
-guides/responses/html
+guide/index
+guide/requests/index
+guide/requests/declarative
+guide/requests/path
+guide/requests/query
+guide/requests/headers
+guide/requests/cookies
+guide/requests/json
+guide/requests/form
+guide/requests/multipart
+guide/requests/bytes
+guide/requests/representation
+guide/requests/values
+guide/responses/index
+guide/responses/success
+guide/responses/errors
+guide/responses/html
+guide/auth/index
+guide/auth/basic
+guide/auth/bearer
+guide/auth/jwt
+guide/auth/api-key
+guide/auth/cookie
+guide/auth/combined
+guide/auth/login
+guide/auth/session
+guide/auth/refresh
+guide/pagination
+guide/signing
+guide/encryption
+guide/protection
+guide/reliability/retry
+guide/reliability/redirect
+guide/reliability/rate-limit
+guide/multi-service
+guide/dependencies
+guide/middleware
+guide/protocols
+guide/websocket
 ```
 
 ```{toctree}
 :hidden:
-:caption: Клиенты и поведение
+:caption: Интеграции
 :maxdepth: 3
 
-clients/index
-clients/httpx
-clients/requests
-clients/curl-cffi
-guides/multi-service
-guides/dependencies
-guides/middleware
-guides/reliability/retry
-guides/reliability/redirect
-guides/reliability/rate-limit
-signing
-guides/payload-crypto
-```
-
-```{toctree}
-:hidden:
-:caption: Защита и инструменты
-:maxdepth: 3
-
-guides/protection/index
-guides/protection/cloudflare
-guides/protection/turnstile
-guides/protection/recaptcha
-guides/openapi
-guides/websocket
-guides/sqlmodel
-guides/xml
-```
-
-```{toctree}
-:hidden:
-:caption: Браузер
-:maxdepth: 2
-
-guides/browser/index
-guides/browser/outcomes
-guides/browser/login
+integrations/http/index
+integrations/http/httpx
+integrations/http/requests
+integrations/http/curl-cffi
+integrations/browser/index
+integrations/browser/outcomes
+integrations/browser/login
+integrations/browser/browser-pool
+integrations/models/index
+integrations/documents/xml
+integrations/generators/openapi
+integrations/accounts/registration
+integrations/accounts/verification
+integrations/accounts/sqlmodel
+integrations/protection/cloudflare
+integrations/protection/turnstile
+integrations/protection/recaptcha
 ```
 
 ```{toctree}
@@ -154,36 +135,29 @@ more/examples/signed-api
 
 ```{toctree}
 :hidden:
-:caption: Миграция
-:maxdepth: 1
-
-more/migration
-```
-
-```{toctree}
-:hidden:
-:caption: API Reference
+:caption: Справочник
 :maxdepth: 2
 
-api-reference/index
-api-reference/api-methods
-api-reference/clients
-api-reference/extensions
-api-reference/testing
-api-reference/request
-api-reference/response
-api-reference/models-codecs
-api-reference/auth
-api-reference/session
-api-reference/registration
-api-reference/verification
-api-reference/dependencies
-api-reference/middleware
-api-reference/signing
-api-reference/crypto
-api-reference/protection
-api-reference/openapi
-api-reference/sqlmodel
-api-reference/browser
-api-reference/xml
+reference/api/index
+reference/api/api-methods
+reference/api/clients
+reference/api/extensions
+reference/api/testing
+reference/api/request
+reference/api/response
+reference/api/models-codecs
+reference/api/auth
+reference/api/session
+reference/api/registration
+reference/api/verification
+reference/api/dependencies
+reference/api/middleware
+reference/api/signing
+reference/api/crypto
+reference/api/protection
+reference/api/openapi
+reference/api/sqlmodel
+reference/api/browser
+reference/api/xml
+reference/migration
 ```

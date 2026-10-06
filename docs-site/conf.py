@@ -44,6 +44,12 @@ html_title = f"{project} {release}"
 html_theme_options = {
     "accent_color": "green",
     "globaltoc_expand_depth": 1,
+    "nav_links": [
+        {"title": "Руководство", "url": "guide/index"},
+        {"title": "Интеграции", "url": "integrations/http/index"},
+        {"title": "Архитектура", "url": "/architecture/", "resource": True},
+        {"title": "API", "url": "reference/api/index"},
+    ],
 }
 html_static_path = ["src/content/docs/_static"]
 html_css_files = ["css/custom.css"]

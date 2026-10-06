@@ -40,7 +40,7 @@ Request: `GET /users/42`. Response: status `200`, header `Content-Type: applicat
 
 Модель создаётся через настроенный `ModelAdapterRegistry`: dataclass, Pydantic v2, msgspec и
 зарегистрированные custom adapters. Примеры — в {doc}`руководстве по сериализации моделей
-</api-reference/models-codecs>`.
+</reference/api/models-codecs>`.
 
 ## Семья выводится из модели
 
@@ -115,7 +115,7 @@ class ShopApi(SyncApi):
 модели: явный `Json(Order)` остаётся тем, что написано. Если пути в документе нет — это
 `MalformedResponseError`, а не «поле пропало».
 
-Сервис, объявивший `protocol` (конверт протокола, см. {doc}`протоколы </guides/protocols>`),
+Сервис, объявивший `protocol` (конверт протокола, см. {doc}`протоколы </guide/protocols>`),
 `unwrap` объявлять не может: конверт уже выбирает полезную нагрузку.
 
 ## Конверт с бизнес-статусом
@@ -213,7 +213,7 @@ class GetOrder(HttpOperation[Order]):
     order_id: Path[str]
 ```
 
-Так же устроены и штатные хелперы: `rpc_result(Model)` из {doc}`протоколов </guides/protocols>` —
+Так же устроены и штатные хелперы: `rpc_result(Model)` из {doc}`протоколов </guide/protocols>` —
 это ровно `Success(200, Json(Model, extractor=RESULT_EXTRACTOR))`, собранный функцией. Отдельного
 «декодера по умолчанию» на роутере нет намеренно: он делал бы форму ответа невидимой в месте, где
 объявлен возвращаемый тип.

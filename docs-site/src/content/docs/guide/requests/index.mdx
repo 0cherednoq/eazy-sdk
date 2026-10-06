@@ -36,7 +36,7 @@ frozen: запрос является значением. `HttpOperation[Order]`
 типам полей, вместе со значениями по умолчанию.
 
 Требования к классу, наследование операций и короткая форма объявления через декоратор описаны
-на странице {doc}`Объявление операции </guides/requests/declarative>`.
+на странице {doc}`Объявление операции </guide/requests/declarative>`.
 
 ## Короткая форма маркеров
 
@@ -46,20 +46,20 @@ frozen: запрос является значением. `HttpOperation[Order]`
 
 | Часть запроса | Короткая форма | Полная форма | Руководство |
 |---|---|---|---|
-| URL placeholder | `Path[T]` | `Annotated[T, markers.Path()]` | {doc}`Path </guides/requests/path>` |
-| Query parameter | `Query[T]` | `Annotated[T, markers.Query("perPage")]` | {doc}`Query </guides/requests/query>` |
-| Header | `Header[T]` | `Annotated[T, markers.Header("X-Trace")]` | {doc}`Headers </guides/requests/headers>` |
-| Cookie | `Cookie[T]` | `Annotated[T, markers.Cookie()]` | {doc}`Cookies </guides/requests/cookies>` |
-| Поле JSON-объекта | `JsonField[T]` | `Annotated[T, markers.JsonField("q")]` | {doc}`JSON body </guides/requests/json>` |
-| JSON-документ целиком | `JsonBody[T]` | `Annotated[Model, markers.JsonBody()]` | {doc}`JSON body </guides/requests/json>` |
-| Form field | `Form[T]` | `Annotated[T, markers.Form()]` | {doc}`Form body </guides/requests/form>` |
-| Multipart part | `Part[T]` | `Annotated[T, markers.Part()]` | {doc}`Multipart </guides/requests/multipart>` |
-| Готовые bytes | — | `Annotated[bytes, markers.BytesBody()]` | {doc}`Bytes </guides/requests/bytes>` |
-| Представление на проводе | — | `wire=Wire(...)` в `__http__` | {doc}`Представление запроса </guides/requests/representation>` |
+| URL placeholder | `Path[T]` | `Annotated[T, markers.Path()]` | {doc}`Path </guide/requests/path>` |
+| Query parameter | `Query[T]` | `Annotated[T, markers.Query("perPage")]` | {doc}`Query </guide/requests/query>` |
+| Header | `Header[T]` | `Annotated[T, markers.Header("X-Trace")]` | {doc}`Headers </guide/requests/headers>` |
+| Cookie | `Cookie[T]` | `Annotated[T, markers.Cookie()]` | {doc}`Cookies </guide/requests/cookies>` |
+| Поле JSON-объекта | `JsonField[T]` | `Annotated[T, markers.JsonField("q")]` | {doc}`JSON body </guide/requests/json>` |
+| JSON-документ целиком | `JsonBody[T]` | `Annotated[Model, markers.JsonBody()]` | {doc}`JSON body </guide/requests/json>` |
+| Form field | `Form[T]` | `Annotated[T, markers.Form()]` | {doc}`Form body </guide/requests/form>` |
+| Multipart part | `Part[T]` | `Annotated[T, markers.Part()]` | {doc}`Multipart </guide/requests/multipart>` |
+| Готовые bytes | — | `Annotated[bytes, markers.BytesBody()]` | {doc}`Bytes </guide/requests/bytes>` |
+| Представление на проводе | — | `wire=Wire(...)` в `__http__` | {doc}`Представление запроса </guide/requests/representation>` |
 
 Имя на проводе принадлежит модели: `markers.Query("perPage")` у dataclass, `serialization_alias`
 у Pydantic, `msgspec.field(name=...)` у msgspec. Объявлять его дважды — ошибка объявления;
-подробности — в разделе {doc}`Имена на проводе </guides/requests/representation>`.
+подробности — в разделе {doc}`Имена на проводе </guide/requests/representation>`.
 
 ## Необязательное поле
 
@@ -79,4 +79,4 @@ class ListOrders(HttpOperation[list[Order]]):
 
 Один параметр нельзя разместить дважды. Placeholder path должен иметь ровно один `Path` marker.
 `options` — параметр вызова, а не поле: он передаётся через `send(request, options=...)`
-(см. {doc}`Запрос как значение </guides/requests/values>`).
+(см. {doc}`Запрос как значение </guide/requests/values>`).

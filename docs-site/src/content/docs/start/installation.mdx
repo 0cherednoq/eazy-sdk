@@ -41,7 +41,7 @@ python -c "import eazy_sdk, httpx, pydantic; print(eazy_sdk.__version__)"
 | curl_cffi | `uv add "eazy-sdk[curl-cffi]"` | ✓ | ✓ |
 
 Для pip замените `uv add` на `python -m pip install`. Примеры создания каждого клиента находятся
-в {doc}`руководстве по адаптерам </clients/index>`.
+в {doc}`руководстве по адаптерам </integrations/http/index>`.
 
 ## HTML parsing
 
@@ -62,7 +62,7 @@ Extra `html` устанавливает private Parsel backend для `parse_htm
 
 Одна и та же model library используется для request body, JSON/XML/HTML response и custom
 extractors. Примеры моделей и реализация собственного adapter-а находятся в
-{doc}`руководстве по сериализации моделей </api-reference/models-codecs>`.
+{doc}`руководстве по сериализации моделей </reference/api/models-codecs>`.
 
 ## OpenAPI generator
 

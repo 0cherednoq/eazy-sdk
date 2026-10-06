@@ -337,7 +337,7 @@ reference/        Справочник
 | 56.0.7 | пробник: `docs_freshness.py` при переносе страницы | известно, какая команда обновляет lock после переноса | complete | после переноса: `uv run python scripts/docs_freshness.py update <новый/путь.mdx>`; тест rekey зелёный | 2026-10-07 |
 | 56.1.1 | базовый прогон строгой сборки до правок | результат записан, список предупреждений сохранён | complete | 87 sources; RED: только `browser-pool.mdx` и `pagination.mdx` вне toctree | 2026-10-07 |
 | 56.1.2 | перенос файлов по [56-pages.md](56-pages.md), текст не меняется | столбец «перенос» заполнен | complete | 82 mappings marked `ok`; 81 move + root index unchanged; all 82 blob hashes equal | 2026-10-07 |
-| 56.1.3 | новые `toctree`, `nav_links`, ссылки `{doc}` | все страницы в оглавлении, строгая сборка зелёная | pending | | |
+| 56.1.3 | новые `toctree`, `nav_links`, ссылки `{doc}` | все страницы в оглавлении, строгая сборка зелёная | complete | 87 sources in the new tree; strict build PASS; top navigation rendered; old doc routes absent | 2026-10-07 |
 | 56.1.4 | гейты документации после переноса | `validate_docs.py` и `docs_freshness.py check` зелёные | pending | | |
 | 56.2.1 | раскладка `examples/mail/` и метки фрагментов | каталоги созданы, соглашение о метках записано в `examples/README.md` | pending | | |
 | 56.2.2 | тест: каждый файл примера запускается, вывод сверяется с блоком страницы | тест в `pytest`, на пробниках зелёный | pending | | |

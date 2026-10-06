@@ -8,7 +8,7 @@ api_fingerprint: "sha256:e022a2427979a153e99f78911b5decd15fc860ac67949ae2909d063
 ---
 
 Передайте готовую session, если login уже был выполнен. `UserSession`, `LoginCredentials`,
-`AsyncAuthApi` и `LoginService` на этой странице те же, что объявлены в {doc}`Login </auth/login>`.
+`AsyncAuthApi` и `LoginService` на этой странице те же, что объявлены в {doc}`Login </guide/auth/login>`.
 
 ```python
 from eazy_sdk.auth import session_auth
@@ -63,7 +63,7 @@ async with StoreSdk.from_handler(
 (`StoreSdk(client)` или `StoreSdk.from_handler(...)`) сам регистрирует фабрику scoped SDK:
 `LoginService` получает `context.sdk` типа `StoreSdk` без untyped lambda и без передачи scheme в
 каждый экземпляр. Чтобы потребитель передавал только `credentials=`/`session=`, спрячьте
-`configure(...)` в override `from_handler`, как показано в {doc}`Login </auth/login>`.
+`configure(...)` в override `from_handler`, как показано в {doc}`Login </guide/auth/login>`.
 
 :::::{grid} 1 1 2 2
 :class-container: http-exchange

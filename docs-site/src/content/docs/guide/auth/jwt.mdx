@@ -51,8 +51,8 @@ JWT_AUTH = BearerScheme("jwt")
 auth = JWT_AUTH.static("eyJhbGciOiJIUzI1NiJ9.demo.signature")
 ```
 
-Если JWT нужно получать по логину и обновлять по refresh token, используйте {doc}`Login </auth/login>`
-и {doc}`Refresh </auth/refresh>`.
+Если JWT нужно получать по логину и обновлять по refresh token, используйте {doc}`Login </guide/auth/login>`
+и {doc}`Refresh </guide/auth/refresh>`.
 
 Eazy SDK не декодирует JWT, не проверяет его подпись и не использует claims для client-side access
 control. Для HTTP-клиента token является secret credential string. Валидация issuer, audience,

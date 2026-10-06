@@ -112,7 +112,7 @@ class RegisterUser(HttpOperation[RegisteredUser]):
 ```
 
 Проекция с двумя параметрами получает разрешённые `requires=` вторым аргументом. Полный пример —
-в {doc}`Представлении запроса </guides/requests/representation>`; исполняемый — в
+в {doc}`Представлении запроса </guide/requests/representation>`; исполняемый — в
 `examples/flat_model_wire_body.py`.
 
 ## 3. В объявленное поле: `apply=`
@@ -214,7 +214,7 @@ Resolver не получает mutable request и не может обойти �
 диагностики.
 
 :::{note} Не всё, что приходит извне, — зависимость
-Access token и session — это {doc}`авторизация </auth/index>`, решение CAPTCHA —
-{doc}`protection </guides/protection/index>`, ключ подписи — `Identity(key_provider=…)`. У каждого
+Access token и session — это {doc}`авторизация </guide/auth/index>`, решение CAPTCHA —
+{doc}`protection </guide/protection>`, ключ подписи — `Identity(key_provider=…)`. У каждого
 из них свои повторы и свой момент обновления, поэтому отдельный механизм здесь не дублирование.
 :::

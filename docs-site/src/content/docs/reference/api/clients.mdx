@@ -65,7 +65,7 @@ await client.aclose()
 ```
 
 Группы создаются лениво. Адрес операции берётся из роутера, если он его объявил, иначе из
-клиента — см. {doc}`Мультисервисный SDK </guides/multi-service>`. Ownership задаётся явно:
+клиента — см. {doc}`Мультисервисный SDK </guide/multi-service>`. Ownership задаётся явно:
 
 | Конструктор | Кто закрывает ресурсы |
 |---|---|
@@ -145,5 +145,5 @@ content, options)`; он возвращает `NormalizedResponse`. Отдель
 | `api.*`, request markers, `Responses`, `ResponseParser` | Public authoring/SPI | Реализуйте документированные protocol-ы, не наследуйтесь от internal compiler types |
 | Zapros `BaseHandler` / `AsyncBaseHandler` | Transport SPI | Единственная граница собственной сетевой интеграции |
 | `eazy_sdk.testing` | Public test support | Наблюдает фактический Zapros request, не заменяет preparation |
-| `eazy_sdk.ext` | Alpha implementation SPI | Используйте только имена из `__all__`; полный контракт и removed internals перечислены в {doc}`Extension SPI </api-reference/extensions>` |
+| `eazy_sdk.ext` | Alpha implementation SPI | Используйте только имена из `__all__`; полный контракт и removed internals перечислены в {doc}`Extension SPI </reference/api/extensions>` |
 | `eazy_sdk.compile.*`, executor stages и compiled records | Private | Не импортируйте и не сохраняйте их между версиями |

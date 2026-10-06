@@ -5181,7 +5181,7 @@ None in phase 55.
 
 ## Phase 56 — documentation overhaul (planned 2026-10-07)
 
-State: `active`, nothing implemented yet. Plan: [56-documentation-overhaul.md](56-documentation-overhaul.md).
+State: `active`. Plan: [56-documentation-overhaul.md](56-documentation-overhaul.md).
 Page queue: [56-pages.md](56-pages.md) (87 existing pages, 31 new).
 
 The owner accepted all decisions on 2026-10-07 and added two: every tutorial topic is shown for
@@ -5221,6 +5221,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   перемещён, корневая `index.mdx` осталась на месте. Пять страниц `more/examples/*` сохранены до
   шага 56.4.10. Сравнение исходных Git blob-хэшей с новыми файлами доказало отсутствие правок
   текста во всех 82 сопоставлениях; столбец «перенос» заполнен.
+- 56.1.3: корневой `toctree` пересобран вокруг разделов «Начало работы», «Руководство»,
+  «Интеграции», временного раздела примеров и «Справочника». Все 87 текущих страниц входят в
+  дерево, включая два прежних сироты. Внутренние документные маршруты и четыре верхние ссылки
+  переведены на новую структуру; чистая строгая сборка завершилась без предупреждений.
 
 ### Commands run while planning
 
@@ -5272,6 +5276,15 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | queue audit | PASS: 82 `ok` values in the «перенос» column; five `more/examples/*` deletion rows remain `n/a`. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.1.3)
+
+| Command | Result |
+|---|---|
+| targeted old-route audit with `rg` | PASS: no old `{doc}`, Markdown-root or card-link routes remain in documentation sources. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-tree` | PASS: clean output directory, 87 sources, no warnings, `llms-full.txt` contains 87 sources. |
+| generated navigation inspection | PASS: «Руководство», «Интеграции», «Архитектура» and «API» render with their new targets. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5313,4 +5326,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.1.3–56.8. No blockers; next step is 56.1.3.
+56.1.4–56.8. No blockers; next step is 56.1.4.

@@ -11,7 +11,7 @@ api_fingerprint: "sha256:9755fa64051f9d4f46b426e40b70e7f3ac7fca9b7c9dd23f8d50a90
 
 Сериализация состоит из двух половин. Одна влияет на байты — кодек тела, `JsonPolicy`, проекция,
 шифрование — и потому принадлежит операции (см. {doc}`Представление запроса
-</guides/requests/representation>`). Другая на байты не влияет: какая библиотека читает модель,
+</guide/requests/representation>`). Другая на байты не влияет: какая библиотека читает модель,
 какой библиотекой закодирован JSON, какой парсер строит документ. Эта половина объявляется один
 раз на корне SDK — в `Serialization`.
 
@@ -58,7 +58,7 @@ registry = ModelAdapterRegistry((*default_model_adapters().adapters, VendorUserA
 ```
 
 Контракт адаптера и полный пример — в {doc}`Сериализация моделей и codecs
-</api-reference/models-codecs>`.
+</reference/api/models-codecs>`.
 
 ### Что выбрать: производительность четырёх адаптеров
 
@@ -229,7 +229,7 @@ add a required selector field or when=
 Парсер документа — это про ответ. Для запроса форму байтов задаёт маркер тела операции:
 `markers.JsonBody()`, `FormBody()`, `MultipartBody()`, `BytesBody()` или собственный `BodyCodec`.
 `eazy-sdk-xml` поставляет `XmlBody`/`XmlResponse` для XML-контрактов
-(см. {doc}`XML </guides/xml>`); скалярные значения path, query, header и cookie кодирует
+(см. {doc}`XML </integrations/documents/xml>`); скалярные значения path, query, header и cookie кодирует
 `ScalarCodec`.
 
 | Расширение | Что делает | Где объявляется |

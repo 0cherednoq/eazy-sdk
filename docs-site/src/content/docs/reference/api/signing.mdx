@@ -79,11 +79,11 @@ class PaymentsApi(PaymentsService, AsyncApi):
 
 `signing=` на операции **заменяет** сервисное правило целиком, а не дополняет его; `signing=()`
 снимает подпись и вместе с `signed = True` даёт ошибку при компиляции. Полная таблица слияния —
-в {doc}`мультисервисном SDK </guides/multi-service>`.
+в {doc}`мультисервисном SDK </guide/multi-service>`.
 
 База подписи считается от тех же байтов, которые уйдут, — в том числе когда тело зашифровано
 целиком, — и кодируется той же `JsonPolicy`, что и тело
-(см. {doc}`Представление запроса </guides/requests/representation>`).
+(см. {doc}`Представление запроса </guide/requests/representation>`).
 
 `Identity.key_provider` является callable
 `(SigningKeyRequirement) -> SigningKey`. Secrets отсутствуют в arguments операции и redacted в
