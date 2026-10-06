@@ -345,7 +345,7 @@ reference/        Справочник
 | 56.2.4 | проверка прозы: длинное тире, английские абзацы | тест красный на старых страницах, список сохранён | complete | snapshot PASS; zero-debt gate RED: 402 dashes on 40 pages, 79 English paragraphs on 10 pages | 2026-10-07 |
 | 56.2.5 | проверка доменов: только `example` в `docs-site/` и `examples/` | тест зелёный | complete | green ratchet; reserved example hosts enforced; 47 legacy literals recorded for migration | 2026-10-07 |
 | 56.2.6 | обёртка для линтера навыка: вырезает frontmatter, код, директивы | запуск по одной странице даёт отчёт | complete | `scripts/lint_docs_prose.py`; start/index report: 0 errors, 0 warnings; pytest/mypy/ruff PASS | 2026-10-07 |
-| 56.3.1 | `start/installation` | строка в очереди заполнена | pending | | |
+| 56.3.1 | `start/installation` | строка в очереди заполнена | complete | concise install path, package table, verified imports, zero prose debt, strict build and blind review PASS | 2026-10-07 |
 | 56.3.2 | `start/quickstart` на почте, вкладки по библиотеке моделей | строка в очереди заполнена | pending | | |
 | 56.3.3 | `start/concepts` | строка в очереди заполнена | pending | | |
 | 56.3.4 | `start/next` с разделом про `llms.txt` | строка в очереди заполнена | pending | | |

@@ -5253,6 +5253,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   номера строк, вырезает frontmatter, fenced-код, вложенные MyST-директивы, inline-код и адреса
   ссылок, затем передаёт чистую прозу локальному `humanizer-ru` через UTF-8 stdin. Путь линтера
   заменяется аргументом или `HUMANIZER_RU_LINTER`; на `start/index.mdx` получен чистый отчёт.
+- 56.3.1: `start/installation` начинается с минимальной установки HTTPX и Pydantic, затем даёт
+  одну таблицу транспортов, моделей, генераторов и интеграций. Проверка установки разделена для
+  uv и pip, показывает настоящий вывод версии и содержит точную команду установки Chromium.
+  Учебных фрагментов на странице нет, поэтому столбец примеров отмечен `n/a`. Аудит структуры и
+  паттернов не нашёл лишних разделов или AI-slop; повторная слепая проверка завершилась `PASS`.
 
 ### Commands run while planning
 
@@ -5382,6 +5387,19 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/index.mdx` | PASS: report produced, 0 errors and 0 warnings. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.3.1)
+
+| Command | Result |
+|---|---|
+| `uv run python -c "import eazy_sdk, httpx, pydantic; print(eazy_sdk.__version__)"` | PASS: `0.2.0a7`, matching the documented output. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/installation.mdx` | PASS: 0 errors, 0 warnings. |
+| phase-56 prose, code-block and domain snapshot tests | PASS: 3 passed; `start/installation` has no remaining debt. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 87 pages. |
+| strict Sphinx build to `docs-site/_build/phase56-installation-final2` | PASS: 87 sources, no warnings; rendered page has exactly one `h1`. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
+| fresh-agent blind review after revisions | PASS; the first review's four issues and the follow-up's two issues were resolved. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5423,4 +5441,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.3.1–56.8. No blockers; next step is 56.3.1.
+56.3.2–56.8. No blockers; next step is 56.3.2.

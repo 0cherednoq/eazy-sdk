@@ -47,5 +47,4 @@ reference/api/session.mdx: em-dash=1
 reference/api/signing.mdx: em-dash=3
 reference/api/testing.mdx: em-dash=1
 reference/migration.mdx: em-dash=36
-start/installation.mdx: english-paragraph=1
 start/quickstart.mdx: em-dash=8

@@ -1,115 +1,75 @@
 ---
 title: Установка
-description: Установите Eazy SDK и только те HTTP adapters, parsers и plugins, которые нужны проекту.
+description: Установите Eazy SDK с HTTP-клиентом и библиотекой моделей для первого проекта.
 freshness: false
 ---
 
-Eazy SDK требует Python 3.13 или новее. Core не устанавливает HTTP-клиент и Pydantic. Добавьте их
-явно под свой SDK.
+Первому JSON SDK нужны ядро, HTTPX и поддержка моделей Pydantic. Установите их командой
+`uv add "eazy-sdk[httpx,pydantic]"`.
 
-## JSON API через HTTPX
+Команда добавляет синхронный и асинхронный адаптер HTTPX. Само ядро не выбирает HTTP-клиент и
+библиотеку моделей за приложение.
 
-::::{tab-set}
-  :::{tab-item} uv
+В проекте с pip набор зависимостей остаётся тем же:
+`python -m pip install "eazy-sdk[httpx,pydantic]"`.
 
-```bash
-uv add "eazy-sdk[httpx,pydantic]"
-```
-:::
-  :::{tab-item} pip
+## Выберите нужные дополнения
 
-```bash
-python -m pip install "eazy-sdk[httpx,pydantic]"
-```
-:::
-::::
+Не устанавливайте полный набор для каждой задачи. Добавьте только транспорт, формат данных или
+интеграцию, которые нужны SDK.
 
-Проверьте установку:
-
-```bash
-python -c "import eazy_sdk, httpx, pydantic; print(eazy_sdk.__version__)"
-```
-
-Команда должна вывести установленную версию Eazy SDK без traceback.
-
-## Выберите HTTP adapter
-
-| Клиент | Команда | Sync | Async |
-|---|---|:---:|:---:|
-| HTTPX | `uv add "eazy-sdk[httpx]"` | ✓ | ✓ |
-| Requests | `uv add "eazy-sdk[requests]"` | ✓ | нет |
-| curl_cffi | `uv add "eazy-sdk[curl-cffi]"` | ✓ | ✓ |
-
-Для pip замените `uv add` на `python -m pip install`. Примеры создания каждого клиента находятся
-в {doc}`руководстве по адаптерам </integrations/http/index>`.
-
-## HTML parsing
-
-```bash
-uv add "eazy-sdk[httpx,pydantic,html]"
-```
-
-Extra `html` устанавливает private Parsel backend для `parse_html` и `Html(Model)`. Селекторы
-объявляются через `Annotated[..., CSS(...)]`, `XPath(...)` и `Scope(...)`.
-
-## Выберите библиотеку моделей
-
-| Модель | Команда | Дополнительная зависимость |
+| Задача | Пакет или дополнение | Команда для uv |
 |---|---|---|
-| dataclass | core уже достаточно | нет |
-| Pydantic v2 | `uv add "eazy-sdk[pydantic]"` | `pydantic>=2` |
-| msgspec Struct | `uv add "eazy-sdk[msgspec]"` | `msgspec>=0.21.1` |
+| HTTP через HTTPX | `eazy-sdk[httpx]` | `uv add "eazy-sdk[httpx]"` |
+| Синхронный HTTP через Requests | `eazy-sdk[requests]` | `uv add "eazy-sdk[requests]"` |
+| HTTP через curl_cffi | `eazy-sdk[curl-cffi]` | `uv add "eazy-sdk[curl-cffi]"` |
+| Модели Pydantic v2 | `eazy-sdk[pydantic]` | `uv add "eazy-sdk[pydantic]"` |
+| Модели msgspec Struct | `eazy-sdk[msgspec]` | `uv add "eazy-sdk[msgspec]"` |
+| Разбор HTML | `eazy-sdk[html]` | `uv add "eazy-sdk[html]"` |
+| Аккаунты и регистрация | `eazy-sdk[accounts]` | `uv add "eazy-sdk[accounts]"` |
+| Хранилище SQLModel | `eazy-sdk[sqlmodel]` | `uv add "eazy-sdk[sqlmodel]"` |
+| WebSocket | `eazy-sdk[websocket]` | `uv add "eazy-sdk[websocket]"` |
+| Браузерный SDK с Playwright | `eazy-sdk-browser[playwright]` | `uv add "eazy-sdk-browser[playwright]"` |
+| Генератор OpenAPI | `eazy-sdk-openapi[yaml]` | `uv add "eazy-sdk-openapi[yaml]"` |
+| Генератор AsyncAPI | `eazy-sdk-asyncapi[yaml]` | `uv add "eazy-sdk-asyncapi[yaml]"` |
+| Готовые описания защит | `eazy-sdk-presets` | `uv add eazy-sdk-presets` |
+| XML | `eazy-sdk-xml` | `uv add eazy-sdk-xml` |
+| Модели Adaptix | `eazy-sdk-adaptix` | `uv add eazy-sdk-adaptix` |
 
-Одна и та же model library используется для request body, JSON/XML/HTML response и custom
-extractors. Примеры моделей и реализация собственного adapter-а находятся в
-{doc}`руководстве по сериализации моделей </reference/api/models-codecs>`.
+Дополнение `[yaml]` у генераторов нужно для файлов YAML. Для спецификации JSON достаточно пакета
+без этого дополнения. У браузерного пакета вместо `playwright` можно выбрать `selenium`,
+`camoufox` или `pydoll`.
 
-## OpenAPI generator
+`eazy-sdk[all]` ставит основные HTTP-интеграции, модели и средства работы с данными, но
+намеренно не ставит браузерный драйвер. Браузер и его двоичные файлы выбирает приложение.
 
-```bash
-uv add "eazy-sdk[httpx,pydantic]" "eazy-sdk-openapi[yaml]"
-eazy-sdk-openapi openapi.yaml generated --package-name my_sdk
+## Проверьте установку
+
+В проекте с uv запустите
+`uv run python -c "import eazy_sdk, httpx, pydantic; print(eazy_sdk.__version__)"`.
+В активированном окружении pip уберите префикс `uv run` и начните команду с `python`.
+
+Результат содержит только установленную версию:
+
+```text
+0.2.0a7
 ```
 
-Extra `[yaml]` нужен для `.yaml` и `.yml`. JSON specification работает с `eazy-sdk-openapi` без
-этого extra.
+Если вы выбрали другой HTTP-клиент или библиотеку моделей, замените `httpx` и `pydantic` в
+строке импорта. Трассировки ошибки быть не должно.
 
-## WebSocket and AsyncAPI 3.0
+## Требования
 
-```bash
-uv add "eazy-sdk[websocket]" "eazy-sdk-asyncapi[yaml]"
-eazy-sdk-asyncapi asyncapi.yaml generated --package-name my_stream_sdk
-```
+- Python 3.13 или новее.
+- Менеджер пакетов с поддержкой дополнений Python. Команды выше даны для uv и pip.
+- Один поддерживаемый HTTP-клиент для HTTP SDK. Список возможностей клиентов находится в
+  {doc}`руководстве по HTTP-интеграциям </integrations/http/index>`.
+- Драйвер для браузерного SDK. После установки Playwright загрузите Chromium командой
+  `uv run playwright install chromium`. В активированном окружении pip используйте
+  `playwright install chromium`.
 
-The `websocket` extra installs the pinned Zapros WebSocket boundary. JSON AsyncAPI input does not
-require the generator's `[yaml]` extra.
+## Дальше
 
-## Protection
-
-```bash
-uv add eazy-sdk-presets
-uv add "eazy-sdk-presets[browser]"    # integration с Playwright
-uv add "eazy-sdk-presets[selectolax]" # HTML parser backend
-```
-
-Presets не содержат solver credentials и не обращаются к captcha-сервису без переданного solver-а.
-
-## SQLModel
-
-```bash
-uv add eazy-sdk-sqlmodel
-```
-
-## XML
-
-```bash
-uv add eazy-sdk-xml
-```
-
-`eazy-sdk-sqlmodel` добавляет async SQLModel storage для аккаунтов и регистрации.
-`eazy-sdk-xml` добавляет `XmlBody`, `XmlResponse` и stdlib codec.
-
-:::{tip} Минимальный набор
-Для первого JSON SDK установите `eazy-sdk[httpx,pydantic]`. Добавляйте parser или plugin, когда
-  он появляется в вашем коде.
-:::
+- {doc}`Соберите первый запрос </start/quickstart>`.
+- {doc}`Выберите HTTP-клиент </integrations/http/index>`.
+- {doc}`Подключите браузерный драйвер </integrations/browser/index>`.
