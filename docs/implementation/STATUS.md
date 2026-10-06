@@ -5249,6 +5249,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   разрешены только на `.example` и зарезервированных `example.com/.net/.org`. Тест зелёный на
   точном исходном списке из 47 старых литералов; список должен опустеть вместе с миграцией страниц
   и старых примеров.
+- 56.2.6: `scripts/lint_docs_prose.py` принимает одну Markdown/MDX-страницу, сохраняет исходные
+  номера строк, вырезает frontmatter, fenced-код, вложенные MyST-директивы, inline-код и адреса
+  ссылок, затем передаёт чистую прозу локальному `humanizer-ru` через UTF-8 stdin. Путь линтера
+  заменяется аргументом или `HUMANIZER_RU_LINTER`; на `start/index.mdx` получен чистый отчёт.
 
 ### Commands run while planning
 
@@ -5368,6 +5372,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run ruff check tests/unit/test_phase56_example_domains.py` | PASS. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.6)
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q tests/unit/test_phase56_docs_lint_wrapper.py` | PASS: extractor removes all scaffolding in the fixture and preserves line count. |
+| `uv run mypy scripts/lint_docs_prose.py tests/unit/test_phase56_docs_lint_wrapper.py` | PASS: no issues in 2 source files. |
+| `uv run ruff check scripts/lint_docs_prose.py tests/unit/test_phase56_docs_lint_wrapper.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/index.mdx` | PASS: report produced, 0 errors and 0 warnings. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5409,4 +5423,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.6–56.8. No blockers; next step is 56.2.6.
+56.3.1–56.8. No blockers; next step is 56.3.1.
