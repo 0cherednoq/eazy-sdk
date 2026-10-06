@@ -5194,6 +5194,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.0.1: работа `feat/browser-plugin` зафиксирована коммитом `fda4c0f`, создана ветка
   `docs/phase56`; `docs-site/` и индекс чистые. Единственный незаписанный файл - локальный
   `.mcp.json`, он не относится к документации и оставлен без изменений.
+- 56.0.2: `examples/mail/http/login_probe.py` объявляет три HTTP-операции входа, проецирует
+  успешные конверты через `Payload`, различает ошибки через `Const` и наследует пять общих
+  ошибок от `LoginService`. Один запуск печатает все шесть исходов из плана.
 
 ### Commands run while planning
 
@@ -5209,6 +5212,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `git switch -c docs/phase56` | PASS: branch created from `fda4c0f`. |
 | `git status --short --branch` | `## docs/phase56`; only untracked `.mcp.json`, no changes under `docs-site/`. |
 
+### Verification evidence (56.0.2)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.login_probe` | PASS: six lines for wrong password, missing account, blocked account, second factor, wrong code and captcha. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 1 passed. |
+| `uv run mypy examples/mail/http/login_probe.py tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 2 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
+| `git diff --check` | PASS. |
+
 ### Remaining work / blockers
 
-56.0.2–56.8. No blockers; next step is 56.0.2.
+56.0.3–56.8. No blockers; next step is 56.0.3.
