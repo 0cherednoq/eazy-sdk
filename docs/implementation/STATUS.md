@@ -5191,7 +5191,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Completed exit criteria
 
-None.
+- 56.0.1: работа `feat/browser-plugin` зафиксирована коммитом `fda4c0f`, создана ветка
+  `docs/phase56`; `docs-site/` и индекс чистые. Единственный незаписанный файл - локальный
+  `.mcp.json`, он не относится к документации и оставлен без изменений.
 
 ### Commands run while planning
 
@@ -5199,6 +5201,14 @@ None.
   page queue: 0 errors.
 - No pytest, mypy, ruff or Sphinx run: planning only, no code or page was changed.
 
+### Verification evidence (56.0.1)
+
+| Command | Result |
+|---|---|
+| `git log -1 --oneline` on `feat/browser-plugin` | `fda4c0f Browser plugin, the Pydoll adapter, and the plan for the documentation`. |
+| `git switch -c docs/phase56` | PASS: branch created from `fda4c0f`. |
+| `git status --short --branch` | `## docs/phase56`; only untracked `.mcp.json`, no changes under `docs-site/`. |
+
 ### Remaining work / blockers
 
-All of 56.0–56.8. No blockers; next step is 56.0.1.
+56.0.2–56.8. No blockers; next step is 56.0.2.
