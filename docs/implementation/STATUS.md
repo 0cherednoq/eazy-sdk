@@ -5197,6 +5197,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.0.2: `examples/mail/http/login_probe.py` объявляет три HTTP-операции входа, проецирует
   успешные конверты через `Payload`, различает ошибки через `Const` и наследует пять общих
   ошибок от `LoginService`. Один запуск печатает все шесть исходов из плана.
+- 56.0.3: `examples/mail/http/captcha_probe.py` получает капчу на операции пароля, распознаёт её
+  через `Guard`, применяет clearance-cookie и повторяет тот же POST по явной политике
+  `rejected_before_execution`. Запись запросов доказывает один исходный вызов и один replay.
 
 ### Commands run while planning
 
@@ -5222,6 +5225,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.0.3)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.captcha_probe` | PASS: challenge `mail-login` solved; password requests `2`; replay carried `login_clearance=solved`; result `OtpStep`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 2 passed. |
+| `uv run mypy examples/mail/http tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 4 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
+| `git diff --check` | PASS. |
+
 ### Remaining work / blockers
 
-56.0.3–56.8. No blockers; next step is 56.0.3.
+56.0.4–56.8. No blockers; next step is 56.0.4.
