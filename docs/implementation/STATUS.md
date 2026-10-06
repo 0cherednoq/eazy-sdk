@@ -5200,6 +5200,9 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.0.3: `examples/mail/http/captcha_probe.py` получает капчу на операции пароля, распознаёт её
   через `Guard`, применяет clearance-cookie и повторяет тот же POST по явной политике
   `rejected_before_execution`. Запись запросов доказывает один исходный вызов и один replay.
+- 56.0.4: браузерный пробник объявляет три отдельные операции с исходами `to=`. Состояния
+  `PasswordStep`, `OtpStep` и `Mailbox` хранят роутер, а `typed_login()` фиксирует точный тип
+  каждого перехода обычными присваиваниями. Долг ядра не нужен: mypy сохраняет всю цепочку.
 
 ### Commands run while planning
 
@@ -5225,6 +5228,15 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.0.4)
+
+| Command | Result |
+|---|---|
+| import of `examples.mail.browser.login_probe` | PASS: all three operation declarations pass import-time D-B checks. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py` | PASS: 3 passed. |
+| `uv run mypy examples/mail/browser/login_probe.py tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 2 source files; explicit step assignments retain `PasswordStep`, `OtpStep`, `Mailbox`. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py` | PASS: all checks passed. |
+
 ### Verification evidence (56.0.3)
 
 | Command | Result |
@@ -5237,4 +5249,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.0.4–56.8. No blockers; next step is 56.0.4.
+56.0.5–56.8. No blockers; next step is 56.0.5.
