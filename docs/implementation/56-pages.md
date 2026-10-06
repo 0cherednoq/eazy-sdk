@@ -105,7 +105,7 @@
 | Страница | Этап | написана | примеры | текст | линтер | слепая |
 |---|---|---|---|---|---|---|
 | `start/concepts` | 56.3 | ok | n/a | ok | ok | ok |
-| `start/next` | 56.3 |  |  |  |  |  |
+| `start/next` | 56.3 | ok | n/a | ok | ok | ok |
 | `tutorial/index` | 56.4 |  |  |  |  |  |
 | `tutorial/login` | 56.4 |  |  |  |  |  |
 | `tutorial/login-failures` | 56.4 |  |  |  |  |  |

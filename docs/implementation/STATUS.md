@@ -5268,6 +5268,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   `Identity` хранит данные вызывающей стороны. Таблица даёт короткую карту, следующие разделы
   уточняют владение ресурсами и необязательность корня и `Identity`. Страница добавлена в
   оглавление и раздел «Начало работы»; учебного кода на ней нет, поэтому примеры отмечены `n/a`.
+- 56.3.4: новая `start/next` связывает восемь пользовательских задач с руководствами,
+  интеграциями и справочником. Отдельный раздел объясняет разницу между генерируемыми
+  `llms.txt` и `llms-full.txt` и даёт рабочие ссылки на корень сайта. Ссылки проверены в HTML,
+  оба файла созданы той же строгой сборкой. Учебного кода нет, поэтому примеры отмечены `n/a`.
 
 ### Commands run while planning
 
@@ -5438,6 +5442,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | fresh-agent blind review | PASS on technical ownership, first-reader clarity, navigation and prose. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.3.4)
+
+| Command | Result |
+|---|---|
+| audit against `humanizer-ru/references/patterns.md` | PASS: task-first headings, uneven paragraph rhythm and no summary ending; no prose finding remained. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/start/next.mdx` | PASS: 0 errors, 0 warnings. |
+| phase-56 prose snapshot, code-block snapshot and domain tests | PASS: 3 passed; новая страница не добавила долг. |
+| first strict Sphinx build to `docs-site/_build/phase56-next-final` | RED as expected from the first link form: MyST treated `/llms.txt` and `/llms-full.txt` as missing source pages. |
+| strict Sphinx build to `docs-site/_build/phase56-next-final3` | PASS: 89 sources, no warnings; both LLM files generated. |
+| rendered HTML check for `href="/llms.txt"` and `href="/llms-full.txt"` | PASS: both root links are present and both target files exist. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 89 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| fresh-agent blind review and post-fix rendered-link recheck | PASS. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5479,4 +5498,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.3.4–56.8. No blockers; next step is 56.3.4.
+56.4.1–56.8. No blockers; next step is 56.4.1.
