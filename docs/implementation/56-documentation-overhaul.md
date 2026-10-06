@@ -339,7 +339,7 @@ reference/        Справочник
 | 56.1.2 | перенос файлов по [56-pages.md](56-pages.md), текст не меняется | столбец «перенос» заполнен | complete | 82 mappings marked `ok`; 81 move + root index unchanged; all 82 blob hashes equal | 2026-10-07 |
 | 56.1.3 | новые `toctree`, `nav_links`, ссылки `{doc}` | все страницы в оглавлении, строгая сборка зелёная | complete | 87 sources in the new tree; strict build PASS; top navigation rendered; old doc routes absent | 2026-10-07 |
 | 56.1.4 | гейты документации после переноса | `validate_docs.py` и `docs_freshness.py check` зелёные | complete | validator: 87 pages; freshness: 72 pages; lock rekeyed with identical fingerprints | 2026-10-07 |
-| 56.2.1 | раскладка `examples/mail/` и метки фрагментов | каталоги созданы, соглашение о метках записано в `examples/README.md` | pending | | |
+| 56.2.1 | раскладка `examples/mail/` и метки фрагментов | каталоги созданы, соглашение о метках записано в `examples/README.md` | complete | `site/`, `http/`, `browser/`; paired Ruff-safe regions documented; strict include probe PASS | 2026-10-07 |
 | 56.2.2 | тест: каждый файл примера запускается, вывод сверяется с блоком страницы | тест в `pytest`, на пробниках зелёный | pending | | |
 | 56.2.3 | проверка: `assert` и обвязка в блоках кода страниц | тест красный на старых страницах, список сохранён | pending | | |
 | 56.2.4 | проверка прозы: длинное тире, английские абзацы | тест красный на старых страницах, список сохранён | pending | | |

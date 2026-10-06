@@ -126,12 +126,12 @@ class SubmitOtp(BrowserOperation[OtpPage, Mailbox]):
         await content.submit.click()
 
 
-# docs: browser-login-router-start
+# region docs: browser-login-router
 class LoginPortal(AsyncBrowserApi):
     identify = op(Identify)
     password = op(SubmitPassword)
     otp = op(SubmitOtp)
-# docs: browser-login-router-end
+# endregion docs: browser-login-router
 
 
 async def typed_login(portal: LoginPortal) -> Mailbox:

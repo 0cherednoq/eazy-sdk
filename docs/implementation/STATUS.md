@@ -5228,6 +5228,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.1.4: валидатор принимает содержимое и frontmatter всех 87 страниц после переноса.
   Freshness-lock переведён со старых путей на новые для всех 72 отслеживаемых страниц; набор
   отпечатков и записей символов до и после переноса совпадает, итоговая проверка зелёная.
+- 56.2.1: каталоги общего сайта, HTTP-линии и браузерной линии созданы в `examples/mail/`.
+  `examples/README.md` фиксирует уникальные парные метки `# region docs: <имя>` и
+  `# endregion docs: <имя>`, запрет вложенности и включение через `literalinclude`. Два пробных
+  фрагмента имеют ровно по одной паре, проходят Ruff и собираются строгим Sphinx-пробником.
 
 ### Commands run while planning
 
@@ -5298,6 +5302,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run python scripts/docs_freshness.py check` | PASS: 72 pages fresh. |
 | `git diff --check` | PASS. |
 
+### Verification evidence (56.2.1)
+
+| Command | Result |
+|---|---|
+| marker-pair audit over `examples/mail/` | PASS: 2 starts, 2 ends, 2 unique names, paired exactly. |
+| `uv run mypy examples/mail` | PASS: no issues in 7 source files. |
+| `uv run ruff check examples/mail` | PASS. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/literalinclude-tabs docs-site/_build/phase56-literalinclude` | PASS: both renamed regions included, no warnings. |
+| `git diff --check` | PASS. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5339,4 +5353,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.2.1–56.8. No blockers; next step is 56.2.1.
+56.2.2–56.8. No blockers; next step is 56.2.2.
