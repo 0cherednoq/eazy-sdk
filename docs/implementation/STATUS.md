@@ -5217,6 +5217,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 - 56.1.1: исходная строгая сборка прочитала все 87 страниц и завершилась с двумя предупреждениями,
   превращёнными в ошибки: `guides/browser/browser-pool.mdx` и `guides/pagination.mdx` не входят в
   toctree. Других предупреждений нет; это базовый список до переноса.
+- 56.1.2: 82 сохраняемые страницы разложены по целевым каталогам из `56-pages.md`: 81 файл
+  перемещён, корневая `index.mdx` осталась на месте. Пять страниц `more/examples/*` сохранены до
+  шага 56.4.10. Сравнение исходных Git blob-хэшей с новыми файлами доказало отсутствие правок
+  текста во всех 82 сопоставлениях; столбец «перенос» заполнен.
 
 ### Commands run while planning
 
@@ -5257,6 +5261,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | Command | Result |
 |---|---|
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/html` | RED as baseline: 87 sources rendered, exactly 2 `toc.not_included` warnings for `guides/browser/browser-pool.mdx` and `guides/pagination.mdx`. |
+
+### Verification evidence (56.1.2)
+
+| Command | Result |
+|---|---|
+| PowerShell preflight over mappings in `56-pages.md` | PASS: exactly 82 mapped pages; every source exists; every target stays under the docs root; no duplicate or occupied target. |
+| PowerShell `Move-Item` loop over validated files | PASS: 81 moved, 1 unchanged (`index.mdx`), 87 `.mdx` pages remain. |
+| `git rev-parse HEAD:<old>` vs `git hash-object <new>` for every mapping | PASS: 82 of 82 content hashes equal, 0 mismatches. |
+| queue audit | PASS: 82 `ok` values in the «перенос» column; five `more/examples/*` deletion rows remain `n/a`. |
+| `git diff --check` | PASS. |
 
 ### Verification evidence (56.0.6)
 
@@ -5299,4 +5313,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.1.2–56.8. No blockers; next step is 56.1.2.
+56.1.3–56.8. No blockers; next step is 56.1.3.

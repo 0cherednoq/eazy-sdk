@@ -12,93 +12,93 @@
 
 | Страница | Новый путь | перенос | примеры | текст | линтер | слепая |
 |---|---|---|---|---|---|---|
-| `api-reference/api-methods` | `reference/api/api-methods` |  |  |  |  | n/a |
-| `api-reference/auth` | `reference/api/auth` |  |  |  |  | n/a |
-| `api-reference/browser` | `reference/api/browser` |  |  |  |  | n/a |
-| `api-reference/clients` | `reference/api/clients` |  |  |  |  | n/a |
-| `api-reference/crypto` | `reference/api/crypto` |  |  |  |  | n/a |
-| `api-reference/dependencies` | `reference/api/dependencies` |  |  |  |  | n/a |
-| `api-reference/extensions` | `reference/api/extensions` |  |  |  |  | n/a |
-| `api-reference/index` | `reference/api/index` |  |  |  |  | n/a |
-| `api-reference/middleware` | `reference/api/middleware` |  |  |  |  | n/a |
-| `api-reference/models-codecs` | `reference/api/models-codecs` |  |  |  |  | n/a |
-| `api-reference/openapi` | `reference/api/openapi` |  |  |  |  | n/a |
-| `api-reference/protection` | `reference/api/protection` |  |  |  |  | n/a |
-| `api-reference/registration` | `reference/api/registration` |  |  |  |  | n/a |
-| `api-reference/request` | `reference/api/request` |  |  |  |  | n/a |
-| `api-reference/response` | `reference/api/response` |  |  |  |  | n/a |
-| `api-reference/session` | `reference/api/session` |  |  |  |  | n/a |
-| `api-reference/signing` | `reference/api/signing` |  |  |  |  | n/a |
-| `api-reference/sqlmodel` | `reference/api/sqlmodel` |  |  |  |  | n/a |
-| `api-reference/testing` | `reference/api/testing` |  |  |  |  | n/a |
-| `api-reference/verification` | `reference/api/verification` |  |  |  |  | n/a |
-| `api-reference/xml` | `reference/api/xml` |  |  |  |  | n/a |
-| `auth/api-key` | `guide/auth/api-key` |  |  |  |  | n/a |
-| `auth/basic` | `guide/auth/basic` |  |  |  |  | n/a |
-| `auth/bearer` | `guide/auth/bearer` |  |  |  |  | n/a |
-| `auth/combined` | `guide/auth/combined` |  |  |  |  | n/a |
-| `auth/cookie` | `guide/auth/cookie` |  |  |  |  | n/a |
-| `auth/index` | `guide/auth/index` |  |  |  |  | n/a |
-| `auth/jwt` | `guide/auth/jwt` |  |  |  |  | n/a |
-| `auth/login` | `guide/auth/login` |  |  |  |  | n/a |
-| `auth/refresh` | `guide/auth/refresh` |  |  |  |  | n/a |
-| `auth/registration` | `integrations/accounts/registration` |  |  |  |  | n/a |
-| `auth/session` | `guide/auth/session` |  |  |  |  | n/a |
-| `auth/verification` | `integrations/accounts/verification` |  |  |  |  | n/a |
-| `clients/curl-cffi` | `integrations/http/curl-cffi` |  |  |  |  | n/a |
-| `clients/httpx` | `integrations/http/httpx` |  |  |  |  | n/a |
-| `clients/index` | `integrations/http/index` |  |  |  |  | n/a |
-| `clients/requests` | `integrations/http/requests` |  |  |  |  | n/a |
-| `getting-started/index` | `start/index` |  |  |  |  |  |
-| `getting-started/installation` | `start/installation` |  |  |  |  |  |
-| `getting-started/quickstart` | `start/quickstart` |  |  |  |  |  |
-| `guides/browser/browser-pool` | `integrations/browser/browser-pool` |  |  |  |  | n/a |
-| `guides/browser/index` | `integrations/browser/index` |  |  |  |  | n/a |
-| `guides/browser/login` | `integrations/browser/login` |  |  |  |  | n/a |
-| `guides/browser/outcomes` | `integrations/browser/outcomes` |  |  |  |  | n/a |
-| `guides/dependencies` | `guide/dependencies` |  |  |  |  | n/a |
-| `guides/index` | `guide/index` |  |  |  |  | n/a |
-| `guides/middleware` | `guide/middleware` |  |  |  |  | n/a |
-| `guides/multi-service` | `guide/multi-service` |  |  |  |  | n/a |
-| `guides/openapi` | `integrations/generators/openapi` |  |  |  |  | n/a |
-| `guides/pagination` | `guide/pagination` |  |  |  |  | n/a |
-| `guides/payload-crypto` | `guide/encryption` |  |  |  |  | n/a |
-| `guides/protection/cloudflare` | `integrations/protection/cloudflare` |  |  |  |  | n/a |
-| `guides/protection/index` | `guide/protection` |  |  |  |  | n/a |
-| `guides/protection/recaptcha` | `integrations/protection/recaptcha` |  |  |  |  | n/a |
-| `guides/protection/turnstile` | `integrations/protection/turnstile` |  |  |  |  | n/a |
-| `guides/protocols` | `guide/protocols` |  |  |  |  | n/a |
-| `guides/reliability/rate-limit` | `guide/reliability/rate-limit` |  |  |  |  | n/a |
-| `guides/reliability/redirect` | `guide/reliability/redirect` |  |  |  |  | n/a |
-| `guides/reliability/retry` | `guide/reliability/retry` |  |  |  |  | n/a |
-| `guides/requests/bytes` | `guide/requests/bytes` |  |  |  |  | n/a |
-| `guides/requests/cookies` | `guide/requests/cookies` |  |  |  |  | n/a |
-| `guides/requests/declarative` | `guide/requests/declarative` |  |  |  |  | n/a |
-| `guides/requests/form` | `guide/requests/form` |  |  |  |  | n/a |
-| `guides/requests/headers` | `guide/requests/headers` |  |  |  |  | n/a |
-| `guides/requests/index` | `guide/requests/index` |  |  |  |  | n/a |
-| `guides/requests/json` | `guide/requests/json` |  |  |  |  | n/a |
-| `guides/requests/multipart` | `guide/requests/multipart` |  |  |  |  | n/a |
-| `guides/requests/path` | `guide/requests/path` |  |  |  |  | n/a |
-| `guides/requests/query` | `guide/requests/query` |  |  |  |  | n/a |
-| `guides/requests/representation` | `guide/requests/representation` |  |  |  |  | n/a |
-| `guides/requests/values` | `guide/requests/values` |  |  |  |  | n/a |
-| `guides/responses/errors` | `guide/responses/errors` |  |  |  |  | n/a |
-| `guides/responses/html` | `guide/responses/html` |  |  |  |  | n/a |
-| `guides/responses/index` | `guide/responses/index` |  |  |  |  | n/a |
-| `guides/responses/success` | `guide/responses/success` |  |  |  |  | n/a |
-| `guides/serialization` | `integrations/models/index` |  |  |  |  | n/a |
-| `guides/sqlmodel` | `integrations/accounts/sqlmodel` |  |  |  |  | n/a |
-| `guides/websocket` | `guide/websocket` |  |  |  |  | n/a |
-| `guides/xml` | `integrations/documents/xml` |  |  |  |  | n/a |
-| `index` | `index` |  |  |  |  | n/a |
+| `api-reference/api-methods` | `reference/api/api-methods` | ok |  |  |  | n/a |
+| `api-reference/auth` | `reference/api/auth` | ok |  |  |  | n/a |
+| `api-reference/browser` | `reference/api/browser` | ok |  |  |  | n/a |
+| `api-reference/clients` | `reference/api/clients` | ok |  |  |  | n/a |
+| `api-reference/crypto` | `reference/api/crypto` | ok |  |  |  | n/a |
+| `api-reference/dependencies` | `reference/api/dependencies` | ok |  |  |  | n/a |
+| `api-reference/extensions` | `reference/api/extensions` | ok |  |  |  | n/a |
+| `api-reference/index` | `reference/api/index` | ok |  |  |  | n/a |
+| `api-reference/middleware` | `reference/api/middleware` | ok |  |  |  | n/a |
+| `api-reference/models-codecs` | `reference/api/models-codecs` | ok |  |  |  | n/a |
+| `api-reference/openapi` | `reference/api/openapi` | ok |  |  |  | n/a |
+| `api-reference/protection` | `reference/api/protection` | ok |  |  |  | n/a |
+| `api-reference/registration` | `reference/api/registration` | ok |  |  |  | n/a |
+| `api-reference/request` | `reference/api/request` | ok |  |  |  | n/a |
+| `api-reference/response` | `reference/api/response` | ok |  |  |  | n/a |
+| `api-reference/session` | `reference/api/session` | ok |  |  |  | n/a |
+| `api-reference/signing` | `reference/api/signing` | ok |  |  |  | n/a |
+| `api-reference/sqlmodel` | `reference/api/sqlmodel` | ok |  |  |  | n/a |
+| `api-reference/testing` | `reference/api/testing` | ok |  |  |  | n/a |
+| `api-reference/verification` | `reference/api/verification` | ok |  |  |  | n/a |
+| `api-reference/xml` | `reference/api/xml` | ok |  |  |  | n/a |
+| `auth/api-key` | `guide/auth/api-key` | ok |  |  |  | n/a |
+| `auth/basic` | `guide/auth/basic` | ok |  |  |  | n/a |
+| `auth/bearer` | `guide/auth/bearer` | ok |  |  |  | n/a |
+| `auth/combined` | `guide/auth/combined` | ok |  |  |  | n/a |
+| `auth/cookie` | `guide/auth/cookie` | ok |  |  |  | n/a |
+| `auth/index` | `guide/auth/index` | ok |  |  |  | n/a |
+| `auth/jwt` | `guide/auth/jwt` | ok |  |  |  | n/a |
+| `auth/login` | `guide/auth/login` | ok |  |  |  | n/a |
+| `auth/refresh` | `guide/auth/refresh` | ok |  |  |  | n/a |
+| `auth/registration` | `integrations/accounts/registration` | ok |  |  |  | n/a |
+| `auth/session` | `guide/auth/session` | ok |  |  |  | n/a |
+| `auth/verification` | `integrations/accounts/verification` | ok |  |  |  | n/a |
+| `clients/curl-cffi` | `integrations/http/curl-cffi` | ok |  |  |  | n/a |
+| `clients/httpx` | `integrations/http/httpx` | ok |  |  |  | n/a |
+| `clients/index` | `integrations/http/index` | ok |  |  |  | n/a |
+| `clients/requests` | `integrations/http/requests` | ok |  |  |  | n/a |
+| `getting-started/index` | `start/index` | ok |  |  |  |  |
+| `getting-started/installation` | `start/installation` | ok |  |  |  |  |
+| `getting-started/quickstart` | `start/quickstart` | ok |  |  |  |  |
+| `guides/browser/browser-pool` | `integrations/browser/browser-pool` | ok |  |  |  | n/a |
+| `guides/browser/index` | `integrations/browser/index` | ok |  |  |  | n/a |
+| `guides/browser/login` | `integrations/browser/login` | ok |  |  |  | n/a |
+| `guides/browser/outcomes` | `integrations/browser/outcomes` | ok |  |  |  | n/a |
+| `guides/dependencies` | `guide/dependencies` | ok |  |  |  | n/a |
+| `guides/index` | `guide/index` | ok |  |  |  | n/a |
+| `guides/middleware` | `guide/middleware` | ok |  |  |  | n/a |
+| `guides/multi-service` | `guide/multi-service` | ok |  |  |  | n/a |
+| `guides/openapi` | `integrations/generators/openapi` | ok |  |  |  | n/a |
+| `guides/pagination` | `guide/pagination` | ok |  |  |  | n/a |
+| `guides/payload-crypto` | `guide/encryption` | ok |  |  |  | n/a |
+| `guides/protection/cloudflare` | `integrations/protection/cloudflare` | ok |  |  |  | n/a |
+| `guides/protection/index` | `guide/protection` | ok |  |  |  | n/a |
+| `guides/protection/recaptcha` | `integrations/protection/recaptcha` | ok |  |  |  | n/a |
+| `guides/protection/turnstile` | `integrations/protection/turnstile` | ok |  |  |  | n/a |
+| `guides/protocols` | `guide/protocols` | ok |  |  |  | n/a |
+| `guides/reliability/rate-limit` | `guide/reliability/rate-limit` | ok |  |  |  | n/a |
+| `guides/reliability/redirect` | `guide/reliability/redirect` | ok |  |  |  | n/a |
+| `guides/reliability/retry` | `guide/reliability/retry` | ok |  |  |  | n/a |
+| `guides/requests/bytes` | `guide/requests/bytes` | ok |  |  |  | n/a |
+| `guides/requests/cookies` | `guide/requests/cookies` | ok |  |  |  | n/a |
+| `guides/requests/declarative` | `guide/requests/declarative` | ok |  |  |  | n/a |
+| `guides/requests/form` | `guide/requests/form` | ok |  |  |  | n/a |
+| `guides/requests/headers` | `guide/requests/headers` | ok |  |  |  | n/a |
+| `guides/requests/index` | `guide/requests/index` | ok |  |  |  | n/a |
+| `guides/requests/json` | `guide/requests/json` | ok |  |  |  | n/a |
+| `guides/requests/multipart` | `guide/requests/multipart` | ok |  |  |  | n/a |
+| `guides/requests/path` | `guide/requests/path` | ok |  |  |  | n/a |
+| `guides/requests/query` | `guide/requests/query` | ok |  |  |  | n/a |
+| `guides/requests/representation` | `guide/requests/representation` | ok |  |  |  | n/a |
+| `guides/requests/values` | `guide/requests/values` | ok |  |  |  | n/a |
+| `guides/responses/errors` | `guide/responses/errors` | ok |  |  |  | n/a |
+| `guides/responses/html` | `guide/responses/html` | ok |  |  |  | n/a |
+| `guides/responses/index` | `guide/responses/index` | ok |  |  |  | n/a |
+| `guides/responses/success` | `guide/responses/success` | ok |  |  |  | n/a |
+| `guides/serialization` | `integrations/models/index` | ok |  |  |  | n/a |
+| `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok |  |  |  | n/a |
+| `guides/websocket` | `guide/websocket` | ok |  |  |  | n/a |
+| `guides/xml` | `integrations/documents/xml` | ok |  |  |  | n/a |
+| `index` | `index` | ok |  |  |  | n/a |
 | `more/examples/html-login` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/index` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/json-auth` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/signed-api` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/store-sdk` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
-| `more/migration` | `reference/migration` |  |  |  |  | n/a |
-| `signing` | `guide/signing` |  |  |  |  | n/a |
+| `more/migration` | `reference/migration` | ok |  |  |  | n/a |
+| `signing` | `guide/signing` | ok |  |  |  | n/a |
 
 ## Новые страницы
 
