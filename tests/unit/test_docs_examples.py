@@ -69,10 +69,6 @@ REPOSITORY = Path(__file__).resolve().parents[2]
             "adaptix registered: john as user-42\n",
         ),
         (
-            "examples/docs/store_sdk.py",
-            "pay-42 accepted receipt-pay-42\n",
-        ),
-        (
             "examples/dummyjson_session_auth.py",
             "authenticated: emilys (Emily Johnson)\n"
             "runtime:\n"

@@ -337,33 +337,6 @@
       "eazy_sdk_presets.cloudflare": "sha256:d53d2694d5f59cc37702a3e7bb0c43671c92291f0705246d4a9a802fb9636495"
     }
   },
-  "more/examples/json-auth.mdx": {
-    "fingerprint": "sha256:5a44011869a2b62a6c63d6c3f0fa53359243c502740ffddf53acfd724318043b",
-    "symbols": {
-      "eazy_sdk.auth.Bearer": "sha256:6254d1e9553802ba25175c5b1e3ea104181a11e19b1f85046d78b547f14244cc",
-      "eazy_sdk.auth.ExpiresAt": "sha256:2eab3362db64ca92d1980718ef77d68ed3247b06a818a228310ac333d6b32873",
-      "eazy_sdk.auth.RefreshToken": "sha256:228692f362b2a02a7b57968fcd33a1e7501c25d3e1dab874014d221e90f2eccb",
-      "eazy_sdk.auth.session_auth": "sha256:303c50f1bf36c34d6b3ebbc8b901f2a64f155f2e7b576ebd53f8e862af02d0fc"
-    }
-  },
-  "more/examples/signed-api.mdx": {
-    "fingerprint": "sha256:bb2a6ad5e18e1e183c56b58fd8745958856c7a894fff16d9d616d957a76d1539",
-    "symbols": {
-      "eazy_sdk.request.SigningKey": "sha256:cea03d9d4878c2cd13e09a6dc815973ca0477ba704cadc3aa8e5b1614fe40730",
-      "eazy_sdk.request.hmac_sha256": "sha256:8513032e1d4d557b9ec68448d1a06bd01c1811bda927a10f7b49d396b2eed46d"
-    }
-  },
-  "more/examples/store-sdk.mdx": {
-    "fingerprint": "sha256:5765f5b234d30e4858a96a756cdb4389e48f4aa2ed481eef9471ede8e2b74c2a",
-    "symbols": {
-      "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
-      "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
-      "eazy_sdk.auth.BearerScheme": "sha256:8d94956efc1a0d40a7b0c866c6717d0156a188e56a48ae2823d76fbf3f6729ec",
-      "eazy_sdk.crypto": "sha256:6fc5804c353041e6d0d5a9f450efc5e8185fdacb03de5c97d5cded21fc0f3b3e",
-      "eazy_sdk.request.hmac_sha256": "sha256:8513032e1d4d557b9ec68448d1a06bd01c1811bda927a10f7b49d396b2eed46d",
-      "eazy_sdk.websocket": "sha256:992d72e05e0bc04822db15164e4f707ae1cd0b5758706dc2f01ee29aefdd782f"
-    }
-  },
   "reference/api/api-methods.mdx": {
     "fingerprint": "sha256:50c4178c3bb810f58ba1336cf2d1acf52efb16876bc36f2f5e4111948aa06238",
     "symbols": {

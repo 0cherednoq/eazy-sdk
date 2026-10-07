@@ -37,7 +37,6 @@ docs-site/src/content/docs/integrations/browser/login.mdx:359: mail.example.test
 docs-site/src/content/docs/integrations/generators/openapi.mdx:27: museum.example.test
 docs-site/src/content/docs/integrations/protection/cloudflare.mdx:55: api.example.test
 docs-site/src/content/docs/integrations/protection/turnstile.mdx:46: api.example.test
-docs-site/src/content/docs/more/examples/json-auth.mdx:76: example.test
 docs-site/src/content/docs/reference/api/signing.mdx:59: pay.shop.com
 docs-site/src/content/docs/reference/api/testing.mdx:49: api.test
 docs-site/src/content/docs/reference/api/testing.mdx:53: api.test

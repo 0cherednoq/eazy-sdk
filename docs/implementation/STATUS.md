@@ -5617,6 +5617,18 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build and preview rebuild | PASS: 98 sources, no warnings; `/tutorial/assembly/` returns 200 with exact outputs and synchronized tabs. |
 | fresh-agent blind review plus correction recheck | PASS after changing the group claim from runtime instances to inherited router classes and sourcing the browser HTML fragment from `_INBOX_HTML_OPEN`, which `MailSite` actually renders. |
 
+### Verification evidence (56.4.10)
+
+| Command | Result |
+|---|---|
+| removal audit over `docs-site/src/content/docs/more/examples/*` and `examples/docs/store_sdk.py` | PASS: all five legacy documentation pages and the store example are absent. |
+| reference scan over live docs, examples, tests and the freshness lock | PASS: no references to the removed routes, filenames or page slugs remain. Historical plan and status evidence is retained. |
+| `uv run pytest -q tests/unit/test_docs_examples.py` | PASS: 12 remaining local examples run with their documented output. |
+| phase-56 snapshot and example tests | PASS: 21 tests; prose and domain snapshots were reduced only by the deleted pages. The separate zero-debt assertions remain intentionally red on 56.5-56.8 pages. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/index.mdx` | PASS: 0 errors, 0 warnings for the replacement tutorial card. |
+| documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current; orphaned lock entries removed by the supported updater. |
+| clean strict Sphinx build | PASS: 93 sources, no warnings; the output contains no `more/examples` directory. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5658,4 +5670,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.10–56.8. No blockers; next step is 56.4.10.
+56.5.1–56.8. No blockers; next step is 56.5.1.
