@@ -1,0 +1,39 @@
+---
+title: Подключить msgspec
+description: Используйте msgspec.Struct и переименование полей в типизированном ответе.
+freshness: false
+---
+
+Установите extra `msgspec`:
+
+```bash
+uv add "eazy-sdk[msgspec]"
+```
+
+`rename` задаёт имя поля в данных API, не меняя имя атрибута Python:
+
+```{literalinclude} ../../../../../../examples/docs/integration_msgspec_model.py
+:language: python
+:start-after: "# docs:integration-msgspec-model:start"
+:end-before: "# docs:integration-msgspec-model:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_msgspec_model.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_msgspec_model -->
+```text
+msgspec: 42 План на пятницу
+```
+
+Адаптер читает `rename` класса и `msgspec.field(name=...)`. `frozen=True` сообщает SDK, что
+модель нельзя изменить при эволюции подписанного или спроецированного значения.
+
+## Дальше
+
+- {doc}`Сравнить библиотеки моделей </integrations/models/index>`
+- {doc}`Использовать dataclass </integrations/models/dataclass>`
+- {doc}`Проверить модели и кодеки </reference/api/models-codecs>`

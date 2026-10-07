@@ -1,0 +1,42 @@
+---
+title: Подключить Pydantic
+description: Используйте BaseModel и alias Pydantic v2 в типизированном ответе.
+freshness: false
+---
+
+Нужна проверка моделей средствами Pydantic?
+
+Установите extra `pydantic`:
+
+```bash
+uv add "eazy-sdk[pydantic]"
+```
+
+Адаптер использует Pydantic v2 для разбора ответа. Alias связывает имя Python с полем API:
+
+```{literalinclude} ../../../../../../examples/docs/integration_pydantic_model.py
+:language: python
+:start-after: "# docs:integration-pydantic-model:start"
+:end-before: "# docs:integration-pydantic-model:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_pydantic_model.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_pydantic_model -->
+```text
+pydantic: 42 План на пятницу
+```
+
+Для входящих данных адаптер учитывает `validation_alias`. При сериализации тела запроса он
+использует `serialization_alias` или `alias` согласно конфигурации модели. Ошибка в типах ответа
+сохраняет структурированные сведения Pydantic в контексте ошибки SDK.
+
+## Дальше
+
+- {doc}`Сравнить библиотеки моделей </integrations/models/index>`
+- {doc}`Подключить msgspec </integrations/models/msgspec>`
+- {doc}`Проверить модели и кодеки </reference/api/models-codecs>`

@@ -1,6 +1,5 @@
 # Generated baseline for phase 56.2.4. Remove entries as pages are rewritten.
 integrations/generators/openapi.mdx: em-dash=2
-integrations/models/index.mdx: em-dash=25
 integrations/protection/cloudflare.mdx: english-paragraph=5
 integrations/protection/turnstile.mdx: english-paragraph=3
 reference/api/api-methods.mdx: em-dash=23

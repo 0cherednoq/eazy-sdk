@@ -1,47 +1,43 @@
 ---
-title: XML
-description: XML request/response через eazy-sdk-xml.
+title: Отправить и разобрать XML
+description: Подключите XML-кодек к телу запроса и типизированному ответу.
 freshness: false
 ---
+
+Установите отдельный плагин:
 
 ```bash
 uv add eazy-sdk-xml
 ```
 
-Подключите XML codec к request marker и response extractor. Операция остаётся обычным методом
-API-класса.
+Один `ElementTreeXmlCodec` сериализует модель запроса и разбирает примитивы ответа:
 
-```python
-from dataclasses import dataclass
-from typing import Annotated
-
-from eazy_sdk import Http, HttpOperation, SyncApi, op
-from eazy_sdk.response import Extracted
-from eazy_sdk_xml import ElementTreeXmlCodec, XmlBody, XmlResponse
-
-codec = ElementTreeXmlCodec(root_name="order")
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CreateOrder(HttpOperation[OrderResult]):
-    __http__ = Http.post(
-        "/orders",
-        operation_id="createOrder",
-        success={
-            201: Extracted(OrderResult, using=XmlResponse(codec), media_type="application/xml")
-        },
-    )
-
-    order: Annotated[Order, XmlBody(codec=codec)]
-
-class OrdersApi(SyncApi):
-    create_order = op(CreateOrder)
+```{literalinclude} ../../../../../../examples/docs/integration_xml_document.py
+:language: python
+:start-after: "# docs:integration-xml-document:start"
+:end-before: "# docs:integration-xml-document:end"
 ```
 
-Пример request: `POST /orders`, `Content-Type: application/xml`, body
-`<order><id>42</id></order>`. Пример response: status `201`, `Content-Type: application/xml`, body
-`<result><accepted>true</accepted></result>`.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_xml_document.py
+:language: python
+```
+:::
 
-Собственный codec реализует `serialize(value) -> bytes` и `parse(body) -> object`. Он должен быть
-детерминированным, если body участвует в signing. `XmlResponse` возвращает primitive tree, после
-чего общий `ModelAdapterRegistry` строит dataclass, Pydantic или msgspec model. Malformed XML
-становится response parsing error, а не частично заполненной моделью.
+<!-- example-output: examples.docs.integration_xml_document -->
+```text
+xml order: 42
+```
+
+`XmlBody` задаёт `Content-Type: application/xml` и кодирует тело. `XmlResponse` читает XML в
+примитивное дерево, после чего общий реестр моделей создаёт `OrderResult`. Ошибка синтаксиса XML
+становится ошибкой разбора ответа.
+
+Для извлечения отдельных полей из XML-документа используйте `ElementTreeBackend` и XPath. Этот
+бэкенд не поддерживает CSS; несовместимый селектор отвергается при компиляции операции.
+
+## Дальше
+
+- {doc}`Извлечь данные из HTML </integrations/documents/html>`
+- {doc}`Выбрать библиотеку моделей </integrations/models/index>`
+- {doc}`Проверить XML API </reference/api/xml>`

@@ -87,10 +87,10 @@
 | `guides/responses/html` | `guide/responses/html` | ok | ok | ok | ok | n/a |
 | `guides/responses/index` | `guide/responses/index` | ok | n/a | ok | ok | n/a |
 | `guides/responses/success` | `guide/responses/success` | ok | ok | ok | ok | n/a |
-| `guides/serialization` | `integrations/models/index` | ok |  |  |  | n/a |
+| `guides/serialization` | `integrations/models/index` | ok | n/a | ok | ok | n/a |
 | `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok |  |  |  | n/a |
 | `guides/websocket` | `guide/websocket` | ok | ok | ok | ok | n/a |
-| `guides/xml` | `integrations/documents/xml` | ok |  |  |  | n/a |
+| `guides/xml` | `integrations/documents/xml` | ok | ok | ok | ok | n/a |
 | `index` | `index` | ok |  |  |  | n/a |
 | `more/examples/html-login` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/index` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
@@ -120,11 +120,11 @@
 | `integrations/http/custom-handler` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/browser/playwright` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/browser/pydoll` | 56.6 | ok | ok | ok | ok | n/a |
-| `integrations/models/pydantic` | 56.6 |  |  |  |  | n/a |
-| `integrations/models/msgspec` | 56.6 |  |  |  |  | n/a |
-| `integrations/models/dataclass` | 56.6 |  |  |  |  | n/a |
-| `integrations/models/adaptix` | 56.6 |  |  |  |  | n/a |
-| `integrations/documents/html` | 56.6 |  |  |  |  | n/a |
+| `integrations/models/pydantic` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/models/msgspec` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/models/dataclass` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/models/adaptix` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/documents/html` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/generators/asyncapi` | 56.6 |  |  |  |  | n/a |
 | `integrations/accounts/index` | 56.6 |  |  |  |  | n/a |
 | `architecture/index` | 56.7 |  |  |  |  | n/a |

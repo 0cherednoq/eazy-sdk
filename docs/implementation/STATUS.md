@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.6.3–56.8. No blockers; next step is 56.6.3.
+56.6.4–56.8. No blockers; next step is 56.6.4.
 
 ### Verification evidence (56.5.5)
 
@@ -5765,3 +5765,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | page queue and debt audit | PASS: all six rows are filled; eight obsolete code-block findings, 40 long dashes and six legacy domains are removed from the snapshots. |
 | documentation metadata and freshness | PASS: 97 valid pages; 73 freshness fingerprints current. |
 | strict Sphinx build | PASS: 97 sources, no warnings. |
+
+### Verification evidence (56.6.3)
+
+| Command | Result |
+|---|---|
+| six model/document example runs | PASS: Pydantic, msgspec, dataclass and Adaptix parsed message 42; Parsel extracted the inbox HTML; the XML codec sent and parsed order 42. |
+| focused documentation examples, snapshots and domain ratchet | PASS: 83 tests; all outputs match their pages, all literal includes resolve, and the rewritten pages add no debt. |
+| `uv run mypy examples/docs` | PASS: no issues in 53 source files. |
+| `uv run ruff check examples/docs` | PASS. |
+| `scripts/lint_docs_prose.py` over all seven pages | PASS: 0 errors and 0 warnings on every page; the pattern audit found no remaining findings. The outline-test exclusion applies to procedural pages. |
+| page queue and debt audit | PASS: all seven rows are filled; the obsolete 25-long-dash entry for the model overview is removed. |
+| documentation metadata and freshness | PASS: 102 valid pages; 73 freshness fingerprints current, including the refreshed model-overview fingerprint. |
+| strict Sphinx build | PASS: 102 sources, no warnings. |

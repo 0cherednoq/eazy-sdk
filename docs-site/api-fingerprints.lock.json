@@ -312,11 +312,9 @@
     }
   },
   "integrations/models/index.mdx": {
-    "fingerprint": "sha256:9755fa64051f9d4f46b426e40b70e7f3ac7fca9b7c9dd23f8d50a9021aa7fd03",
+    "fingerprint": "sha256:536595de5a736d92191121bc382b0caf79dadaefc51a1d89c578748112db46b8",
     "symbols": {
-      "eazy_sdk.models": "sha256:09807aaca77730f5c586faef4ac34326dc86996ebd827381ef0c5b72294386f8",
-      "eazy_sdk.request.wire.JsonBackend": "sha256:c3f5c29fe916ac2d1423cb50858a44fc60a1534eecd0057136fad6cf8efeb390",
-      "eazy_sdk.serialization.Serialization": "sha256:a477e233bb1a2a600192f72c40d9cfe276e820102cc1847e8bb6c7e6e0c33b3a"
+      "eazy_sdk.models": "sha256:09807aaca77730f5c586faef4ac34326dc86996ebd827381ef0c5b72294386f8"
     }
   },
   "integrations/protection/cloudflare.mdx": {

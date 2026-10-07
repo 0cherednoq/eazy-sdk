@@ -1,0 +1,43 @@
+---
+title: Подключить Adaptix
+description: Используйте один Retort приложения как адаптер выбранных dataclass-моделей.
+freshness: false
+---
+
+Установите отдельный плагин:
+
+```bash
+uv add eazy-sdk-adaptix
+```
+
+Перечислите типы, которыми управляет `Retort`, и повторите их таблицу имён для компилятора SDK:
+
+```{literalinclude} ../../../../../../examples/docs/integration_adaptix_model.py
+:language: python
+:start-after: "# docs:integration-adaptix-model:start"
+:end-before: "# docs:integration-adaptix-model:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_adaptix_model.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_adaptix_model -->
+```text
+adaptix: 42 План на пятницу
+```
+
+`adaptix_models(...)` заменяет штатный адаптер dataclass одним маршрутизатором. Указанные в
+`types=` классы проходят через `Retort`; остальные dataclass продолжает обрабатывать встроенная
+реализация. Так в реестре не появляются два адаптера для одного типа.
+
+Таблица `names=` нужна компилятору до первого значения модели. Она должна совпадать с
+`name_mapping` в рецепте `Retort`.
+
+## Дальше
+
+- {doc}`Сравнить библиотеки моделей </integrations/models/index>`
+- {doc}`Использовать dataclass </integrations/models/dataclass>`
+- {doc}`Проверить модели и кодеки </reference/api/models-codecs>`

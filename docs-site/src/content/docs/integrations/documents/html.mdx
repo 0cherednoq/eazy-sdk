@@ -1,0 +1,45 @@
+---
+title: Извлечь данные из HTML
+description: Объявите CSS-селекторы в модели и разберите HTML-ответ через Parsel.
+freshness: false
+---
+
+Установите HTML extra:
+
+```bash
+uv add "eazy-sdk[html]"
+```
+
+`CSS(...)` связывает поле модели с селектором документа. Операция остаётся обычным HTTP GET:
+
+```{literalinclude} ../../../../../../examples/docs/integration_html_document.py
+:language: python
+:start-after: "# docs:integration-html-document:start"
+:end-before: "# docs:integration-html-document:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_html_document.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_html_document -->
+```text
+html: Входящие — План на пятницу
+```
+
+`ParselBackend` поддерживает CSS и XPath для `text/html` и `application/xhtml+xml`. `Scope(...)`
+задаёт повторяющийся узел для списка вложенных моделей. Отсутствие обязательного поля считается
+ошибкой разбора, а optional-поле получает `None`.
+
+:::{note}
+Документная модель должна иметь хотя бы одно обязательное поле. Иначе она совпадёт с любой HTML-
+страницей, включая страницу ошибки другого ответа.
+:::
+
+## Дальше
+
+- {doc}`Разобрать XML </integrations/documents/xml>`
+- {doc}`Извлечь HTML в руководстве </guide/responses/html>`
+- {doc}`Проверить модели и кодеки </reference/api/models-codecs>`

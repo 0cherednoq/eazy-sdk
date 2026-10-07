@@ -1,0 +1,33 @@
+---
+title: Использовать dataclass
+description: Разберите ответ в стандартный dataclass без дополнительной зависимости.
+freshness: false
+---
+
+Адаптер dataclass входит в ядро. Поля Python напрямую соответствуют именам в данных API:
+
+```{literalinclude} ../../../../../../examples/docs/integration_dataclass_model.py
+:language: python
+:start-after: "# docs:integration-dataclass-model:start"
+:end-before: "# docs:integration-dataclass-model:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_dataclass_model.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_dataclass_model -->
+```text
+dataclass: 42 План на пятницу
+```
+
+Вложенные dataclass, коллекции, optional-поля и значения по умолчанию проходят через общий
+`ModelAdapterRegistry`. Для другого имени в API используйте проекцию операции или Adaptix.
+
+## Дальше
+
+- {doc}`Сравнить библиотеки моделей </integrations/models/index>`
+- {doc}`Подключить Adaptix </integrations/models/adaptix>`
+- {doc}`Спроецировать тело запроса </guide/requests/representation>`

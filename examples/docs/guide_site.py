@@ -24,7 +24,14 @@ class GuideSite:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(f"{request.method} {request.url.host}{request.url.path}")
         path = request.url.path
-        if path in {"/device", "/documents", "/middleware", "/messages/42"}:
+        if path in {
+            "/device",
+            "/documents",
+            "/middleware",
+            "/messages/42",
+            "/catalogue",
+            "/orders",
+        }:
             return self._content(request)
         if path in {"/health", "/redirect", "/final", "/rate"}:
             return self._reliability(request)
@@ -49,7 +56,22 @@ class GuideSite:
             )
         if path == "/middleware":
             return httpx.Response(200, json={"value": "ready"})
-        return httpx.Response(200, json={"id": 42, "subject": "План на пятницу"})
+        if path == "/messages/42":
+            return httpx.Response(200, json={"id": 42, "subject": "План на пятницу"})
+        if path == "/catalogue":
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html; charset=utf-8"},
+                content=(
+                    '<main><h1>Входящие</h1><article data-id="42">'
+                    '<span class="subject">План на пятницу</span></article></main>'
+                ).encode(),
+            )
+        return httpx.Response(
+            201,
+            headers={"content-type": "application/xml"},
+            content=b"<result><id>42</id></result>",
+        )
 
     def _reliability(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
