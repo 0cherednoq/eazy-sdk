@@ -113,7 +113,7 @@
 | `tutorial/session` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/messages` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/send` | 56.4 | ok | ok | ok | ok | ok |
-| `tutorial/encryption` | 56.4 |  |  |  |  |  |
+| `tutorial/encryption` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/assembly` | 56.4 |  |  |  |  |  |
 | `guide/testing` | 56.5 |  |  |  |  | n/a |
 | `integrations/index` | 56.6 |  |  |  |  | n/a |

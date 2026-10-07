@@ -5588,6 +5588,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build and preview rebuild | PASS: 96 sources, no warnings; `/tutorial/send/` returns 200 and contains both outputs, synchronized tabs and the actual signature. |
 | fresh-agent blind review plus provenance recheck | PASS after replacing the hand-copied composer HTML with a `literalinclude` from the exact `_COMPOSER_HTML` used by `MailSite`. |
 
+### Verification evidence (56.4.8)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.encryption` | PASS: encrypted message `100`; a separate GET found the decrypted subject `Секретная встреча`. |
+| independent HTTP capture and HMAC recomputation | PASS: field transform → compact JSON → whole-body transform; ciphertext and `cebf…b1a` signature match the page byte for byte; the response round-trips through the inbound transform. |
+| `uv run python -m examples.mail.browser.send` plus Chromium network capture | PASS: `Sent`/`Rejected`/`Silent`; JavaScript encrypts fields and body, signs the final bytes, decrypts the response, and the server stores the clear subject. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: 37 passed; all runnable outputs match their pages. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 29 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/encryption.mdx` | PASS: 0 errors, 0 warnings after replacing non-identifier English stage names. |
+| documentation metadata and freshness | PASS: 97 valid pages; 73 freshness fingerprints current. |
+| strict Sphinx build and preview rebuild | PASS: 97 sources, no warnings; `/tutorial/encryption/` returns 200 with exact ciphertext, output and synchronized tabs. |
+| fresh-agent blind review after three corrections | PASS: terminology, `plaintext_statuses` and browser response decryption are explicit; no remaining findings. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5629,4 +5644,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.8–56.8. No blockers; next step is 56.4.8.
+56.4.9–56.8. No blockers; next step is 56.4.9.

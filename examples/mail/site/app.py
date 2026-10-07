@@ -11,6 +11,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode
 
+from eazy_sdk.crypto import CryptoContext, CryptoDirection, CryptoStage
+
+from examples.mail.crypto import (
+    BODY_CIPHER,
+    FIELD_CIPHER,
+    MAIL_ENCRYPTED_CONTENT_TYPE,
+)
+
 REJECTED_INPUT = "wrong"
 VALID_LOGIN_INPUT = "correct"
 VALID_OTP = "123456"
@@ -312,18 +320,22 @@ class MailSite:
         signature = request.header("x-mail-signature") or ""
         if not hmac.compare_digest(signature, _mail_signature(request.body)):
             return _failure(403, "signature_rejected", "Signature is missing")
-        body = request.json()
+        encrypted = request.header("content-type") == MAIL_ENCRYPTED_CONTENT_TYPE
+        body = _encrypted_mail_document(request) if encrypted else request.json()
         recipient = str(body.get("recipient", ""))
         subject = str(body.get("subject", ""))
         if recipient == "rejected@mail.example":
-            return _failure(200, "recipient_rejected", "Recipient was rejected")
+            response = _failure(200, "recipient_rejected", "Recipient was rejected")
+            return _encrypt_mail_response(response) if encrypted else response
         if recipient == "quiet@mail.example":
             message = MailMessage(100 + len(self.state.sent), email, recipient, subject)
             self.state.sent.append(message)
-            return _success({"outcome": "silent"})
+            response = _success({"outcome": "silent"})
+            return _encrypt_mail_response(response) if encrypted else response
         message = MailMessage(100 + len(self.state.sent), email, recipient, subject)
         self.state.sent.append(message)
-        return _success({"outcome": "sent", "message_id": message.id})
+        response = _success({"outcome": "sent", "message_id": message.id})
+        return _encrypt_mail_response(response) if encrypted else response
 
     def _sent(self, request: SiteRequest) -> SiteResponse:
         recipient = request.query_value("recipient")
@@ -388,6 +400,49 @@ def _success(body: Mapping[str, object]) -> SiteResponse:
 def _mail_signature(body: bytes) -> str:
     digest = hashlib.sha256(body).hexdigest().encode()
     return hmac.new(MAIL_SIGNING_SECRET, digest, hashlib.sha256).hexdigest()
+
+
+def _crypto_context(
+    direction: CryptoDirection,
+    *,
+    algorithm: str = BODY_CIPHER.name,
+    stage: CryptoStage = CryptoStage.ENCODED,
+) -> CryptoContext:
+    return CryptoContext(
+        operation_id="teaching-mail-site",
+        profile="mail-send-v1",
+        algorithm=algorithm,
+        direction=direction,
+        stage=stage,
+        attempt=1,
+    )
+
+
+def _encrypted_mail_document(request: SiteRequest) -> dict[str, object]:
+    body_context = _crypto_context(CryptoDirection.INBOUND)
+    document = json.loads(BODY_CIPHER.decrypt(request.body, context=body_context))
+    if not isinstance(document, dict):
+        raise ValueError("the teaching site accepts encrypted JSON objects")
+    field_context = _crypto_context(
+        CryptoDirection.INBOUND,
+        algorithm=FIELD_CIPHER.name,
+        stage=CryptoStage.DOCUMENT,
+    )
+    for field_name in ("subject", "body"):
+        document[field_name] = FIELD_CIPHER.decrypt(
+            document[field_name],
+            context=field_context,
+        )
+    return document
+
+
+def _encrypt_mail_response(response: SiteResponse) -> SiteResponse:
+    context = _crypto_context(CryptoDirection.OUTBOUND)
+    return SiteResponse(
+        response.status,
+        (("content-type", MAIL_ENCRYPTED_CONTENT_TYPE),),
+        BODY_CIPHER.encrypt(response.body, context=context),
+    )
 
 
 def _failure(status: int, code: str, message: str) -> SiteResponse:
@@ -523,8 +578,20 @@ composer.addEventListener('submit', async (event) => {
   statusNode.hidden = true;
   if (rejected.open) rejected.close();
   const fields = new FormData(composer);
-  const body = JSON.stringify(Object.fromEntries(fields));
   const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const encode64 = (value) => {
+    const bytes = encoder.encode(value);
+    return btoa(String.fromCharCode(...bytes));
+  };
+  const decode64 = (value) => {
+    const bytes = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+    return decoder.decode(bytes);
+  };
+  const documentBody = Object.fromEntries(fields);
+  documentBody.subject = `mail-field:${encode64(documentBody.subject)}`;
+  documentBody.body = `mail-field:${encode64(documentBody.body)}`;
+  const body = `mail-body:${encode64(JSON.stringify(documentBody))}`;
   const digestBytes = await crypto.subtle.digest('SHA-256', encoder.encode(body));
   const digest = Array.from(new Uint8Array(digestBytes))
     .map((value) => value.toString(16).padStart(2, '0')).join('');
@@ -537,16 +604,17 @@ composer.addEventListener('submit', async (event) => {
   const response = await fetch('/api/v1/messages/send', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/vnd.mail.encrypted+json',
       Authorization: `Bearer ${token}`,
       'X-Mail-Signature': signature,
     },
     body,
   });
-  const documentBody = await response.json();
-  if (documentBody.status === 'recipient_rejected') {
+  const encryptedResponse = await response.text();
+  const responseBody = JSON.parse(decode64(encryptedResponse.replace('mail-body:', '')));
+  if (responseBody.status === 'recipient_rejected') {
     rejected.showModal();
-  } else if (documentBody.body.outcome === 'sent') {
+  } else if (responseBody.body.outcome === 'sent') {
     statusNode.hidden = false;
   }
 });

@@ -1,0 +1,134 @@
+---
+title: Шифрование полей и всего тела
+description: Преобразуйте выбранные поля, зашифруйте сериализованные байты и подпишите шифротекст.
+freshness: false
+---
+
+Письмо проходит две стадии. Сначала Eazy SDK преобразует `subject` и `body` внутри модели, затем
+JSON-кодек создаёт байты и второй алгоритм шифрует их целиком. HMAC из предыдущей главы видит уже
+шифротекст, поэтому сервер проверяет ровно те байты, которые получил.
+
+| Стадия | Вход | Результат |
+|---|---|---|
+| Преобразование полей | `NewMessage.subject`, `NewMessage.body` | строки с префиксом `mail-field:` |
+| JSON-кодек | модель с преобразованными полями | компактный UTF-8 JSON |
+| Преобразование байтов | сериализованный JSON | байты с префиксом `mail-body:` |
+| Подпись | окончательные байты | `X-Mail-Signature` по шифротексту |
+| Входящий ответ | зашифрованные байты | обычный `SendResult` после обратных стадий |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /api/v1/messages/send``
+
+```text
+Authorization: Bearer session-1
+Content-Type: application/vnd.mail.encrypted+json
+X-Mail-Signature: cebf73d9b5258813cd412be5173cf14633cf6cf26812c08ddbfc595cb58ddb1a
+
+mail-body:eyJib2R5IjoibWFpbC1maWVsZDowSnJRdTlHTzBZZlF1Q0RRdjlHQTBMalFzdEMxMExmUmc5R0NJTkN5SU5DLzBZL1JndEM5MExqUmh0R0RMZz09IiwicmVjaXBpZW50IjoiZ3JhY2VAbWFpbC5leGFtcGxlIiwic3ViamVjdCI6Im1haWwtZmllbGQ6MEtIUXRkQzYwWURRdGRHQzBMM1FzTkdQSU5DeTBZSFJndEdBMExYUmg5Q3cifQ==
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```text
+Content-Type: application/vnd.mail.encrypted+json
+
+mail-body:eyJzdGF0dXMiOiJvayIsImJvZHkiOnsib3V0Y29tZSI6InNlbnQiLCJtZXNzYWdlX2lkIjoxMDB9fQ==
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+Алгоритмы принадлежат приложению. Учебные реализации кодируют значение в Base64 с различимым
+префиксом; `CryptoContext` они принимают по тому же протоколу, что и настоящий алгоритм из KMS
+или хранилища ключей.
+
+```{literalinclude} ../../../../../examples/mail/crypto.py
+:language: python
+:start-after: "# region docs: mail-demo-ciphers"
+:end-before: "# endregion docs: mail-demo-ciphers"
+```
+
+Профиль задаёт порядок стадий и пределы размера. `encrypt_field(...)` получает тип модели и путь,
+который проверяет типизатор. `encrypt_encoded(...)` работает позже, уже с сериализованными байтами.
+Обратное преобразование байтов нужно для зашифрованного ответа.
+
+```{literalinclude} ../../../../../examples/mail/http/encryption.py
+:language: python
+:start-after: "# region docs: mail-encryption-profile"
+:end-before: "# endregion docs: mail-encryption-profile"
+```
+
+Операция связывает профиль с контрактом представления. Внешний `Content-Type` принадлежит зашифрованному
+формату, а `clear_content_type` говорит декодеру, что после расшифровки лежит JSON.
+`plaintext_statuses` оставляет ответы `401` и `403` открытыми: сервер возвращает такие отказы до
+расшифровки тела. Подпись остаётся той же, но исполняется после обеих исходящих стадий.
+
+```{literalinclude} ../../../../../examples/mail/http/encryption.py
+:language: python
+:start-after: "# region docs: encrypted-mail-operation"
+:end-before: "# endregion docs: encrypted-mail-operation"
+```
+
+После отправки обычный GET ищет письмо по открытой теме. Результат подтверждает, что сайт
+расшифровал поле перед сохранением, а вызывающий получил обычную модель ответа.
+
+```{literalinclude} ../../../../../examples/mail/http/encryption.py
+:language: python
+:start-after: "# region docs: encrypted-mail-flow"
+:end-before: "# endregion docs: encrypted-mail-flow"
+```
+
+:::{dropdown} Файл операции целиком
+```{literalinclude} ../../../../../examples/mail/http/encryption.py
+:language: python
+```
+:::
+
+:::{dropdown} Файл учебных алгоритмов целиком
+```{literalinclude} ../../../../../examples/mail/crypto.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.encryption`.
+
+<!-- example-output: examples.mail.http.encryption -->
+```text
+encrypted message: 100
+found clear subject: Секретная встреча
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+JavaScript учебной страницы сам шифрует поля и тело перед `fetch` и расшифровывает ответ;
+браузерная операция только заполняет форму и распознаёт
+{doc}`три исхода композера </tutorial/send>`.
+::::
+:::::
+
+:::{warning}
+Base64 не обеспечивает секретность. Эти обратимые алгоритмы показывают места подключения;
+в приложении передайте алгоритм с проверенной схемой, управлением ключами и уникальным `nonce`.
+:::
+
+## Дальше
+
+- {doc}`Вернитесь к подписанной отправке </tutorial/send>`.
+- {doc}`Изучите полный контракт payload crypto </guide/encryption>`.

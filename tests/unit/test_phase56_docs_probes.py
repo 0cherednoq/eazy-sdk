@@ -33,6 +33,7 @@ from examples.mail.browser.messages import main as browser_messages_main
 from examples.mail.browser.send import main as browser_send_main
 from examples.mail.browser.session import main as browser_session_main
 from examples.mail.http.captcha import main as captcha_main
+from examples.mail.http.encryption import main as http_encryption_main
 from examples.mail.http.login_failures import main as http_login_main
 from examples.mail.http.messages import main as http_messages_main
 from examples.mail.http.send import main as http_send_main
@@ -162,6 +163,17 @@ def test_browser_send_probe_distinguishes_all_three_outcomes(
         "sent: Sent",
         "rejected: Rejected",
         "silent: Silent",
+    ]
+
+
+def test_http_encryption_probe_round_trips_fields_and_body(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http_encryption_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "encrypted message: 100",
+        "found clear subject: Секретная встреча",
     ]
 
 

@@ -356,7 +356,7 @@ reference/        Справочник
 | 56.4.5 | глава 5, сессия, обе линии | строка в очереди заполнена | complete | `session_auth`: HTML, срок и `401`; `BrowserLogin`/`BrowserSession`: один вход на две вкладки; 28 тестов, strict build и blind review PASS | 2026-10-07 |
 | 56.4.6 | глава 6, список писем, обе линии | три стратегии и коллекция подтверждены выводом | complete | `Pages.offset/cursor/next_url` и Chromium `each(...)`/«Ещё»; 32 теста, strict build и blind review PASS | 2026-10-07 |
 | 56.4.7 | глава 7, отправка письма, обе линии | три исхода композера подтверждены выводом | complete | HMAC по фактическим байтам; HTTP `sent`/`RecipientRejected`/`silent` с поиском в Sent; Chromium `Sent`/`Rejected`/`Silent`; 35 тестов, strict build и blind review PASS | 2026-10-07 |
-| 56.4.8 | глава 8, шифрование | строка в очереди заполнена | pending | | |
+| 56.4.8 | глава 8, шифрование | строка в очереди заполнена | complete | field → JSON → whole-body crypto и HMAC по ciphertext; HTTP и Chromium round-trip; 37 тестов, strict build и blind review PASS | 2026-10-07 |
 | 56.4.9 | глава 9, сборка, сессия браузера у HTTP-клиента | `python -m examples.mail http` и `browser` проходят | pending | | |
 | 56.4.10 | удаление `more/examples/*` и `examples/docs/store_sdk.py` | ссылок на них нет, сборка зелёная | pending | | |
 | 56.5.1 | руководство: запросы, 13 страниц | строки в очереди заполнены | pending | | |

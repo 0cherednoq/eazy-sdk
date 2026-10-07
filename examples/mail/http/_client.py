@@ -11,8 +11,9 @@ from examples.mail.site import MailSite, handle_httpx
 
 
 def mail_client() -> Client:
+    site = MailSite()
     raw = httpx.Client(
-        transport=httpx.MockTransport(handle_httpx),
+        transport=httpx.MockTransport(lambda request: handle_httpx(request, site)),
         headers={},
         cookies={},
     )
