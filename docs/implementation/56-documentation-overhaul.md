@@ -359,7 +359,7 @@ reference/        Справочник
 | 56.4.8 | глава 8, шифрование | строка в очереди заполнена | complete | field → JSON → whole-body crypto и HMAC по ciphertext; HTTP и Chromium round-trip; 37 тестов, strict build и blind review PASS | 2026-10-07 |
 | 56.4.9 | глава 9, сборка, сессия браузера у HTTP-клиента | `python -m examples.mail http` и `browser` проходят | complete | оба entry point PASS; один `BrowserMailSdk`, BrowserLogin → Bearer → реальный curl_cffi и bound Chromium router на одном MailSite; 41 тест, strict build и blind review PASS | 2026-10-07 |
 | 56.4.10 | удаление `more/examples/*` и `examples/docs/store_sdk.py` | ссылок на них нет, сборка зелёная | complete | пять страниц и старый пример удалены; ссылки, тест и freshness-lock очищены; 93-page strict build PASS | 2026-10-07 |
-| 56.5.1 | руководство: запросы, 13 страниц | строки в очереди заполнены | pending | | |
+| 56.5.1 | руководство: запросы, 12 страниц | строки в очереди заполнены | complete | 11 runnable-файлов и общий локальный сайт; 44 теста, mypy/ruff, 0/0 prose lint, freshness и 93-page strict build PASS | 2026-10-07 |
 | 56.5.2 | руководство: ответы, 4 страницы | строки в очереди заполнены | pending | | |
 | 56.5.3 | руководство: авторизация, 10 страниц, вкладки по правилу 12 | строки в очереди заполнены | pending | | |
 | 56.5.4 | руководство: защита, перевод на русский | строка в очереди заполнена | pending | | |
@@ -381,7 +381,9 @@ reference/        Справочник
 
 ### 8.3. Отклонения от плана
 
-Пока нет.
+- В строке 56.5.1 число страниц исправлено с 13 на 12. Очередь `56-pages.md`, целевая структура,
+  `toctree` и каталог `guide/requests/` содержат одни и те же 12 маршрутов; отдельная
+  тринадцатая страница в плане не названа.
 
 ## 9. Гейты
 

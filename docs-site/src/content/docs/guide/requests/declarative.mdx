@@ -1,6 +1,6 @@
 ---
-title: Объявление операции
-description: Операция — frozen-класс, публикуемый через op(); декоратор — короткая форма того же класса.
+title: Объявить HTTP-операцию
+description: Выберите класс операции для полного контракта или декоратор для короткого метода.
 sources:
   - eazy_sdk.api
   - eazy_sdk.operation
@@ -8,153 +8,79 @@ draft: false
 api_fingerprint: "sha256:4a81cfb7bf9d2f8984226f5bbe39b753307b3541f356f7717cacff1f085d7795"
 ---
 
-Операция объявляется классом. Его поля — это поля запроса, `__http__` — всё остальное, что
-операция объявляет о себе, а `op(...)` публикует её на роутере. Публичной сигнатурой SDK
-становится конструктор класса, поэтому IDE и type checker видят имена полей, их типы и значения
-по умолчанию до первого запуска.
+Объявите запрос неизменяемым классом `HttpOperation[T]`. Поля класса становятся аргументами
+вызова, `__http__` хранит HTTP-контракт, а `op(...)` публикует операцию на роутере. Редактор кода
+видит сигнатуру до запуска программы.
 
-Эта страница — единственное место в документации, где рядом показаны обе формы объявления:
-класс и декоратор. Во всех остальных руководствах операции объявлены классами.
+Это основной вариант.
+Он сохраняет отдельный тип запроса, поддерживает фабрики значений по умолчанию и позволяет
+переиспользовать общие поля через обычное наследование моделей.
 
-## Класс
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``POST /orders``
+```json
+{"item": "keyboard"}
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``201 Created``
+```json
+{"id": "order-42", "item": "keyboard"}
+```
+::::
+:::::
 
-```python
-from dataclasses import dataclass
+## Объявить операцию классом
 
-from eazy_sdk import UNSET, Http, HttpOperation, JsonField, Omittable, Path, Query, SyncApi, op
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CreateOrder(HttpOperation[Order]):
-    __http__ = Http.post("/customers/{customer_id}/orders", success={201: Order})
-
-    customer_id: Path[str]
-    item: JsonField[str]
-    quantity: JsonField[int] = 1
-    dry_run: Query[bool] = False
-    comment: JsonField[Omittable[str]] = UNSET
-
-class OrdersApi(SyncApi):
-    create_order = op(CreateOrder)
+```{literalinclude} ../../../../../../examples/docs/request_declaration.py
+:language: python
+:start-after: "# docs:class:start"
+:end-before: "# docs:class:end"
 ```
 
-Три требования к классу, и других нет:
+`Order` задаёт тип успешного ответа. `success={201: Order}` связывает статус `201` с этой моделью.
+Маркер `JsonField[str]` помещает `item` в JSON-тело. `kw_only=True` делает все аргументы
+именованными, поэтому добавление нового поля не меняет смысл старых вызовов.
 
-| Требование | Почему |
-|---|---|
-| `HttpOperation[T]` в базах | `T` — тип успешного ответа и тип, который вернёт вызов |
-| `__http__ = Http.<verb>(...)` | метод, путь и весь контракт операции |
-| класс **frozen** | запрос является значением: его копируют и отправляют повторно |
+## Использовать короткий декоратор
 
-`kw_only=True` формально не обязателен, но объявляйте его: у HTTP-параметров нет осмысленного
-порядка, а позиционный вызов операции читается хуже и ломается при добавлении поля.
-
-Класс может быть dataclass, Pydantic-моделью или msgspec-структурой — любой, который читает
-настроенный `ModelAdapterRegistry`:
-
-```python
-from pydantic import BaseModel, ConfigDict
-
-class GetPost(BaseModel, HttpOperation[BlogPost]):
-    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
-    __http__ = Http.get("/posts/{post_id}")
-
-    post_id: Path[int]
+```{literalinclude} ../../../../../../examples/docs/request_declaration.py
+:language: python
+:start-after: "# docs:decorator:start"
+:end-before: "# docs:decorator:end"
 ```
 
-`ClassVar`-атрибуты полями запроса не становятся, поэтому `__http__` и любые константы класса
-на провод не уходят.
+Декоратор синтезирует такой же неизменяемый класс и публикует его тем же дескриптором. Python не
+выполняет тело метода во время вызова SDK. Полученный класс доступен как
+`CompactOrdersApi.create.Operation`.
 
-## Что даёт класс
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_declaration.py
+:language: python
+```
+:::
 
-```python
-from dataclasses import field
-from uuid import uuid4
+Запуск: `uv run python examples/docs/request_declaration.py`.
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Ping(HttpOperation[Pong]):
-    __http__ = Http.get("/ping")
-
-    trace_id: Annotated[str, markers.Header("X-Trace")] = field(
-        default_factory=lambda: uuid4().hex
-    )
+<!-- example-output: examples.docs.request_declaration -->
+```text
+class: order-42 keyboard
+decorator: order-42 mouse
 ```
 
-- **Значения по умолчанию и `default_factory`** — обычные Python-механизмы; фабрика вызывается
-  на каждое построение запроса.
-- **Запрос как значение**: `request()`, `evolve()`, `send()` (см. {doc}`Запрос как значение
-  </guide/requests/values>`).
-- **Источник проекции**: `BodyProjection` без `source=` получает само значение операции
-  (см. {doc}`Представление запроса </guide/requests/representation>`).
-- **Наследование**: общий набор полей выносится в базовый класс операции обычным наследованием
-  dataclass — подкласс переобъявляет `__http__` и добавляет свои поля.
-- **Повторное использование**: один класс можно опубликовать на нескольких роутерах;
-  `operation_id` по умолчанию берётся от имени класса, а не от имени атрибута.
-
-```python
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListPage(HttpOperation[Page]):
-    __http__ = Http.get("/items")
-
-    page: Query[int] = 1
-    per_page: Query[int] = 20
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListArchivedPage(ListPage):
-    __http__ = Http.get("/items/archived")
-
-    since: Query[str]
-```
-
-## Декоратор как короткая форма
-
-Тот же метод можно объявить декоратором. Он синтезирует ровно такой же frozen-класс — класс
-доступен как `OrdersApi.create_order.Operation`:
-
-```python
-from typing import Annotated
-
-from eazy_sdk import UNSET, Omittable, SyncApi, api
-from eazy_sdk.request import markers
-
-class OrdersApi(SyncApi):
-    @api.post("/customers/{customer_id}/orders", success={201: Order})
-    def create_order(
-        self,
-        *,
-        customer_id: Annotated[str, markers.Path()],
-        item: Annotated[str, markers.JsonField()],
-        quantity: Annotated[int, markers.JsonField()] = 1,
-        dry_run: Annotated[bool, markers.Query()] = False,
-        comment: Annotated[Omittable[str], markers.JsonField()] = UNSET,
-    ) -> Order:
-        raise NotImplementedError
-```
-
-Правила декоратора:
-
-- аннотация возвращаемого типа обязательна — она называет успешный случай так же, как
-  `HttpOperation[T]`;
-- тело не выполняется; пишите `raise NotImplementedError`, потому что `...` strict mypy считает
-  ошибкой `empty-body`;
-- параметры keyword-only, как и поля класса;
-- `Http.get` и `api.get` — одна и та же функция с одним набором ключевых слов, включая
-  `Http.request(method, path)` / `api.request(method, path)` для нестандартного HTTP-глагола.
-
-## Что выбрать
-
-| | Класс + `op(...)` | Декоратор |
+| Задача | Класс и `op(...)` | Декоратор |
 |---|---|---|
-| Значения по умолчанию | обычные defaults и `default_factory` | только defaults сигнатуры; `default_factory` выразить нечем |
-| Запрос как значение | `request()`/`evolve()`/`send()` над своим классом | те же методы над синтезированным `.Operation` |
-| `options` одного вызова | `send(request, options=...)` | и параметр вызова, и `send(...)` |
-| Источник проекции | сам класс операции | синтезированный класс, `.Operation` |
-| Наследование полей | обычное наследование класса | повтор в сигнатуре |
-| `operation_id` по умолчанию | имя класса | имя метода |
-| Объём объявления | класс + строка `op(...)` | один метод |
+| `default_factory`, наследование полей, проекция | подходит | ограничен сигнатурой метода |
+| запрос как отдельное значение | прямой класс операции | синтезированный `.Operation` |
+| короткая операция без сложного тела | больше строк | компактнее |
 
-Декоратор остаётся удобным для короткой ручки без тела и без общих полей. Всё остальное —
-пагинация, отложенная отправка, общий набор полей у семейства операций, проекция в приватную
-wire-схему — короче и точнее выражается классом.
+## Дальше
 
-Обе формы проходят один и тот же путь исполнения: декоратор не является отдельным механизмом, он
-собирает класс и публикует его тем же дескриптором.
+- {doc}`Добавьте значение в путь </guide/requests/path>`.
+- {doc}`Отправьте JSON </guide/requests/json>`.
+- {doc}`Работайте с запросом как со значением </guide/requests/values>`.

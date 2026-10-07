@@ -71,18 +71,18 @@
 | `guides/reliability/rate-limit` | `guide/reliability/rate-limit` | ok |  |  |  | n/a |
 | `guides/reliability/redirect` | `guide/reliability/redirect` | ok |  |  |  | n/a |
 | `guides/reliability/retry` | `guide/reliability/retry` | ok |  |  |  | n/a |
-| `guides/requests/bytes` | `guide/requests/bytes` | ok |  |  |  | n/a |
-| `guides/requests/cookies` | `guide/requests/cookies` | ok |  |  |  | n/a |
-| `guides/requests/declarative` | `guide/requests/declarative` | ok |  |  |  | n/a |
-| `guides/requests/form` | `guide/requests/form` | ok |  |  |  | n/a |
-| `guides/requests/headers` | `guide/requests/headers` | ok |  |  |  | n/a |
-| `guides/requests/index` | `guide/requests/index` | ok |  |  |  | n/a |
-| `guides/requests/json` | `guide/requests/json` | ok |  |  |  | n/a |
-| `guides/requests/multipart` | `guide/requests/multipart` | ok |  |  |  | n/a |
-| `guides/requests/path` | `guide/requests/path` | ok |  |  |  | n/a |
-| `guides/requests/query` | `guide/requests/query` | ok |  |  |  | n/a |
-| `guides/requests/representation` | `guide/requests/representation` | ok |  |  |  | n/a |
-| `guides/requests/values` | `guide/requests/values` | ok |  |  |  | n/a |
+| `guides/requests/bytes` | `guide/requests/bytes` | ok | ok | ok | ok | n/a |
+| `guides/requests/cookies` | `guide/requests/cookies` | ok | ok | ok | ok | n/a |
+| `guides/requests/declarative` | `guide/requests/declarative` | ok | ok | ok | ok | n/a |
+| `guides/requests/form` | `guide/requests/form` | ok | ok | ok | ok | n/a |
+| `guides/requests/headers` | `guide/requests/headers` | ok | ok | ok | ok | n/a |
+| `guides/requests/index` | `guide/requests/index` | ok | n/a | ok | ok | n/a |
+| `guides/requests/json` | `guide/requests/json` | ok | ok | ok | ok | n/a |
+| `guides/requests/multipart` | `guide/requests/multipart` | ok | ok | ok | ok | n/a |
+| `guides/requests/path` | `guide/requests/path` | ok | ok | ok | ok | n/a |
+| `guides/requests/query` | `guide/requests/query` | ok | ok | ok | ok | n/a |
+| `guides/requests/representation` | `guide/requests/representation` | ok | ok | ok | ok | n/a |
+| `guides/requests/values` | `guide/requests/values` | ok | ok | ok | ok | n/a |
 | `guides/responses/errors` | `guide/responses/errors` | ok |  |  |  | n/a |
 | `guides/responses/html` | `guide/responses/html` | ok |  |  |  | n/a |
 | `guides/responses/index` | `guide/responses/index` | ok |  |  |  | n/a |

@@ -1,43 +1,61 @@
 ---
-title: Multipart
-description: Отправьте файл через multipart/form-data.
+title: Отправить файл
+description: Соберите multipart/form-data из файла и сопутствующих полей.
 sources:
   - eazy_sdk.request.Part
   - eazy_sdk.request.MultipartPart
 api_fingerprint: "sha256:1c1493b3925e6875898c5327c62ca81ed79ab0f3bd433fed49cecac6e4dd0695"
 ---
 
-Каждый `Part()` становится частью `multipart/form-data`. Для filename, part content type или
-собственных part headers передайте `MultipartPart`.
+Используйте `Part[T]` для простого поля multipart. Для файла с именем, типом содержимого или
+собственными заголовками передайте `MultipartPart`.
 
-```python
-from dataclasses import dataclass
-from typing import Annotated
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``POST /files``
+```text
+Content-Disposition: form-data; name="document"; filename="avatar.txt"
+Content-Type: text/plain
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``201 Created``
+```json
+{"file_id": "file-1", "filename": "avatar.txt"}
+```
+::::
+:::::
 
-from eazy_sdk import UNSET, Http, HttpOperation, Omittable, SyncApi, op
-from eazy_sdk.request import MultipartPart, Part, markers
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class UploadFile(HttpOperation[Upload]):
-    __http__ = Http.post("/files", operation_id="uploadFile")
-
-    document: Annotated[MultipartPart, markers.Part("document")]
-    label: Part[Omittable[str]] = UNSET
-
-class FilesApi(SyncApi):
-    upload = op(UploadFile)
-
-result = FilesApi(client).upload(
-    document=MultipartPart(
-        b"PNG bytes",
-        filename="avatar.png",
-        content_type="image/png",
-    ),
-)
+```{literalinclude} ../../../../../../examples/docs/request_multipart.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Eazy SDK формирует boundary и framing bytes до отправки. Для фиксированного boundary или полного
-body model используйте `MultipartBody(boundary=...)`. Adapter получает уже подготовленные bytes и
-не пересобирает multipart.
+`markers.Part("document")` задаёт имя части. `MultipartPart` хранит содержимое, имя файла и
+`Content-Type`. SDK формирует границу и служебные байты до подписи и отправки.
 
-Пример ответа: status `201`, `Content-Type: application/json`, body `{"file_id":"f-1"}`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_multipart.py
+:language: python
+```
+:::
+
+Запуск: `uv run python examples/docs/request_multipart.py`.
+
+<!-- example-output: examples.docs.request_multipart -->
+```text
+uploaded: file-1 avatar.txt
+```
+
+Для фиксированной границы или модели всего тела используйте `MultipartBody(boundary=...)`.
+Обработчик транспорта получает уже собранные байты и не должен кодировать multipart повторно.
+
+## Дальше
+
+- {doc}`Отправьте готовые байты </guide/requests/bytes>`.
+- {doc}`Подпишите окончательное тело </guide/signing>`.

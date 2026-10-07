@@ -1,6 +1,6 @@
 ---
-title: JSON body
-description: Поля операции — это поля JSON-объекта; модель нужна только для вложенного документа.
+title: Отправить JSON-объект
+description: Соберите плоский JSON из полей операции или передайте модель целиком.
 sources:
   - eazy_sdk.request.JsonBody
   - eazy_sdk.request.Body
@@ -8,94 +8,56 @@ sources:
 api_fingerprint: "sha256:dca4bcce0eeb1c0bc2f0f7e7ef636bb4ca77e7b1d0fffbb0220386e312aff426"
 ---
 
-Плоский JSON object объявляется полями операции с маркером `JsonField`. Runtime проверяет поля и
-типы значений до provider calls и сети, а IDE показывает точные именованные аргументы без
-wrapper-словаря.
+Объявите каждое поле плоского JSON как `JsonField[T]`. Вызов получит точную сигнатуру без
+словаря `body`, а SDK проверит обязательные значения до отправки.
 
-```python
-from dataclasses import dataclass, field
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``POST /users``
+```json
+{"name": "Ada", "tags": ["admin"]}
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``201 Created``
+```json
+{"id": 42, "name": "Ada"}
+```
+::::
+:::::
 
-from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, JsonField, Omittable, op
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CreateUser(HttpOperation[User]):
-    __http__ = Http.post("/users", operation_id="createUser")
-
-    name: JsonField[str]
-    tags: JsonField[list[str]] = field(default_factory=list)
-    note: JsonField[Omittable[str]] = UNSET
-
-class AsyncUsersApi(AsyncApi):
-    create = op(CreateUser)
-
-user = await AsyncUsersApi(client).create(name="Ada", tags=["admin"])
+```{literalinclude} ../../../../../../examples/docs/request_json.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Запрос содержит `Content-Type: application/json` и body `{"name":"Ada","tags":["admin"]}`. Поле,
-оставшееся `UNSET`, в body не попадает; явно переданный `None` остаётся JSON `null`, если тип поля
-допускает `None`. `default_factory` работает как в любом dataclass: каждый вызов получает свой
-список.
+Для `tags` создаётся новый список при каждом вызове. `note=UNSET` не попадает в объект. Явное
+`note=None` станет JSON `null`, если аннотация разрешает `None`.
 
-Имя на проводе принадлежит модели. У dataclass его задаёт маркер
-(`Annotated[str, markers.JsonField("q")]`), у Pydantic — `serialization_alias`, у msgspec —
-`msgspec.field(name=...)`. Объявлять его в двух местах сразу — ошибка объявления.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_json.py
+:language: python
+```
+:::
 
-Для вложенного документа или model-owned validation используйте dataclass, Pydantic v2 или
-msgspec и передавайте его одним полем с `markers.JsonBody()`. Этот marker выбирает placement, но не
-переопределяет aliases/default/exclusion policy такой модели.
+Запуск: `uv run python examples/docs/request_json.py`.
 
-Готовые определения для всех трёх model libraries и пример собственного `ModelAdapter` находятся
-в {doc}`руководстве по сериализации моделей </reference/api/models-codecs>`.
-
-Не смешивайте root body с `JsonField` в одной операции. Пример ответа: status `201`, JSON
-`{"id":42,"name":"Ada"}`.
-
-## Когда wire-структура другая
-
-Если внешний API ждёт вложенный документ, а вызывающему удобнее плоские поля, объявите
-`BodyProjection` в `__http__`. Источник — сама операция, поэтому поля объявлены один раз:
-
-```python
-from dataclasses import dataclass
-
-from eazy_sdk import Http, HttpOperation, op
-from eazy_sdk.request import Body, BodyProjection
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RegisterUser(HttpOperation[Account]):
-    __http__ = Http.post(
-        "/register",
-        projection=BodyProjection(
-            target=RegisterUserWire,
-            using=register_to_wire,
-            encoding=Body.json(),
-        ),
-    )
-
-    login: str
-    email: str
-    first_name: str
-    last_name: str
-
-def register_to_wire(source: RegisterUser) -> RegisterUserWire:
-    return {
-        "account": {"login": source.login, "email": source.email},
-        "profile": {"first_name": source.first_name, "last_name": source.last_name},
-        "client": make_client_wire(),
-    }
+<!-- example-output: examples.docs.request_json -->
+```text
+created: 42 Ada
 ```
 
-Поля без маркера — это источник проекции: вызывающий передаёт их напрямую, без `body=` или
-wrapper dict. `make_client_wire()` вызывается заново на каждой attempt; значения из mutable
-client/session state добавляйте auth/protection writers после projection, а managed CAPTCHA/CSRF
-поля размещайте через `FromProtection` в private target schema.
+Для одного вложенного документа используйте модель с `markers.JsonBody()`. Её адаптер отвечает
+за псевдонимы, значения по умолчанию и исключение полей. Не смешивайте корневое тело с
+`JsonField` в одной операции. Если публичные поля должны превратиться в другую структуру,
+используйте {doc}`BodyProjection </guide/requests/representation>`.
 
-Для projection действуют три разные состояния:
+## Дальше
 
-- поле, оставшееся `UNSET`, не передаётся mapper-у, поэтому mapper может применить свой default;
-- явно переданный `None` остаётся значением `None`;
-- отсутствующее обязательное поле — это `TypeError` конструктора операции, до mapper, providers и
-  сети.
-
-Если mapper-у нужны значения зависимостей, объявите их в `requires=` и добавьте второй параметр:
-`using(source, injected)` получает разрешённые значения этой attempt.
+- {doc}`Настройте представление тела </guide/requests/representation>`.
+- {doc}`Разберите успешный JSON-ответ </guide/responses/success>`.

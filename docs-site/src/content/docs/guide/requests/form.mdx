@@ -1,36 +1,58 @@
 ---
-title: Form body
-description: Отправьте application/x-www-form-urlencoded request.
+title: Отправить HTML-форму
+description: Закодируйте поля как application/x-www-form-urlencoded.
 sources:
   - eazy_sdk.request.Form
 api_fingerprint: "sha256:57cc49a702463f8a149b91c9dbfafbc8fb6b8bdb6c7e5112ccc1d43813aab03e"
 ---
 
-`Form()` описывает отдельное поле `application/x-www-form-urlencoded`. Это удобно для HTML login
-и OAuth-style token endpoints.
+Используйте `Form[T]` для входа через HTML-форму и других методов, которые принимают
+`application/x-www-form-urlencoded`.
 
-```python
-from dataclasses import dataclass
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``POST /login``
+```text
+Content-Type: application/x-www-form-urlencoded
 
-from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, op
-from eazy_sdk.request import Form
+email=ada%40mail.example&password=mail-password
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```json
+{"account": "ada@mail.example", "access_token": "session-1"}
+```
+::::
+:::::
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Login(HttpOperation[Session]):
-    __http__ = Http.post("/login", operation_id="login")
-
-    email: Form[str]
-    password: Form[str]
-    remember: Form[Omittable[bool]] = UNSET
-
-class AsyncAuthApi(AsyncApi):
-    login = op(Login)
+```{literalinclude} ../../../../../../examples/docs/request_form.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Запрос: `POST /login`, `Content-Type: application/x-www-form-urlencoded`, body
-`email=ada%40example.test&password=secret`. Поле `remember`, оставшееся `UNSET`, в body не попадает.
+`email` и `password` обязательны. `remember=UNSET` не добавляет поле в тело. Для одной модели
+целиком используйте `FormBody()` и не смешивайте её с отдельными полями `Form`.
 
-Для полной Pydantic-модели используйте `FormBody()`. Не смешивайте `FormBody()` и отдельные
-`Form()` fields. Порядок полей при необходимости задаётся через `wire=Wire(order=FieldOrder(body=(...)))`
-в `__http__`.
-Пример ответа: status `200`, JSON `{"access_token":"..."}`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_form.py
+:language: python
+```
+:::
+
+Запуск: `uv run python examples/docs/request_form.py`.
+
+<!-- example-output: examples.docs.request_form -->
+```text
+session: ada@mail.example session-1
+```
+
+## Дальше
+
+- {doc}`Опишите многошаговый вход </guide/auth/login>`.
+- {doc}`Отправьте файл через multipart </guide/requests/multipart>`.

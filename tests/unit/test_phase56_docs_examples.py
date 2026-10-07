@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[2]
-EXAMPLES_ROOT = ROOT / "examples" / "mail"
+EXAMPLE_ROOTS = (
+    ROOT / "examples" / "mail",
+    ROOT / "examples" / "docs",
+)
+STANDALONE_EXAMPLES = (ROOT / "examples" / "request_values.py",)
 DOCS_ROOTS = (
     ROOT / "docs-site" / "src" / "content" / "docs",
     ROOT / "docs-site" / "probes",
@@ -49,7 +53,9 @@ def _documented_outputs() -> list[DocumentedOutput]:
 
 def _runnable_example_modules() -> set[str]:
     modules: set[str] = set()
-    for source in EXAMPLES_ROOT.rglob("*.py"):
+    sources = [source for root in EXAMPLE_ROOTS for source in root.rglob("*.py")]
+    sources.extend(STANDALONE_EXAMPLES)
+    for source in sources:
         if source.name == "__main__.py":
             continue
         if MAIN_GUARD not in source.read_text(encoding="utf-8"):

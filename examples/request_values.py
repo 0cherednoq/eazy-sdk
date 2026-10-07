@@ -10,14 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-import httpx
-
-from eazy_sdk import Client, Http, HttpOperation, Query, SyncApi, op
-from eazy_sdk.handlers.httpx import HttpxHandler
+from eazy_sdk import Http, HttpOperation, Query, SyncApi, op
 from eazy_sdk.request import markers
-
-BASE_URL = "https://api.catalog.example"
-
+from examples.docs.request_site import request_client
 
 @dataclass(frozen=True, slots=True)
 class Page:
@@ -25,6 +20,8 @@ class Page:
     next_page: int | None
 
 
+# docs:operation:start
+# examples/request_values.py
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListItems(HttpOperation[Page]):
     """Every field of the request is a field of this class, defaults included."""
@@ -37,28 +34,15 @@ class ListItems(HttpOperation[Page]):
 
 class CatalogApi(SyncApi):
     list_items = op(ListItems)
-
-
-PAGES = {
-    1: {"items": ["keyboard", "mouse"], "next_page": 2},
-    2: {"items": ["monitor", "cable"], "next_page": 3},
-    3: {"items": ["lamp"], "next_page": None},
-}
-
-
-def catalog_server(request: httpx.Request) -> httpx.Response:
-    page = int(request.url.params.get("page", "1"))
-    return httpx.Response(200, json=PAGES[page])
+# docs:operation:end
 
 
 def main() -> None:
-    raw_client = httpx.Client(transport=httpx.MockTransport(catalog_server))
-    with Client(
-        base_url=BASE_URL,
-        handler=HttpxHandler(raw_client, owns_client=True),
-    ) as client:
+    with request_client() as client:
         catalog = CatalogApi(client)
 
+        # docs:flow:start
+        # examples/request_values.py
         # One value, evolved per page: no Pages helper, no cursor object, no callback.
         request = catalog.list_items.request(per_page=2)
         collected: list[str] = []
@@ -74,6 +58,7 @@ def main() -> None:
         pending = [catalog.list_items.request(page=number, per_page=2) for number in (3, 1)]
         for item in pending:
             print(f"queued page: {catalog.list_items.send(item).items[0]}")
+        # docs:flow:end
 
 
 if __name__ == "__main__":

@@ -1,41 +1,59 @@
 ---
-title: Query
-description: Добавьте обязательные и optional query parameters.
+title: Добавить параметры запроса
+description: Отправьте обязательные и пропускаемые значения в строке запроса.
 sources:
   - eazy_sdk.request.Query
 api_fingerprint: "sha256:29e5a5e65785078b161fa666aa876d34223ff161de1418998fda23ca87e43402"
 ---
 
-Query parameters — это поля операции. Значение по умолчанию отправляется как обычное значение;
-поле, которое иногда не нужно отправлять вовсе, объявляется `Omittable[T] = UNSET`.
+Используйте `Query[T]` для параметров после `?`. Обычное значение по умолчанию отправляется.
+Поле `Omittable[T] = UNSET` исчезает из запроса, пока вызывающий его не передал.
 
-```python
-from dataclasses import dataclass
+Так URL остаётся коротким.
 
-from eazy_sdk import UNSET, AsyncApi, Http, HttpOperation, Omittable, Query, op
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /users?q=ada``
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```json
+[{"id": 42, "name": "Ada", "query": "ada"}]
+```
+::::
+:::::
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SearchUsers(HttpOperation[list[User]]):
-    __http__ = Http.get("/users", operation_id="searchUsers")
-
-    q: Query[str]
-    limit: Query[Omittable[int]] = UNSET
-
-class AsyncUsersApi(AsyncApi):
-    search = op(SearchUsers)
-
-users = await AsyncUsersApi(client).search(q="ada", limit=10)
+```{literalinclude} ../../../../../../examples/docs/request_query.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Вызов отправит `GET /users?q=ada&limit=10`. `search(q="ada")` отправит только `q`: `UNSET` не
-уходит на провод. Явный `None` — это другое: он отправится как пустое значение, если тип поля
-допускает `None`.
+`q` обязателен. `limit` не попадает в URL при значении `UNSET`. Если аннотация допускает `None`,
+явное значение `None` кодируется отдельно и не считается пропущенным полем.
 
-Переименуйте wire-параметр маркером: `Annotated[int, markers.Query("page-size")]`. Параметры
-`style`, `explode` и `allow_reserved` нужны для OpenAPI-compatible сериализации сложных значений.
-Для API, которое чувствительно к порядку query, задайте
-`wire=Wire(order=FieldOrder(query=(...)))` в `__http__`; правило percent-кодирования —
-`wire=Wire(query=QueryCodec(space="plus"))`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_query.py
+:language: python
+```
+:::
 
-Пример ответа: status `200`, `Content-Type: application/json`, body
-`[{"id":42,"name":"Ada"}]`.
+Запуск: `uv run python examples/docs/request_query.py`.
+
+<!-- example-output: examples.docs.request_query -->
+```text
+query: ada; result: Ada
+```
+
+Для другого имени на проводе укажите `markers.Query("page-size")`. Параметры `style`, `explode`
+и `allow_reserved` управляют совместимой с OpenAPI сериализацией сложных значений. `Wire`
+задаёт порядок параметров и правило кодирования пробелов, если сервер различает эти варианты.
+
+## Дальше
+
+- {doc}`Добавьте заголовки </guide/requests/headers>`.
+- {doc}`Изменяйте и повторно отправляйте запрос </guide/requests/values>`.

@@ -1,37 +1,63 @@
 ---
-title: Headers
-description: Добавьте typed request headers.
+title: Добавить заголовки запроса
+description: Свяжите аргументы операции с именованными HTTP-заголовками.
 sources:
   - eazy_sdk.request.Header
 api_fingerprint: "sha256:60acafc05c61fd84c97beb09b8b3174ff44e65d19f415b9469d02afae778c506"
 ---
 
-Header marker связывает Python-аргумент с request header. Указывайте wire-имя явно, когда оно
-отличается от имени аргумента.
+Используйте `markers.Header`, когда заголовок относится к одному вызову. Явно задайте имя на
+проводе, если оно отличается от Python-поля.
 
-```python
-from dataclasses import dataclass
-from typing import Annotated
+Регистр имени не важен.
 
-from eazy_sdk import UNSET, Http, HttpOperation, Omittable, SyncApi, op
-from eazy_sdk.request import markers
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /reports``
+```text
+Accept-Language: ru
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```json
+{"locale": "ru", "request_id": null}
+```
+::::
+:::::
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetReport(HttpOperation[Report]):
-    __http__ = Http.get("/reports", operation_id="getReport")
-
-    locale: Annotated[str, markers.Header("Accept-Language")] = "en"
-    request_id: Annotated[Omittable[str], markers.Header("X-Request-ID")] = UNSET
-
-class ReportsApi(SyncApi):
-    report = op(GetReport)
+```{literalinclude} ../../../../../../examples/docs/request_headers.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-`report(locale="ru")` отправит `Accept-Language: ru` и пропустит `X-Request-ID`: `UNSET` не
-уходит на провод.
-Header names сравниваются без учёта регистра, но Eazy SDK сохраняет объявленное wire-имя и порядок
-там, где transport поддерживает exact mode.
+`locale` всегда отправляется и по умолчанию равен `en`. `request_id` со значением `UNSET` не
+создаёт заголовок. SDK сохраняет объявленное написание имени для обработчиков, которые умеют
+передавать заголовки без нормализации.
 
-Не передавайте authorization, signing или managed protection headers вручную. Они принадлежат
-client policy и добавляются до отправки. Пример ответа: status `200`, header
-`Content-Type: application/json`, body `{"ready":true}`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_headers.py
+:language: python
+```
+:::
+
+Запуск: `uv run python examples/docs/request_headers.py`.
+
+<!-- example-output: examples.docs.request_headers -->
+```text
+locale: ru; request id: None
+```
+
+Не передавайте заголовки авторизации, подписи или управляемой защиты как обычные аргументы.
+Эти значения принадлежат `Identity` и политикам клиента, которые применяются при подготовке
+каждой попытки.
+
+## Дальше
+
+- {doc}`Передайте cookie одного вызова </guide/requests/cookies>`.
+- {doc}`Подключите Bearer-авторизацию </guide/auth/bearer>`.

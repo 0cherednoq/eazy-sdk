@@ -1,36 +1,57 @@
 ---
-title: Path
-description: Подставьте typed значение в URL path.
+title: Подставить значение в путь
+description: Свяжите типизированное поле операции с заполнителем в URL.
 sources:
   - eazy_sdk.request.Path
 api_fingerprint: "sha256:d23df2adf4b0fb285729788cd46d25363fe4500badded62707c91f3f39333d3c"
 ---
 
-Path parameter заменяет placeholder в URL. Поле операции объявляет его тип, а имя поля —
-это имя placeholder'а.
+Используйте `Path[T]`, когда API ждёт значение внутри адреса. Имя поля должно совпадать с
+заполнителем в шаблоне пути.
 
-```python
-from dataclasses import dataclass
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /users/42``
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```json
+{"id": 42, "name": "Ada"}
+```
+::::
+:::::
 
-from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetUser(HttpOperation[User]):
-    __http__ = Http.get("/users/{user_id}", operation_id="getUser")
-
-    user_id: Path[int]
-
-class UsersApi(SyncApi):
-    get_user = op(GetUser)
-
-user = UsersApi(client).get_user(user_id=42)
+```{literalinclude} ../../../../../../examples/docs/request_path.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Вызов отправит `GET /users/42`. Если placeholder называется иначе, чем поле, задайте имя маркером:
-`user: Annotated[int, markers.Path("id")]` для `{id}` в шаблоне.
+Поле `user_id` заполняет `{user_id}` и принимает только `int`. Если Python-имя отличается от
+имени в URL, используйте `Annotated[int, markers.Path("id")]`.
 
-Eazy SDK отклоняет класс роутера при импорте, если placeholder не объявлен полем, `Path`-маркер не
-имеет placeholder'а или один placeholder описан несколько раз. Optional path parameters не
-поддерживаются: URL всегда должен быть однозначным.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_path.py
+:language: python
+```
+:::
 
-Пример ответа: status `200`, `Content-Type: application/json`, body `{"id":42,"name":"Ada"}`.
+Запуск: `uv run python examples/docs/request_path.py`.
+
+<!-- example-output: examples.docs.request_path -->
+```text
+user: 42 Ada
+```
+
+SDK отклоняет объявление, если заполнитель остался без поля, поле `Path` не имеет заполнителя
+или одно место описано дважды. Необязательный параметр пути невозможен: адрес должен быть
+однозначным до отправки.
+
+## Дальше
+
+- {doc}`Добавьте параметры после вопросительного знака </guide/requests/query>`.
+- {doc}`Настройте имена на проводе </guide/requests/representation>`.

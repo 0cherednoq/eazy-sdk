@@ -1,34 +1,57 @@
 ---
-title: Cookies
-description: Добавьте cookie в HTTP request.
+title: Передать cookie одного вызова
+description: Добавьте cookie как аргумент операции или вынесите сессионную cookie в авторизацию.
 sources:
   - eazy_sdk.request.Cookie
 api_fingerprint: "sha256:c62589ab60cc9142859cfaf9e300fb99137c0dacf6758c427fecfa4f886025d2"
 ---
 
-Cookie marker подходит для значения, которое действительно является аргументом операции. Session
-cookie лучше подключать через auth policy.
+Используйте `markers.Cookie`, если значение действительно меняется от вызова к вызову. Для
+сессионной cookie выберите `CookieScheme` или `session_cookie(...)`, чтобы секрет не появлялся
+в сигнатуре каждой операции.
 
-```python
-from dataclasses import dataclass
-from typing import Annotated
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /dashboard``
+```text
+Cookie: experiment=new-nav
+```
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```json
+{"experiment": "new-nav", "widgets": 3}
+```
+::::
+:::::
 
-from eazy_sdk import UNSET, Http, HttpOperation, Omittable, SyncApi, op
-from eazy_sdk.request import markers
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetDashboard(HttpOperation[Dashboard]):
-    __http__ = Http.get("/dashboard", operation_id="dashboard")
-
-    experiment: Annotated[Omittable[str], markers.Cookie("experiment")] = UNSET
-
-class DashboardApi(SyncApi):
-    dashboard = op(GetDashboard)
+```{literalinclude} ../../../../../../examples/docs/request_cookies.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-`dashboard(experiment="new-nav")` отправит `Cookie: experiment=new-nav`. Поле, оставшееся `UNSET`,
-cookie не добавляет. Несколько cookie объединяются в один корректный header на этапе preparation.
+`experiment` становится cookie с тем же именем. Значение `UNSET` не добавляет cookie. Несколько
+объявленных значений SDK объединяет в один корректный заголовок `Cookie`.
 
-Для готовой auth cookie используйте `CookieScheme`; для cookie из login response используйте
-`session_cookie(...)`. Тогда credential не появляется в сигнатуре метода. Пример ответа: status
-`200`, `Content-Type: application/json`, body `{"widgets":3}`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_cookies.py
+:language: python
+```
+:::
+
+Запуск: `uv run python examples/docs/request_cookies.py`.
+
+<!-- example-output: examples.docs.request_cookies -->
+```text
+experiment: new-nav; widgets: 3
+```
+
+## Дальше
+
+- {doc}`Настройте cookie-авторизацию </guide/auth/cookie>`.
+- {doc}`Сохраните и обновляйте сессию </guide/auth/session>`.

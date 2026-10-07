@@ -5629,6 +5629,19 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current; orphaned lock entries removed by the supported updater. |
 | clean strict Sphinx build | PASS: 93 sources, no warnings; the output contains no `more/examples` directory. |
 
+### Verification evidence (56.5.1)
+
+| Command | Result |
+|---|---|
+| request-guide example runs | PASS: declaration, path, query, headers, cookies, JSON, form, multipart, bytes, projection and request-value flows returned the output published on their pages. |
+| `uv run pytest -q tests/unit/test_docs_examples.py tests/unit/test_phase56_docs_examples.py` plus phase-56 snapshots and domain ratchet | PASS: 44 tests; every runnable guide file has exactly one matching output block, all includes resolve, and no new domain or documentation debt appeared. |
+| `uv run mypy examples/docs examples/request_values.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 14 source files across the two focused runs. |
+| matching focused `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py` over all 12 request pages | PASS: 0 errors and 0 warnings on every page. The pattern audit found no remaining findings; the outline-test exclusion for procedural guides applies. |
+| page queue and debt audit | PASS: all 12 queue rows are filled; seven legacy prose-debt entries are gone; no request page appears in code-block debt. The planned count was corrected from 13 to the 12 routes named everywhere else in the plan. |
+| documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
+| clean strict Sphinx build and preview rebuild | PASS: 93 sources, no warnings; `/guide/requests/` and `/guide/requests/representation/` return 200 with rendered source paths and exact output. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5670,4 +5683,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.5.1–56.8. No blockers; next step is 56.5.1.
+56.5.2–56.8. No blockers; next step is 56.5.2.
