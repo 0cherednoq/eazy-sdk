@@ -21,6 +21,7 @@ async def main() -> None:
         # examples/docs/integration_pydoll.py
         options = ChromiumOptions()  # type: ignore[no-untyped-call]
         options.headless = True
+        options.start_timeout = 30  # холодный старт Chrome на загруженной машине
         browser = Chrome(options=options)
         tab = await browser.start()
         try:
