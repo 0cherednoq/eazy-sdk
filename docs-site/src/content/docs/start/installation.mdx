@@ -5,13 +5,16 @@ freshness: false
 ---
 
 Первому JSON SDK нужны ядро, HTTPX и поддержка моделей Pydantic. Установите их командой
-`uv add "eazy-sdk[httpx,pydantic]"`.
+`uv add "eazy-sdk-core[httpx,pydantic]"`.
+
+Пакет ядра на PyPI называется `eazy-sdk-core`, а в коде импортируется как `eazy_sdk`. Пока выходят
+только альфа-версии, pip требует флаг `--pre`, а uv - параметр `--prerelease allow`.
 
 Команда добавляет синхронный и асинхронный адаптер HTTPX. Само ядро не выбирает HTTP-клиент и
 библиотеку моделей за приложение.
 
 В проекте с pip набор зависимостей остаётся тем же:
-`python -m pip install "eazy-sdk[httpx,pydantic]"`.
+`python -m pip install "eazy-sdk-core[httpx,pydantic]"`.
 
 ## Выберите нужные дополнения
 
@@ -20,15 +23,15 @@ freshness: false
 
 | Задача | Пакет или дополнение | Команда для uv |
 |---|---|---|
-| HTTP через HTTPX | `eazy-sdk[httpx]` | `uv add "eazy-sdk[httpx]"` |
-| Синхронный HTTP через Requests | `eazy-sdk[requests]` | `uv add "eazy-sdk[requests]"` |
-| HTTP через curl_cffi | `eazy-sdk[curl-cffi]` | `uv add "eazy-sdk[curl-cffi]"` |
-| Модели Pydantic v2 | `eazy-sdk[pydantic]` | `uv add "eazy-sdk[pydantic]"` |
-| Модели msgspec Struct | `eazy-sdk[msgspec]` | `uv add "eazy-sdk[msgspec]"` |
-| Разбор HTML | `eazy-sdk[html]` | `uv add "eazy-sdk[html]"` |
-| Аккаунты и регистрация | `eazy-sdk[accounts]` | `uv add "eazy-sdk[accounts]"` |
-| Хранилище SQLModel | `eazy-sdk[sqlmodel]` | `uv add "eazy-sdk[sqlmodel]"` |
-| WebSocket | `eazy-sdk[websocket]` | `uv add "eazy-sdk[websocket]"` |
+| HTTP через HTTPX | `eazy-sdk-core[httpx]` | `uv add "eazy-sdk-core[httpx]"` |
+| Синхронный HTTP через Requests | `eazy-sdk-core[requests]` | `uv add "eazy-sdk-core[requests]"` |
+| HTTP через curl_cffi | `eazy-sdk-core[curl-cffi]` | `uv add "eazy-sdk-core[curl-cffi]"` |
+| Модели Pydantic v2 | `eazy-sdk-core[pydantic]` | `uv add "eazy-sdk-core[pydantic]"` |
+| Модели msgspec Struct | `eazy-sdk-core[msgspec]` | `uv add "eazy-sdk-core[msgspec]"` |
+| Разбор HTML | `eazy-sdk-core[html]` | `uv add "eazy-sdk-core[html]"` |
+| Аккаунты и регистрация | `eazy-sdk-core[accounts]` | `uv add "eazy-sdk-core[accounts]"` |
+| Хранилище SQLModel | `eazy-sdk-core[sqlmodel]` | `uv add "eazy-sdk-core[sqlmodel]"` |
+| WebSocket | `eazy-sdk-core[websocket]` | `uv add "eazy-sdk-core[websocket]"` |
 | Браузерный SDK с Playwright | `eazy-sdk-browser[playwright]` | `uv add "eazy-sdk-browser[playwright]"` |
 | Генератор OpenAPI | `eazy-sdk-openapi[yaml]` | `uv add "eazy-sdk-openapi[yaml]"` |
 | Генератор AsyncAPI | `eazy-sdk-asyncapi[yaml]` | `uv add "eazy-sdk-asyncapi[yaml]"` |
@@ -40,7 +43,7 @@ freshness: false
 без этого дополнения. У браузерного пакета вместо `playwright` можно выбрать `selenium`,
 `camoufox` или `pydoll`.
 
-`eazy-sdk[all]` ставит основные HTTP-интеграции, модели и средства работы с данными, но
+`eazy-sdk-core[all]` ставит основные HTTP-интеграции, модели и средства работы с данными, но
 намеренно не ставит браузерный драйвер. Браузер и его двоичные файлы выбирает приложение.
 
 ## Проверьте установку

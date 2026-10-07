@@ -54,7 +54,7 @@ DISTRIBUTION_IMPORTS = {
     "aiosqlite": ("aiosqlite",),
     "sqlalchemy": ("sqlalchemy",),
     "pyyaml": ("yaml",),
-    "eazy-sdk": ("eazy_sdk",),
+    "eazy-sdk-core": ("eazy_sdk",),
     "eazy-sdk-accounts": ("eazy_sdk_accounts",),
     "eazy-sdk-html": ("eazy_sdk_html",),
     "eazy-sdk-presets": ("eazy_sdk_presets",),
@@ -274,8 +274,10 @@ def audit(directory: Path) -> None:
         expected_name = project["name"]
         expected_version = project["version"]
         expected_license = project["license"]
+        # Files are named after the distribution, which for the core differs from the import package.
+        distribution = expected_name.replace("-", "_")
 
-        wheel = _wheel_for(directory, package)
+        wheel = _wheel_for(directory, distribution)
         with zipfile.ZipFile(wheel) as archive:
             names = archive.namelist()
             if marker not in names:
@@ -365,7 +367,7 @@ def audit(directory: Path) -> None:
                                     f"{fragment!r} in {name}"
                                 )
 
-        sdist = _sdist_for(directory, package)
+        sdist = _sdist_for(directory, distribution)
         with tarfile.open(sdist, "r:gz") as archive:
             members = archive.getmembers()
             names = [member.name for member in members]

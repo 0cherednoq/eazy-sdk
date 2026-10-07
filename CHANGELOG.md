@@ -7,6 +7,10 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 Breaking:
 
+- The core distribution is renamed from `eazy-sdk` to `eazy-sdk-core`: PyPI rejects `eazy-sdk` as
+  too similar to the unrelated `eazysdk` project. Install with
+  `pip install "eazy-sdk-core[httpx,pydantic]"`. The import package `eazy_sdk`, the plugin
+  distributions `eazy-sdk-*` and the `x-eazy-sdk` specification extension keep their names.
 - Response-case arbitration ranks a criterion above status precision. The order is now: a case
   that states a criterion over one that states none, then an exact status over a range over
   `DEFAULT`, then an explicit media type over a wildcard, then the layer that declared the case.

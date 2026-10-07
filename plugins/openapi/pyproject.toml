@@ -17,7 +17,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "eazy-sdk>=0.2.0a7,<0.3",
+  "eazy-sdk-core>=0.2.0a7,<0.3",
   "datamodel-code-generator>=0.26,<1",
   "pydantic[email]>=2",
 ]
@@ -27,6 +27,13 @@ yaml = ["PyYAML>=6"]
 
 [project.scripts]
 eazy-sdk-openapi = "eazy_sdk_openapi.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/0cherednoq/eazy-sdk"
+Documentation = "https://0cherednoq.github.io/eazy-sdk/"
+Repository = "https://github.com/0cherednoq/eazy-sdk"
+Changelog = "https://github.com/0cherednoq/eazy-sdk/blob/master/CHANGELOG.md"
+Issues = "https://github.com/0cherednoq/eazy-sdk/issues"
 
 [build-system]
 requires = ["hatchling"]

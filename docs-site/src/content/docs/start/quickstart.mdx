@@ -22,7 +22,7 @@ api_fingerprint: "sha256:fdfdc4cae1dd399ea8dbb68dabe121b6857289dc4f607a69aefd96d
 ::::{tab-item} Pydantic
 :sync: pydantic
 
-Установите зависимости командой `uv add "eazy-sdk[httpx,pydantic]"`.
+Установите зависимости командой `uv add "eazy-sdk-core[httpx,pydantic]"`.
 
 ```{literalinclude} ../../../../../examples/mail/http/quickstart_pydantic.py
 :language: python
@@ -49,7 +49,7 @@ ada@mail.example: Планы на пятницу
 ::::{tab-item} dataclass
 :sync: dataclass
 
-Стандартной библиотеке нужен только HTTP-клиент: `uv add "eazy-sdk[httpx]"`.
+Стандартной библиотеке нужен только HTTP-клиент: `uv add "eazy-sdk-core[httpx]"`.
 
 ```{literalinclude} ../../../../../examples/mail/http/quickstart_dataclass.py
 :language: python
@@ -76,7 +76,7 @@ ada@mail.example: Планы на пятницу
 ::::{tab-item} msgspec
 :sync: msgspec
 
-Установите зависимости командой `uv add "eazy-sdk[httpx,msgspec]"`.
+Установите зависимости командой `uv add "eazy-sdk-core[httpx,msgspec]"`.
 
 ```{literalinclude} ../../../../../examples/mail/http/quickstart_msgspec.py
 :language: python

@@ -313,7 +313,7 @@ class _BoundHtmlExtractor:
             except ImportError as exc:  # pragma: no cover - depends on extras
                 raise ImportError(
                     "HTML extraction requires the eazy-sdk-html plugin: "
-                    'pip install "eazy-sdk[html]"'
+                    'pip install "eazy-sdk-core[html]"'
                 ) from exc
 
             serialization = self.response.serialization

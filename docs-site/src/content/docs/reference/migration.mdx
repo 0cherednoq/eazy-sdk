@@ -162,7 +162,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.handlers.EmitOptions.proxy` | `eazy_sdk.handlers.HandlerProfile.proxy` | Proxy объявляет handler (`Client.httpx(proxy=...)` и др.), а не per-call опции. Поля `verify_tls`/`stream_response` удалены: их никто не читал. |
 | `eazy_sdk.codegen.session_auth` | `eazy_sdk.codegen.generated_session_auth` | Codegen-хелпер получил своё имя; `eazy_sdk.auth.session_auth` является другой authoring-функцией. |
 | `eazy_sdk.codegen.session_scheme` | `eazy_sdk.codegen.generated_session_scheme` | То же для схемы. Сгенерированные модули нужно перегенерировать. |
-| extra `eazy-sdk-html[parsel]` | зависимость `eazy-sdk-html` | `parsel` стал обязательной зависимостью плагина; `pip install "eazy-sdk[html]"` достаточно. |
+| extra `eazy-sdk-html[parsel]` | зависимость `eazy-sdk-html` | `parsel` стал обязательной зависимостью плагина; `pip install "eazy-sdk-core[html]"` достаточно. |
 
 Новые параметры без брейков: `proxy=` у `Client.httpx/requests/curl_cffi` и
 `AsyncClient.httpx/curl_cffi`, `SolveContext.remaining()`.
@@ -198,10 +198,10 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 
 | Было | Стало | Комментарий |
 |---|---|---|
-| `eazy_sdk.extraction.CSS` | `eazy_sdk_html.CSS` | Плагин `eazy-sdk-html` (`pip install "eazy-sdk[html]"`). |
+| `eazy_sdk.extraction.CSS` | `eazy_sdk_html.CSS` | Плагин `eazy-sdk-html` (`pip install "eazy-sdk-core[html]"`). |
 | `eazy_sdk.extraction.XPath` | `eazy_sdk_html.XPath` | |
 | `eazy_sdk.extraction.Scope` | `eazy_sdk_html.Scope` | |
-| `eazy_sdk.accounts.storage.MemoryStorage` | `eazy_sdk_accounts.storage.MemoryStorage` | Плагин `eazy-sdk-accounts` (`pip install "eazy-sdk[accounts]"`). |
+| `eazy_sdk.accounts.storage.MemoryStorage` | `eazy_sdk_accounts.storage.MemoryStorage` | Плагин `eazy-sdk-accounts` (`pip install "eazy-sdk-core[accounts]"`). |
 | `eazy_sdk.accounts.registration` | `eazy_sdk_accounts.registration` | |
 | `eazy_sdk._internal` | `eazy_sdk.core` | Ядро (`kernel`, `errors`, `http`, `http_plan`, `ports`) и компилятор `eazy_sdk.compile`. |
 

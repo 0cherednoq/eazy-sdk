@@ -9,11 +9,11 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "eazy-sdk",
     "eazy-sdk-accounts",
     "eazy-sdk-adaptix",
     "eazy-sdk-asyncapi",
     "eazy-sdk-browser",
+    "eazy-sdk-core",
     "eazy-sdk-html",
     "eazy-sdk-openapi",
     "eazy-sdk-presets",
@@ -925,7 +925,91 @@ wheels = [
 ]
 
 [[package]]
-name = "eazy-sdk"
+name = "eazy-sdk-accounts"
+version = "0.2.0a7"
+source = { editable = "plugins/accounts" }
+dependencies = [
+    { name = "eazy-sdk-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "eazy-sdk-core", editable = "." }]
+
+[[package]]
+name = "eazy-sdk-adaptix"
+version = "0.2.0a7"
+source = { editable = "plugins/adaptix" }
+dependencies = [
+    { name = "adaptix" },
+    { name = "eazy-sdk-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "adaptix", specifier = ">=3.0.0b12" },
+    { name = "eazy-sdk-core", editable = "." },
+]
+
+[[package]]
+name = "eazy-sdk-asyncapi"
+version = "0.2.0a7"
+source = { editable = "plugins/asyncapi" }
+dependencies = [
+    { name = "eazy-sdk-core" },
+]
+
+[package.optional-dependencies]
+yaml = [
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "eazy-sdk-core", editable = "." },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
+]
+provides-extras = ["yaml"]
+
+[[package]]
+name = "eazy-sdk-browser"
+version = "0.2.0a7"
+source = { editable = "plugins/browser" }
+dependencies = [
+    { name = "eazy-sdk-core" },
+    { name = "zapros" },
+]
+
+[package.optional-dependencies]
+accounts = [
+    { name = "eazy-sdk-accounts" },
+]
+camoufox = [
+    { name = "camoufox" },
+]
+playwright = [
+    { name = "playwright" },
+]
+pydoll = [
+    { name = "pydoll-python" },
+]
+selenium = [
+    { name = "selenium" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "camoufox", marker = "extra == 'camoufox'", specifier = ">=0.4" },
+    { name = "eazy-sdk-accounts", marker = "extra == 'accounts'", editable = "plugins/accounts" },
+    { name = "eazy-sdk-core", editable = "." },
+    { name = "playwright", marker = "extra == 'playwright'", specifier = ">=1.55" },
+    { name = "pydoll-python", marker = "extra == 'pydoll'", specifier = ">=3,<4" },
+    { name = "selenium", marker = "extra == 'selenium'", specifier = ">=4.25" },
+    { name = "zapros", specifier = "==0.16.0" },
+]
+provides-extras = ["playwright", "camoufox", "selenium", "pydoll", "accounts"]
+
+[[package]]
+name = "eazy-sdk-core"
 version = "0.2.0a7"
 source = { editable = "." }
 dependencies = [
@@ -1113,101 +1197,17 @@ docs = [
 ]
 
 [[package]]
-name = "eazy-sdk-accounts"
-version = "0.2.0a7"
-source = { editable = "plugins/accounts" }
-dependencies = [
-    { name = "eazy-sdk" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "eazy-sdk", editable = "." }]
-
-[[package]]
-name = "eazy-sdk-adaptix"
-version = "0.2.0a7"
-source = { editable = "plugins/adaptix" }
-dependencies = [
-    { name = "adaptix" },
-    { name = "eazy-sdk" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "adaptix", specifier = ">=3.0.0b12" },
-    { name = "eazy-sdk", editable = "." },
-]
-
-[[package]]
-name = "eazy-sdk-asyncapi"
-version = "0.2.0a7"
-source = { editable = "plugins/asyncapi" }
-dependencies = [
-    { name = "eazy-sdk" },
-]
-
-[package.optional-dependencies]
-yaml = [
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "eazy-sdk", editable = "." },
-    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
-]
-provides-extras = ["yaml"]
-
-[[package]]
-name = "eazy-sdk-browser"
-version = "0.2.0a7"
-source = { editable = "plugins/browser" }
-dependencies = [
-    { name = "eazy-sdk" },
-    { name = "zapros" },
-]
-
-[package.optional-dependencies]
-accounts = [
-    { name = "eazy-sdk-accounts" },
-]
-camoufox = [
-    { name = "camoufox" },
-]
-playwright = [
-    { name = "playwright" },
-]
-pydoll = [
-    { name = "pydoll-python" },
-]
-selenium = [
-    { name = "selenium" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "camoufox", marker = "extra == 'camoufox'", specifier = ">=0.4" },
-    { name = "eazy-sdk", editable = "." },
-    { name = "eazy-sdk-accounts", marker = "extra == 'accounts'", editable = "plugins/accounts" },
-    { name = "playwright", marker = "extra == 'playwright'", specifier = ">=1.55" },
-    { name = "pydoll-python", marker = "extra == 'pydoll'", specifier = ">=3,<4" },
-    { name = "selenium", marker = "extra == 'selenium'", specifier = ">=4.25" },
-    { name = "zapros", specifier = "==0.16.0" },
-]
-provides-extras = ["playwright", "camoufox", "selenium", "pydoll", "accounts"]
-
-[[package]]
 name = "eazy-sdk-html"
 version = "0.2.0a7"
 source = { editable = "plugins/html" }
 dependencies = [
-    { name = "eazy-sdk" },
+    { name = "eazy-sdk-core" },
     { name = "parsel" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "eazy-sdk", editable = "." },
+    { name = "eazy-sdk-core", editable = "." },
     { name = "parsel", specifier = ">=1.11" },
 ]
 
@@ -1217,7 +1217,7 @@ version = "0.2.0a7"
 source = { editable = "plugins/openapi" }
 dependencies = [
     { name = "datamodel-code-generator" },
-    { name = "eazy-sdk" },
+    { name = "eazy-sdk-core" },
     { name = "pydantic", extra = ["email"] },
 ]
 
@@ -1229,7 +1229,7 @@ yaml = [
 [package.metadata]
 requires-dist = [
     { name = "datamodel-code-generator", specifier = ">=0.26,<1" },
-    { name = "eazy-sdk", editable = "." },
+    { name = "eazy-sdk-core", editable = "." },
     { name = "pydantic", extras = ["email"], specifier = ">=2" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
 ]
@@ -1240,7 +1240,7 @@ name = "eazy-sdk-presets"
 version = "0.2.0a7"
 source = { editable = "plugins/presets" }
 dependencies = [
-    { name = "eazy-sdk" },
+    { name = "eazy-sdk-core" },
 ]
 
 [package.optional-dependencies]
@@ -1253,7 +1253,7 @@ selectolax = [
 
 [package.metadata]
 requires-dist = [
-    { name = "eazy-sdk", editable = "." },
+    { name = "eazy-sdk-core", editable = "." },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.50" },
     { name = "selectolax", marker = "extra == 'selectolax'", specifier = ">=0.3" },
 ]
@@ -1265,8 +1265,8 @@ version = "0.2.0a7"
 source = { editable = "plugins/sqlmodel" }
 dependencies = [
     { name = "aiosqlite" },
-    { name = "eazy-sdk" },
     { name = "eazy-sdk-accounts" },
+    { name = "eazy-sdk-core" },
     { name = "pydantic" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlmodel" },
@@ -1275,8 +1275,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
-    { name = "eazy-sdk", editable = "." },
     { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
+    { name = "eazy-sdk-core", editable = "." },
     { name = "pydantic", specifier = ">=2" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
@@ -1287,11 +1287,11 @@ name = "eazy-sdk-xml"
 version = "0.2.0a7"
 source = { editable = "plugins/xml" }
 dependencies = [
-    { name = "eazy-sdk" },
+    { name = "eazy-sdk-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "eazy-sdk", editable = "." }]
+requires-dist = [{ name = "eazy-sdk-core", editable = "." }]
 
 [[package]]
 name = "editor"

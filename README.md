@@ -1,123 +1,169 @@
 # Eazy SDK
 
-Eazy SDK is a transport-independent runtime for typed HTTP and async WebSocket SDKs. HTTP and
-WebSocket use separate lifecycle runtimes while sharing model adapters, typed cases, auth values,
-and protection primitives.
+[![CI](https://github.com/0cherednoq/eazy-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/0cherednoq/eazy-sdk/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://0cherednoq.github.io/eazy-sdk/)
+[![PyPI](https://img.shields.io/pypi/v/eazy-sdk-core.svg?include_prereleases&cacheSeconds=300)](https://pypi.org/project/eazy-sdk-core/)
+[![Python](https://img.shields.io/pypi/pyversions/eazy-sdk-core.svg?cacheSeconds=300)](https://pypi.org/project/eazy-sdk-core/)
 
-> **Status:** `0.2.0a7` is an alpha release adding declarative pagination: a `__pages__`
-> strategy on the operation class (`Pages.numbered`, `Pages.offset`, `Pages.cursor`,
-> `Pages.next_url`) and `pages()`/`items()` on the bound operation. Python 3.13 or
-> newer is required. Release artifacts are hosted on GitHub; PyPI publication is deferred.
->
-> Alphas rename without deprecated aliases. The docs page `more/migration` lists every
-> `old name -> new name` for 0.2.0a3 -> 0.2.0a4 -> 0.2.0a5.
+Библиотека для Python, на которой пишут типизированные SDK к чужим HTTP API, WebSocket и сайтам.
+Запрос объявляется классом, ответ разбирается в модель, а вход, обновление сессии, подпись,
+повторы и пагинация описываются рядом с операцией и не попадают в код вызова.
+
+> Статус: alpha, версия `0.2.0a7`. Альфа-версии переименовывают публичные имена без устаревших
+> псевдонимов, список замен ведёт страница
+> [«Миграция»](https://0cherednoq.github.io/eazy-sdk/reference/migration/). Документация собирается в
+> сайт из [docs-site/](https://github.com/0cherednoq/eazy-sdk/tree/master/docs-site) и публикуется на
+> [GitHub Pages](https://0cherednoq.github.io/eazy-sdk/).
+
+## Что это даёт
+
+* Операция описана один раз: поля класса задают путь, query, заголовки и тело, а тип результата
+  виден редактору и тайпчекеру.
+* Один и тот же роутер работает через HTTPX, Requests, curl_cffi или свой обработчик. Ядро не
+  ставит ни HTTP-клиент, ни библиотеку моделей.
+* Ответы разбираются в Pydantic, msgspec, dataclass или Adaptix. Ошибка API внутри ответа с
+  кодом 200 становится типизированным исключением.
+* Вход, обновление сессии по сроку и по отказу, подпись HMAC, шифрование тела, капча и
+  пагинация объявляются декларативно и срабатывают на каждой попытке.
+* Тот же SDK может работать через браузер: операции страницы на Playwright или Pydoll и сессия
+  браузера у HTTP-клиента.
+* Генераторы собирают SDK из OpenAPI 3.0-3.2 и AsyncAPI 3.0.
+
+HTTP-клиент, браузер и хранилище аккаунтов остаются за приложением: SDK получает их готовыми.
+
+## Установка
+
+Нужен Python 3.13 или новее.
 
 ```bash
-pip install \
-  "eazy-sdk[httpx,pydantic] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a7/eazy_sdk-0.2.0a7-py3-none-any.whl"
+pip install --pre "eazy-sdk-core[httpx,pydantic]"
 ```
 
-For WebSocket SDKs and AsyncAPI 3.0 generation:
+На PyPI ядро называется `eazy-sdk-core`, а импортируется как `eazy_sdk`. Проект `eazysdk` на PyPI
+к этой библиотеке отношения не имеет. Флаг `--pre` нужен, пока выходят только альфа-версии. Те же файлы приложены к каждому
+[релизу GitHub](https://github.com/0cherednoq/eazy-sdk/releases).
 
-```bash
-pip install \
-  "eazy-sdk[websocket] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a7/eazy_sdk-0.2.0a7-py3-none-any.whl" \
-  "eazy-sdk-asyncapi[yaml] @ https://github.com/0cherednoq/eazy-sdk/releases/download/v0.2.0a7/eazy_sdk_asyncapi-0.2.0a7-py3-none-any.whl"
-eazy-sdk-asyncapi asyncapi.yaml generated --package-name market_stream
-```
+Дополнения выбираются по задаче: `httpx`, `requests`, `curl-cffi`, `websocket`, `pydantic`,
+`msgspec`, `html`, `accounts`, `sqlmodel`, `browser`. Генераторы и готовые описания защит
+поставляются отдельными пакетами: `eazy-sdk-openapi`, `eazy-sdk-asyncapi`, `eazy-sdk-presets`.
+Полная таблица есть на странице
+[«Установка»](https://0cherednoq.github.io/eazy-sdk/start/installation/).
+
+## Быстрый старт
+
+Скрипт ниже получает одно письмо с учебного сайта `mail.example`. Сайт отвечает в том же
+процессе, поэтому для знакомства хватит одного файла и сети не нужно.
 
 ```python
-from typing import Annotated
+# quickstart.py
+from dataclasses import dataclass
 
+import httpx
 from pydantic import BaseModel
 
-from eazy_sdk import Client, Json, Path, SyncApi, api
+from eazy_sdk import Client, Http, HttpOperation, Path, SyncApi, op
+from eazy_sdk.handlers.httpx import HttpxHandler
 
 
-class User(BaseModel):
+class Message(BaseModel):
     id: int
-    name: str
+    sender: str
+    subject: str
 
 
-class UsersApi(SyncApi):
-    @api.get("/users/{user_id}", operation_id="getUser", response=Json())
-    def get_user(self, *, user_id: Annotated[int, Path()]) -> User:
-        raise NotImplementedError
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetMessage(HttpOperation[Message]):
+    __http__ = Http.get("/messages/{message_id}")  # метод и путь
+
+    message_id: Path[int]  # поле операции уходит в путь
 
 
-with Client.httpx(base_url="https://api.example") as client:
-    users = UsersApi(client)
-    user = users.get_user(user_id=42)
-    envelope = users.get_user.with_response(user_id=42)
+class MailApi(SyncApi):
+    message = op(GetMessage)  # операция становится методом роутера
+
+
+def mail_site(request: httpx.Request) -> httpx.Response:
+    # учебный сайт в этом же процессе; в приложении запрос уходит в сеть
+    return httpx.Response(
+        200,
+        json={"id": 42, "sender": "ada@mail.example", "subject": "Планы на пятницу"},
+    )
+
+
+raw = httpx.Client(transport=httpx.MockTransport(mail_site))
+
+with Client(
+    base_url="https://mail.example",
+    handler=HttpxHandler(raw, owns_client=True),
+) as client:
+    message = MailApi(client).message(message_id=42)
+    response = MailApi(client).message.with_response(message_id=42)
+
+print(f"{message.sender}: {message.subject}")
+print(response.status_code)
+
+# ada@mail.example: Планы на пятницу
+# 200
 ```
 
-`response=Json()` infers the model from the return annotation; `Bytes()`, `Text()`, and `Html()`
-work the same way, and `responses=Responses(...)` declares several success/error cases.
-`Client(base_url=...)` uses Zapros' standard network handler; `Client.httpx()`,
-`Client.requests()`, and `Client.curl_cffi()` build the first-party handlers, and `handler=`
-accepts any Zapros handler.
+Что здесь произошло:
 
-`api` is the narrow HTTP-decorator namespace. It provides `get`, `post`, `put`, `patch`, `delete`,
-`head`, `options`, `trace`, and `request`; import `SyncApi`, `AsyncApi`, and runtime types
-separately.
+1. `GetMessage` описал запрос как значение. `__http__` задал метод и путь, поле `message_id`
+   подставилось в путь, а `HttpOperation[Message]` назвал тип успешного ответа.
+2. `op(GetMessage)` опубликовал операцию на роутере. Сигнатура метода `message` совпадает с
+   конструктором класса, поэтому редактор подсказывает `message_id`.
+3. Клиент доставил байты и разобрал JSON в `Message`. Роутер о транспорте не знает: в
+   приложении вместо двух строк с `raw` достаточно `Client.httpx(base_url=...)`.
+4. `.with_response()` вернул тот же результат вместе со статусом и заголовками.
 
-For reusable or generated request schemas, expose the same inputs through
-`**request: Unpack[TypedDict]`. Both authoring styles compile to the same request plan; do not mix
-them in one operation.
+## Дальше
 
-When caller-facing kwargs and the protocol JSON have different shapes, declare one
-`BodyProjection`. The public method stays flat while the target model owns nesting, aliases,
-defaults, and private wire fields:
+| Задача | Страница |
+|---|---|
+| Разобраться в ролях: операция, роутер, клиент, корень, `Identity` | [Основные понятия](https://0cherednoq.github.io/eazy-sdk/start/concepts/) |
+| Пройти один SDK почты от входа до отправки письма, по HTTP и через браузер | [Разбор на примере](https://0cherednoq.github.io/eazy-sdk/tutorial/) |
+| Объявить параметры, заголовки и тело запроса | [Запросы](https://0cherednoq.github.io/eazy-sdk/guide/requests/) |
+| Разобрать успешный ответ и ошибку API | [Ответы](https://0cherednoq.github.io/eazy-sdk/guide/responses/) |
+| Добавить ключ, токен, cookie, вход и обновление сессии | [Авторизация](https://0cherednoq.github.io/eazy-sdk/guide/auth/) |
+| Обойти список страницами, подписать и зашифровать запрос | [Пагинация](https://0cherednoq.github.io/eazy-sdk/guide/pagination/), [подпись](https://0cherednoq.github.io/eazy-sdk/guide/signing/), [шифрование](https://0cherednoq.github.io/eazy-sdk/guide/encryption/) |
+| Выбрать HTTP-клиент, библиотеку моделей, браузер или генератор | [Интеграции](https://0cherednoq.github.io/eazy-sdk/integrations/) |
+| Проверить SDK без сети | [Тестирование SDK](https://0cherednoq.github.io/eazy-sdk/guide/testing/) |
+| Понять, как устроен путь запроса внутри | [Архитектура](https://0cherednoq.github.io/eazy-sdk/architecture/) |
+| Найти точную сигнатуру | [Справочник API](https://0cherednoq.github.io/eazy-sdk/reference/api/) |
 
-```python
-from typing import TypedDict, Unpack
+Запускаемые примеры ко всем страницам лежат в [examples/](https://github.com/0cherednoq/eazy-sdk/blob/master/examples/README.md).
 
-from eazy_sdk import AsyncApi, api
-from eazy_sdk.request import BodyProjection, JsonBody
+## Для ИИ-ассистентов
 
+Сайт документации отдаёт два текстовых файла, собранных из тех же страниц:
 
-class RegisterUser(TypedDict):
-    login: str
-    email: str
+* [llms.txt](https://0cherednoq.github.io/eazy-sdk/llms.txt) содержит краткое описание проекта
+  и ссылки на страницы. Он подходит помощнику, который умеет открывать ссылки: в контекст
+  попадают только нужные страницы.
+* [llms-full.txt](https://0cherednoq.github.io/eazy-sdk/llms-full.txt) содержит полный текст
+  документации одним файлом. Он подходит для локального поиска и для инструмента, который по
+  ссылкам не ходит.
 
+Оба файла обновляются при каждой публикации сайта, отдельную копию документации поддерживать не
+нужно.
 
-REGISTER_BODY = BodyProjection(
-    RegisterUser,
-    RegisterUserWire,
-    register_to_wire,
-    JsonBody(),
-)
+## Разработка
 
-
-class RegistrationApi(AsyncApi):
-    @api.post("/register", body=REGISTER_BODY, responses=REGISTER_RESPONSES)
-    async def register(self, **request: Unpack[RegisterUser]) -> RegisteredUser:
-        raise NotImplementedError
-```
-
-Projection runs once per HTTP attempt before body encoding, crypto, and signing. Adaptix can
-provide the typed mapper but remains optional; a plain callable follows the same contract.
-
-Core uses Zapros as its HTTP and WebSocket boundary. Extras include `httpx`, `requests`,
-`curl-cffi`, `websocket`, `pydantic`, `html`, `sqlmodel`, and `all`. OpenAPI generation is provided
-by `eazy-sdk-openapi`, AsyncAPI 3.0 generation by `eazy-sdk-asyncapi`, and Cloudflare/reCAPTCHA
-policies by `eazy-sdk-presets`.
-
-Application-owned field and whole-payload encryption use the shared `eazy_sdk.crypto` profiles for
-HTTP and WebSocket. Eazy SDK owns stage ordering and wire metadata, while applications provide the
-algorithm and key lifecycle; see the [payload crypto guide](docs-site/src/content/docs/guides/payload-crypto.mdx).
-
-See the [documentation](docs-site/src/content/docs/index.mdx), [examples](examples/README.md), and
-the authoritative [implementation plan](docs/implementation/README.md).
-
-Development gates:
+Нужен [uv](https://docs.astral.sh/uv/). Браузерным тестам нужен Chromium.
 
 ```bash
-uv run pytest -q
-uv run mypy
-uv run ruff check
-uv run python scripts/docs_freshness.py check
+uv sync --all-packages --all-extras            # окружение и все инструменты
+uv run playwright install chromium             # браузер для тестов плагина
+uv run pytest -q                               # тесты
+uv run mypy                                    # типы
+uv run ruff check                              # линтер
+uv run python scripts/docs_freshness.py check  # страницы не отстали от кода
 ```
 
-Eazy SDK is released under the [MIT License](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for
-the development workflow and [SECURITY.md](SECURITY.md) for private vulnerability reports.
+Порядок работы описан в [CONTRIBUTING.md](https://github.com/0cherednoq/eazy-sdk/blob/master/CONTRIBUTING.md), об уязвимостях сообщают по
+[SECURITY.md](https://github.com/0cherednoq/eazy-sdk/blob/master/SECURITY.md). План архитектуры лежит в
+[docs/implementation/](https://github.com/0cherednoq/eazy-sdk/blob/master/docs/implementation/README.md).
+
+## Лицензия
+
+[MIT](https://github.com/0cherednoq/eazy-sdk/blob/master/LICENSE)

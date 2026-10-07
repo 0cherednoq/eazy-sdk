@@ -16,11 +16,18 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a7,<0.3"]
+dependencies = ["eazy-sdk-core>=0.2.0a7,<0.3"]
 
 [project.optional-dependencies]
 browser = ["playwright>=1.50"]
 selectolax = ["selectolax>=0.3"]
+
+[project.urls]
+Homepage = "https://github.com/0cherednoq/eazy-sdk"
+Documentation = "https://0cherednoq.github.io/eazy-sdk/"
+Repository = "https://github.com/0cherednoq/eazy-sdk"
+Changelog = "https://github.com/0cherednoq/eazy-sdk/blob/master/CHANGELOG.md"
+Issues = "https://github.com/0cherednoq/eazy-sdk/issues"
 
 [build-system]
 requires = ["hatchling"]

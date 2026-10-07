@@ -89,7 +89,7 @@ async with async_playwright() as playwright:
 Ядро плагина не зависит ни от одного драйвера — транспорт ставится экстрой:
 
 ```bash
-uv add "eazy-sdk[browser]"                 # плагин вместе с ядром SDK
+uv add "eazy-sdk-core[browser]"                 # плагин вместе с ядром SDK
 uv add "eazy-sdk-browser[playwright]"      # с адаптером playwright
 uv add "eazy-sdk-browser[pydoll]"          # с нативным адаптером Pydoll >=3,<4
 uv add "eazy-sdk-browser[accounts]"        # + аккаунты и сессии в хранилище eazy-sdk

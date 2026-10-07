@@ -21,12 +21,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 # extra/distribution label -> (requirement template, python -c program)
 CHECKS: dict[str, tuple[str, str]] = {
     "core": (
-        "eazy-sdk=={version}",
+        "eazy-sdk-core=={version}",
         "import eazy_sdk; from eazy_sdk import Client; "
         "Client(base_url='https://example.test').close()",
     ),
     "html": (
-        "eazy-sdk[html]=={version}",
+        "eazy-sdk-core[html]=={version}",
         "from dataclasses import dataclass; from typing import Annotated\n"
         "from eazy_sdk_html import CSS, parse_html\n"
         "@dataclass\n"
@@ -35,18 +35,18 @@ CHECKS: dict[str, tuple[str, str]] = {
         "assert parse_html('<h1>Hi</h1>', Page).title == 'Hi'",
     ),
     "accounts": (
-        "eazy-sdk[accounts]=={version}",
+        "eazy-sdk-core[accounts]=={version}",
         "import eazy_sdk_accounts, eazy_sdk_accounts.storage, eazy_sdk_accounts.http",
     ),
     "sqlmodel": (
-        "eazy-sdk[sqlmodel]=={version}",
+        "eazy-sdk-core[sqlmodel]=={version}",
         "import eazy_sdk_sqlmodel",
     ),
     # Ядро плагина ставится без драйвера: это его главное свойство, и проверять его
     # надо установкой, а не утверждением в README. Ядро eazy-sdk ему нужно — ошибки
     # и профиль возможностей общие.
     "browser": (
-        "eazy-sdk[browser]=={version}",
+        "eazy-sdk-core[browser]=={version}",
         "import eazy_sdk_browser; from eazy_sdk_browser import css, visible; "
         "assert visible(css('button')).label == 'visible button'",
     ),
@@ -58,28 +58,28 @@ CHECKS: dict[str, tuple[str, str]] = {
         "assert PydollDriver.__module__ == 'eazy_sdk_browser.handlers.pydoll'",
     ),
     "httpx": (
-        "eazy-sdk[httpx]=={version}",
+        "eazy-sdk-core[httpx]=={version}",
         "from eazy_sdk import Client; Client.httpx(base_url='https://example.test').close()",
     ),
     "requests": (
-        "eazy-sdk[requests]=={version}",
+        "eazy-sdk-core[requests]=={version}",
         "from eazy_sdk import Client; Client.requests(base_url='https://example.test').close()",
     ),
     "curl-cffi": (
-        "eazy-sdk[curl-cffi]=={version}",
+        "eazy-sdk-core[curl-cffi]=={version}",
         "from eazy_sdk import Client; Client.curl_cffi(base_url='https://example.test').close()",
     ),
     "websocket": (
-        "eazy-sdk[websocket]=={version}",
+        "eazy-sdk-core[websocket]=={version}",
         "import eazy_sdk.websocket",
     ),
     "pydantic": (
-        "eazy-sdk[pydantic]=={version}",
+        "eazy-sdk-core[pydantic]=={version}",
         "import pydantic; from eazy_sdk.models import default_model_adapters; "
         "default_model_adapters()",
     ),
     "msgspec": (
-        "eazy-sdk[msgspec]=={version}",
+        "eazy-sdk-core[msgspec]=={version}",
         "import msgspec; import eazy_sdk.models",
     ),
     "presets": (

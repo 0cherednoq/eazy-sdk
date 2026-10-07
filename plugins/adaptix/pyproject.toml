@@ -16,7 +16,14 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["eazy-sdk>=0.2.0a7,<0.3", "adaptix>=3.0.0b12"]
+dependencies = ["eazy-sdk-core>=0.2.0a7,<0.3", "adaptix>=3.0.0b12"]
+
+[project.urls]
+Homepage = "https://github.com/0cherednoq/eazy-sdk"
+Documentation = "https://0cherednoq.github.io/eazy-sdk/"
+Repository = "https://github.com/0cherednoq/eazy-sdk"
+Changelog = "https://github.com/0cherednoq/eazy-sdk/blob/master/CHANGELOG.md"
+Issues = "https://github.com/0cherednoq/eazy-sdk/issues"
 
 [build-system]
 requires = ["hatchling"]

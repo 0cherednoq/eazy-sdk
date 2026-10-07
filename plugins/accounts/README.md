@@ -5,5 +5,5 @@ Account registration, verification flows and the multi-account storage layer
 stay in the core (`eazy_sdk.auth.session`).
 
 ```bash
-pip install "eazy-sdk[accounts]"
+pip install "eazy-sdk-core[accounts]"
 ```

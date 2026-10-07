@@ -1,3 +1,7 @@
+# Release from an annotated tag vX.Y.Z: build every workspace member once, then publish the same
+# files to PyPI and attach them to a GitHub release.
+# PyPI uses Trusted Publishing (no tokens). One-time setup is described in CONTRIBUTING.md:
+# a publisher for this workflow and the "pypi" environment on each of the ten projects.
 name: Release
 
 on:
@@ -5,11 +9,11 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  github-release:
-    name: GitHub release from tag
+  build:
+    name: Build and audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +30,8 @@ jobs:
         run: uv run --no-project --python 3.13 python scripts/package_audit.py dist/release
       - name: Extras smoke
         run: uv run --no-project --python 3.13 python scripts/extras_smoke.py dist/release
+      - name: Metadata renders on PyPI
+        run: uvx twine check --strict dist/release/*
       - name: Release notes from the annotated tag
         # actions/checkout leaves the tag peeled to its commit; re-fetch the tag object.
         run: |
@@ -33,6 +39,51 @@ jobs:
           test "$(git cat-file -t "${GITHUB_REF_NAME}")" = "tag" || { echo "${GITHUB_REF_NAME} is not an annotated tag"; exit 1; }
           git tag -l --format='%(contents:body)' "${GITHUB_REF_NAME}" > release-notes.md
           test -s release-notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/release
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/eazy-sdk-core
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # A rerun after a partial upload must not fail on the files that already landed.
+          skip-existing: true
+
+  github-release:
+    name: GitHub release from tag
+    # Independent of the PyPI job: the wheels stay downloadable even if PyPI rejects the upload.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/release
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
       - uses: softprops/action-gh-release@v2
         with:
           name: Eazy SDK ${{ github.ref_name }}

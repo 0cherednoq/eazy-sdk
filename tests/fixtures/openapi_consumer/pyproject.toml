@@ -2,7 +2,7 @@
 name = "eazy_sdk-generated-consumer-fixture"
 version = "0.2.0a7"
 requires-python = ">=3.13"
-dependencies = ["eazy-sdk[pydantic]==0.2.0a7"]
+dependencies = ["eazy-sdk-core[pydantic]==0.2.0a7"]
 
 [build-system]
 requires = ["hatchling"]
