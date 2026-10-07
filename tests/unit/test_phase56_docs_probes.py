@@ -5,9 +5,10 @@ from dataclasses import dataclass, field
 
 import httpx
 import pytest
-from eazy_sdk_browser import AsyncBrowserClient, BrowserCallOptions, Failure, Observation, enforce
+from eazy_sdk_browser import BrowserCallOptions, Failure, Observation, enforce
 from eazy_sdk_browser.testing import FakeDriver
 
+from examples.mail.browser.captcha import main as browser_captcha_main
 from examples.mail.browser.login_failures import main as browser_login_main
 from examples.mail.browser.login_probe import (
     ACCOUNT_FAILURES,
@@ -25,10 +26,10 @@ from examples.mail.browser.login_probe import (
     WrongCodeError,
     WrongPasswordError,
 )
-from examples.mail.http.captcha_probe import main as captcha_main
+from examples.mail.http.captcha import main as captcha_main
 from examples.mail.http.login_failures import main as http_login_main
 from examples.mail.site import MailSite, handle_httpx, intercept_page
-from examples.mail.site.browser_driver import TeachingLoginDriver
+from examples.mail.site._playwright import playwright_mail
 
 
 def test_http_login_probe_prints_all_six_outcomes(capsys: pytest.CaptureFixture[str]) -> None:
@@ -70,6 +71,18 @@ def test_http_captcha_probe_replays_the_password_step(capsys: pytest.CaptureFixt
     ]
 
 
+def test_browser_captcha_probe_continues_the_password_operation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_captcha_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "challenge solved: mail-login",
+        "password submits: 1",
+        "same operation: OtpStep",
+    ]
+
+
 def test_browser_login_probe_declares_three_typed_steps() -> None:
     assert LoginPortal.identify.operation is Identify
     identify_outcomes = Identify.__browser__.outcomes
@@ -85,13 +98,12 @@ def test_browser_login_probe_declares_three_typed_steps() -> None:
 
 @pytest.mark.asyncio
 async def test_browser_login_probe_executes_the_three_typed_steps() -> None:
-    driver = TeachingLoginDriver()
-    portal = LoginPortal(AsyncBrowserClient(driver))
-    options = BrowserCallOptions(timeout=0.01)
-
-    password = await portal.identify(email="ada@mail.example", options=options)
-    otp = await password.submit(password=VALID_LOGIN_INPUT)
-    mailbox = await otp.submit(code="123456")
+    options = BrowserCallOptions(timeout=5.0)
+    async with playwright_mail() as runtime:
+        portal = LoginPortal(runtime.client)
+        password = await portal.identify(email="ada@mail.example", options=options)
+        otp = await password.submit(password=VALID_LOGIN_INPUT)
+        mailbox = await otp.submit(code="123456")
 
     assert isinstance(password, PasswordStep)
     assert isinstance(otp, OtpStep)
@@ -304,36 +316,24 @@ async def test_complete_teaching_site_serves_the_browser_tutorial() -> None:
     assert b'data-page="password"' in password
     assert b"login%3Aada" not in password
 
-    status, headers, _ = await visit(
+    status, _, otp = await visit(
         "POST",
         "https://mail.example/login/password",
         body=b"login_id=login%3Aada%40mail.example&password=correct",
         headers=form_headers,
     )
-    assert status == 303
-    assert headers["location"] == "/login/otp?login_id=login%3Aada%40mail.example"
-
-    _, _, otp = await visit(
-        "GET",
-        f"https://mail.example{headers['location']}",
-    )
+    assert status == 200
     assert b'data-page="otp"' in otp
+    assert b"history.replaceState" in otp
 
-    status, headers, _ = await visit(
+    status, headers, inbox = await visit(
         "POST",
         "https://mail.example/login/otp",
         body=b"login_id=login%3Aada%40mail.example&code=123456",
         headers=form_headers,
     )
-    assert status == 303
-    assert headers["location"] == "/inbox/"
+    assert status == 200
     session_cookie = headers["set-cookie"].split(";", maxsplit=1)[0]
-
-    _, _, inbox = await visit(
-        "GET",
-        "https://mail.example/inbox/",
-        headers={"cookie": session_cookie},
-    )
     _, _, composer = await visit(
         "GET",
         "https://mail.example/compose/",

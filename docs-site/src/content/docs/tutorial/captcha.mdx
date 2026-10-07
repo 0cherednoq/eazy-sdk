@@ -1,0 +1,138 @@
+---
+title: Капча на входе
+description: Решите капчу и продолжите тот же шаг пароля без второго пути входа.
+freshness: false
+---
+
+Аккаунт `captcha@mail.example` принимает пароль, но до второго фактора требует проверку
+`mail-login`. Эта капча придумана для учебного сайта. Решатель меняет состояние текущего
+клиента, после чего шаг пароля продолжается.
+
+| Линия | Что делает решатель | Что продолжает работу |
+|---|---|---|
+| HTTP | кладёт `login_clearance=solved` в cookie | тот же POST повторяется по политике replay |
+| Браузер | нажимает кнопку виджета | тот же вызов операции дожидается страницы кода |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /login/password``
+
+```json
+{
+  "login_id": "login:captcha@mail.example",
+  "password": "correct"
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``403 Forbidden``
+
+```json
+{"kind": "captcha", "site_key": "mail-login"}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+`LoginCaptchaGuard` распознаёт ответ до разбора обычных ошибок. Политика
+`rejected_before_execution(max_replays=1)` разрешает ровно один повтор: сервер отклонил запрос
+до выполнения входа, поэтому повтор не дублирует результат.
+
+```{literalinclude} ../../../../../examples/mail/http/captcha_probe.py
+:language: python
+:start-after: "# region docs: http-captcha-guard"
+:end-before: "# endregion docs: http-captcha-guard"
+```
+
+После решения cookie попадает в тот же HTTP-клиент, а координатор заново готовит запрос пароля.
+
+```{literalinclude} ../../../../../examples/mail/http/captcha.py
+:language: python
+:start-after: "# region docs: http-captcha-flow"
+:end-before: "# endregion docs: http-captcha-flow"
+```
+
+:::{dropdown} Файлы примера целиком
+```{literalinclude} ../../../../../examples/mail/http/captcha_probe.py
+:language: python
+```
+
+```{literalinclude} ../../../../../examples/mail/http/captcha.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.captcha`.
+
+<!-- example-output: examples.mail.http.captcha -->
+```text
+challenge solved: mail-login
+password requests: 2
+replay cookie: login_clearance=solved
+next step: OtpStep
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+После отправки пароля `MailSite` возвращает этот фрагмент:
+
+```html
+<main data-page="captcha" data-login-id="login:captcha@mail.example"><div class="captcha" data-site-key="mail-login">Подтвердите вход</div><form method="post" action="/login/captcha"><input name="login_id" type="hidden" value="login:captcha@mail.example"><button data-action="solve" type="submit">Я не робот</button></form></main>
+```
+
+`Handle` проверяется раньше `Failure`. Он нажимает кнопку решения, страница переходит к форме
+кода, и исход `to=OtpStep` завершает исходный вызов `password(...)`.
+
+```{literalinclude} ../../../../../examples/mail/browser/captcha.py
+:language: python
+:start-after: "# region docs: browser-captcha-operation"
+:end-before: "# endregion docs: browser-captcha-operation"
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/captcha.py
+:language: python
+:start-after: "# region docs: browser-captcha-flow"
+:end-before: "# endregion docs: browser-captcha-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/captcha.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.browser.captcha`.
+
+<!-- example-output: examples.mail.browser.captcha -->
+```text
+challenge solved: mail-login
+password submits: 1
+same operation: OtpStep
+```
+::::
+:::::
+
+:::{note}
+Повтор HTTP ограничен политикой replay. Браузер не отправляет пароль второй раз: обработчик
+виджета остаётся внутри уже начатой операции и ждёт её обычный исход.
+:::
+
+## Дальше
+
+- {doc}`Сверьте остальные исходы входа </tutorial/login-failures>`.
+- {doc}`Вернитесь к карте учебного сайта </tutorial/index>`.

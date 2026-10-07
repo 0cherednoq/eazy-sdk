@@ -137,9 +137,9 @@ captcha: CaptchaRequired
 ```
 :::
 
-Команда `uv run python -m examples.mail.browser.login_failures` выполняет каждую операцию через
-`TeachingLoginDriver`. Драйвер передаёт формы тому же `MailSite` и отдаёт операции DOM-признаки
-полученной страницы.
+Команда `uv run python -m examples.mail.browser.login_failures` запускает Chromium через
+`PlaywrightDriver`. Перехват запросов передаёт формы тому же `MailSite`, а операция читает
+DOM-признаки полученной страницы.
 
 <!-- example-output: examples.mail.browser.login_failures -->
 ```text

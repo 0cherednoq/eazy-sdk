@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import httpx
-
-from eazy_sdk import Client, ClientConfig, Security
-from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.protection import (
     Guard,
     GuardSolution,
@@ -17,11 +13,8 @@ from eazy_sdk.protection import (
 )
 from eazy_sdk.response import ResponseContext
 
-from examples.mail.site import MailSite, handle_httpx
-
-from .login_probe import LoginApi, VALID_INPUT
-
-
+# region docs: http-captcha-guard
+# examples/mail/http/captcha_probe.py
 @dataclass(frozen=True, slots=True)
 class LoginCaptcha:
     site_key: str
@@ -48,29 +41,4 @@ class LoginCaptchaGuard(Guard[LoginCaptcha]):
     def solve(self, challenge: LoginCaptcha, context: SolveContext) -> GuardSolution:
         self.solved.append(challenge.site_key)
         return self.solution(cookies={"login_clearance": "solved"})
-
-
-def main() -> None:
-    site = MailSite()
-    guard = LoginCaptchaGuard()
-    raw = httpx.Client(
-        transport=httpx.MockTransport(lambda request: handle_httpx(request, site)),
-        headers={},
-        cookies={},
-    )
-    with Client(
-        handler=HttpxHandler(raw, owns_client=True),
-        config=ClientConfig(security=Security.of(guard)),
-    ) as client:
-        login = LoginApi(client)
-        password_step = login.identify(email="captcha@mail.example")
-        next_step = login.password(login_id=password_step.login_id, password=VALID_INPUT)
-
-    print(f"challenge solved: {guard.solved[0]}")
-    print(f"password requests: {len(site.state.password_cookies)}")
-    print(f"replay cookie: {site.state.password_cookies[1]}")
-    print(f"next step: {type(next_step).__name__}")
-
-
-if __name__ == "__main__":
-    main()
+# endregion docs: http-captcha-guard

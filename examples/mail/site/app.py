@@ -118,6 +118,7 @@ class SiteState:
     sent: list[MailMessage] = field(default_factory=list)
     sessions: dict[str, str] = field(default_factory=lambda: {"session-1": "ada@mail.example"})
     password_cookies: list[str | None] = field(default_factory=list)
+    captcha_solves: list[str] = field(default_factory=list)
     refreshes: int = 0
 
 
@@ -138,6 +139,7 @@ class MailSite:
             ("GET", "/messages/42"): self._quickstart_message,
             ("POST", "/login/identify"): self._identify,
             ("POST", "/login/password"): self._password,
+            ("POST", "/login/captcha"): self._solve_captcha,
             ("GET", "/login/otp"): self._otp_page,
             ("POST", "/login/otp"): self._otp,
             ("GET", "/login/"): self._login_page,
@@ -187,6 +189,16 @@ class MailSite:
     def _otp_page(self, request: SiteRequest) -> SiteResponse:
         login_id = request.query_value("login_id") or ""
         return SiteResponse.html(200, _otp_html(login_id))
+
+    def _solve_captcha(self, request: SiteRequest) -> SiteResponse:
+        login_id = _field(request, "login_id")
+        if _email_from_login(login_id) not in self.state.accounts:
+            return self._login_failure(request, "account_not_found", "Account does not exist")
+        self.state.captcha_solves.append("mail-login")
+        return SiteResponse.redirect(
+            f"/login/otp?{urlencode({'login_id': login_id})}",
+            cookie="login_clearance=solved; Path=/",
+        )
 
     def _otp(self, request: SiteRequest) -> SiteResponse:
         login_id = _field(request, "login_id")
@@ -373,7 +385,11 @@ def _captcha_html(login_id: str) -> str:
     return _page(
         "Проверка",
         f'<main data-page="captcha" data-login-id="{html.escape(login_id)}">'
-        '<div class="captcha" data-site-key="mail-login">Подтвердите вход</div></main>',
+        '<div class="captcha" data-site-key="mail-login">Подтвердите вход</div>'
+        '<form method="post" action="/login/captcha">'
+        f'<input name="login_id" type="hidden" value="{html.escape(login_id)}">'
+        '<button data-action="solve" type="submit">Я не робот</button>'
+        "</form></main>",
     )
 
 

@@ -109,7 +109,7 @@
 | `tutorial/index` | 56.4 | ok | n/a | ok | ok | ok |
 | `tutorial/login` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/login-failures` | 56.4 | ok | ok | ok | ok | ok |
-| `tutorial/captcha` | 56.4 |  |  |  |  |  |
+| `tutorial/captcha` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/session` | 56.4 |  |  |  |  |  |
 | `tutorial/messages` | 56.4 |  |  |  |  |  |
 | `tutorial/send` | 56.4 |  |  |  |  |  |

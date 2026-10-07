@@ -5283,9 +5283,13 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   обработчики страницы. Шифрование честно ограничено HTTP-линией как клиентское преобразование.
 - 56.4.3: новые `tutorial/login` и `tutorial/login-failures` показывают трёхшаговый вход и шесть
   его исходов для HTTP и браузера. HTTP-линия выполняет операции через локальный обработчик,
-  браузерная проводит `LoginPortal` через `TeachingLoginDriver`, который отправляет формы тому же
-  `MailSite` и строит DOM-признаки из фактического HTML. Обвязка вынесена из публикуемых файлов;
+  браузерная проводит `LoginPortal` через Chromium и `PlaywrightDriver`, а перехват отправляет
+  формы тому же `MailSite`. Обвязка вынесена из публикуемых файлов;
   на страницах остались `literalinclude`, панели запросов/ответов и буквальные HTML-фрагменты.
+- 56.4.4: новая `tutorial/captcha` прямо помечает капчу как учебное добавление. HTTP-линия
+  распознаёт `403`, применяет clearance-cookie и один раз повторяет отклонённый POST. Браузерная
+  линия запускает Chromium через `PlaywrightDriver`: `Handle` нажимает кнопку виджета, а тот же
+  вызов операции пароля дожидается `OtpStep`. Оба транспорта работают через общий `MailSite`.
 
 ### Commands run while planning
 
@@ -5506,7 +5510,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 |---|---|
 | `uv run python -m examples.mail.http.login_success` | PASS: `session: session-ada`. |
 | `uv run python -m examples.mail.http.login_failures` | PASS: six HTTP outcomes match the published output. |
-| `uv run python -m examples.mail.browser.login_failures` | PASS: six browser operations execute through `TeachingLoginDriver` and `MailSite`; output matches the page. |
+| `uv run python -m examples.mail.browser.login_failures` | PASS: six browser operations execute in Chromium through `PlaywrightDriver`, intercepted by `MailSite`; output matches the page. |
 | `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 22 passed. |
 | `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 19 source files. |
 | `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
@@ -5514,6 +5518,20 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 92 pages. |
 | strict Sphinx build to `docs-site/_build/user-preview` | PASS after moving nested HTTP panels above the transport tabs: 92 sources, no warnings. |
 | fresh-agent blind review after two correction rounds | PASS: factual HTTP/HTML panels, clean published files, all six executed browser outcomes and page-queue tracking verified. |
+
+### Verification evidence (56.4.4)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.captcha` | PASS: challenge `mail-login`, 2 password requests, replay cookie `login_clearance=solved`, result `OtpStep`. |
+| `uv run python -m examples.mail.browser.captcha` | PASS: live Chromium solved `mail-login`, submitted the password once and returned `OtpStep` from the same operation. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 24 passed; runnable output, live browser flow, common site and domain ratchet are green. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 21 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/captcha.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 93 pages. |
+| strict Sphinx build to `docs-site/_build/user-preview` | PASS: 93 sources, no warnings; live preview route returns 200. |
+| fresh-agent blind review after correction | PASS: educational provenance and real `PlaywrightDriver`/`intercept_page` execution verified. |
 
 ### Verification evidence (56.0.6)
 
@@ -5556,4 +5574,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.4–56.8. No blockers; next step is 56.4.4.
+56.4.5–56.8. No blockers; next step is 56.4.5.

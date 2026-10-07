@@ -6,6 +6,7 @@ from typing import Protocol
 from urllib.parse import parse_qsl, urlsplit
 
 import httpx
+import json
 
 from .app import MailSite, SiteRequest, SiteResponse, SiteState
 
@@ -63,11 +64,47 @@ async def intercept_page(route: PageRoute, site: MailSite | None = None) -> None
             request.post_data_buffer or b"",
         )
     )
+    response = _follow_page_redirect(request, response, target)
     await route.fulfill(
         status=response.status,
         headers=dict(response.headers),
         body=response.body,
     )
+
+
+def _follow_page_redirect(
+    request: PageRequest,
+    response: SiteResponse,
+    site: MailSite,
+) -> SiteResponse:
+    """Let an intercepted form follow the teaching site's same-origin redirect."""
+
+    headers = dict(response.headers)
+    location = headers.get("location")
+    if response.status != 303 or location is None:
+        return response
+    parsed = urlsplit(location)
+    follow_headers = dict(request.headers)
+    cookie = headers.get("set-cookie")
+    if cookie is not None:
+        follow_headers["cookie"] = cookie.split(";", maxsplit=1)[0]
+    followed = site(
+        SiteRequest(
+            "GET",
+            parsed.path,
+            query=tuple(parse_qsl(parsed.query, keep_blank_values=True)),
+            headers=tuple(follow_headers.items()),
+        )
+    )
+    script = (
+        "<script>history.replaceState(null, '', "
+        f"{json.dumps(location)});</script>"
+    ).encode()
+    body = followed.body.replace(b"</body>", script + b"</body>")
+    final_headers = dict(followed.headers)
+    if cookie is not None:
+        final_headers["set-cookie"] = cookie
+    return SiteResponse(200, tuple(final_headers.items()), body)
 
 
 def _site_request(
