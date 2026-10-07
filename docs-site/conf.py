@@ -21,6 +21,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_design",
     "sphinx_llms_txt",
+    "sphinxcontrib.mermaid",
 ]
 
 source_suffix = {

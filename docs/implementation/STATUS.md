@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.7–56.8. No blockers; next step is 56.7.1.
+56.7.2–56.8. No blockers; next step is 56.7.2.
 
 ### Verification evidence (56.5.5)
 
@@ -5792,3 +5792,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | page queue and debt audit | PASS: all ten rows are filled; three prose findings and seven legacy-domain findings are removed from the snapshots. |
 | documentation metadata and freshness | PASS: 105 valid pages; 73 tracked pages are fresh. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-all-integrations` | PASS: 105 sources, no warnings. |
+
+### Verification evidence (56.7.1)
+
+| Command | Result |
+|---|---|
+| `uv add --group docs "sphinxcontrib-mermaid>=2,<3"` | PASS: resolved and locked `sphinxcontrib-mermaid` 2.1.1 in the docs group. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/mermaid docs-site/_build/phase56-mermaid-probe` | PASS: the standalone Mermaid source built without warnings. |
+| rendered probe inspection | PASS: `index.html` contains `pre.mermaid`, the `flowchart LR` source and the Mermaid module loader. |
