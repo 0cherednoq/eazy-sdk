@@ -38,6 +38,7 @@ implementation and verification evidence.
 | 28 | complete | AP-00–AP-07: tracked workspace metadata, per-attempt identity, capability/identity preflight, immutable bundles, replay/public cleanup, bounded locks, docs and all release gates pass. | None. |
 | 29 | complete | AS-00–AS-06: high-level guard builder, session-owned affinity, identity/capability removal, 19-name public API, 49-name advanced SPI, migrated presets/docs and all release gates. | None. |
 | 55 | complete | Native Pydoll 3 adapter, shared live contract suite, bounded capture, state/fetch/lifecycle support, wheel isolation and `browser_pool` acceptance all have current-checkout evidence. | None. |
+| 56 | complete | Documentation site rebuilt around four top tabs and one mail SDK tutorial shown for HTTP and browser on a shared teaching site; 113 pages in the tree, every snippet included from a runnable file in `examples/`, code-block, prose and domain debt at zero; full gates recorded under 56.8.3. | None. |
 
 ## Phase 55 planning record (2026-10-06)
 
@@ -5181,7 +5182,7 @@ None in phase 55.
 
 ## Phase 56 — documentation overhaul (planned 2026-10-07)
 
-State: `active`. Plan: [56-documentation-overhaul.md](56-documentation-overhaul.md).
+State: `complete` (closed 2026-10-07). Plan: [56-documentation-overhaul.md](56-documentation-overhaul.md).
 Page queue: [56-pages.md](56-pages.md) (87 existing pages, 31 new).
 
 The owner accepted all decisions on 2026-10-07 and added two: every tutorial topic is shown for
@@ -5723,7 +5724,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.8.4 (closing records). No blockers.
+None in phase 56.
 
 ### Verification evidence (56.5.5)
 
@@ -5857,3 +5858,16 @@ named real services were replaced by `.example` files served by local handlers, 
 | stage 56.2 checks (code blocks, prose, domains, example outputs) | PASS inside the full pytest run; the three debt files are empty. |
 | empty-cell audit of `56-pages.md` | PASS: no empty cells. |
 | `git diff --check` | PASS. |
+
+### Phase exit criteria (56.8.4)
+
+| № | Criterion (plan §0) | Evidence |
+|---|---|---|
+| 1 | every page is in the tree, strict Sphinx build has no warnings | strict build PASS over 113 pages (56.8.3) |
+| 2 | no `assert`, substitute transports or stub servers in page code blocks | `test_phase56_docs_code_blocks.py` green, `56-code-block-debt.txt` empty |
+| 3 | every snippet comes from a file in `examples/` that tests run; page output equals file output | `test_phase56_docs_examples.py` and `test_docs_examples.py` green in the full run |
+| 4 | both tutorial lines pass with one command each | `python -m examples.mail http` and `browser` exit 0 |
+| 5 | only `example` domains in `docs-site/` and `examples/` | domain ratchet green, `56-domain-debt.txt` empty |
+| 6 | prose of every page passed `humanizer-ru`, zero linter errors | wrapper run over 113 pages: 0 errors each |
+| 7 | no empty cells in `56-pages.md` | audit: 0 lines with an empty cell |
+| 8 | section 9 gates green | table under 56.8.3 |

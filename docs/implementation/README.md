@@ -78,6 +78,9 @@ becomes an ordinary `ApiError`.
 [Phase 55](55-pydoll-browser-adapter.md) adds a native Pydoll 3 page adapter to
 `eazy_sdk_browser`; browser processes, contexts, leases, proxies and task retries remain owned by
 an external orchestration layer such as `browser_pool`.
+[Phase 56](56-documentation-overhaul.md) rebuilds the documentation site: four top tabs, one mail
+SDK tutorial shown for both HTTP and browser on a shared teaching site, and every page snippet
+included from a runnable file in `examples/`. It changes no core or plugin code.
 
 ## Цель
 
