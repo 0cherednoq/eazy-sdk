@@ -5642,6 +5642,19 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
 | clean strict Sphinx build and preview rebuild | PASS: 93 sources, no warnings; `/guide/requests/` and `/guide/requests/representation/` return 200 with rendered source paths and exact output. |
 
+### Verification evidence (56.5.2)
+
+| Command | Result |
+|---|---|
+| response-guide example runs | PASS: typed success metadata, mapped 404/429 errors and CSS-scoped HTML extraction produced the output published on their pages. |
+| `uv run pytest -q tests/unit/test_docs_examples.py tests/unit/test_phase56_docs_examples.py` plus phase-56 snapshots and domain ratchet | PASS: 47 tests; every runnable guide file has exactly one matching output block, all includes resolve, and no new domain or documentation debt appeared. |
+| `uv run mypy examples/docs tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 16 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py` over all four response pages | PASS: 0 errors and 0 warnings on every page; the pattern audit found no remaining findings. The outline-test exclusion for procedural guides applies. |
+| page queue and debt audit | PASS: all four queue rows are filled; the obsolete assertion, 40 long dashes and three legacy domain rows are removed from the debt snapshots. |
+| documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
+| clean strict Sphinx build | PASS: 93 sources, no warnings. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5683,4 +5696,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.5.2–56.8. No blockers; next step is 56.5.2.
+56.5.3–56.8. No blockers; next step is 56.5.3.

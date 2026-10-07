@@ -1,219 +1,76 @@
 ---
-title: Успешный ответ
-description: Тип результата объявляет успешный случай; success= нужен, только когда случаев несколько.
+title: Получить типизированное значение и метаданные
+description: Выведите успешный случай из HttpOperation[T] и при необходимости сохраните HTTP-ответ.
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
 api_fingerprint: "sha256:6f3256edda10e0cbb30db2e960bfbcdc041acd00e31b50ea261f07df5ee29d80"
 ---
 
-Тип результата операции — это и есть успешный случай. `HttpOperation[User]` означает «`200`,
-JSON, модель `User`»; ничего дополнительно объявлять не нужно.
+`HttpOperation[Order]` объявляет обычный успешный ответ: статус `200`, JSON-тело и модель
+`Order`. Метод `with_response(...)` выполняет ту же операцию, но возвращает
+`ResponseEnvelope[Order]` с HTTP-метаданными.
 
-```python
-from dataclasses import dataclass
+Дополнительное объявление не нужно.
 
-from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /orders/order-42``
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```text
+X-Request-ID: request-42
+Content-Type: application/json
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetUser(HttpOperation[User]):
-    __http__ = Http.get("/users/{user_id}")
+{"id": "order-42", "status": "paid", "total": 12900}
+```
+::::
+:::::
 
-    user_id: Path[int]
-
-class UsersApi(SyncApi):
-    get_user = op(GetUser)
-
-users = UsersApi(client)
-user = users.get_user(user_id=42)
-envelope = users.get_user.with_response(user_id=42)
-
-assert envelope.value == User(id=42, name="Ada")
-print(envelope.status_code)
-print(envelope.headers.get("x-request-id"))
-print(envelope.response.raw_response)
+```{literalinclude} ../../../../../../examples/docs/response_success.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Request: `GET /users/42`. Response: status `200`, header `Content-Type: application/json`, JSON
-`{"id":42,"name":"Ada"}`. Обычный вызов возвращает `User`; `.with_response(...)` выполняет ту же
-операцию и добавляет HTTP metadata, не меняя parser или response case.
+Обычный `get(...)` вернул бы `Order`. В примере `.with_response(...)` сохраняет его в `.value`,
+статус в `.status_code`, заголовки в `.headers`, а исходный объект обработчика в
+`.response.raw_response`.
 
-Модель создаётся через настроенный `ModelAdapterRegistry`: dataclass, Pydantic v2, msgspec и
-зарегистрированные custom adapters. Примеры — в {doc}`руководстве по сериализации моделей
-</reference/api/models-codecs>`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/response_success.py
+:language: python
+```
+:::
 
-## Семья выводится из модели
+Запуск: `uv run python examples/docs/response_success.py`.
 
-Какой экстрактор читает ответ, решает модель, а не декларация: модель, поля которой несут
-CSS/XPath-селекторы, читается документным бэкендом, любая другая — как JSON.
-
-```python
-@dataclass(frozen=True, slots=True)
-class CatalogPage:
-    title: Annotated[str, CSS("h1::text")]
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetCatalogue(HttpOperation[CatalogPage]):   # Html, потому что есть селекторы
-    __http__ = Http.get("/catalogue/page-{page}.html")
-
-    page: Path[int]
+<!-- example-output: examples.docs.response_success -->
+```text
+status: 200
+order: order-42 paid
+request id: request-42
 ```
 
-`str` означает текстовый ответ, `bytes` — бинарный, `None` — пустое тело. `Json(...)`, `Html(...)`,
-`Text()`, `Bytes()`, `Empty()` пишут явно, когда нужно задать медиа-тип, статус или условие.
+## Объявить несколько успешных случаев
 
-## Несколько успешных случаев
+Используйте `success=`, когда операция возвращает разные модели или особый статус. Например,
+`success={201: Order, 202: AcceptedOrder}` различает созданный и принятый в обработку заказ.
 
-`success=` нужен там, где успешных ответов больше одного или у ответа особый статус:
+Значением может быть модель, `Json`, `Text`, `Bytes`, `Empty` или список представлений. Условие
+`when=` различает формы с одинаковым статусом. Тип результата операции должен включать все
+возможные значения.
+Строка `str` означает текст, `bytes` означает бинарное тело, а `None` означает пустой ответ.
+Явные представления нужны, когда контракт задаёт особый тип содержимого, условие или способ
+разбора.
 
-```python
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CreateOrder(HttpOperation[Order]):
-    __http__ = Http.post(
-        "/orders",
-        success={201: Order, 202: Accepted},
-    )
+## Дальше
 
-    item: JsonField[str]
-```
-
-Значение по ключу — модель, представление или их список: один статус может документировать
-несколько форм, а различает их `when=`. Его принимает любое представление: `Json`, `Html`,
-`Extracted`, `Parsed`, `Text`, `Bytes` и `Empty`.
-
-Если два случая подошли к одному ответу, выигрывает более конкретный. Порядок сравнения такой:
-
-1. случай, заявивший критерий, важнее случая без критерия;
-2. точный статус важнее диапазона `"4xx"`, диапазон важнее `DEFAULT`;
-3. явная медиа важнее `*/*`, а `*/*` важнее её отсутствия;
-4. объявление операции важнее объявления её сервиса, а сервиса — важнее клиента.
-
-Критерий стоит первым, потому что это более узкое утверждение. «`200`, и тело выглядит как
-страница защиты» говорит больше, чем «`200`». Благодаря этому сервис, объявивший свои страницы
-защиты один раз на диапазоне статусов, не проигрывает каждой операции, объявившей обычный успех
-на точном статусе. Операция, которая действительно владеет статусом вопреки условному случаю,
-заявляет собственный `when=`.
-
-Настоящая ничья — два одинаково конкретных случая — остаётся `AmbiguousResponseError`: её
-разрешает автор, а не библиотека.
-
-## Конверт сервиса
-
-Многие API кладут полезную нагрузку внутрь конверта. Указатель на неё объявляется один раз на
-сервисе — как JSON-указатель RFC 6901:
-
-```python
-class ShopApi(SyncApi):
-    unwrap = "/data"
-
-    get_order = op(GetOrder)
-    get_catalogue = op(GetCatalogue)
-```
-
-Ответ `{"data": {"id": "o-1", "total": 500}, "meta": {...}}` разбирается в `Order`, и ни одна
-операция про конверт не знает. Указатель применяется только к случаям, построенным из «голой»
-модели: явный `Json(Order)` остаётся тем, что написано. Если пути в документе нет — это
-`MalformedResponseError`, а не «поле пропало».
-
-Сервис, объявивший `protocol` (конверт протокола, см. {doc}`протоколы </guide/protocols>`),
-`unwrap` объявлять не может: конверт уже выбирает полезную нагрузку.
-
-## Конверт с бизнес-статусом
-
-`unwrap` подходит конверту, который только оборачивает. Но многие сервисы сообщают неуспех внутри
-конверта, оставляя статус `200`:
-
-```json
-{"Success": false, "Result": null, "Message": "Дело не найдено"}
-```
-
-Такой конверт различается не указателем, а тем, что модель сама говорит о своём теле. `Const`
-объявляет константу на поле — это `const` из JSON Schema, написанный на Python. `Payload`
-помечает поле, которое операция возвращает.
-
-```python
-from dataclasses import dataclass
-from typing import Annotated
-
-from eazy_sdk import Http, HttpOperation, SyncApi, op
-from eazy_sdk.response import ApiError, Const, Json, Payload
-
-@dataclass(frozen=True)
-class CaseFile:
-    number: str
-
-@dataclass(frozen=True)
-class CaseFound:
-    Success: Annotated[bool, Const(True)]
-    Result: Payload[CaseFile]
-    Message: str | None = None
-
-@dataclass(frozen=True)
-class CaseMissing:
-    Success: Annotated[bool, Const(False)]
-    Message: str
-
-class CaseNotFound(ApiError[CaseMissing]):
-    pass
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetCase(HttpOperation[CaseFile]):
-    __http__ = Http.get(
-        "/cases",
-        success={200: Json(CaseFound)},
-        errors={200: (Json(CaseMissing), CaseNotFound)},
-    )
-
-class CasesApi(SyncApi):
-    get_case = op(GetCase)
-```
-
-Тег — утверждение о теле, а не об исходе: «в этом ответе `Success` равно `false`». Успех это или
-ошибка, говорит словарь, в который положена модель, — и только он это и знает, потому что одна и
-та же форма для одной операции успех, а для другой неуспех. Поэтому тег читается одинаково на
-`success=` и на `errors=` и никогда не инвертируется.
-
-Ответ с `"Success": false` поднимает `CaseNotFound` — обычный `ApiError`, который участвует в
-`errors=`, попадает в `ErrorSummary` и проходит через слои retry и защиты. Проверка
-`if not response.Success: raise` в коде вызывающего больше не нужна.
-
-`Payload` применяется только к успешному случаю, поэтому результат операции — `CaseFile`, а поля
-`Success` и `Message` не видны вызывающему коду. Случай ошибки сохраняет весь конверт: `Message`
-живёт именно там, и `CaseNotFound.error.Message` его отдаёт. Тип, объявленный маркером, сверяется
-с `HttpOperation[T]` при первом обращении к операции: расхождение — ошибка объявления, а не
-неожиданный результат в рантайме.
-
-Форма — `Annotated`, а не `Literal`, потому что теги нужны на всех четырёх библиотеках моделей:
-`Literal[True]` невозможен на msgspec, который принимает в `Literal` только `None`, целые и
-строки, а адаптеры dataclass и TypedDict не поддерживают `Literal` вовсе. Там, где бэкенд
-`Literal` тянет, одноэлементный `Literal["customer"]` читается как тот же самый тег.
-
-Значения сравниваются вместе с типами: в Python `1 == True`, поэтому тело `{"Success": 1}` тегу
-`Const(True)` не удовлетворяет.
-
-Условие, которое не сводится к равенству, и модель, которую нельзя менять, — это `accept=` на
-кейсе: `Json(ThirdParty, accept=lambda r: r.status == "ok")`. Он отвечает на другой вопрос,
-«подходит ли этот кейс», поэтому читается как написан и на успехе, и на ошибке, и переопределяет
-теги модели.
-
-## Одно объявление на много операций
-
-Успешные случаи задают тип результата, поэтому от сервиса они не наследуются. Повтор убирается не
-вторым механизмом наследования, а обычной функцией: `Json(...)` — значение, и его собирает
-фабрика.
-
-```python
-def wrapped[T](model: type[T]) -> Json[T]:
-    return Json(model, unwrap="/data")
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetOrder(HttpOperation[Order]):
-    __http__ = Http.get("/orders/{order_id}", success=wrapped(Order))
-
-    order_id: Path[str]
-```
-
-Так же устроены и штатные хелперы: `rpc_result(Model)` из {doc}`протоколов </guide/protocols>` —
-это ровно `Success(200, Json(Model, extractor=RESULT_EXTRACTOR))`, собранный функцией. Отдельного
-«декодера по умолчанию» на роутере нет намеренно: он делал бы форму ответа невидимой в месте, где
-объявлен возвращаемый тип.
+- {doc}`Разберите ожидаемую ошибку </guide/responses/errors>`.
+- {doc}`Извлеките данные из HTML </guide/responses/html>`.
+- {doc}`Настройте модели и кодеки </integrations/models/index>`.

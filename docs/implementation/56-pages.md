@@ -83,10 +83,10 @@
 | `guides/requests/query` | `guide/requests/query` | ok | ok | ok | ok | n/a |
 | `guides/requests/representation` | `guide/requests/representation` | ok | ok | ok | ok | n/a |
 | `guides/requests/values` | `guide/requests/values` | ok | ok | ok | ok | n/a |
-| `guides/responses/errors` | `guide/responses/errors` | ok |  |  |  | n/a |
-| `guides/responses/html` | `guide/responses/html` | ok |  |  |  | n/a |
-| `guides/responses/index` | `guide/responses/index` | ok |  |  |  | n/a |
-| `guides/responses/success` | `guide/responses/success` | ok |  |  |  | n/a |
+| `guides/responses/errors` | `guide/responses/errors` | ok | ok | ok | ok | n/a |
+| `guides/responses/html` | `guide/responses/html` | ok | ok | ok | ok | n/a |
+| `guides/responses/index` | `guide/responses/index` | ok | n/a | ok | ok | n/a |
+| `guides/responses/success` | `guide/responses/success` | ok | ok | ok | ok | n/a |
 | `guides/serialization` | `integrations/models/index` | ok |  |  |  | n/a |
 | `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok |  |  |  | n/a |
 | `guides/websocket` | `guide/websocket` | ok |  |  |  | n/a |

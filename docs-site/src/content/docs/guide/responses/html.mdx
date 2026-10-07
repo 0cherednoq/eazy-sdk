@@ -1,6 +1,6 @@
 ---
-title: HTML
-description: Typed offline HTML extraction через Annotated CSS/XPath schema.
+title: Извлечь типизированные данные из HTML
+description: Свяжите поля модели с CSS- или XPath-селекторами и разберите HTML-ответ операции.
 sources:
   - eazy_sdk_html.parse_html
   - eazy_sdk_html.CSS
@@ -10,75 +10,73 @@ sources:
 api_fingerprint: "sha256:c57faa2bd240d86143fc47ba62961e3070340a222628269444686ef1140fa1b8"
 ---
 
-`parse_html` извлекает typed model без HTTP и без Zapros. Один schema contract работает с
-dataclass, Pydantic и msgspec; selector engine возвращает primitive tree, после чего выбранный
-`ModelAdapter` строит итоговый объект.
+Поля документной модели несут CSS- или XPath-селекторы. SDK сначала строит дерево HTML, затем
+извлекает простые значения и передаёт их настроенному адаптеру моделей.
 
-```python
-from dataclasses import dataclass
-from typing import Annotated
+Модель остаётся обычным `dataclass`.
 
-from eazy_sdk_html import CSS, Scope, parse_html
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+::::{grid-item}
+:class: http-panel http-panel--request
+**→ Request** · ``GET /catalogue/page-1.html``
+::::
+::::{grid-item}
+:class: http-panel http-panel--response
+**← Response** · ``200 OK``
+```html
+<h1>Mailbox library</h1>
+<article class="book">
+  <a href="sdk-patterns.html">SDK Patterns</a><span>12.50</span>
+</article>
+```
+::::
+:::::
 
-@dataclass
-class Product:
-    name: Annotated[str, CSS(".name::text")]
-    price: Annotated[float, CSS(".price::text")]
-
-@dataclass
-class Catalog:
-    title: Annotated[str, CSS("h1::text")]
-    products: Annotated[list[Product], Scope(CSS("article.product"))]
-
-catalog = parse_html(html_bytes, Catalog)
+```{literalinclude} ../../../../../../examples/docs/response_html.py
+:language: python
+:start-after: "# docs:models:start"
+:end-before: "# docs:models:end"
 ```
 
-Используйте `CSS("a::attr(href)")` для атрибутов и `XPath("//h1/text()")`, когда XPath точнее.
-Для `list[T]` selector возвращает все совпадения; для nested model `Scope(...)` создаёт отдельный
-контекст на каждый найденный элемент. У optional field отсутствие совпадения даёт `None`, а у
-required field — `ExtractionError` с полным model path и selector.
+`CSS("a::text")` читает текст одного узла. `Scope(CSS("article.book"))` создаёт отдельный
+контекст для каждой карточки и строит список `Book`. Необязательное поле получает `None`, если
+селектор ничего не нашёл; обязательное поле приводит к `ExtractionError` с путём модели.
 
-## HTML response
-
-Тот же schema — это тип результата операции: объявлять семью ответа не нужно, её называет модель.
-
-```python
-from dataclasses import dataclass
-
-from eazy_sdk import Http, HttpOperation, Path, SyncApi, op
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetCatalogue(HttpOperation[Catalog]):
-    __http__ = Http.get("/catalogue/page-{page}.html")
-
-    page: Path[int]
-
-class BooksApi(SyncApi):
-    catalogue = op(GetCatalogue)
+```{literalinclude} ../../../../../../examples/docs/response_html.py
+:language: python
+:start-after: "# docs:operation:start"
+:end-before: "# docs:operation:end"
 ```
 
-`Catalog` несёт CSS-селекторы, поэтому ответ читает документный бэкенд: extractor → primitive tree
-→ `ModelAdapter`. Модель без селекторов на том же месте читалась бы как JSON. Явный `Html(Model)`
-нужен там, где задан особый медиа-тип или статус; для нестандартного формата реализуйте
-`ResponseExtractor`, а `Parsed(...)` остаётся явным parser escape hatch для протоколов, которые не
-выражаются extractor schema.
+Селекторы в `Catalogue` сообщают компилятору, что ответ нужно читать как документ. Модель без
+селекторов на том же месте читалась бы как JSON. Явное представление `Html(Model)` нужно для
+особого статуса, типа содержимого или условия.
 
-Документная модель, у которой нет ни одного обязательного поля, подошла бы к любой странице —
-включая страницу ошибки, стоящую рядом в том же наборе случаев. Такая операция отвергается при
-компиляции: добавьте обязательное поле-селектор или условие `when=`.
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/response_html.py
+:language: python
+```
+:::
 
-## Парсер выбирается на корне
+Запуск: `uv run python examples/docs/response_html.py`.
 
-Селекторы — контракт операции; парсер, который строит документ, — реализация, поэтому он
-объявляется один раз:
-
-```python
-from eazy_sdk.serialization import Serialization
-
-store = Store(client, serialization=Serialization(documents=(ParselBackend(),)))
+<!-- example-output: examples.docs.response_html -->
+```text
+Mailbox library: 2 books
+first: SDK Patterns 12.50
+next: page-2.html
 ```
 
-По умолчанию используется parsel, который читает и CSS, и XPath. Бэкенды не взаимозаменяемы по
-языку селекторов, и это проверяется **при компиляции**: операция с `XPath(...)` на парсере без
-XPath отвергается с указанием поля, языка и бэкенда, а не даёт пустое извлечение в рантайме —
-пустой результат выглядел бы как «сервер перестал присылать поле».
+По умолчанию HTML читает Parsel с поддержкой CSS и XPath. Другой документный бэкенд задаётся в
+`Serialization(documents=(...))` на корне. Компилятор заранее проверяет, что бэкенд понимает язык
+каждого селектора.
+Для отдельного HTML-фрагмента без HTTP используйте `parse_html(data, Model)`. Он применяет ту же
+модель, селекторы и адаптеры.
+
+## Дальше
+
+- {doc}`Проверьте контракт документного ответа </reference/api/response>`.
+- {doc}`Настройте модели и адаптеры </integrations/models/index>`.
+- {doc}`Разберите неизвестный ответ </guide/responses/errors>`.

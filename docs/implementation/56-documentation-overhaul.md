@@ -360,7 +360,7 @@ reference/        Справочник
 | 56.4.9 | глава 9, сборка, сессия браузера у HTTP-клиента | `python -m examples.mail http` и `browser` проходят | complete | оба entry point PASS; один `BrowserMailSdk`, BrowserLogin → Bearer → реальный curl_cffi и bound Chromium router на одном MailSite; 41 тест, strict build и blind review PASS | 2026-10-07 |
 | 56.4.10 | удаление `more/examples/*` и `examples/docs/store_sdk.py` | ссылок на них нет, сборка зелёная | complete | пять страниц и старый пример удалены; ссылки, тест и freshness-lock очищены; 93-page strict build PASS | 2026-10-07 |
 | 56.5.1 | руководство: запросы, 12 страниц | строки в очереди заполнены | complete | 11 runnable-файлов и общий локальный сайт; 44 теста, mypy/ruff, 0/0 prose lint, freshness и 93-page strict build PASS | 2026-10-07 |
-| 56.5.2 | руководство: ответы, 4 страницы | строки в очереди заполнены | pending | | |
+| 56.5.2 | руководство: ответы, 4 страницы | строки в очереди заполнены | complete | три runnable-примера и обзор; 47 тестов, mypy/ruff, 0/0 prose lint, freshness и 93-page strict build PASS | 2026-10-07 |
 | 56.5.3 | руководство: авторизация, 10 страниц, вкладки по правилу 12 | строки в очереди заполнены | pending | | |
 | 56.5.4 | руководство: защита, перевод на русский | строка в очереди заполнена | pending | | |
 | 56.5.5 | руководство: остальное и новая `guide/testing` | строки в очереди заполнены | pending | | |

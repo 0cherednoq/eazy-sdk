@@ -20,9 +20,6 @@ docs-site/src/content/docs/guide/multi-service.mdx:113: pay.shop.com
 docs-site/src/content/docs/guide/protection.mdx:103: kad.arbitr.ru
 docs-site/src/content/docs/guide/protection.mdx:106: kad.arbitr.ru
 docs-site/src/content/docs/guide/protocols.mdx:36: rpc.shop.com
-docs-site/src/content/docs/guide/responses/errors.mdx:26: example.test
-docs-site/src/content/docs/guide/responses/errors.mdx:62: example.test
-docs-site/src/content/docs/guide/responses/errors.mdx:133: example.test
 docs-site/src/content/docs/guide/websocket.mdx:131: stream.example.test
 docs-site/src/content/docs/integrations/accounts/registration.mdx:29: example.test
 docs-site/src/content/docs/integrations/accounts/registration.mdx:118: example.test

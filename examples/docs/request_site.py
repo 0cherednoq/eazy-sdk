@@ -53,6 +53,34 @@ def _get(request: httpx.Request) -> httpx.Response:
             3: {"items": ["lamp"], "next_page": None},
         }
         return _json_response(200, pages[page])
+    if path == "/orders/order-42":
+        return httpx.Response(
+            200,
+            headers={"X-Request-ID": "request-42"},
+            json={"id": "order-42", "status": "paid", "total": 12_900},
+        )
+    if path == "/orders/busy":
+        return _json_response(
+            429,
+            {"code": "rate_limited", "message": "Try again later"},
+        )
+    if path.startswith("/orders/"):
+        order_id = path.rsplit("/", maxsplit=1)[-1]
+        return _json_response(
+            404,
+            {"code": "order_not_found", "message": f"Unknown order {order_id}"},
+        )
+    if path == "/catalogue/page-1.html":
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/html; charset=utf-8"},
+            content=b"""<!doctype html><html><body><main>
+<h1>Mailbox library</h1>
+<article class="book"><a href="sdk-patterns.html">SDK Patterns</a><span>12.50</span></article>
+<article class="book"><a href="typed-http.html">Typed HTTP</a><span>18.00</span></article>
+<a class="next" href="page-2.html">next</a>
+</main></body></html>""",
+        )
     return _json_response(404, {"error": "route_not_found"})
 
 

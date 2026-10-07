@@ -1,218 +1,75 @@
 ---
-title: Ошибки API
-description: Ожидаемые ответы API как типизированные исключения.
+title: Разобрать ожидаемую ошибку API
+description: Свяжите статус ответа с типизированным исключением и моделью проблемы.
 sources:
   - eazy_sdk.api
   - eazy_sdk.response
 api_fingerprint: "sha256:6f3256edda10e0cbb30db2e960bfbcdc041acd00e31b50ea261f07df5ee29d80"
 ---
 
-## Неправильный пароль
+Ожидаемый отказ входит в контракт операции. Объявите модель тела, наследника `ApiError` и
+соответствие в `errors=`. Вызывающий сможет обработать каждый исход отдельным `except`, без
+ветвления по числовому статусу.
+
+| Ответ сайта | Правило операции | Что получает вызывающий |
+|---|---|---|
+| `200` с заказом | `HttpOperation[Order]` | `Order` |
+| `404` с проблемой | `errors={404: OrderNotFound}` | `OrderNotFound` |
+| `429` с проблемой | `errors={429: RateLimited}` | `RateLimited` |
 
 :::::{grid} 1 1 2 2
 :class-container: http-exchange
 :gutter: 2
-
 ::::{grid-item}
 :class: http-panel http-panel--request
-
-**→ Request** · ``POST /auth/login``
-
-```json
-{
-  "method": "POST",
-  "url": "/auth/login",
-  "headers": {"Content-Type": "application/json"},
-  "body": {"username": "ada@example.test", "password": "wrong"}
-}
-```
+**→ Request** · ``GET /orders/missing``
 ::::
-
 ::::{grid-item}
 :class: http-panel http-panel--response
-
-**← Response** · ``401 Unauthorized``
-
-```json
-{
-  "status": 401,
-  "headers": {"Content-Type": "application/json"},
-  "body": {"code": "invalid_password", "message": "Password is incorrect"}
-}
-```
-::::
-:::::
-
-## Пользователь не найден
-
-:::::{grid} 1 1 2 2
-:class-container: http-exchange
-:gutter: 2
-
-::::{grid-item}
-:class: http-panel http-panel--request
-
-**→ Request** · ``POST /auth/login``
-
-```json
-{
-  "method": "POST",
-  "url": "/auth/login",
-  "headers": {"Content-Type": "application/json"},
-  "body": {"username": "nobody@example.test", "password": "anything"}
-}
-```
-::::
-
-::::{grid-item}
-:class: http-panel http-panel--response
-
 **← Response** · ``404 Not Found``
-
 ```json
-{
-  "status": 404,
-  "headers": {"Content-Type": "application/json"},
-  "body": {"code": "user_not_found", "message": "User does not exist"}
-}
+{"code": "order_not_found", "message": "Unknown order missing"}
 ```
 ::::
 :::::
 
-## Контракт
-
-```python
-from dataclasses import dataclass
-
-from pydantic import BaseModel
-
-from eazy_sdk import Http, HttpOperation, JsonField, op
-from eazy_sdk.response import ApiError
-
-class LoginProblem(BaseModel):
-    code: str
-    message: str
-
-class InvalidPasswordError(ApiError[LoginProblem]):
-    pass
-
-class UserNotFoundError(ApiError[LoginProblem]):
-    pass
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Login(HttpOperation[UserSession]):
-    __http__ = Http.post(
-        "/auth/login",
-        errors={401: InvalidPasswordError, 404: UserNotFoundError},
-    )
-
-    username: JsonField[str]
-    password: JsonField[str]
+```{literalinclude} ../../../../../../examples/docs/response_errors.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
 ```
 
-Модель ошибки объявлена один раз — в `ApiError[LoginProblem]`, — поэтому в `errors=` достаточно
-самого класса исключения. Ключ — статус (`404`), диапазон (`"5xx"`) или `DEFAULT` — последний
-только в `fallback=`, потому что «на всё остальное» это не такой же случай, как `404`.
+`ApiError[ApiProblem]` сохраняет типизированное тело в `.error`. Свойство `.summary` содержит
+безопасную сводку: идентификатор операции, статус, тип содержимого, номер попытки, метод и
+отредактированный адрес. Полный контекст ответа остаётся в `.context`.
 
-Если исключение приложения не должно наследовать библиотечный класс, объявите пару
-«модель, фабрика»:
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/response_errors.py
+:language: python
+```
+:::
 
-```python
-class Refused(Exception):
-    def __init__(self, problem: LoginProblem, context: object) -> None:
-        self.problem = problem
-        super().__init__(problem.message)
+Запуск: `uv run python examples/docs/response_errors.py`.
 
-__http__ = Http.post("/auth/login", errors={403: (LoginProblem, Refused)})
+<!-- example-output: examples.docs.response_errors -->
+```text
+404: Unknown order missing
+429: rate_limited
 ```
 
-## Обработка
+## Разместить общие ошибки
 
-```python
-try:
-    session = await sdk.auth.login(username="ada@example.test", password="wrong")
-except InvalidPasswordError as exc:
-    print(exc.error.message)
-except UserNotFoundError as exc:
-    print(exc.error.message)
-```
+Операция объявляет собственные ошибки. Роутер добавляет отказы всего сервиса через `errors`, а
+`ClientConfig(errors=...)` задаёт ответы конкретного хоста. При совпадении выигрывает объявление,
+которое находится ближе к операции.
 
-`ApiError` хранит typed payload в `.error` и response context в `.context`. Не используйте status
-code branching после обычного вызова: documented error case уже выбрал точный exception type.
+Условие `when=` различает ответы с одинаковым статусом по телу, заголовку или типу содержимого.
+Предикаты из `eazy_sdk.response.match` проверяют сырые байты до разбора модели. Неизвестный ответ
+даёт `UnexpectedResponseError`, а неверное тело уже выбранного случая даёт
+`MalformedResponseError`.
 
-Свойство `.summary` доступно всегда и возвращает `ErrorSummary` — operation_id, статус, media
-type, номер попытки, метод и редактированный target. Именно она переживает `pickle`: в очередь
-задач или в отчёт об ошибке уезжает сводка, а не тело ответа с его заголовками.
+## Дальше
 
-## Ошибки, общие для сервиса и хоста
-
-Ошибки — единственная часть контракта ответа, которая складывается: сервис объявляет `errors`, и
-они добавляются к объявленным операцией. При совпадении статуса выигрывает случай, объявленный
-ближе к операции.
-
-```python
-class ShopApi(SyncApi):
-    errors = ({429: RateLimited},)
-
-    login = op(Login)
-```
-
-Клиент может объявить то же самое по адресу — для ошибок, которыми хост отвечает независимо от
-того, какой SDK с ним говорит:
-
-```python
-config = ClientConfig(errors={"api.shop.example": {503: AccessBlocked}})
-```
-
-Это самый внешний слой: операция важнее сервиса, сервис важнее клиента.
-
-## Условия по телу ответа
-
-Статуса не всегда достаточно. Страница капчи и страница блокировки приходят с тем же `200`, что и
-нормальный ответ, и различаются только телом. Такое условие пишется в `when=`, а собирается из
-готовых предикатов:
-
-```python
-from eazy_sdk.response import Error, StatusRange, Text
-from eazy_sdk.response.match import body, content_type
-
-is_challenge = body.contains(b"captcha.execute") | body.contains(b'name="captchaToken"')
-is_blocked = body.contains(b"support@shop.example") | body.contains("Доступ заблокирован")
-
-class ShopApi(SyncApi):
-    errors = (
-        Error(StatusRange(200, 599), Text(media_type=None), exception=ChallengeRequired,
-              condition=is_challenge),
-        Error(StatusRange(200, 599), Text(media_type=None), exception=AccessBlocked,
-              condition=is_blocked),
-    )
-```
-
-Предикаты соединяются через `&`, `|` и `~`. Доступны `body.startswith`, `body.contains`,
-`body.matches`, `body.is_empty`, `content_type.is_`, `content_type.startswith`, `status.is_`,
-`status.in_` и `header(name).present`/`.is_`/`.contains`.
-
-Аргумент типа `bytes` сравнивается с сырым телом, аргумент типа `str` — с декодированным
-текстом, поэтому кириллический маркер пишется как есть, без `.encode()`. Тело, которое не
-декодируется, даёт `False`, а не исключение: решение о маршрутизации не должно ронять вызов.
-
-Предикат — обычный вызываемый объект, поэтому смешивается с готовыми функциями и лямбдами:
-`is_challenge & (lambda ctx: ctx.response.status_code == 200)`.
-
-Операциям при этом ничего писать не нужно. Случай с условием важнее случая без условия, поэтому
-объявленный на сервисе `is_challenge` выигрывает у обычного `success={200: ...}` любой операции,
-когда тело действительно оказалось страницей защиты.
-
-## Неуспех внутри `200`
-
-Условие по сырому телу отвечает на вопрос до разбора. Когда сервис сообщает неуспех полем внутри
-конверта — `{"Success": false, "Message": "…"}` со статусом `200`, — различает случаи тег на
-модели: `Annotated[bool, Const(False)]` на модели ошибки и `Const(True)` на модели успеха. Такая
-ошибка становится обычным `ApiError`: участвует в `errors=`, попадает в `ErrorSummary` и проходит
-через retry и защиту. Подробно — в разделе «Конверт с бизнес-статусом» на странице
-{doc}`успешных ответов </guide/responses/success>`.
-
-Ответ с неизвестным status/media type даёт `UnexpectedResponseError`; если тело пришло документной
-медиа, а все кандидаты — структурные модели, сообщение это называет. Валидный case с malformed
-payload даёт `MalformedResponseError`. Эти ошибки означают нарушение контракта upstream и не
-смешиваются с ожидаемыми `401`/`404`.
+- {doc}`Настройте повторы временных ошибок </guide/reliability/retry>`.
+- {doc}`Опишите варианты многошагового входа </guide/auth/login>`.
+- {doc}`Проверьте полный контракт случаев ответа </reference/api/response>`.
