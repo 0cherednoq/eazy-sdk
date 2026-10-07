@@ -1,55 +1,41 @@
 ---
-title: reCAPTCHA
-description: Typed reCAPTCHA v2, v3 and Enterprise policies.
+title: Подключить reCAPTCHA
+description: Настройте типизированные политики reCAPTCHA v2, v3 и Enterprise.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.recaptcha
 api_fingerprint: "sha256:8f5cb35140adde0f0eb56f9befbf7419718622bc770e7a61c09d1db61fe29384"
 ---
 
-v2/checkbox policies реагируют на response challenge. v3/action и Enterprise score policies
-получают token до request.
+Политика v2 с флажком реагирует на проверочный ответ. Политика v3 получает токен для указанного
+действия до исходного запроса.
 
-```python target
-from eazy_sdk import ClientConfig
-from eazy_sdk.protection import SolveContext, operation
-from eazy_sdk_presets import form_field, recaptcha
-
-
-class RecaptchaV2Solver:
-    async def solve(
-        self,
-        challenge: recaptcha.RecaptchaChallenge,
-        context: SolveContext,
-    ) -> recaptcha.RecaptchaToken:
-        raise NotImplementedError("obtain the token from your captcha service")
-
-
-class RecaptchaV3Solver(RecaptchaV2Solver):
-    pass
-
-
-v2 = recaptcha.v2_checkbox(
-    scope=operation("login"),
-    solver=RecaptchaV2Solver(),
-    apply=form_field("g-recaptcha-response"),
-)
-
-v3 = recaptcha.v3_action(
-    scope=operation("createAccount"),
-    site_key="public-site-key",
-    action="create_account",
-    solver=RecaptchaV3Solver(),
-    apply=form_field("g-recaptcha-response"),
-)
-
-config = ClientConfig().with_protection(v2, v3)
+```{literalinclude} ../../../../../../examples/docs/integration_recaptcha.py
+:language: python
+:start-after: "# docs:integration-recaptcha:start"
+:end-before: "# docs:integration-recaptcha:end"
 ```
 
-`scope=operation(...)` ограничивает policy одной operation identity. Solver возвращает typed
-solution и не мутирует request, cache или retry coordinator. Private token field отсутствует в
-public method signature и добавляется перед projection/encoding/signing нужного attempt.
-Direct solver implements only the typed challenge-to-token contract. JavaScript, browser, WASM,
-and remote API choices remain private to the solver. If a framework provides SDK-level solver DI,
-omit the direct solver and install the returned preset through `with_protection()`; a missing
-binding remains a typed preflight error.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_recaptcha.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_recaptcha -->
+```text
+protections: recaptcha.v2-checkbox, recaptcha.v3-action:create_account
+```
+
+`operation(...)` ограничивает политику одной операцией SDK. Решатель возвращает типизированный
+токен и не изменяет запрос или состояние повторов. Способ применения, например
+`form_field("g-recaptcha-response")`, добавляет закрытое поле перед кодированием и подписью.
+
+Если описание не содержит решателя, привяжите его через механизм внедрения зависимостей до
+выполнения запроса. Иначе предварительная проверка конфигурации вернёт типизированную ошибку.
+
+## Дальше
+
+- {doc}`Подключить Turnstile </integrations/protection/turnstile>`
+- {doc}`Понять модель защит </guide/protection>`
+- {doc}`Настроить повторные запросы </guide/reliability/retry>`

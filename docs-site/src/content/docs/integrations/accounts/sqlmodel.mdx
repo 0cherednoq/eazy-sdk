@@ -1,93 +1,47 @@
 ---
-title: SQLModel
-description: Хранение аккаунтов Eazy SDK в SQLite или PostgreSQL.
+title: Подключить SQLModel
+description: Храните аккаунты Eazy SDK в SQLite или PostgreSQL.
 sources:
   - eazy_sdk_sqlmodel
 api_fingerprint: "sha256:b9c2ae068cd3625e4204952ec2788b0dec255f1e6586f89bc46ef38b4f40d17d"
 ---
 
-## Установка
+Установите плагин и асинхронный драйвер выбранной базы. Для SQLite:
 
 ```bash
-uv add eazy-sdk-sqlmodel
+uv add eazy-sdk-sqlmodel aiosqlite
 ```
 
-Для SQLite добавьте async driver:
+`open_workspace(...)` создаёт область операций над аккаунтами, сессиями, подтверждениями,
+связями и событиями:
 
-```bash
-uv add aiosqlite
+```{literalinclude} ../../../../../../examples/docs/integration_sqlmodel.py
+:language: python
+:start-after: "# docs:integration-sqlmodel:start"
+:end-before: "# docs:integration-sqlmodel:end"
 ```
 
-## Подключение
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_sqlmodel.py
+:language: python
+```
+:::
 
-```python
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from eazy_sdk_sqlmodel import create_all, open_workspace
-
-engine = create_async_engine("sqlite+aiosqlite:///sdk.db")
-await create_all(engine)
+<!-- example-output: examples.docs.integration_sqlmodel -->
+```text
+stored: ada@mail.example
 ```
 
-## Создание аккаунта
+В примере используется временная SQLite. Для постоянной базы сначала вызовите
+`create_all(engine)`. Учётные данные, профиль и данные сессии сохраняются как JSON, поэтому
+защиту данных на диске должно обеспечить приложение.
 
-```python
-async with open_workspace(engine) as storage:
-    account = await storage.accounts.create(
-        "ada@example.test",
-        provider="example.test",
-        credentials={
-            "format": "plain-json",
-            "version": 1,
-            "data": {"password": "correct-horse"},
-        },
-        profile={"first_name": "Ada"},
-    )
-```
+`create_all(...)` предназначен для новой базы. Для обновления старой схемы сначала запустите
+`eazy-sdk-sqlmodel-migrate DATABASE_URL` без `--apply`, изучите отчёт, затем повторите команду с
+`--apply`.
 
-Credentials, profile и session payload сохраняются как JSON. Если нужна защита данных на диске, добавьте её на уровне приложения.
+## Дальше
 
-## Регистрация
-
-```python
-from eazy_sdk_sqlmodel import SqlRegistrationStore
-
-registration_store = SqlRegistrationStore(
-    session,
-    credentials_model=SignupCredentials,
-    profile_model=AccountProfile,
-    session_model=UserSession,
-)
-```
-
-Передайте `registration_store` в `account_registration(...)`. После успешной регистрации аккаунт
-сохранится автоматически.
-
-## Сохранение login session
-
-```python
-from eazy_sdk.auth import session_auth
-from eazy_sdk_sqlmodel import SqlSessionStore
-
-session_store = SqlSessionStore(
-    database_session,
-    account.id,
-    session_model=UserSession,
-)
-auth = session_auth(
-    UserSession,
-    credentials=credentials,
-    service=LoginService(),
-    store=session_store,
-)
-```
-
-Store проверяет revision при refresh и не позволяет позднему ответу затереть новую session.
-Используйте отдельный `AsyncSession`: lifecycle store сам фиксирует state и event перед возвратом
-и отклоняет явную внешнюю transaction.
-
-## Production schema
-
-`create_all(...)` предназначен для новой базы. Для обновления v1 сначала выполните read-only
-inspection через `eazy-sdk-sqlmodel-migrate DATABASE_URL`, затем повторите команду с `--apply`.
-Runtime не имеет dual-schema path после миграции.
+- {doc}`Выбрать хранилище аккаунтов </integrations/accounts/index>`
+- {doc}`Создать регистрацию </integrations/accounts/registration>`
+- {doc}`Управлять сессией </guide/auth/session>`

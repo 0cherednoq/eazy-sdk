@@ -1,76 +1,43 @@
 ---
-title: Cloudflare Challenge Pages
-description: Detect a Cloudflare challenge and replay with managed clearance cookies.
+title: Обработать Cloudflare Challenge Pages
+description: Подключите типизированную защиту для страницы проверки Cloudflare.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
 api_fingerprint: "sha256:aa7aa6fc2ef1ec8d90c1cee12b76d568ff5c92b88afd628f472771dd2f44d776"
 ---
 
-The preset recognizes a definitive challenge from `cf-mitigated: challenge` and an HTML content
-type. Status alone is not enough.
+Пресет распознаёт страницу проверки по заголовку `cf-mitigated: challenge` и типу HTML. Одного
+кода состояния недостаточно.
 
-```python target
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+Создайте описание защиты для нужного узла:
 
-import httpx
-
-from eazy_sdk import AsyncClient, ClientConfig
-from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-from eazy_sdk.protection import SolveContext
-from eazy_sdk_presets import cloudflare, host
-
-
-class CloudflareSolver:
-    def __init__(self, session: httpx.AsyncClient) -> None:
-        self.session = session
-
-    async def solve(
-        self,
-        challenge: cloudflare.CloudflareChallenge,
-        context: SolveContext,
-    ) -> cloudflare.CloudflareClearance:
-        cookies = await solve_with_service(self.session, challenge)
-        return cloudflare.CloudflareClearance(
-            cookies=tuple(
-                cloudflare.SecretCookie(cookie.name, cookie.value)
-                for cookie in cookies
-            ),
-            expires_at=datetime.now(UTC) + timedelta(minutes=30),
-        )
-
-
-@asynccontextmanager
-async def create_sdk(proxy: str) -> AsyncIterator[AsyncClient]:
-    async with httpx.AsyncClient(proxy=proxy) as session:
-        handler = AsyncHttpxHandler(session, owns_client=False)
-        guard = cloudflare.challenge_pages(
-            scope=host("api.example.test"),
-            solver=CloudflareSolver(session),
-        )
-        config = ClientConfig().with_protection(guard)
-        async with AsyncClient(
-            base_url="https://api.example.test",
-            handler=handler,
-            config=config,
-        ) as client:
-            yield client
+```{literalinclude} ../../../../../../examples/docs/integration_cloudflare.py
+:language: python
+:start-after: "# docs:integration-cloudflare:start"
+:end-before: "# docs:integration-cloudflare:end"
 ```
 
-All items in `CloudflareClearance.cookies` are validated and applied as one private batch. The
-default state lifetime is `until_rejected` within the current handler session. A repeated
-definitive challenge invalidates the applied clearance before solving and replaying again.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_cloudflare.py
+:language: python
+```
+:::
 
-The factory gives the handler and solver the same fixed native session. The solver does not declare
-browser or JavaScript capabilities; those are implementation details. A browser-backed factory can
-apply the same construction with one browser context or lease.
+<!-- example-output: examples.docs.integration_cloudflare -->
+```text
+protection: cloudflare.challenge-pages
+```
 
-Keep transport configuration fixed for the client lifecycle. To rotate a proxy, User-Agent, or
-impersonation profile, close the current client and create a new handler and client. The new client
-starts with empty managed clearance state.
+Перед использованием привяжите решатель, который возвращает `CloudflareClearance`. Исполнитель
+проверит cookies, применит их одной закрытой группой и безопасно повторит запрос. Повторная
+подтверждённая проверка отменяет прежнее разрешение перед новым решением.
 
-The preset performs no browser automation itself. It only parses sanitized challenge metadata,
-calls the supplied solver, applies returned cookies, and asks the shared executor for a safe
-replay.
+Пресет сам не запускает браузер. Если решателю и HTTP-клиенту нужен общий сетевой путь, создайте
+их из одной фиксированной сессии. При смене прокси или профиля имитации создайте новый клиент.
+
+## Дальше
+
+- {doc}`Настроить Turnstile </integrations/protection/turnstile>`
+- {doc}`Понять модель защит </guide/protection>`
+- {doc}`Проверить возможности обработчика </reference/api/clients>`

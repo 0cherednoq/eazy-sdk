@@ -1,0 +1,44 @@
+---
+title: Интеграции
+description: Выберите транспорт, модели, генератор, хранилище и готовую защиту Eazy SDK.
+freshness: false
+---
+
+Используйте эту карту, чтобы установить только нужные зависимости. Каждая интеграция сохраняет
+общие контракты операций, авторизации, повторов и ошибок Eazy SDK.
+
+## Пакеты плагинов
+
+| Пакет | Задача | Страница |
+| --- | --- | --- |
+| `eazy-sdk-openapi` | Сгенерировать HTTP SDK | {doc}`OpenAPI </integrations/generators/openapi>` |
+| `eazy-sdk-asyncapi` | Сгенерировать WebSocket SDK | {doc}`AsyncAPI </integrations/generators/asyncapi>` |
+| `eazy-sdk-browser` | Выполнять операции через браузер | {doc}`Браузер </integrations/browser/index>` |
+| `eazy-sdk-accounts` | Хранить аккаунты и сессии | {doc}`Аккаунты </integrations/accounts/index>` |
+| `eazy-sdk-sqlmodel` | Хранить аккаунты в SQL | {doc}`SQLModel </integrations/accounts/sqlmodel>` |
+| `eazy-sdk-presets` | Подключить готовые защиты | {doc}`Cloudflare </integrations/protection/cloudflare>`, {doc}`Turnstile </integrations/protection/turnstile>`, {doc}`reCAPTCHA </integrations/protection/recaptcha>` |
+| `eazy-sdk-adaptix` | Использовать модели Adaptix | {doc}`Adaptix </integrations/models/adaptix>` |
+| `eazy-sdk-html` | Читать HTML-документы | {doc}`HTML </integrations/documents/html>` |
+| `eazy-sdk-xml` | Читать XML-документы | {doc}`XML </integrations/documents/xml>` |
+
+## Extras основного пакета
+
+| Extra | Задача | Страница |
+| --- | --- | --- |
+| `httpx` | Отправлять HTTP через HTTPX | {doc}`Подключение </integrations/http/httpx>` |
+| `requests` | Отправлять HTTP через Requests | {doc}`Подключение </integrations/http/requests>` |
+| `curl-cffi` | Имитировать профиль браузера | {doc}`Подключение </integrations/http/curl-cffi>` |
+| `websocket` | Читать поток событий | {doc}`Настройка </guide/websocket>` |
+| `browser` | Выполнять операции в браузере | {doc}`Обзор </integrations/browser/index>` |
+| `accounts` | Хранить аккаунты и сессии | {doc}`Обзор </integrations/accounts/index>` |
+| `sqlmodel` | Хранить аккаунты в SQL | {doc}`Подключение </integrations/accounts/sqlmodel>` |
+| `pydantic` | Разбирать модели Pydantic | {doc}`Подключение </integrations/models/pydantic>` |
+| `msgspec` | Разбирать модели msgspec | {doc}`Подключение </integrations/models/msgspec>` |
+| `html` | Читать HTML-документы | {doc}`Подключение </integrations/documents/html>` |
+| `all` | Установить все extras | {doc}`Установка </start/installation>` |
+
+## Дальше
+
+- {doc}`Выбрать HTTP-клиент </integrations/http/index>`
+- {doc}`Выбрать библиотеку моделей </integrations/models/index>`
+- {doc}`Перейти от установки к первому запросу </start/quickstart>`

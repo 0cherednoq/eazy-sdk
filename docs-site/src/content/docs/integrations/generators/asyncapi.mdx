@@ -1,0 +1,45 @@
+---
+title: Сгенерировать SDK из AsyncAPI
+description: Создайте пакет WebSocket-клиента из документа AsyncAPI 3.0.
+freshness: false
+---
+
+Генератор AsyncAPI создаёт типизированный клиент событий для каналов и операций `receive`.
+Установите пакет генератора:
+
+```bash
+uv add "eazy-sdk-asyncapi[yaml]"
+```
+
+Передайте документ AsyncAPI 3.0 и имя будущего пакета:
+
+```{literalinclude} ../../../../../../examples/docs/integration_asyncapi.py
+:language: python
+:start-after: "# docs:integration-asyncapi:start"
+:end-before: "# docs:integration-asyncapi:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_asyncapi.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_asyncapi -->
+```text
+package: mail_events_sdk
+files: __init__.py, client.py, models.py, protocol.py
+```
+
+`client.py` содержит клиент, `models.py` модели сообщений, а `protocol.py` контракт транспорта.
+Для YAML используйте команду:
+
+```bash
+eazy-sdk-asyncapi asyncapi.yaml generated --package-name mail_events_sdk
+```
+
+## Дальше
+
+- {doc}`Сгенерировать HTTP-клиент из OpenAPI </integrations/generators/openapi>`
+- {doc}`Настроить WebSocket </guide/websocket>`
+- {doc}`Проверить SDK локально </guide/testing>`

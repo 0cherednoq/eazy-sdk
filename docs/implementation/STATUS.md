@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.6.4–56.8. No blockers; next step is 56.6.4.
+56.7–56.8. No blockers; next step is 56.7.1.
 
 ### Verification evidence (56.5.5)
 
@@ -5778,3 +5778,17 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | page queue and debt audit | PASS: all seven rows are filled; the obsolete 25-long-dash entry for the model overview is removed. |
 | documentation metadata and freshness | PASS: 102 valid pages; 73 freshness fingerprints current, including the refreshed model-overview fingerprint. |
 | strict Sphinx build | PASS: 102 sources, no warnings. |
+
+### Verification evidence (56.6.4)
+
+| Command | Result |
+|---|---|
+| nine remaining-integration example runs | PASS: OpenAPI and AsyncAPI generated packages; memory and SQLModel workspaces stored an account; registration reached pending and complete states; Cloudflare, Turnstile and reCAPTCHA presets produced the published identifiers. |
+| focused documentation examples, snapshots and domain ratchet | PASS: 92 tests; all published outputs and literal includes resolve, and all three debt snapshots match. |
+| `uv run mypy` over the nine new example files | PASS: no issues in 9 source files. |
+| matching `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py` over all ten pages | PASS: 0 errors and 0 warnings on every page. |
+| plugin and extra coverage audit | PASS: the integrations map covers all nine `plugins/*` directories and every one of the eleven optional-dependency groups in `pyproject.toml`. |
+| page queue and debt audit | PASS: all ten rows are filled; three prose findings and seven legacy-domain findings are removed from the snapshots. |
+| documentation metadata and freshness | PASS: 105 valid pages; 73 tracked pages are fresh. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-all-integrations` | PASS: 105 sources, no warnings. |

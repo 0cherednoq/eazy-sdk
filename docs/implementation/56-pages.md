@@ -42,9 +42,9 @@
 | `auth/jwt` | `guide/auth/jwt` | ok | ok | ok | ok | n/a |
 | `auth/login` | `guide/auth/login` | ok | ok | ok | ok | n/a |
 | `auth/refresh` | `guide/auth/refresh` | ok | ok | ok | ok | n/a |
-| `auth/registration` | `integrations/accounts/registration` | ok |  |  |  | n/a |
+| `auth/registration` | `integrations/accounts/registration` | ok | ok | ok | ok | n/a |
 | `auth/session` | `guide/auth/session` | ok | ok | ok | ok | n/a |
-| `auth/verification` | `integrations/accounts/verification` | ok |  |  |  | n/a |
+| `auth/verification` | `integrations/accounts/verification` | ok | ok | ok | ok | n/a |
 | `clients/curl-cffi` | `integrations/http/curl-cffi` | ok | ok | ok | ok | n/a |
 | `clients/httpx` | `integrations/http/httpx` | ok | ok | ok | ok | n/a |
 | `clients/index` | `integrations/http/index` | ok | n/a | ok | ok | n/a |
@@ -60,13 +60,13 @@
 | `guides/index` | `guide/index` | ok | n/a | ok | ok | n/a |
 | `guides/middleware` | `guide/middleware` | ok | ok | ok | ok | n/a |
 | `guides/multi-service` | `guide/multi-service` | ok | ok | ok | ok | n/a |
-| `guides/openapi` | `integrations/generators/openapi` | ok |  |  |  | n/a |
+| `guides/openapi` | `integrations/generators/openapi` | ok | ok | ok | ok | n/a |
 | `guides/pagination` | `guide/pagination` | ok | ok | ok | ok | n/a |
 | `guides/payload-crypto` | `guide/encryption` | ok | ok | ok | ok | n/a |
-| `guides/protection/cloudflare` | `integrations/protection/cloudflare` | ok |  |  |  | n/a |
+| `guides/protection/cloudflare` | `integrations/protection/cloudflare` | ok | ok | ok | ok | n/a |
 | `guides/protection/index` | `guide/protection` | ok | ok | ok | ok | n/a |
-| `guides/protection/recaptcha` | `integrations/protection/recaptcha` | ok |  |  |  | n/a |
-| `guides/protection/turnstile` | `integrations/protection/turnstile` | ok |  |  |  | n/a |
+| `guides/protection/recaptcha` | `integrations/protection/recaptcha` | ok | ok | ok | ok | n/a |
+| `guides/protection/turnstile` | `integrations/protection/turnstile` | ok | ok | ok | ok | n/a |
 | `guides/protocols` | `guide/protocols` | ok | ok | ok | ok | n/a |
 | `guides/reliability/rate-limit` | `guide/reliability/rate-limit` | ok | ok | ok | ok | n/a |
 | `guides/reliability/redirect` | `guide/reliability/redirect` | ok | ok | ok | ok | n/a |
@@ -88,7 +88,7 @@
 | `guides/responses/index` | `guide/responses/index` | ok | n/a | ok | ok | n/a |
 | `guides/responses/success` | `guide/responses/success` | ok | ok | ok | ok | n/a |
 | `guides/serialization` | `integrations/models/index` | ok | n/a | ok | ok | n/a |
-| `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok |  |  |  | n/a |
+| `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok | ok | ok | ok | n/a |
 | `guides/websocket` | `guide/websocket` | ok | ok | ok | ok | n/a |
 | `guides/xml` | `integrations/documents/xml` | ok | ok | ok | ok | n/a |
 | `index` | `index` | ok |  |  |  | n/a |
@@ -116,7 +116,7 @@
 | `tutorial/encryption` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/assembly` | 56.4 | ok | ok | ok | ok | ok |
 | `guide/testing` | 56.5 | ok | ok | ok | ok | n/a |
-| `integrations/index` | 56.6 |  |  |  |  | n/a |
+| `integrations/index` | 56.6 | ok | n/a | ok | ok | n/a |
 | `integrations/http/custom-handler` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/browser/playwright` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/browser/pydoll` | 56.6 | ok | ok | ok | ok | n/a |
@@ -125,8 +125,8 @@
 | `integrations/models/dataclass` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/models/adaptix` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/documents/html` | 56.6 | ok | ok | ok | ok | n/a |
-| `integrations/generators/asyncapi` | 56.6 |  |  |  |  | n/a |
-| `integrations/accounts/index` | 56.6 |  |  |  |  | n/a |
+| `integrations/generators/asyncapi` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/accounts/index` | 56.6 | ok | ok | ok | ok | n/a |
 | `architecture/index` | 56.7 |  |  |  |  | n/a |
 | `architecture/request-path` | 56.7 |  |  |  |  | n/a |
 | `architecture/attempts` | 56.7 |  |  |  |  | n/a |

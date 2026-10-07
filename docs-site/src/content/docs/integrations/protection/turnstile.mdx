@@ -1,60 +1,39 @@
 ---
-title: Turnstile
-description: Install typed Turnstile widget and proactive preclearance guards.
+title: Подключить Cloudflare Turnstile
+description: Настройте защиту виджетом или предварительным разрешением Turnstile.
 sources:
   - eazy_sdk.protection
   - eazy_sdk_presets.cloudflare
 api_fingerprint: "sha256:aa7aa6fc2ef1ec8d90c1cee12b76d568ff5c92b88afd628f472771dd2f44d776"
 ---
 
-Widget and preclearance guards use different lifecycle stages. Install both descriptors through one
-immutable config merge:
+Turnstile поддерживает два разных жизненных цикла. Виджет реагирует на ответ сервера, а
+предварительное разрешение получает cookies до запроса к источнику.
 
-```python target
-from eazy_sdk import ClientConfig
-from eazy_sdk.protection import SolveContext, host, operation
-from eazy_sdk_presets import cloudflare, form_field
-
-
-class TurnstileTokenSolver:
-    async def solve(
-        self,
-        challenge: cloudflare.TurnstileChallenge,
-        context: SolveContext,
-    ) -> cloudflare.TurnstileToken:
-        raise NotImplementedError("obtain the widget token from your captcha service")
-
-
-class TurnstileClearanceSolver:
-    async def solve(
-        self,
-        challenge: cloudflare.TurnstileChallenge,
-        context: SolveContext,
-    ) -> cloudflare.CloudflareClearance:
-        raise NotImplementedError("obtain the clearance cookies for page_url")
-
-
-widget = cloudflare.turnstile_widget(
-    scope=operation("login"),
-    solver=TurnstileTokenSolver(),
-    apply=form_field("cf-turnstile-response"),
-)
-
-preclearance = cloudflare.turnstile_preclearance(
-    scope=host("api.example.test"),
-    site_key="public-site-key",
-    page_url="https://api.example.test/login",
-    solver=TurnstileClearanceSolver(),
-)
-
-config = ClientConfig().with_protection(widget, preclearance)
+```{literalinclude} ../../../../../../examples/docs/integration_turnstile.py
+:language: python
+:start-after: "# docs:integration-turnstile:start"
+:end-before: "# docs:integration-turnstile:end"
 ```
 
-The widget solver runs only after a matching response and uses the configured replay proof.
-Preclearance runs before the origin request and can be reused until expiry within the current
-handler session.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_turnstile.py
+:language: python
+```
+:::
 
-Both solvers implement only their typed challenge-to-solution contract. The runtime does not ask
-whether they use JavaScript, a browser, WASM, or an external service. If preclearance and HTTP must
-share a network path, build both from the same fixed session or lease. Rotate transport by creating
-a new client.
+<!-- example-output: examples.docs.integration_turnstile -->
+```text
+protections: cloudflare.turnstile-widget, cloudflare.turnstile-preclearance
+```
+
+Привяжите к каждому описанию совместимый решатель и добавьте их через
+`ClientConfig().with_protection(...)`. Для виджета задайте способ применения токена, например
+`form_field("cf-turnstile-response")`. Предварительное разрешение можно повторно использовать до
+истечения срока в пределах той же сессии обработчика.
+
+## Дальше
+
+- {doc}`Обработать Challenge Pages </integrations/protection/cloudflare>`
+- {doc}`Подключить reCAPTCHA </integrations/protection/recaptcha>`
+- {doc}`Понять модель защит </guide/protection>`

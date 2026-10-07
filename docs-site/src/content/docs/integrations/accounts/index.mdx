@@ -1,0 +1,43 @@
+---
+title: Хранить аккаунты и сессии
+description: Выберите память или SQLModel для аккаунтов, подтверждений и сессий.
+freshness: false
+---
+
+Пакет `eazy-sdk-accounts` хранит аккаунты, подтверждения, ограничения, связи, события и сессии.
+Он не зависит от HTTP-клиента и подходит для нескольких созданных SDK.
+
+Установите хранилище в памяти:
+
+```bash
+uv add eazy-sdk-accounts
+```
+
+Создайте аккаунт, отметьте адрес подтверждённым и выберите подходящую запись из пула:
+
+```{literalinclude} ../../../../../../examples/docs/integration_accounts.py
+:language: python
+:start-after: "# docs:integration-accounts:start"
+:end-before: "# docs:integration-accounts:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_accounts.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_accounts -->
+```text
+account: ada@mail.example
+selected: ada@mail.example
+```
+
+`MemoryStorage` хранит состояние только в текущем процессе. Для SQLite или PostgreSQL используйте
+плагин SQLModel.
+
+## Дальше
+
+- {doc}`Создать регистрацию </integrations/accounts/registration>`
+- {doc}`Подтвердить регистрацию </integrations/accounts/verification>`
+- {doc}`Подключить SQLModel </integrations/accounts/sqlmodel>`
