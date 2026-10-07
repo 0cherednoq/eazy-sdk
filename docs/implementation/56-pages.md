@@ -49,7 +49,7 @@
 | `clients/httpx` | `integrations/http/httpx` | ok | ok | ok | ok | n/a |
 | `clients/index` | `integrations/http/index` | ok | n/a | ok | ok | n/a |
 | `clients/requests` | `integrations/http/requests` | ok | ok | ok | ok | n/a |
-| `getting-started/index` | `start/index` | ok |  |  |  |  |
+| `getting-started/index` | `start/index` | ok | n/a | ok | ok | ok |
 | `getting-started/installation` | `start/installation` | ok | n/a | ok | ok | ok |
 | `getting-started/quickstart` | `start/quickstart` | ok | ok | ok | ok | ok |
 | `guides/browser/browser-pool` | `integrations/browser/browser-pool` | ok | n/a | ok | ok | n/a |

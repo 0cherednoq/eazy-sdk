@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-PAGE = Path(__file__).resolve().parents[2] / "docs-site/src/content/docs/more/migration.mdx"
+PAGE = Path(__file__).resolve().parents[2] / "docs-site/src/content/docs/reference/migration.mdx"
 ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|")
 
 
@@ -53,4 +53,5 @@ def test_migration_row_is_accurate(old: str, new: str) -> None:
 def test_migration_page_covers_both_alpha_steps() -> None:
     assert len(_rows()) >= 20
     text = PAGE.read_text(encoding="utf-8")
-    assert "## 0.2.0a4 → 0.2.0a5" in text and "## 0.2.0a3 → 0.2.0a4" in text
+    assert "## Переход с 0.2.0a4 на 0.2.0a5" in text
+    assert "## Переход с 0.2.0a3 на 0.2.0a4" in text

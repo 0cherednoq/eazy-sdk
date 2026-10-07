@@ -1,6 +1,12 @@
 """Tests for prose extraction used by the humanizer-ru wrapper."""
 
-from scripts.lint_docs_prose import extract_prose
+import sys
+from pathlib import Path
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
+
+from lint_docs_prose import extract_prose  # noqa: E402
 
 
 def test_extract_prose_removes_page_scaffolding_and_preserves_lines() -> None:

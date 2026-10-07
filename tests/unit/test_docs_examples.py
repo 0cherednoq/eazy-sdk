@@ -21,17 +21,13 @@ from examples.adaptix_nested_wire_body import (
 from examples.adaptix_nested_wire_body import (
     RegisterUser as AdaptixRegisterUser,
 )
-from examples.books_to_scrape import CatalogPage
-from examples.dummyjson_auth import (
+from examples.bearer_auth import (
     USER_BEARER,
-    DummyJsonAuthApi,
-    DummyJsonUsersApi,
+    AccountAuthApi,
+    AccountUsersApi,
 )
-from examples.dummyjson_session_auth import (
-    DummyJsonSandbox,
-    DummyJsonSdk,
-    UserSession,
-)
+from examples.blog_posts import BlogApi
+from examples.catalog_html import CatalogPage
 from examples.flat_model_wire_body import (
     DEVICE,
     DeviceContext,
@@ -39,7 +35,11 @@ from examples.flat_model_wire_body import (
     RegisterUserProjection,
     RegisterWireSettings,
 )
-from examples.jsonplaceholder_posts import JsonPlaceholderApi
+from examples.session_auth import (
+    AccountSandbox,
+    AccountSdk,
+    UserSession,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -69,7 +69,26 @@ REPOSITORY = Path(__file__).resolve().parents[2]
             "adaptix registered: john as user-42\n",
         ),
         (
-            "examples/dummyjson_session_auth.py",
+            "examples/blog_posts.py",
+            "GET /posts/1 -> 7: First note\n"
+            "GET /posts?userId=1 -> 2 posts\n"
+            "POST /posts -> 101: Eazy SDK SDK example\n",
+        ),
+        (
+            "examples/catalog_html.py",
+            "Books: 3 books\n"
+            "- Typed clients | GBP 12.50 | rating Five\n"
+            "- Request pipelines | GBP 18.00 | rating Four\n"
+            "- Response models | GBP 9.75 | rating Three\n"
+            "next: page-2.html\n",
+        ),
+        (
+            "examples/bearer_auth.py",
+            "authenticated: emilys (Emily Johnson)\n"
+            "access token received and kept out of output\n",
+        ),
+        (
+            "examples/session_auth.py",
             "authenticated: emilys (Emily Johnson)\n"
             "runtime:\n"
             "- POST /auth/login\n"
@@ -92,7 +111,7 @@ def test_local_examples_run_without_network(script: str, expected: str) -> None:
     assert completed.stdout == expected
 
 
-def test_jsonplaceholder_example_serializes_and_parses_declared_models() -> None:
+def test_blog_example_serializes_and_parses_declared_models() -> None:
     def server(request: httpx.Request) -> httpx.Response:
         if request.method == "GET" and request.url.path == "/posts/1":
             return httpx.Response(
@@ -119,10 +138,10 @@ def test_jsonplaceholder_example_serializes_and_parses_declared_models() -> None
         cookies={},
     )
     with Client(
-        base_url="https://jsonplaceholder.test",
+        base_url="https://blog.example",
         handler=HttpxHandler(raw, owns_client=True),
     ) as client:
-        posts = JsonPlaceholderApi(client)
+        posts = BlogApi(client)
         first = posts.get_post.with_response(post_id=1)
         selected = posts.list_posts(user_id=7)
         created = posts.create_post(
@@ -201,7 +220,7 @@ def test_adaptix_example_uses_wire_defaults_and_injected_time_factory() -> None:
     assert body.metadata.generated_at is generated_at
 
 
-def test_books_example_extracts_nested_html_and_optional_pagination() -> None:
+def test_catalog_example_extracts_nested_html_and_optional_pagination() -> None:
     document = b"""
     <html><body><div class="page_inner"><h1>Books</h1>
       <article class="product_pod">
@@ -223,7 +242,7 @@ def test_books_example_extracts_nested_html_and_optional_pagination() -> None:
     assert page.books[0].absolute_url.endswith("/catalogue/book_1/index.html")
 
 
-def test_dummyjson_example_keeps_login_public_and_adds_bearer_to_me() -> None:
+def test_bearer_example_keeps_login_public_and_adds_bearer_to_me() -> None:
     def server(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth/login":
             assert "Authorization" not in request.headers
@@ -248,7 +267,7 @@ def test_dummyjson_example_keeps_login_public_and_adds_bearer_to_me() -> None:
             json={
                 "id": 1,
                 "username": "emilys",
-                "email": "emily@example.test",
+                "email": "emily@account.example",
                 "firstName": "Emily",
                 "lastName": "Johnson",
             },
@@ -260,16 +279,16 @@ def test_dummyjson_example_keeps_login_public_and_adds_bearer_to_me() -> None:
         cookies={},
     )
     with Client(
-        base_url="https://dummyjson.test",
+        base_url="https://account.example",
         handler=HttpxHandler(raw, owns_client=True),
     ) as client:
         identity = Identity(auth=(USER_BEARER.static("access-demo"),))
-        session = DummyJsonAuthApi(client, identity=identity).login(
+        session = AccountAuthApi(client, identity=identity).login(
             username="emilys",
             password=SecretStr("emilyspass").get_secret_value(),
             expires_in_mins=30,
         )
-        user = DummyJsonUsersApi(client, identity=identity).me()
+        user = AccountUsersApi(client, identity=identity).me()
 
     assert session.access_token.get_secret_value() == "access-demo"
     assert (user.username, user.first_name) == ("emilys", "Emily")
@@ -277,7 +296,7 @@ def test_dummyjson_example_keeps_login_public_and_adds_bearer_to_me() -> None:
 
 @pytest.mark.asyncio
 async def test_session_auth_uses_a_supplied_session_without_login() -> None:
-    server = DummyJsonSandbox()
+    server = AccountSandbox()
     saved = UserSession.model_validate(
         {"accessToken": "saved-access", "refreshToken": "saved-refresh"}
     )
@@ -287,7 +306,7 @@ async def test_session_auth_uses_a_supplied_session_without_login() -> None:
         headers={},
         cookies={},
     )
-    async with DummyJsonSdk.from_handler(
+    async with AccountSdk.from_handler(
         handler=AsyncHttpxHandler(raw, owns_client=True),
         session=saved,
     ) as sdk:

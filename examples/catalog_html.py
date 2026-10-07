@@ -1,4 +1,4 @@
-"""Extract a typed catalog page from the public Books to Scrape sandbox."""
+"""Extract a typed catalog page from a local teaching endpoint."""
 
 from __future__ import annotations
 
@@ -7,12 +7,13 @@ from decimal import Decimal
 from typing import Annotated
 from urllib.parse import urljoin
 
+import httpx
 from eazy_sdk_html import CSS, Scope
 
 from eazy_sdk import Client, ClientConfig, Http, HttpOperation, Path, Resilience, SyncApi, op
 from eazy_sdk.handlers.httpx import HttpxHandler
 
-BASE_URL = "https://books.toscrape.com"
+BASE_URL = "https://catalog.example"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,10 +56,36 @@ class BooksApi(SyncApi):
     page = op(GetCatalogPage)
 
 
+def _catalog_site(_: httpx.Request) -> httpx.Response:
+    return httpx.Response(
+        200,
+        headers={"Content-Type": "text/html; charset=utf-8"},
+        content="""
+        <html><body><h1>Books</h1>
+          <article class="product_pod"><p class="star-rating Five"></p>
+            <h3><a href="one/index.html" title="Typed clients">One</a></h3>
+            <p class="price_color">£12.50</p></article>
+          <article class="product_pod"><p class="star-rating Four"></p>
+            <h3><a href="two/index.html" title="Request pipelines">Two</a></h3>
+            <p class="price_color">£18.00</p></article>
+          <article class="product_pod"><p class="star-rating Three"></p>
+            <h3><a href="three/index.html" title="Response models">Three</a></h3>
+            <p class="price_color">£9.75</p></article>
+          <li class="next"><a href="page-2.html">next</a></li>
+        </body></html>
+        """.encode(),
+    )
+
+
 def main() -> None:
+    raw = httpx.Client(
+        transport=httpx.MockTransport(_catalog_site),
+        headers={},
+        cookies={},
+    )
     with Client(
         base_url=BASE_URL,
-        handler=HttpxHandler(),
+        handler=HttpxHandler(raw, owns_client=True),
         config=ClientConfig(resilience=Resilience(timeout=20)),
     ) as client:
         catalog = BooksApi(client).page(page=1)

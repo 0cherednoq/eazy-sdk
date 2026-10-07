@@ -1,6 +1,1 @@
 # Phase 56.2.5 ratchet. Remove entries when their legacy example or page is migrated.
-examples/books_to_scrape.py:15: books.toscrape.com
-examples/dummyjson_auth.py:27: dummyjson.com
-examples/dummyjson_session_auth.py:44: dummyjson.com
-examples/dummyjson_session_auth.py:218: x.dummyjson.com
-examples/jsonplaceholder_posts.py:13: jsonplaceholder.typicode.com

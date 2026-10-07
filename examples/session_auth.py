@@ -1,6 +1,6 @@
 """Automatic login and refresh hidden behind a small SDK root factory.
 
-The local server follows DummyJSON's documented auth contract. It deliberately
+The local server follows a small teaching auth contract. It deliberately
 rejects the first access token so the example also demonstrates 401 refresh and
 request replay without making a public network dependency part of the example.
 """
@@ -41,7 +41,7 @@ from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import markers
 from eazy_sdk.response import ApiError
 
-BASE_URL = "https://dummyjson.com"
+BASE_URL = "https://account.example"
 
 
 class LoginCredentials(BaseModel):
@@ -54,7 +54,7 @@ class UserSession(BaseModel):
     refresh_token: Annotated[SecretStr, RefreshToken()] = Field(validation_alias="refreshToken")
 
 
-DUMMYJSON_SESSION = session_scheme(UserSession, name="dummyjson-session")
+ACCOUNT_SESSION = session_scheme(UserSession, name="account-session")
 
 
 class CurrentUser(BaseModel):
@@ -99,24 +99,24 @@ class GetCurrentUser(HttpOperation[CurrentUser]):
     )
 
 
-class DummyJsonAuthApi(AsyncApi):
+class AccountAuthApi(AsyncApi):
     login = op(Login)
     refresh = op(RefreshSession)
 
 
-class DummyJsonUsersApi(AsyncApi):
-    security = DUMMYJSON_SESSION
+class AccountUsersApi(AsyncApi):
+    security = ACCOUNT_SESSION
 
     me = op(GetCurrentUser)
 
 
-class DummyJsonLoginService:
+class AccountLoginService:
     """Translate lifecycle values into ordinary declared auth operations."""
 
     async def acquire(
         self,
         credentials: LoginCredentials,
-        context: AuthContext[DummyJsonSdk],
+        context: AuthContext[AccountSdk],
     ) -> UserSession:
         return await context.sdk.auth.login(
             username=credentials.username,
@@ -127,7 +127,7 @@ class DummyJsonLoginService:
     async def refresh(
         self,
         session: UserSession,
-        context: AuthContext[DummyJsonSdk],
+        context: AuthContext[AccountSdk],
     ) -> UserSession:
         return await context.sdk.auth.refresh(
             refresh_token=session.refresh_token.get_secret_value(),
@@ -135,11 +135,11 @@ class DummyJsonLoginService:
         )
 
 
-class DummyJsonSdk(AsyncRoot):
+class AccountSdk(AsyncRoot):
     """Public SDK root. Consumers do not call login or refresh directly."""
 
-    auth = api_group(DummyJsonAuthApi)
-    users = api_group(DummyJsonUsersApi)
+    auth = api_group(AccountAuthApi)
+    users = api_group(AccountUsersApi)
 
     @classmethod
     def from_handler(
@@ -158,10 +158,10 @@ class DummyJsonSdk(AsyncRoot):
     ) -> Self:
         if identity is not None:
             raise ValueError("identity cannot be combined with credentials or session")
-        auth = DUMMYJSON_SESSION.configure(
+        auth = ACCOUNT_SESSION.configure(
             credentials=credentials,
             session=session,
-            service=DummyJsonLoginService(),
+            service=AccountLoginService(),
         )
         return super().from_handler(
             handler=handler,
@@ -176,7 +176,7 @@ class DummyJsonSdk(AsyncRoot):
 
 
 @dataclass(slots=True)
-class DummyJsonSandbox:
+class AccountSandbox:
     calls: list[str] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -215,7 +215,7 @@ class DummyJsonSandbox:
             json={
                 "id": 1,
                 "username": "emilys",
-                "email": "emily.johnson@x.dummyjson.com",
+                "email": "emily@account.example",
                 "firstName": "Emily",
                 "lastName": "Johnson",
             },
@@ -223,7 +223,7 @@ class DummyJsonSandbox:
 
 
 async def main() -> None:
-    server = DummyJsonSandbox()
+    server = AccountSandbox()
     credentials = LoginCredentials(
         username="emilys",
         password=SecretStr("emilyspass"),
@@ -235,7 +235,7 @@ async def main() -> None:
         cookies={},
     )
     handler = AsyncHttpxHandler(raw, owns_client=True)
-    async with DummyJsonSdk.from_handler(
+    async with AccountSdk.from_handler(
         handler=handler,
         credentials=credentials,
     ) as sdk:

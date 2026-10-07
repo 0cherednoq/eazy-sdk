@@ -1,11 +1,11 @@
-"""Login to DummyJSON, then call a Bearer-protected endpoint."""
+"""Log in locally, then call a Bearer-protected endpoint."""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Annotated
 
+import httpx
 from pydantic import BaseModel, Field, SecretStr
 
 from eazy_sdk import (
@@ -24,8 +24,8 @@ from eazy_sdk.handlers.httpx import HttpxHandler
 from eazy_sdk.request import markers
 from eazy_sdk.response import ApiError
 
-BASE_URL = "https://dummyjson.com"
-USER_BEARER = BearerScheme("dummyjson-user")
+BASE_URL = "https://account.example"
+USER_BEARER = BearerScheme("account-user")
 
 
 class LoginCredentials(BaseModel):
@@ -79,21 +79,50 @@ class GetCurrentUser(HttpOperation[CurrentUser]):
     )
 
 
-class DummyJsonAuthApi(SyncApi):
+class AccountAuthApi(SyncApi):
     login = op(Login)
 
 
-class DummyJsonUsersApi(SyncApi):
+class AccountUsersApi(SyncApi):
     me = op(GetCurrentUser)
 
 
+def _account_site(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/auth/login":
+        return httpx.Response(
+            200,
+            json={
+                "username": "emilys",
+                "accessToken": "access-demo",
+                "refreshToken": "refresh-demo",
+            },
+        )
+    if request.headers.get("Authorization") != "Bearer access-demo":
+        return httpx.Response(401, json={"message": "Invalid token"})
+    return httpx.Response(
+        200,
+        json={
+            "id": 1,
+            "username": "emilys",
+            "email": "emily@account.example",
+            "firstName": "Emily",
+            "lastName": "Johnson",
+        },
+    )
+
+
 def login(credentials: LoginCredentials) -> LoginSession:
+    raw = httpx.Client(
+        transport=httpx.MockTransport(_account_site),
+        headers={},
+        cookies={},
+    )
     with Client(
         base_url=BASE_URL,
-        handler=HttpxHandler(),
+        handler=HttpxHandler(raw, owns_client=True),
         config=ClientConfig(resilience=Resilience(timeout=20)),
     ) as client:
-        return DummyJsonAuthApi(client).login(
+        return AccountAuthApi(client).login(
             username=credentials.username,
             password=credentials.password.get_secret_value(),
             expires_in_mins=30,
@@ -102,25 +131,29 @@ def login(credentials: LoginCredentials) -> LoginSession:
 
 def current_user(session: LoginSession) -> CurrentUser:
     identity = Identity(auth=(USER_BEARER.static(session.access_token.get_secret_value()),))
+    raw = httpx.Client(
+        transport=httpx.MockTransport(_account_site),
+        headers={},
+        cookies={},
+    )
     with Client(
         base_url=BASE_URL,
-        handler=HttpxHandler(),
+        handler=HttpxHandler(raw, owns_client=True),
         config=ClientConfig(resilience=Resilience(timeout=20)),
     ) as client:
-        return DummyJsonUsersApi(client, identity=identity).me()
+        return AccountUsersApi(client, identity=identity).me()
 
 
 def main() -> None:
-    # These defaults are public demo credentials from DummyJSON documentation.
     credentials = LoginCredentials(
-        username=os.getenv("DUMMYJSON_USERNAME", "emilys"),
-        password=SecretStr(os.getenv("DUMMYJSON_PASSWORD", "emilyspass")),
+        username="emilys",
+        password=SecretStr("emilyspass"),
     )
 
     try:
         session = login(credentials)
     except LoginRejected as error:
-        raise SystemExit(f"DummyJSON rejected the demo login: {error.error.message}") from error
+        raise SystemExit(f"Login rejected: {error.error.message}") from error
 
     user = current_user(session)
 

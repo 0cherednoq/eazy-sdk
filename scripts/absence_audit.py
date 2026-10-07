@@ -396,7 +396,7 @@ def audit() -> list[str]:
         ROOT / "README.md",
     )
     # The migration page names what is gone on purpose; that is its whole job.
-    migration_page = ROOT / "docs-site" / "src" / "content" / "docs" / "more" / "migration.mdx"
+    migration_page = ROOT / "docs-site" / "src" / "content" / "docs" / "reference" / "migration.mdx"
     for entry in public_text_roots:
         paths = (entry,) if entry.is_file() else entry.rglob("*")
         for path in paths:

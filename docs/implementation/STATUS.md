@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.8.3–56.8.4. No blockers; next step is the full gate run in 56.8.3.
+56.8.4 (closing records). No blockers.
 
 ### Verification evidence (56.5.5)
 
@@ -5831,4 +5831,29 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |
 | `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 113 pages. |
 | `uv run --group docs sphinx-build -E -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-reference-final` | PASS: 113 sources, no warnings. |
+| `git diff --check` | PASS. |
+
+### Verification evidence (56.8.3)
+
+Three defects surfaced only in the whole-repository run and were fixed in this step:
+`scripts/__init__.py` (added in 56.2.6) made mypy see `scripts/absence_audit.py` under two module
+names; `tests/unit/test_phase37_migration_doc.py` and the migration-page exemption in
+`scripts/absence_audit.py` still pointed at `more/migration.mdx`. Four standalone examples that
+named real services were replaced by `.example` files served by local handlers, which empties
+`56-domain-debt.txt`. The `start/index` queue row was completed after a blind review.
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q` | PASS: 1754 passed, 11 skipped in 484.71s. An earlier run of the same tree, executed while a Sphinx build and a second Chromium example were running, had one failure: `test_browser_login_probe_prints_all_six_executed_outcomes` hit the 5 s element timeout (`NotReadyError`). The test passed 3 of 3 times in isolation and in the clean full run. |
+| `uv run mypy` | PASS: no issues found in 502 source files. |
+| `uv run ruff check` | PASS: all checks passed. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 113 pages. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/html` | PASS: 113 pages, build succeeded with warnings as errors. |
+| `uv run python -m examples.mail http` | PASS: exit 0; routers `account, messages`, user `ada@mail.example`, message ids `[42, 43]`, encrypted send `100`. |
+| `uv run python -m examples.mail browser` | PASS: exit 0; `curl_cffi + Chromium`, one browser login, same user and message ids, browser router `mailbox`. |
+| `uv run python scripts/absence_audit.py` | PASS. |
+| `scripts/lint_docs_prose.py` over all 113 pages | PASS: 0 errors on every page. |
+| stage 56.2 checks (code blocks, prose, domains, example outputs) | PASS inside the full pytest run; the three debt files are empty. |
+| empty-cell audit of `56-pages.md` | PASS: no empty cells. |
 | `git diff --check` | PASS. |
