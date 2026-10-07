@@ -5,6 +5,17 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Fixed:
+
+- `Inject` values no longer land in another `Inject`'s slot. Every attempt created a fresh
+  dependency descriptor per `Inject` and registered its provider in the identity's
+  `DependencyRegistry` under `id(descriptor)`; once the descriptor was freed, the next one reused
+  the address and received the stale provider, so a request silently carried a value of another
+  parameter, possibly from another operation. The registry and the per-call caches are now keyed
+  by the descriptor itself, an `Inject` provider stays on its own requirement instead of entering
+  the shared registry, and `requires=`/`inject=` are lowered once per call, so
+  `Inject(cache=DependencyCachePolicy.CALL)` keeps its value across retries.
+
 ## 0.2.0a8 - 2026-10-07
 
 Breaking:

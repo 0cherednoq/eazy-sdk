@@ -5907,3 +5907,30 @@ which describe every plugin as its own distribution.
 | `scripts/package_audit.py` | PASS. |
 | `scripts/extras_smoke.py` | PASS: 17 extras install from the wheel into fresh environments and import. |
 | docs freshness, validator, strict Sphinx build with `docs-site/requirements.txt` | PASS: 80 fresh pages, 113 valid pages, no warnings, no root-absolute links. |
+
+## Fix — `Inject` dependency identity (2026-10-07)
+
+Not a phase: a defect fix on `fix/inject-dependency-identity`, reported by a consumer SDK.
+
+- Cause: `_lower_requirements` ran on every attempt and built a new `RequestDependency` per
+  `Inject`, while `DependencyRegistry` and `_DependencyCaches` were keyed by `id(dependency)`. A
+  freed descriptor's address was reused by the next one, which then read a stale provider. The
+  reproduction (two operations, constant query `Inject`s, 200 call pairs) sent a wrong query in
+  59 of 200 calls.
+- Fix: the registry and caches are keyed by the descriptor object; an `Inject` provider lives on
+  its `_RequestRequirement` and never enters the identity's registry; requirements are lowered
+  once per logical call, so descriptors are stable across attempts.
+- `tests/rewrite/test_inject_identity.py` covers cross-operation isolation, the registry keeping
+  a registered descriptor alive, `CALL` versus `ATTEMPT` values across response retries, and the
+  signature of every attempt covering the value that attempt injected. Three of the four fail on
+  the previous code.
+- Known and unchanged: `_DependencyCaches` is created per call, so `DependencyCachePolicy.CLIENT`
+  does not outlive a call.
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q` | PASS: 1753 passed, 11 skipped in 469.85s. |
+| `uv run mypy` | PASS: no issues found in 503 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |

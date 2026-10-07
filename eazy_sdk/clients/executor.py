@@ -1165,6 +1165,8 @@ class _AttemptRun[T]:
         self.initial_crypto = initial_crypto
         self.initial_compiled_crypto = initial_compiled_crypto
         self.dependencies = _DependencyCaches()
+        self.requirements: tuple[Any, ...] | None = None
+        """``requires=`` and ``inject=`` lowered once, so every attempt sees the same identities."""
         self.call_states: dict[str, _ManagedProtectionState] = {}
         self.applied_shared: dict[str, tuple[_ProtectionCacheKey, _ManagedProtectionState]] = {}
         self.mandatory_results: dict[int, object] = {}
@@ -1320,12 +1322,14 @@ class _AttemptRun[T]:
     ) -> tuple[OperationValues, tuple[Any, ...], CryptoValues, tuple[tuple[str, FrozenValue], ...]]:
         contract = self.compiled.contract
         self.injected = {}
-        dependency_patch = await _resolve_requirements(
-            _lower_requirements(
+        if self.requirements is None:
+            self.requirements = _lower_requirements(
                 (*contract.requires, *contract.inject),
                 self.compiled,
                 self.core.identity.dependencies,
-            ),
+            )
+        dependency_patch = await _resolve_requirements(
+            self.requirements,
             self.core.identity.dependencies,
             operation_id=contract.operation_id,
             attempt=state.number,

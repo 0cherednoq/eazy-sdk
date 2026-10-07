@@ -178,6 +178,8 @@ class _RequestRequirement[T]:
     bindings: tuple[_ResultBinding[T, Any], ...]
     scope: RequestScope = dataclass_field(default_factory=RequestScope)
     requires: tuple[RequestDependency[Any], ...] = ()
+    provider: object | None = None
+    """A provider the declaration owns (``Inject``); it never enters the shared registry."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,28 +203,36 @@ class ProviderUnavailable:
 
 
 class DependencyRegistry:
+    """Providers by dependency identity.
+
+    The descriptor itself is the key: the entry keeps it alive, so its identity cannot be
+    recycled for another dependency the way a bare ``id()`` can.
+    """
+
     def __init__(self) -> None:
-        self._providers: dict[int, object] = {}
+        self._providers: dict[RequestDependency[Any], object] = {}
 
     def register[T](self, dependency: RequestDependency[T], provider: object) -> None:
-        if id(dependency) in self._providers:
+        if dependency in self._providers:
             raise PlanError(f"dependency already registered: {dependency.diagnostic_name}")
-        self._providers[id(dependency)] = provider
+        self._providers[dependency] = provider
 
     def provider[T](self, dependency: RequestDependency[T]) -> object | None:
-        return self._providers.get(id(dependency))
+        return self._providers.get(dependency)
 
     def ensure[T](self, dependency: RequestDependency[T], provider: object) -> None:
-        self._providers.setdefault(id(dependency), provider)
+        self._providers.setdefault(dependency, provider)
 
 
 @dataclass(slots=True)
 class _DependencyCaches:
-    client: dict[int, object] = dataclass_field(default_factory=dict)
-    call: dict[int, object] = dataclass_field(default_factory=dict)
-    attempt: dict[int, object] = dataclass_field(default_factory=dict)
+    client: dict[RequestDependency[Any], object] = dataclass_field(default_factory=dict)
+    call: dict[RequestDependency[Any], object] = dataclass_field(default_factory=dict)
+    attempt: dict[RequestDependency[Any], object] = dataclass_field(default_factory=dict)
 
-    def cache_for(self, policy: DependencyCachePolicy) -> dict[int, object] | None:
+    def cache_for(
+        self, policy: DependencyCachePolicy
+    ) -> dict[RequestDependency[Any], object] | None:
         return {
             DependencyCachePolicy.CLIENT: self.client,
             DependencyCachePolicy.CALL: self.call,
@@ -284,10 +294,12 @@ async def _resolve_requirements(
     for requirement in _compile_dependency_order(requirements):
         dependency = requirement.dependency
         cache = caches.cache_for(dependency.cache)
-        if cache is not None and id(dependency) in cache:
-            value = cache[id(dependency)]
+        if cache is not None and dependency in cache:
+            value = cache[dependency]
         else:
-            provider = registry.provider(dependency)
+            provider = requirement.provider
+            if provider is None:
+                provider = registry.provider(dependency)
             if provider is None:
                 if requirement.required:
                     raise PlanError(f"missing provider: {dependency.diagnostic_name}")
@@ -306,7 +318,7 @@ async def _resolve_requirements(
                 continue
             value = dependency.validator(value)
             if cache is not None:
-                cache[id(dependency)] = value
+                cache[dependency] = value
         resolved[dependency] = value
         operations.extend(binding.operation_for(value) for binding in requirement.bindings)
     return ValuePatch(tuple(operations))
@@ -341,6 +353,12 @@ def value() -> FieldBinding:
 def _lower_requirements(
     requirements: tuple[object, ...], compiled: object, registry: DependencyRegistry
 ) -> tuple[_RequestRequirement[Any], ...]:
+    """Lower declarations once per logical call.
+
+    Every ``Inject`` gets a descriptor of its own here, and the caches are keyed by that
+    descriptor, so lowering again for a retry would lose the ``CALL`` value.
+    """
+
     output: list[_RequestRequirement[Any]] = []
     for item in requirements:
         if isinstance(item, Inject):
@@ -360,7 +378,6 @@ def _lower_requirements(
                 provider = _ConstantProvider(item.source)
             if callable(provider) and not hasattr(provider, "resolve"):
                 provider = _CallableProvider(provider)
-            registry.ensure(descriptor, provider)
             slots = getattr(compiled, f"{item.location}_slots", None)
             if item.location == "body":
                 slots = getattr(compiled, "body_field_slots", {})
@@ -374,6 +391,7 @@ def _lower_requirements(
                     descriptor,
                     True,
                     (_ResultBinding(_IdentitySelector(), slot),),
+                    provider=provider,
                 )
             )
             continue
