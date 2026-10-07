@@ -5871,3 +5871,39 @@ named real services were replaced by `.example` files served by local handlers, 
 | 6 | prose of every page passed `humanizer-ru`, zero linter errors | wrapper run over 113 pages: 0 errors each |
 | 7 | no empty cells in `56-pages.md` | audit: 0 lines with an empty cell |
 | 8 | section 9 gates green | table under 56.8.3 |
+
+## Packaging decision — one distribution on PyPI (2026-10-07)
+
+Owner decision, taken while preparing the first PyPI release. It deviates from the plan documents,
+which describe every plugin as its own distribution.
+
+- PyPI rejects the project name `eazy-sdk` as too similar to the unrelated `eazysdk`. The
+  distribution is named `eazy-sdk-core`; the import package stays `eazy_sdk`.
+- PyPI also refuses two pending trusted publishers with the same owner, repository, workflow and
+  environment, so ten projects would need ten publisher configurations. The nine plugin
+  distributions never had independent versions.
+- The core and the nine integrations therefore ship as one distribution. Sources stay under
+  `plugins/<name>/eazy_sdk_<name>`; the wheel carries each as a top-level package under its
+  existing import name. An extra installs only third-party libraries
+  (`eazy-sdk-core[openapi,yaml]`, `eazy-sdk-core[browser,playwright]`). The uv workspace, the nine
+  plugin manifests and their LICENSE copies are removed.
+- `scripts/package_audit.py` keeps the boundary the separate wheels used to enforce: the core
+  imports no integration, and an integration imports only the core, its declared siblings and what
+  its own extra installs.
+- CI failed on Python 3.14 once the Sphinx step was fixed: Pydoll 3 calls the deprecated
+  `asyncio.iscoroutinefunction`, and the suite turns warnings into errors. A module-scoped
+  `filterwarnings` entry covers the dependency.
+- Release 0.2.0a8 is the first one built this way. `docs.yml` deploys the site to GitHub Pages;
+  `release.yml` publishes to PyPI through Trusted Publishing (environment `pypi`).
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q` on Python 3.13 | PASS: 1749 passed, 11 skipped in 511.85s. Five fewer than before: the per-plugin manifest parametrisations are gone. |
+| `uv run --python 3.14 pytest -q` in a separate environment | PASS: 1749 passed, 11 skipped in 512.88s. Before the filter: 6 failed and 1 error, all from the Pydoll deprecation warning. |
+| `uv run mypy` | PASS: no issues found in 502 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS: 5 contracts kept. |
+| `uv build`, `uvx twine check --strict` | PASS: one wheel and one sdist, both render. |
+| `scripts/package_audit.py` | PASS. |
+| `scripts/extras_smoke.py` | PASS: 17 extras install from the wheel into fresh environments and import. |
+| docs freshness, validator, strict Sphinx build with `docs-site/requirements.txt` | PASS: 80 fresh pages, 113 valid pages, no warnings, no root-absolute links. |

@@ -21,7 +21,7 @@ freshness: false
 Не устанавливайте полный набор для каждой задачи. Добавьте только транспорт, формат данных или
 интеграцию, которые нужны SDK.
 
-| Задача | Пакет или дополнение | Команда для uv |
+| Задача | Дополнение | Команда для uv |
 |---|---|---|
 | HTTP через HTTPX | `eazy-sdk-core[httpx]` | `uv add "eazy-sdk-core[httpx]"` |
 | Синхронный HTTP через Requests | `eazy-sdk-core[requests]` | `uv add "eazy-sdk-core[requests]"` |
@@ -32,15 +32,19 @@ freshness: false
 | Аккаунты и регистрация | `eazy-sdk-core[accounts]` | `uv add "eazy-sdk-core[accounts]"` |
 | Хранилище SQLModel | `eazy-sdk-core[sqlmodel]` | `uv add "eazy-sdk-core[sqlmodel]"` |
 | WebSocket | `eazy-sdk-core[websocket]` | `uv add "eazy-sdk-core[websocket]"` |
-| Браузерный SDK с Playwright | `eazy-sdk-browser[playwright]` | `uv add "eazy-sdk-browser[playwright]"` |
-| Генератор OpenAPI | `eazy-sdk-openapi[yaml]` | `uv add "eazy-sdk-openapi[yaml]"` |
-| Генератор AsyncAPI | `eazy-sdk-asyncapi[yaml]` | `uv add "eazy-sdk-asyncapi[yaml]"` |
-| Готовые описания защит | `eazy-sdk-presets` | `uv add eazy-sdk-presets` |
-| XML | `eazy-sdk-xml` | `uv add eazy-sdk-xml` |
-| Модели Adaptix | `eazy-sdk-adaptix` | `uv add eazy-sdk-adaptix` |
+| Браузерный SDK с Playwright | `eazy-sdk-core[browser,playwright]` | `uv add "eazy-sdk-core[browser,playwright]"` |
+| Генератор OpenAPI | `eazy-sdk-core[openapi,yaml]` | `uv add "eazy-sdk-core[openapi,yaml]"` |
+| Генератор AsyncAPI | `eazy-sdk-core[asyncapi,yaml]` | `uv add "eazy-sdk-core[asyncapi,yaml]"` |
+| Готовые описания защит | `eazy-sdk-core[presets]` | `uv add "eazy-sdk-core[presets]"` |
+| XML | `eazy-sdk-core[xml]` | `uv add "eazy-sdk-core[xml]"` |
+| Модели Adaptix | `eazy-sdk-core[adaptix]` | `uv add "eazy-sdk-core[adaptix]"` |
 
-Дополнение `[yaml]` у генераторов нужно для файлов YAML. Для спецификации JSON достаточно пакета
-без этого дополнения. У браузерного пакета вместо `playwright` можно выбрать `selenium`,
+Все интеграции входят в один пакет `eazy-sdk-core`. Дополнение ставит только сторонние библиотеки,
+которые нужны интеграции, поэтому несколько дополнений перечисляются через запятую в одной
+команде.
+
+Дополнение `yaml` у генераторов нужно для файлов YAML. Для спецификации JSON достаточно
+`openapi` или `asyncapi`. У браузерной интеграции вместо `playwright` можно выбрать `selenium`,
 `camoufox` или `pydoll`.
 
 `eazy-sdk-core[all]` ставит основные HTTP-интеграции, модели и средства работы с данными, но
@@ -55,7 +59,7 @@ freshness: false
 Результат содержит только установленную версию:
 
 ```text
-0.2.0a7
+0.2.0a8
 ```
 
 Если вы выбрали другой HTTP-клиент или библиотеку моделей, замените `httpx` и `pydantic` в

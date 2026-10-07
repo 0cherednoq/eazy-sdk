@@ -6,7 +6,7 @@ Chromium: `uv run playwright install chromium`.
 Install the workspace:
 
 ```bash
-uv sync --all-packages --all-extras
+uv sync --all-extras
 ```
 
 Before opening a pull request, run:
@@ -47,11 +47,12 @@ The site lives under the `/eazy-sdk/` path, so pages must not link from the doma
 
 ## Releasing
 
-A release is one annotated tag. `release.yml` builds all ten workspace packages once, audits them,
-uploads them to PyPI and attaches the same files to a GitHub release.
+A release is one annotated tag. `release.yml` builds the single distribution `eazy-sdk-core`, which
+ships the core and every integration under `plugins/`, audits it, uploads it to PyPI and attaches
+the same files to a GitHub release.
 
-1. Set the same version in the root `pyproject.toml`, every `plugins/*/pyproject.toml` and the
-   version bounds between them, then update `CHANGELOG.md`.
+1. Set the version in `pyproject.toml`, `eazy_sdk/__init__.py` and
+   `plugins/browser/eazy_sdk_browser/__init__.py`, then update `CHANGELOG.md`.
 2. Run the gates listed above and merge to `master`.
 3. Create an annotated tag whose body is the release notes, and push it:
 
@@ -69,21 +70,15 @@ stores no PyPI token.
 
 1. In the repository, create the environment `pypi` (Settings -> Environments). Adding required
    reviewers there makes every upload wait for a manual approval.
-2. On PyPI, open Account -> Publishing and add a pending publisher for each of the ten projects:
-   `eazy-sdk-core`, `eazy-sdk-accounts`, `eazy-sdk-adaptix`, `eazy-sdk-asyncapi`, `eazy-sdk-browser`,
-   `eazy-sdk-html`, `eazy-sdk-openapi`, `eazy-sdk-presets`, `eazy-sdk-sqlmodel`, `eazy-sdk-xml`.
-   Use the same values every time:
+2. On PyPI, open Account -> Publishing and add a pending publisher for the project
+   `eazy-sdk-core`: owner `0cherednoq`, repository `eazy-sdk`, workflow `release.yml`,
+   environment `pypi`.
 
-   | Field | Value |
-   |---|---|
-   | Owner | `0cherednoq` |
-   | Repository name | `eazy-sdk` |
-   | Workflow name | `release.yml` |
-   | Environment name | `pypi` |
+The distribution is `eazy-sdk-core` because PyPI rejects `eazy-sdk` as too similar to the unrelated
+`eazysdk` project; the import package stays `eazy_sdk`. Integrations are not separate PyPI
+projects: an extra such as `eazy-sdk-core[html]` installs only the third-party libraries the
+integration needs.
 
-The core distribution is `eazy-sdk-core` because PyPI rejects `eazy-sdk` as too similar to the
-unrelated `eazysdk` project; the import package stays `eazy_sdk`.
-
-The first tagged release then creates the projects. The `pypi` and `github-release` jobs are
-independent: if PyPI rejects an upload, the GitHub release is still created, and the `pypi` job can
-be rerun because it skips files that are already uploaded.
+The first tagged release creates the project. The `pypi` and `github-release` jobs are
+independent: if PyPI rejects the upload, the GitHub release is still created, and the `pypi` job
+can be rerun because it skips files that are already uploaded.

@@ -13,27 +13,37 @@ from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path
 
+# Import package -> typing marker. One distribution, `eazy-sdk-core`, ships all of them.
 PACKAGES = {
-    "eazy_sdk": ("eazy_sdk/py.typed", "pyproject.toml"),
-    "eazy_sdk_accounts": (
-        "eazy_sdk_accounts/py.typed",
-        "plugins/accounts/pyproject.toml",
-    ),
-    "eazy_sdk_asyncapi": (
-        "eazy_sdk_asyncapi/py.typed",
-        "plugins/asyncapi/pyproject.toml",
-    ),
-    "eazy_sdk_html": ("eazy_sdk_html/py.typed", "plugins/html/pyproject.toml"),
-    "eazy_sdk_openapi": ("eazy_sdk_openapi/py.typed", "plugins/openapi/pyproject.toml"),
-    "eazy_sdk_presets": ("eazy_sdk_presets/py.typed", "plugins/presets/pyproject.toml"),
-    "eazy_sdk_sqlmodel": (
-        "eazy_sdk_sqlmodel/py.typed",
-        "plugins/sqlmodel/pyproject.toml",
-    ),
-    "eazy_sdk_xml": ("eazy_sdk_xml/py.typed", "plugins/xml/pyproject.toml"),
-    "eazy_sdk_adaptix": ("eazy_sdk_adaptix/py.typed", "plugins/adaptix/pyproject.toml"),
-    "eazy_sdk_browser": ("eazy_sdk_browser/py.typed", "plugins/browser/pyproject.toml"),
+    "eazy_sdk": "eazy_sdk/py.typed",
+    "eazy_sdk_accounts": "eazy_sdk_accounts/py.typed",
+    "eazy_sdk_asyncapi": "eazy_sdk_asyncapi/py.typed",
+    "eazy_sdk_html": "eazy_sdk_html/py.typed",
+    "eazy_sdk_openapi": "eazy_sdk_openapi/py.typed",
+    "eazy_sdk_presets": "eazy_sdk_presets/py.typed",
+    "eazy_sdk_sqlmodel": "eazy_sdk_sqlmodel/py.typed",
+    "eazy_sdk_xml": "eazy_sdk_xml/py.typed",
+    "eazy_sdk_adaptix": "eazy_sdk_adaptix/py.typed",
+    "eazy_sdk_browser": "eazy_sdk_browser/py.typed",
 }
+
+# Integration package -> (the extra that installs its third-party dependencies, the sibling
+# packages it may import). The core has no extra of its own and imports no integration.
+PACKAGE_RULES: dict[str, tuple[str | None, tuple[str, ...]]] = {
+    "eazy_sdk": (None, ()),
+    "eazy_sdk_accounts": ("accounts", ("eazy_sdk",)),
+    "eazy_sdk_asyncapi": ("asyncapi", ("eazy_sdk",)),
+    "eazy_sdk_html": ("html", ("eazy_sdk",)),
+    "eazy_sdk_openapi": ("openapi", ("eazy_sdk",)),
+    "eazy_sdk_presets": ("presets", ("eazy_sdk",)),
+    "eazy_sdk_sqlmodel": ("sqlmodel", ("eazy_sdk", "eazy_sdk_accounts")),
+    "eazy_sdk_xml": ("xml", ("eazy_sdk",)),
+    "eazy_sdk_adaptix": ("adaptix", ("eazy_sdk",)),
+    "eazy_sdk_browser": ("browser", ("eazy_sdk",)),
+}
+
+# Extras that also unlock a sibling integration package for an optional module.
+EXTRA_PACKAGES = {"accounts": ("eazy_sdk_accounts",)}
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,19 +64,13 @@ DISTRIBUTION_IMPORTS = {
     "aiosqlite": ("aiosqlite",),
     "sqlalchemy": ("sqlalchemy",),
     "pyyaml": ("yaml",),
-    "eazy-sdk-core": ("eazy_sdk",),
-    "eazy-sdk-accounts": ("eazy_sdk_accounts",),
-    "eazy-sdk-html": ("eazy_sdk_html",),
-    "eazy-sdk-presets": ("eazy_sdk_presets",),
-    "eazy-sdk-sqlmodel": ("eazy_sdk_sqlmodel",),
-    "eazy-sdk-openapi": ("eazy_sdk_openapi",),
-    "eazy-sdk-asyncapi": ("eazy_sdk_asyncapi",),
-    "eazy-sdk-xml": ("eazy_sdk_xml",),
-    "eazy-sdk-adaptix": ("eazy_sdk_adaptix",),
     "adaptix": ("adaptix",),
     "playwright": ("playwright",),
     "pydoll-python": ("pydoll",),
-    "eazy-sdk-browser": ("eazy_sdk_browser",),
+    "msgspec": ("msgspec",),
+    "selectolax": ("selectolax",),
+    "camoufox": ("camoufox",),
+    "selenium": ("selenium",),
 }
 
 FORBIDDEN_CORE = (
@@ -247,8 +251,11 @@ def _import_failures(
             provided.update(imports)
         return provided
 
-    mandatory = set(sys.stdlib_module_names) | {package}
+    own_extra, siblings = PACKAGE_RULES[package]
+    mandatory = set(sys.stdlib_module_names) | {package, *siblings}
     mandatory |= provided_by(_distributions(metadata, None))
+    if own_extra is not None:
+        mandatory |= provided_by(_distributions(metadata, own_extra))
     for name in names:
         if not name.endswith(".py"):
             continue
@@ -256,6 +263,7 @@ def _import_failures(
         extra = OPTIONAL_MODULES.get(name)
         if extra is not None:
             allowed |= provided_by(_distributions(metadata, extra))
+            allowed |= set(EXTRA_PACKAGES.get(extra, ()))
         for imported in sorted(_unconditional_imports(archive.read(name).decode("utf-8"))):
             if imported not in allowed:
                 failures.append(
@@ -268,18 +276,23 @@ def _import_failures(
 
 def audit(directory: Path) -> None:
     failures: list[str] = []
-    for package, (marker, pyproject_path) in PACKAGES.items():
-        with (REPOSITORY_ROOT / pyproject_path).open("rb") as pyproject_file:
-            project = tomllib.load(pyproject_file)["project"]
-        expected_name = project["name"]
-        expected_version = project["version"]
-        expected_license = project["license"]
-        # Files are named after the distribution, which for the core differs from the import package.
-        distribution = expected_name.replace("-", "_")
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as pyproject_file:
+        project = tomllib.load(pyproject_file)["project"]
+    expected_name = project["name"]
+    expected_version = project["version"]
+    expected_license = project["license"]
+    # Files are named after the distribution, which differs from every import package.
+    distribution = expected_name.replace("-", "_")
+    wheel = _wheel_for(directory, distribution)
+    sdist = _sdist_for(directory, distribution)
 
-        wheel = _wheel_for(directory, distribution)
+    for package, marker in PACKAGES.items():
         with zipfile.ZipFile(wheel) as archive:
-            names = archive.namelist()
+            names = [
+                name
+                for name in archive.namelist()
+                if name.startswith(f"{package}/") or ".dist-info/" in name
+            ]
             if marker not in names:
                 failures.append(f"{wheel.name}: missing {marker}")
             metadata_name = next(name for name in names if name.endswith(".dist-info/METADATA"))
@@ -367,9 +380,12 @@ def audit(directory: Path) -> None:
                                     f"{fragment!r} in {name}"
                                 )
 
-        sdist = _sdist_for(directory, distribution)
         with tarfile.open(sdist, "r:gz") as archive:
-            members = archive.getmembers()
+            members = [
+                member
+                for member in archive.getmembers()
+                if f"/{package}/" in member.name or member.name.count("/") == 1
+            ]
             names = [member.name for member in members]
             if not any(name.endswith(f"/{marker}") for name in names):
                 failures.append(f"{sdist.name}: missing {marker}")

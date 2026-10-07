@@ -1,4 +1,4 @@
-# eazy-sdk-openapi
+# eazy_sdk_openapi
 
 Generate thin Eazy SDK SDK packages from OpenAPI 3.0.x, 3.1.x, or 3.2.x:
 

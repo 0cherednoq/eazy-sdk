@@ -1,4 +1,4 @@
-# eazy-sdk-browser
+# eazy_sdk_browser
 
 Декларативные браузерные SDK поверх любого драйвера. Готовые нативные адаптеры — Playwright и
 Pydoll 3; Selenium и Camoufox могут подключаться следующими адаптерами.
@@ -80,7 +80,7 @@ async with async_playwright() as playwright:
 | **Отказы API** | ответ страницы в карте (`ApiResponse`) разбирает объявление `Responses` из `eazy-sdk` |
 | **Возможности драйвера** | профиль по осям `CapabilityLevel`; нужное операции (`requires=`, признаки, маркеры карты) сверяется до первого действия |
 | **Вход** | `BrowserLogin` на `SessionLifecycle` ядра: сессия из хранилища, повторный вход после объявленного отказа |
-| **Хранилище** | `BrowserSessions.store(account)` — сессия за аккаунтом `eazy-sdk-accounts` |
+| **Хранилище** | `BrowserSessions.store(account)` — сессия за аккаунтом `eazy_sdk_accounts` |
 | **Мост в HTTP** | `browser_cookie_auth(state, scheme, "sid")` отдаёт браузерную куку `Auth` HTTP-клиенту |
 | **Браузер как транспорт** | `BrowserHandler`: объявленная HTTP-операция уходит запросом из страницы |
 
@@ -90,9 +90,9 @@ async with async_playwright() as playwright:
 
 ```bash
 uv add "eazy-sdk-core[browser]"                 # плагин вместе с ядром SDK
-uv add "eazy-sdk-browser[playwright]"      # с адаптером playwright
-uv add "eazy-sdk-browser[pydoll]"          # с нативным адаптером Pydoll >=3,<4
-uv add "eazy-sdk-browser[accounts]"        # + аккаунты и сессии в хранилище eazy-sdk
+uv add "eazy-sdk-core[browser,playwright]"      # с адаптером playwright
+uv add "eazy-sdk-core[browser,pydoll]"          # с нативным адаптером Pydoll >=3,<4
+uv add "eazy-sdk-core[browser,accounts]"        # + аккаунты и сессии в хранилище eazy-sdk
 ```
 
 `eazy-sdk` — обязательная зависимость: ошибки, профиль возможностей и жизненный цикл сессии у

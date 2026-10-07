@@ -1,4 +1,4 @@
-# eazy-sdk-sqlmodel
+# eazy_sdk_sqlmodel
 
 Async five-table account storage for Eazy SDK:
 
@@ -11,7 +11,7 @@ Async five-table account storage for Eazy SDK:
 Install:
 
 ```console
-uv add eazy-sdk-sqlmodel
+uv add "eazy-sdk-core[sqlmodel]"
 ```
 
 Quickstart:

@@ -8,6 +8,26 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 или `AttributeError` показывает, что именно нужно поменять. Эта страница служит единственной
 подсказкой. Каждая строка таблицы проверяется тестом: «стало» импортируется, «было» отсутствует.
 
+## Один пакет вместо десяти (0.2.0a8)
+
+Ядро и все интеграции поставляются одним пакетом `eazy-sdk-core`. Имена импорта не изменились:
+`eazy_sdk`, `eazy_sdk_html`, `eazy_sdk_browser` и остальные остаются прежними. Меняется только
+команда установки.
+
+| Было | Стало |
+|---|---|
+| `eazy-sdk[httpx,pydantic]` | `eazy-sdk-core[httpx,pydantic]` |
+| `eazy-sdk-openapi[yaml]` | `eazy-sdk-core[openapi,yaml]` |
+| `eazy-sdk-asyncapi[yaml]` | `eazy-sdk-core[asyncapi,yaml]` |
+| `eazy-sdk-browser[playwright]` | `eazy-sdk-core[browser,playwright]` |
+| `eazy-sdk-sqlmodel` | `eazy-sdk-core[sqlmodel]` |
+| `eazy-sdk-presets` | `eazy-sdk-core[presets]` |
+| `eazy-sdk-adaptix` | `eazy-sdk-core[adaptix]` |
+| `eazy-sdk-xml` | `eazy-sdk-core[xml]` |
+
+Дополнение ставит сторонние библиотеки интеграции. Её код уже лежит в пакете, поэтому без
+дополнения импорт интеграции завершится `ImportError` с именем недостающей библиотеки.
+
 ## Переход с 0.2.0a5 на 0.3.0
 
 Корень SDK стал отдельным типом. `SyncApi` и `AsyncApi` являются роутерами: операции и атрибуты сервиса

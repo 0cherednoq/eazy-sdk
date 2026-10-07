@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
-# extra/distribution label -> (requirement template, python -c program)
+# extra label -> (requirement template, python -c program)
 CHECKS: dict[str, tuple[str, str]] = {
     "core": (
         "eazy-sdk-core=={version}",
@@ -42,16 +42,15 @@ CHECKS: dict[str, tuple[str, str]] = {
         "eazy-sdk-core[sqlmodel]=={version}",
         "import eazy_sdk_sqlmodel",
     ),
-    # Ядро плагина ставится без драйвера: это его главное свойство, и проверять его
-    # надо установкой, а не утверждением в README. Ядро eazy-sdk ему нужно — ошибки
-    # и профиль возможностей общие.
+    # Браузерная интеграция работает без драйвера: это её главное свойство, и проверять
+    # его надо установкой, а не утверждением в README.
     "browser": (
         "eazy-sdk-core[browser]=={version}",
         "import eazy_sdk_browser; from eazy_sdk_browser import css, visible; "
         "assert visible(css('button')).label == 'visible button'",
     ),
     "browser-pydoll": (
-        "eazy-sdk-browser[pydoll]=={version}",
+        "eazy-sdk-core[browser,pydoll]=={version}",
         "from importlib.metadata import version\n"
         "from eazy_sdk_browser.handlers.pydoll import PydollDriver\n"
         "assert version('pydoll-python').split('.', 1)[0] == '3'\n"
@@ -83,23 +82,23 @@ CHECKS: dict[str, tuple[str, str]] = {
         "import msgspec; import eazy_sdk.models",
     ),
     "presets": (
-        "eazy-sdk-presets=={version}",
+        "eazy-sdk-core[presets]=={version}",
         "import eazy_sdk_presets",
     ),
     "openapi": (
-        "eazy-sdk-openapi=={version}",
+        "eazy-sdk-core[openapi]=={version}",
         "import eazy_sdk_openapi, eazy_sdk_openapi.generator, eazy_sdk_openapi.cli",
     ),
     "asyncapi": (
-        "eazy-sdk-asyncapi=={version}",
+        "eazy-sdk-core[asyncapi]=={version}",
         "import eazy_sdk_asyncapi, eazy_sdk_asyncapi.generator, eazy_sdk_asyncapi.cli",
     ),
     "xml": (
-        "eazy-sdk-xml=={version}",
+        "eazy-sdk-core[xml]=={version}",
         "import eazy_sdk_xml",
     ),
     "adaptix": (
-        "eazy-sdk-adaptix=={version}",
+        "eazy-sdk-core[adaptix]=={version}",
         "import eazy_sdk_adaptix",
     ),
 }
@@ -162,7 +161,7 @@ def smoke(dist: Path, only: set[str] | None, keep: bool) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("dist", type=Path, help="directory with all workspace wheels")
+    parser.add_argument("dist", type=Path, help="directory with the built wheel")
     parser.add_argument("--only", help="comma-separated subset of extras to check")
     parser.add_argument("--keep", action="store_true", help="keep the temporary venvs")
     args = parser.parse_args()

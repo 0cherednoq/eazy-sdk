@@ -22,7 +22,7 @@ def load_document(path: Path) -> Mapping[str, Any]:
             yaml = importlib.import_module("yaml")
         except ImportError as exc:
             raise RuntimeError(
-                "YAML input requires PyYAML; install eazy-sdk-openapi[yaml]"
+                "YAML input requires PyYAML; install eazy-sdk-core[yaml]"
             ) from exc
         value = yaml.safe_load(text)
     if not isinstance(value, Mapping):

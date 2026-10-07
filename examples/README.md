@@ -8,7 +8,7 @@
 Из корня репозитория установите зависимости:
 
 ```bash
-uv sync --all-packages --all-extras
+uv sync --all-extras
 ```
 
 ## Сквозной пример почтового SDK

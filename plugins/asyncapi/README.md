@@ -1,4 +1,4 @@
-# eazy-sdk-asyncapi
+# eazy_sdk_asyncapi
 
 AsyncAPI 3.0 WebSocket SDK generation for the Eazy SDK async WebSocket runtime.
 

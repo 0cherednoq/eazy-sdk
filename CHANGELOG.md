@@ -5,12 +5,21 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a8 - 2026-10-07
+
 Breaking:
 
-- The core distribution is renamed from `eazy-sdk` to `eazy-sdk-core`: PyPI rejects `eazy-sdk` as
-  too similar to the unrelated `eazysdk` project. Install with
-  `pip install "eazy-sdk-core[httpx,pydantic]"`. The import package `eazy_sdk`, the plugin
-  distributions `eazy-sdk-*` and the `x-eazy-sdk` specification extension keep their names.
+- One distribution instead of ten. The core and every integration ship as `eazy-sdk-core`; the
+  separate `eazy-sdk-html`, `eazy-sdk-accounts`, `eazy-sdk-sqlmodel`, `eazy-sdk-browser`,
+  `eazy-sdk-openapi`, `eazy-sdk-asyncapi`, `eazy-sdk-presets`, `eazy-sdk-xml` and
+  `eazy-sdk-adaptix` distributions are gone. An extra now installs only the third-party
+  libraries an integration needs: `eazy-sdk-openapi[yaml]` becomes
+  `eazy-sdk-core[openapi,yaml]`, `eazy-sdk-browser[playwright]` becomes
+  `eazy-sdk-core[browser,playwright]`. Import packages (`eazy_sdk`, `eazy_sdk_html`, ...), the
+  `eazy-sdk-openapi`, `eazy-sdk-asyncapi` and `eazy-sdk-sqlmodel-migrate` commands and the
+  `x-eazy-sdk` specification extension keep their names.
+- The distribution is named `eazy-sdk-core`, not `eazy-sdk`: PyPI rejects `eazy-sdk` as too
+  similar to the unrelated `eazysdk` project.
 - Response-case arbitration ranks a criterion above status precision. The order is now: a case
   that states a criterion over one that states none, then an exact status over a range over
   `DEFAULT`, then an explicit media type over a wildcard, then the layer that declared the case.

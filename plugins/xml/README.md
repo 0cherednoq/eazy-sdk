@@ -1,6 +1,6 @@
-# eazy-sdk-xml
+# eazy_sdk_xml
 
-`eazy-sdk-xml` adds a standard-library XML body codec and response extractor to Eazy SDK. Use it
+`eazy_sdk_xml` adds a standard-library XML body codec and response extractor to Eazy SDK. Use it
 when an HTTP API accepts or returns simple XML and you want to keep XML support outside the core
 runtime.
 

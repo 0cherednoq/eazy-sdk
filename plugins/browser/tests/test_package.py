@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 @pytest.mark.unit
 def test_version_matches_project_metadata() -> None:
     """Версия пакета и версия в pyproject.toml не расходятся."""
-    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    declared = tomllib.loads((ROOT.parent.parent / "pyproject.toml").read_text(encoding="utf-8"))
     assert eazy_sdk_browser.__version__ == declared["project"]["version"]
 
 

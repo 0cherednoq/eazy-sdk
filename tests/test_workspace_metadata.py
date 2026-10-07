@@ -1,4 +1,4 @@
-"""Source-completeness checks for every workspace distribution."""
+"""Source-completeness checks for the distribution."""
 
 from __future__ import annotations
 
@@ -8,14 +8,8 @@ from pathlib import Path
 import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-WORKSPACE_PROJECTS = (
-    REPOSITORY,
-    REPOSITORY / "plugins" / "asyncapi",
-    REPOSITORY / "plugins" / "openapi",
-    REPOSITORY / "plugins" / "presets",
-    REPOSITORY / "plugins" / "sqlmodel",
-    REPOSITORY / "plugins" / "xml",
-)
+# One distribution ships the core and every integration; its readme is the repository readme.
+WORKSPACE_PROJECTS = (REPOSITORY,)
 
 
 @pytest.mark.parametrize("project", WORKSPACE_PROJECTS, ids=lambda path: path.name)

@@ -1,6 +1,6 @@
-# eazy-sdk-adaptix
+# eazy_sdk_adaptix
 
-`eazy-sdk-adaptix` lets an SDK serialize its models with an [Adaptix](https://adaptix.readthedocs.io)
+`eazy_sdk_adaptix` lets an SDK serialize its models with an [Adaptix](https://adaptix.readthedocs.io)
 retort instead of describing the same rules twice. Register the retort as a model adapter and the
 operations it serves are dumped and loaded by it.
 

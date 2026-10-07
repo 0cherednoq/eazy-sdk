@@ -1,4 +1,4 @@
-# eazy-sdk-html
+# eazy_sdk_html
 
 Offline HTML inspection (`HtmlInspector`, visible text, forms, redirects) and typed
 extraction plans (`parse_html`, `CSS`, `XPath`, `Scope`) for Eazy SDK responses.

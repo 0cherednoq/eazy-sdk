@@ -7,35 +7,31 @@ freshness: false
 Используйте эту карту, чтобы установить только нужные зависимости. Каждая интеграция сохраняет
 общие контракты операций, авторизации, повторов и ошибок Eazy SDK.
 
-## Пакеты плагинов
+## Дополнения пакета
 
-| Пакет | Задача | Страница |
-| --- | --- | --- |
-| `eazy-sdk-openapi` | Сгенерировать HTTP SDK | {doc}`OpenAPI </integrations/generators/openapi>` |
-| `eazy-sdk-asyncapi` | Сгенерировать WebSocket SDK | {doc}`AsyncAPI </integrations/generators/asyncapi>` |
-| `eazy-sdk-browser` | Выполнять операции через браузер | {doc}`Браузер </integrations/browser/index>` |
-| `eazy-sdk-accounts` | Хранить аккаунты и сессии | {doc}`Аккаунты </integrations/accounts/index>` |
-| `eazy-sdk-sqlmodel` | Хранить аккаунты в SQL | {doc}`SQLModel </integrations/accounts/sqlmodel>` |
-| `eazy-sdk-presets` | Подключить готовые защиты | {doc}`Cloudflare </integrations/protection/cloudflare>`, {doc}`Turnstile </integrations/protection/turnstile>`, {doc}`reCAPTCHA </integrations/protection/recaptcha>` |
-| `eazy-sdk-adaptix` | Использовать модели Adaptix | {doc}`Adaptix </integrations/models/adaptix>` |
-| `eazy-sdk-html` | Читать HTML-документы | {doc}`HTML </integrations/documents/html>` |
-| `eazy-sdk-xml` | Читать XML-документы | {doc}`XML </integrations/documents/xml>` |
+Все интеграции входят в пакет `eazy-sdk-core`. Дополнение ставит сторонние библиотеки, которые
+нужны интеграции. Команда установки выглядит так: `uv add "eazy-sdk-core[httpx,pydantic]"`.
 
-## Extras основного пакета
-
-| Extra | Задача | Страница |
+| Дополнение | Задача | Страница |
 | --- | --- | --- |
 | `httpx` | Отправлять HTTP через HTTPX | {doc}`Подключение </integrations/http/httpx>` |
 | `requests` | Отправлять HTTP через Requests | {doc}`Подключение </integrations/http/requests>` |
 | `curl-cffi` | Имитировать профиль браузера | {doc}`Подключение </integrations/http/curl-cffi>` |
 | `websocket` | Читать поток событий | {doc}`Настройка </guide/websocket>` |
-| `browser` | Выполнять операции в браузере | {doc}`Обзор </integrations/browser/index>` |
-| `accounts` | Хранить аккаунты и сессии | {doc}`Обзор </integrations/accounts/index>` |
-| `sqlmodel` | Хранить аккаунты в SQL | {doc}`Подключение </integrations/accounts/sqlmodel>` |
 | `pydantic` | Разбирать модели Pydantic | {doc}`Подключение </integrations/models/pydantic>` |
 | `msgspec` | Разбирать модели msgspec | {doc}`Подключение </integrations/models/msgspec>` |
-| `html` | Читать HTML-документы | {doc}`Подключение </integrations/documents/html>` |
-| `all` | Установить все extras | {doc}`Установка </start/installation>` |
+| `adaptix` | Использовать модели Adaptix | {doc}`Adaptix </integrations/models/adaptix>` |
+| `html` | Читать HTML-документы | {doc}`HTML </integrations/documents/html>` |
+| `xml` | Читать XML-документы | {doc}`XML </integrations/documents/xml>` |
+| `openapi` | Сгенерировать HTTP SDK | {doc}`OpenAPI </integrations/generators/openapi>` |
+| `asyncapi` | Сгенерировать WebSocket SDK | {doc}`AsyncAPI </integrations/generators/asyncapi>` |
+| `yaml` | Читать спецификации YAML генераторами | {doc}`OpenAPI </integrations/generators/openapi>` |
+| `browser` | Выполнять операции через браузер | {doc}`Браузер </integrations/browser/index>` |
+| `playwright`, `pydoll`, `selenium`, `camoufox` | Выбрать браузерный драйвер | {doc}`Playwright </integrations/browser/playwright>`, {doc}`Pydoll </integrations/browser/pydoll>` |
+| `accounts` | Хранить аккаунты и сессии | {doc}`Аккаунты </integrations/accounts/index>` |
+| `sqlmodel` | Хранить аккаунты в SQL | {doc}`SQLModel </integrations/accounts/sqlmodel>` |
+| `presets` | Подключить готовые защиты | {doc}`Cloudflare </integrations/protection/cloudflare>`, {doc}`Turnstile </integrations/protection/turnstile>`, {doc}`reCAPTCHA </integrations/protection/recaptcha>` |
+| `all` | Установить HTTP-клиенты, модели и хранилище | {doc}`Установка </start/installation>` |
 
 ## Дальше
 

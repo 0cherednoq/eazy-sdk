@@ -13,14 +13,8 @@ from eazy_sdk_openapi.generator import (
 from eazy_sdk_openapi.ir import parse_openapi
 
 ROOT = Path(__file__).resolve().parents[2]
-PROJECTS = (
-    ROOT / "pyproject.toml",
-    ROOT / "plugins" / "asyncapi" / "pyproject.toml",
-    ROOT / "plugins" / "openapi" / "pyproject.toml",
-    ROOT / "plugins" / "presets" / "pyproject.toml",
-    ROOT / "plugins" / "sqlmodel" / "pyproject.toml",
-    ROOT / "plugins" / "xml" / "pyproject.toml",
-)
+# The core and every integration ship as one distribution with one manifest.
+PROJECTS = (ROOT / "pyproject.toml",)
 
 
 def test_all_distributions_share_the_verified_python_policy() -> None:

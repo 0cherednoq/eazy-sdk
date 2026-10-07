@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-core"
-version = "0.2.0a7"
+version = "0.2.0a8"
 description = "Transport-independent runtime for typed HTTP and async WebSocket SDKs."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -21,20 +21,50 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Интеграции едут в том же wheel; extra ставит только сторонние библиотеки, которые им нужны.
+# Пустой extra означает, что интеграции хватает ядра: имя оставлено, чтобы команда установки
+# не зависела от того, есть ли у интеграции свои зависимости.
 pydantic = ["pydantic>=2"]
+msgspec = ["msgspec>=0.21.1"]
+adaptix = ["adaptix>=3.0.0b12"]
 httpx = ["httpx>=0.27"]
 requests = ["requests>=2.31"]
 curl-cffi = ["curl_cffi>=0.7"]
 websocket = ["zapros[websocket]==0.16.0"]
-html = ["eazy-sdk-html>=0.2.0a7,<0.3"]
-accounts = ["eazy-sdk-accounts>=0.2.0a7,<0.3"]
-sqlmodel = ["eazy-sdk-sqlmodel>=0.2.0a7,<0.3"]
-# Браузерные SDK. В `all` не входит: драйвер тянет за собой сам браузер.
-browser = ["eazy-sdk-browser>=0.2.0a7,<0.3"]
-all = ["pydantic>=2", "msgspec>=0.21.1", "httpx>=0.27", "requests>=2.31", "curl_cffi>=0.7", "zapros[websocket]==0.16.0", "eazy-sdk-sqlmodel>=0.2.0a7,<0.3", "eazy-sdk-html>=0.2.0a7,<0.3", "eazy-sdk-accounts>=0.2.0a7,<0.3"]
-msgspec = [
-    "msgspec>=0.21.1",
+html = ["parsel>=1.11"]
+xml = []
+accounts = []
+sqlmodel = ["sqlmodel>=0.0.22", "sqlalchemy[asyncio]>=2", "pydantic>=2", "aiosqlite>=0.20"]
+openapi = ["datamodel-code-generator>=0.26,<1", "pydantic[email]>=2"]
+asyncapi = []
+# Чтение спецификаций YAML генераторами OpenAPI и AsyncAPI.
+yaml = ["PyYAML>=6"]
+presets = []
+selectolax = ["selectolax>=0.3"]
+# Браузерные SDK. `browser` ставит только код, драйвер выбирается отдельным extra.
+# В `all` драйверы не входят: они тянут за собой сам браузер.
+browser = []
+playwright = ["playwright>=1.55"]
+camoufox = ["camoufox>=0.4"]
+selenium = ["selenium>=4.25"]
+pydoll = ["pydoll-python>=3,<4"]
+all = [
+  "pydantic>=2",
+  "msgspec>=0.21.1",
+  "httpx>=0.27",
+  "requests>=2.31",
+  "curl_cffi>=0.7",
+  "zapros[websocket]==0.16.0",
+  "parsel>=1.11",
+  "sqlmodel>=0.0.22",
+  "sqlalchemy[asyncio]>=2",
+  "aiosqlite>=0.20",
 ]
+
+[project.scripts]
+eazy-sdk-openapi = "eazy_sdk_openapi.cli:main"
+eazy-sdk-asyncapi = "eazy_sdk_asyncapi.cli:main"
+eazy-sdk-sqlmodel-migrate = "eazy_sdk_sqlmodel.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/0cherednoq/eazy-sdk"
@@ -65,15 +95,10 @@ dev = [
   "sqlmodel>=0.0.22",
   "aiosqlite>=0.20",
   "asyncpg>=0.30",
-  "eazy-sdk-sqlmodel",
-  "eazy-sdk-openapi[yaml]",
-  "eazy-sdk-asyncapi[yaml]",
-  "eazy-sdk-presets",
-  "eazy-sdk-accounts",
-  "eazy-sdk-html",
-  "eazy-sdk-xml",
-  "eazy-sdk-adaptix",
-  "eazy-sdk-browser",
+  "sqlalchemy[asyncio]>=2",
+  "datamodel-code-generator>=0.26,<1",
+  "pydantic[email]>=2",
+  "PyYAML>=6",
   "playwright>=1.55",
   "pydoll-python>=3,<4",
   "import-linter>=2.3",
@@ -108,36 +133,31 @@ auth-conformance = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv.workspace]
-members = [
-  "plugins/accounts",
-  "plugins/adaptix",
-  "plugins/asyncapi",
-  "plugins/browser",
-  "plugins/html",
-  "plugins/openapi",
-  "plugins/presets",
-  "plugins/sqlmodel",
-  "plugins/xml",
+[tool.hatch.build.targets.wheel]
+# Один дистрибутив: ядро и интеграции. Интеграции лежат в plugins/<имя>/, в wheel каждая
+# попадает пакетом верхнего уровня под своим именем импорта.
+packages = [
+  "eazy_sdk",
+  "plugins/accounts/eazy_sdk_accounts",
+  "plugins/adaptix/eazy_sdk_adaptix",
+  "plugins/asyncapi/eazy_sdk_asyncapi",
+  "plugins/browser/eazy_sdk_browser",
+  "plugins/html/eazy_sdk_html",
+  "plugins/openapi/eazy_sdk_openapi",
+  "plugins/presets/eazy_sdk_presets",
+  "plugins/sqlmodel/eazy_sdk_sqlmodel",
+  "plugins/xml/eazy_sdk_xml",
 ]
 
-[tool.uv.sources]
-eazy-sdk-core = { workspace = true }
-eazy-sdk-sqlmodel = { workspace = true }
-eazy-sdk-openapi = { workspace = true }
-eazy-sdk-asyncapi = { workspace = true }
-eazy-sdk-presets = { workspace = true }
-eazy-sdk-accounts = { workspace = true }
-eazy-sdk-html = { workspace = true }
-eazy-sdk-xml = { workspace = true }
-eazy-sdk-adaptix = { workspace = true }
-eazy-sdk-browser = { workspace = true }
-
-[tool.hatch.build.targets.wheel]
-packages = ["eazy_sdk"]
-
 [tool.hatch.build.targets.sdist]
-include = ["/eazy_sdk", "/CHANGELOG.md", "/LICENSE", "/README.md", "/pyproject.toml"]
+include = [
+  "/eazy_sdk",
+  "/plugins/*/eazy_sdk_*",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/README.md",
+  "/pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -162,6 +182,9 @@ filterwarnings = [
   # curl_cffi uses a selector helper thread with Proactor on Windows. This is emitted by the
   # dependency itself and is covered by the async first-hop transport test.
   "ignore::curl_cffi.utils.CurlCffiWarning:curl_cffi.aio",
+  # Pydoll 3 still calls asyncio.iscoroutinefunction, deprecated since Python 3.14. The call is
+  # inside the dependency; our own code uses inspect.iscoroutinefunction.
+  "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:pydoll",
 ]
 markers = [
   "unit: fast isolated behaviour tests without real sockets",

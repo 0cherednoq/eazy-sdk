@@ -9,7 +9,7 @@
 Запрос объявляется классом, ответ разбирается в модель, а вход, обновление сессии, подпись,
 повторы и пагинация описываются рядом с операцией и не попадают в код вызова.
 
-> Статус: alpha, версия `0.2.0a7`. Альфа-версии переименовывают публичные имена без устаревших
+> Статус: alpha, версия `0.2.0a8`. Альфа-версии переименовывают публичные имена без устаревших
 > псевдонимов, список замен ведёт страница
 > [«Миграция»](https://0cherednoq.github.io/eazy-sdk/reference/migration/). Документация собирается в
 > сайт из [docs-site/](https://github.com/0cherednoq/eazy-sdk/tree/master/docs-site) и публикуется на
@@ -19,8 +19,8 @@
 
 * Операция описана один раз: поля класса задают путь, query, заголовки и тело, а тип результата
   виден редактору и тайпчекеру.
-* Один и тот же роутер работает через HTTPX, Requests, curl_cffi или свой обработчик. Ядро не
-  ставит ни HTTP-клиент, ни библиотеку моделей.
+* Один и тот же роутер работает через HTTPX, Requests, curl_cffi или свой обработчик. Пакет без
+  дополнений не ставит ни HTTP-клиент, ни библиотеку моделей.
 * Ответы разбираются в Pydantic, msgspec, dataclass или Adaptix. Ошибка API внутри ответа с
   кодом 200 становится типизированным исключением.
 * Вход, обновление сессии по сроку и по отказу, подпись HMAC, шифрование тела, капча и
@@ -39,14 +39,14 @@ HTTP-клиент, браузер и хранилище аккаунтов ос�
 pip install --pre "eazy-sdk-core[httpx,pydantic]"
 ```
 
-На PyPI ядро называется `eazy-sdk-core`, а импортируется как `eazy_sdk`. Проект `eazysdk` на PyPI
+На PyPI пакет называется `eazy-sdk-core`, а импортируется как `eazy_sdk`. Проект `eazysdk` на PyPI
 к этой библиотеке отношения не имеет. Флаг `--pre` нужен, пока выходят только альфа-версии. Те же файлы приложены к каждому
 [релизу GitHub](https://github.com/0cherednoq/eazy-sdk/releases).
 
-Дополнения выбираются по задаче: `httpx`, `requests`, `curl-cffi`, `websocket`, `pydantic`,
-`msgspec`, `html`, `accounts`, `sqlmodel`, `browser`. Генераторы и готовые описания защит
-поставляются отдельными пакетами: `eazy-sdk-openapi`, `eazy-sdk-asyncapi`, `eazy-sdk-presets`.
-Полная таблица есть на странице
+Всё поставляется одним пакетом. Дополнения ставят только сторонние библиотеки и выбираются по
+задаче: `httpx`, `requests`, `curl-cffi`, `websocket`, `pydantic`, `msgspec`, `adaptix`, `html`,
+`xml`, `openapi`, `asyncapi`, `accounts`, `sqlmodel`, `browser`, `playwright`, `pydoll`,
+`presets`. Полная таблица есть на странице
 [«Установка»](https://0cherednoq.github.io/eazy-sdk/start/installation/).
 
 ## Быстрый старт
@@ -152,7 +152,7 @@ print(response.status_code)
 Нужен [uv](https://docs.astral.sh/uv/). Браузерным тестам нужен Chromium.
 
 ```bash
-uv sync --all-packages --all-extras            # окружение и все инструменты
+uv sync --all-extras            # окружение и все инструменты
 uv run playwright install chromium             # браузер для тестов плагина
 uv run pytest -q                               # тесты
 uv run mypy                                    # типы

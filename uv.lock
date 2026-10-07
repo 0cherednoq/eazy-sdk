@@ -7,20 +7,6 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
-[manifest]
-members = [
-    "eazy-sdk-accounts",
-    "eazy-sdk-adaptix",
-    "eazy-sdk-asyncapi",
-    "eazy-sdk-browser",
-    "eazy-sdk-core",
-    "eazy-sdk-html",
-    "eazy-sdk-openapi",
-    "eazy-sdk-presets",
-    "eazy-sdk-sqlmodel",
-    "eazy-sdk-xml",
-]
-
 [[package]]
 name = "adaptix"
 version = "3.0.0b12"
@@ -925,120 +911,37 @@ wheels = [
 ]
 
 [[package]]
-name = "eazy-sdk-accounts"
-version = "0.2.0a7"
-source = { editable = "plugins/accounts" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "eazy-sdk-core", editable = "." }]
-
-[[package]]
-name = "eazy-sdk-adaptix"
-version = "0.2.0a7"
-source = { editable = "plugins/adaptix" }
-dependencies = [
-    { name = "adaptix" },
-    { name = "eazy-sdk-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "adaptix", specifier = ">=3.0.0b12" },
-    { name = "eazy-sdk-core", editable = "." },
-]
-
-[[package]]
-name = "eazy-sdk-asyncapi"
-version = "0.2.0a7"
-source = { editable = "plugins/asyncapi" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-]
-
-[package.optional-dependencies]
-yaml = [
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
-]
-provides-extras = ["yaml"]
-
-[[package]]
-name = "eazy-sdk-browser"
-version = "0.2.0a7"
-source = { editable = "plugins/browser" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-    { name = "zapros" },
-]
-
-[package.optional-dependencies]
-accounts = [
-    { name = "eazy-sdk-accounts" },
-]
-camoufox = [
-    { name = "camoufox" },
-]
-playwright = [
-    { name = "playwright" },
-]
-pydoll = [
-    { name = "pydoll-python" },
-]
-selenium = [
-    { name = "selenium" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "camoufox", marker = "extra == 'camoufox'", specifier = ">=0.4" },
-    { name = "eazy-sdk-accounts", marker = "extra == 'accounts'", editable = "plugins/accounts" },
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "playwright", marker = "extra == 'playwright'", specifier = ">=1.55" },
-    { name = "pydoll-python", marker = "extra == 'pydoll'", specifier = ">=3,<4" },
-    { name = "selenium", marker = "extra == 'selenium'", specifier = ">=4.25" },
-    { name = "zapros", specifier = "==0.16.0" },
-]
-provides-extras = ["playwright", "camoufox", "selenium", "pydoll", "accounts"]
-
-[[package]]
 name = "eazy-sdk-core"
-version = "0.2.0a7"
+version = "0.2.0a8"
 source = { editable = "." }
 dependencies = [
     { name = "zapros" },
 ]
 
 [package.optional-dependencies]
-accounts = [
-    { name = "eazy-sdk-accounts" },
+adaptix = [
+    { name = "adaptix" },
 ]
 all = [
+    { name = "aiosqlite" },
     { name = "curl-cffi" },
-    { name = "eazy-sdk-accounts" },
-    { name = "eazy-sdk-html" },
-    { name = "eazy-sdk-sqlmodel" },
     { name = "httpx" },
     { name = "msgspec" },
+    { name = "parsel" },
     { name = "pydantic" },
     { name = "requests" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "sqlmodel" },
     { name = "zapros", extra = ["websocket"] },
 ]
-browser = [
-    { name = "eazy-sdk-browser" },
+camoufox = [
+    { name = "camoufox" },
 ]
 curl-cffi = [
     { name = "curl-cffi" },
 ]
 html = [
-    { name = "eazy-sdk-html" },
+    { name = "parsel" },
 ]
 httpx = [
     { name = "httpx" },
@@ -1046,17 +949,39 @@ httpx = [
 msgspec = [
     { name = "msgspec" },
 ]
+openapi = [
+    { name = "datamodel-code-generator" },
+    { name = "pydantic", extra = ["email"] },
+]
+playwright = [
+    { name = "playwright" },
+]
 pydantic = [
     { name = "pydantic" },
+]
+pydoll = [
+    { name = "pydoll-python" },
 ]
 requests = [
     { name = "requests" },
 ]
+selectolax = [
+    { name = "selectolax" },
+]
+selenium = [
+    { name = "selenium" },
+]
 sqlmodel = [
-    { name = "eazy-sdk-sqlmodel" },
+    { name = "aiosqlite" },
+    { name = "pydantic" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "sqlmodel" },
 ]
 websocket = [
     { name = "zapros", extra = ["websocket"] },
+]
+yaml = [
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -1073,15 +998,7 @@ dev = [
     { name = "complexipy" },
     { name = "coverage" },
     { name = "curl-cffi" },
-    { name = "eazy-sdk-accounts" },
-    { name = "eazy-sdk-adaptix" },
-    { name = "eazy-sdk-asyncapi", extra = ["yaml"] },
-    { name = "eazy-sdk-browser" },
-    { name = "eazy-sdk-html" },
-    { name = "eazy-sdk-openapi", extra = ["yaml"] },
-    { name = "eazy-sdk-presets" },
-    { name = "eazy-sdk-sqlmodel" },
-    { name = "eazy-sdk-xml" },
+    { name = "datamodel-code-generator" },
     { name = "httpx" },
     { name = "hypothesis" },
     { name = "import-linter" },
@@ -1091,7 +1008,7 @@ dev = [
     { name = "mypy" },
     { name = "parsel" },
     { name = "playwright" },
-    { name = "pydantic" },
+    { name = "pydantic", extra = ["email"] },
     { name = "pydoll-python" },
     { name = "pyrefly" },
     { name = "pytest" },
@@ -1099,8 +1016,10 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-httpserver" },
     { name = "pytest-timeout" },
+    { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlmodel" },
     { name = "ty" },
     { name = "zapros", extra = ["pyreqwest", "websocket"] },
@@ -1117,28 +1036,39 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "adaptix", marker = "extra == 'adaptix'", specifier = ">=3.0.0b12" },
+    { name = "aiosqlite", marker = "extra == 'all'", specifier = ">=0.20" },
+    { name = "aiosqlite", marker = "extra == 'sqlmodel'", specifier = ">=0.20" },
+    { name = "camoufox", marker = "extra == 'camoufox'", specifier = ">=0.4" },
     { name = "curl-cffi", marker = "extra == 'all'", specifier = ">=0.7" },
     { name = "curl-cffi", marker = "extra == 'curl-cffi'", specifier = ">=0.7" },
-    { name = "eazy-sdk-accounts", marker = "extra == 'accounts'", editable = "plugins/accounts" },
-    { name = "eazy-sdk-accounts", marker = "extra == 'all'", editable = "plugins/accounts" },
-    { name = "eazy-sdk-browser", marker = "extra == 'browser'", editable = "plugins/browser" },
-    { name = "eazy-sdk-html", marker = "extra == 'all'", editable = "plugins/html" },
-    { name = "eazy-sdk-html", marker = "extra == 'html'", editable = "plugins/html" },
-    { name = "eazy-sdk-sqlmodel", marker = "extra == 'all'", editable = "plugins/sqlmodel" },
-    { name = "eazy-sdk-sqlmodel", marker = "extra == 'sqlmodel'", editable = "plugins/sqlmodel" },
+    { name = "datamodel-code-generator", marker = "extra == 'openapi'", specifier = ">=0.26,<1" },
     { name = "httpx", marker = "extra == 'all'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.27" },
     { name = "msgspec", marker = "extra == 'all'", specifier = ">=0.21.1" },
     { name = "msgspec", marker = "extra == 'msgspec'", specifier = ">=0.21.1" },
+    { name = "parsel", marker = "extra == 'all'", specifier = ">=1.11" },
+    { name = "parsel", marker = "extra == 'html'", specifier = ">=1.11" },
+    { name = "playwright", marker = "extra == 'playwright'", specifier = ">=1.55" },
     { name = "pydantic", marker = "extra == 'all'", specifier = ">=2" },
     { name = "pydantic", marker = "extra == 'pydantic'", specifier = ">=2" },
+    { name = "pydantic", marker = "extra == 'sqlmodel'", specifier = ">=2" },
+    { name = "pydantic", extras = ["email"], marker = "extra == 'openapi'", specifier = ">=2" },
+    { name = "pydoll-python", marker = "extra == 'pydoll'", specifier = ">=3,<4" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
     { name = "requests", marker = "extra == 'all'", specifier = ">=2.31" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.31" },
+    { name = "selectolax", marker = "extra == 'selectolax'", specifier = ">=0.3" },
+    { name = "selenium", marker = "extra == 'selenium'", specifier = ">=4.25" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'all'", specifier = ">=2" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sqlmodel'", specifier = ">=2" },
+    { name = "sqlmodel", marker = "extra == 'all'", specifier = ">=0.0.22" },
+    { name = "sqlmodel", marker = "extra == 'sqlmodel'", specifier = ">=0.0.22" },
     { name = "zapros", specifier = "==0.16.0" },
     { name = "zapros", extras = ["websocket"], marker = "extra == 'all'", specifier = "==0.16.0" },
     { name = "zapros", extras = ["websocket"], marker = "extra == 'websocket'", specifier = "==0.16.0" },
 ]
-provides-extras = ["pydantic", "httpx", "requests", "curl-cffi", "websocket", "html", "accounts", "sqlmodel", "browser", "all", "msgspec"]
+provides-extras = ["pydantic", "msgspec", "adaptix", "httpx", "requests", "curl-cffi", "websocket", "html", "xml", "accounts", "sqlmodel", "openapi", "asyncapi", "yaml", "presets", "selectolax", "browser", "playwright", "camoufox", "selenium", "pydoll", "all"]
 
 [package.metadata.requires-dev]
 auth-conformance = [
@@ -1154,15 +1084,7 @@ dev = [
     { name = "complexipy", specifier = ">=6.2" },
     { name = "coverage", specifier = ">=7.6" },
     { name = "curl-cffi", specifier = ">=0.7" },
-    { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
-    { name = "eazy-sdk-adaptix", editable = "plugins/adaptix" },
-    { name = "eazy-sdk-asyncapi", extras = ["yaml"], editable = "plugins/asyncapi" },
-    { name = "eazy-sdk-browser", editable = "plugins/browser" },
-    { name = "eazy-sdk-html", editable = "plugins/html" },
-    { name = "eazy-sdk-openapi", extras = ["yaml"], editable = "plugins/openapi" },
-    { name = "eazy-sdk-presets", editable = "plugins/presets" },
-    { name = "eazy-sdk-sqlmodel", editable = "plugins/sqlmodel" },
-    { name = "eazy-sdk-xml", editable = "plugins/xml" },
+    { name = "datamodel-code-generator", specifier = ">=0.26,<1" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "hypothesis", specifier = ">=6.112" },
     { name = "import-linter", specifier = ">=2.3" },
@@ -1173,6 +1095,7 @@ dev = [
     { name = "parsel", specifier = ">=1.11.0" },
     { name = "playwright", specifier = ">=1.55" },
     { name = "pydantic", specifier = ">=2" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2" },
     { name = "pydoll-python", specifier = ">=3,<4" },
     { name = "pyrefly", specifier = ">=0.60.0" },
     { name = "pytest", specifier = ">=8" },
@@ -1180,8 +1103,10 @@ dev = [
     { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-httpserver", specifier = ">=1.1" },
     { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "requests", specifier = ">=2.31" },
     { name = "ruff", specifier = ">=0.5" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "ty", specifier = ">=0.0.74" },
     { name = "zapros", extras = ["pyreqwest", "websocket"], specifier = "==0.16.0" },
@@ -1195,103 +1120,6 @@ docs = [
     { name = "sphinx-llms-txt", specifier = ">=0.7,<0.8" },
     { name = "sphinxcontrib-mermaid", specifier = ">=2,<3" },
 ]
-
-[[package]]
-name = "eazy-sdk-html"
-version = "0.2.0a7"
-source = { editable = "plugins/html" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-    { name = "parsel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "parsel", specifier = ">=1.11" },
-]
-
-[[package]]
-name = "eazy-sdk-openapi"
-version = "0.2.0a7"
-source = { editable = "plugins/openapi" }
-dependencies = [
-    { name = "datamodel-code-generator" },
-    { name = "eazy-sdk-core" },
-    { name = "pydantic", extra = ["email"] },
-]
-
-[package.optional-dependencies]
-yaml = [
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "datamodel-code-generator", specifier = ">=0.26,<1" },
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "pydantic", extras = ["email"], specifier = ">=2" },
-    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6" },
-]
-provides-extras = ["yaml"]
-
-[[package]]
-name = "eazy-sdk-presets"
-version = "0.2.0a7"
-source = { editable = "plugins/presets" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-]
-
-[package.optional-dependencies]
-browser = [
-    { name = "playwright" },
-]
-selectolax = [
-    { name = "selectolax" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.50" },
-    { name = "selectolax", marker = "extra == 'selectolax'", specifier = ">=0.3" },
-]
-provides-extras = ["browser", "selectolax"]
-
-[[package]]
-name = "eazy-sdk-sqlmodel"
-version = "0.2.0a7"
-source = { editable = "plugins/sqlmodel" }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "eazy-sdk-accounts" },
-    { name = "eazy-sdk-core" },
-    { name = "pydantic" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "sqlmodel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.20" },
-    { name = "eazy-sdk-accounts", editable = "plugins/accounts" },
-    { name = "eazy-sdk-core", editable = "." },
-    { name = "pydantic", specifier = ">=2" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
-    { name = "sqlmodel", specifier = ">=0.0.22" },
-]
-
-[[package]]
-name = "eazy-sdk-xml"
-version = "0.2.0a7"
-source = { editable = "plugins/xml" }
-dependencies = [
-    { name = "eazy-sdk-core" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "eazy-sdk-core", editable = "." }]
 
 [[package]]
 name = "editor"

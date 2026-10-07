@@ -312,7 +312,7 @@ class _BoundHtmlExtractor:
                 from eazy_sdk_html import HtmlDocument
             except ImportError as exc:  # pragma: no cover - depends on extras
                 raise ImportError(
-                    "HTML extraction requires the eazy-sdk-html plugin: "
+                    "HTML extraction requires parsel: "
                     'pip install "eazy-sdk-core[html]"'
                 ) from exc
 

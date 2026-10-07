@@ -1,4 +1,4 @@
-# eazy-sdk-presets
+# eazy_sdk_presets
 
 Immutable Cloudflare Challenge Pages, Turnstile, reCAPTCHA v2/v3 and Enterprise descriptors for the
 Eazy SDK signal/reaction/before-call runtime. Solvers are supplied directly or through identity-based
