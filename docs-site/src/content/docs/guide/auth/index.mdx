@@ -1,21 +1,29 @@
 ---
-title: Авторизация
-description: Выберите способ авторизации для вашего API.
+title: Выбрать способ авторизации
+description: Статические данные, составные требования и управляемая сессия.
 freshness: false
 ---
 
-| Сценарий | Страница |
-|---|---|
-| Сервер принимает логин и пароль в `Authorization` | {doc}`Basic Auth </guide/auth/basic>` |
-| У вас уже есть access token | {doc}`Bearer Token </guide/auth/bearer>` |
-| Access token имеет формат JWT | {doc}`JWT </guide/auth/jwt>` |
-| Сервер принимает ключ в header или query | {doc}`API Key </guide/auth/api-key>` |
-| Сервер принимает готовую cookie | {doc}`Cookie </guide/auth/cookie>` |
-| Endpoint допускает несколько схем | {doc}`Комбинированная авторизация </guide/auth/combined>` |
-| Token нужно получить по логину и паролю | {doc}`Login </guide/auth/login>` |
-| Session нужно передать или сохранить | {doc}`Session </guide/auth/session>` |
-| Access token нужно обновлять | {doc}`Refresh </guide/auth/refresh>` |
-| Нужно создать аккаунт | {doc}`Registration </integrations/accounts/registration>` |
-| Аккаунт требует подтверждения | {doc}`Verification </integrations/accounts/verification>` |
+Ключ, токен или сессия?
 
-Каждая страница показывает HTTP request, response и минимальную настройку Eazy SDK.
+Авторизация состоит из схемы в контракте операции и источника данных в `Identity`. Схема
+определяет место в запросе, а источник отдаёт ключ, пароль, токен или cookie во время вызова.
+
+| Что требует сайт | Что использовать |
+|---|---|
+| Заголовок или параметр с ключом | {doc}`Передать API key </guide/auth/api-key>` |
+| Логин и пароль в `Authorization` | {doc}`Передать Basic credentials </guide/auth/basic>` |
+| Готовый access token | {doc}`Передать Bearer token </guide/auth/bearer>` |
+| Готовую session cookie | {doc}`Передать session cookie </guide/auth/cookie>` |
+| JWT без клиентской проверки claims | {doc}`Передать JWT </guide/auth/jwt>` |
+| Несколько обязательных или альтернативных схем | {doc}`Собрать требования AND и OR </guide/auth/combined>` |
+| Получение, обновление и повторное использование сессии | {doc}`Войти и получить сессию </guide/auth/login>` |
+
+Статическая схема подходит, когда credential уже известен и не меняется внутри SDK. Для входа,
+обновления по сроку или после `401` используйте управляемую сессию.
+
+## Дальше
+
+- {doc}`Передать Bearer token </guide/auth/bearer>`
+- {doc}`Войти и получить сессию </guide/auth/login>`
+- {doc}`Справочник API авторизации </reference/api/auth>`

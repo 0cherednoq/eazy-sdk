@@ -1,51 +1,74 @@
 ---
-title: Комбинированная авторизация
-description: Требования AND и OR для одной операции.
+title: Собрать требования AND и OR
+description: Потребуйте несколько credentials или выберите доступную альтернативу.
 sources:
   - eazy_sdk.auth.all_of
   - eazy_sdk.auth.any_of
 api_fingerprint: "sha256:dd2902f6d64a707200682f063ddf2ae21705263a5d3241c73bac74b6b07ff310"
 ---
 
-Eazy SDK различает требования AND и OR. `all_of(...)` формирует одну альтернативу, в которой
-нужны все credentials. `any_of(...)` выбирает первую полностью доступную альтернативу.
+`all_of(...)` объединяет схемы в одно обязательное требование. `any_of(...)` перечисляет
+альтернативы и выбирает первую, для которой `Identity` содержит все источники.
 
-```python
-from dataclasses import dataclass
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
 
-from eazy_sdk import AsyncApi, Http, HttpOperation, op
-from eazy_sdk.auth import ApiKeyScheme, BasicScheme, BearerScheme, all_of, any_of
+::::{grid-item}
+:class: http-panel http-panel--request
 
-BASIC = BasicScheme("basic")
-BEARER = BearerScheme("bearer")
-DEVICE_KEY = ApiKeyScheme.header("X-Device-Key", name="device-key")
+**→ Запрос** · ``GET /auth/combined``
 
-USER_OR_SERVICE = any_of(BEARER, all_of(BASIC, DEVICE_KEY))
+```json
+{
+  "headers": {
+    "X-Device-Key": "device-7",
+    "Authorization": "Bearer access-1"
+  }
+}
+```
+::::
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListReports(HttpOperation[list[Report]]):
-    __http__ = Http.get("/reports")
+::::{grid-item}
+:class: http-panel http-panel--response
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HealthCheck(HttpOperation[Health]):
-    __http__ = Http.post("/health-check", security=None)
+**← Ответ** · ``200 OK``
 
-class AsyncReportsApi(AsyncApi):
-    security = USER_OR_SERVICE
+```json
+{"credential": "device-7+access-1"}
+```
+::::
+:::::
 
-    list_reports = op(ListReports)
-    health_check = op(HealthCheck)
+```{literalinclude} ../../../../../../examples/docs/auth_combined.py
+:language: python
+:start-after: "# region docs: auth-combined"
+:end-before: "# endregion docs: auth-combined"
 ```
 
-В этом примере `/reports` принимает либо Bearer token, либо одновременно Basic credentials и
-`X-Device-Key`. `/health-check` явно отключает default и остаётся публичной.
-
-| Выражение | Семантика |
+| Выражение | Условие вызова |
 |---|---|
-| `all_of(A, B)` | Требуются обе схемы `A` и `B` |
-| `any_of(A, B)` | Достаточно одной доступной схемы |
-| `any_of(all_of(A, B), C)` | Требуются `A` + `B` либо одна `C` |
-| `security=None` | Отключить `security` роутера для операции |
+| `all_of(A, B)` | Доступны одновременно `A` и `B` |
+| `any_of(A, B)` | Доступна хотя бы одна схема |
+| `any_of(all_of(A, B), C)` | Доступны `A` с `B` или одна `C` |
+| `security=None` | Операция отключает требование роутера |
 
-Зарегистрируйте providers для всех схем выбранной альтернативы. Если ни одна альтернатива не
-может быть разрешена, вызов завершается до сети.
+В примере у `any_of` одна составная альтернатива, поэтому нужны оба источника. Для
+варианта «оба или cookie» добавьте вторую схему: `any_of(all_of(DEVICE_KEY, ACCESS_TOKEN), COOKIE)`.
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_combined.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.auth_combined -->
+```text
+credentials: device-7+access-1
+```
+
+## Дальше
+
+- {doc}`Передать API key </guide/auth/api-key>`
+- {doc}`Передать Bearer token </guide/auth/bearer>`
+- {doc}`Справочник Auth </reference/api/auth>`

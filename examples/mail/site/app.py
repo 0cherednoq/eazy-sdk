@@ -459,13 +459,21 @@ def _page(title: str, body: str) -> str:
     )
 
 
+_IDENTIFY_HTML = """
+<!-- region docs: identify-html -->
+<!-- examples/mail/site/app.py -->
+<main data-page="identify">
+  <form method="post" action="/login/identify">
+    <label>Почта <input name="email" type="email"></label>
+    <button type="submit">Продолжить</button>
+  </form>
+</main>
+<!-- endregion docs: identify-html -->
+"""
+
+
 def _identify_html() -> str:
-    return _page(
-        "Вход",
-        '<main data-page="identify"><form method="post" action="/login/identify">'
-        '<label>Почта <input name="email" type="email"></label>'
-        '<button type="submit">Продолжить</button></form></main>',
-    )
+    return _page("Вход", _IDENTIFY_HTML)
 
 
 def _password_html(login_id: str) -> str:

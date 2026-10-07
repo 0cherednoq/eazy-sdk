@@ -1,6 +1,6 @@
 ---
-title: Refresh
-description: Обновите Bearer session по refresh token.
+title: Обновить сессию
+description: Выполните refresh по сроку или после 401 и повторите исходный запрос.
 sources:
   - eazy_sdk.auth.session_auth
   - eazy_sdk.auth.RefreshToken
@@ -8,9 +8,9 @@ sources:
 api_fingerprint: "sha256:cd1125189a3510394c327d07d91106a26e9bba4cd0fe9234a4d4639adc92c2af"
 ---
 
-Refresh обновляет истёкшую Bearer session без повторной передачи пароля. Runtime вызывает
-`refresh(...)` у того же auth service, сохраняет новую revision и только затем продолжает
-защищённую операцию.
+`RefreshToken()` отмечает значение для обновления, а `ExpiresAt()` позволяет сделать refresh до
+защищённого запроса. Если сервер всё же отвечает `401`, runtime обновляет сессию и один раз
+повторяет исходный вызов.
 
 :::::{grid} 1 1 2 2
 :class-container: http-exchange
@@ -19,79 +19,89 @@ Refresh обновляет истёкшую Bearer session без повторн
 ::::{grid-item}
 :class: http-panel http-panel--request
 
-**→ Request** · ``POST /auth/refresh``
+**→ Запрос** · ``POST /auth/refresh``
 
 ```json
-{
-  "method": "POST",
-  "url": "/auth/refresh",
-  "headers": {"Content-Type": "application/json"},
-  "body": {"refresh_token": "refresh-v1"}
-}
+{"refresh_token": "refresh-1"}
 ```
 ::::
 
 ::::{grid-item}
 :class: http-panel http-panel--response
 
-**← Response** · ``200 OK``
+**← Ответ** · ``200 OK``
 
 ```json
 {
-  "status": 200,
-  "headers": {"Content-Type": "application/json"},
-  "body": {
-    "access_token": "access-v2",
-    "refresh_token": "refresh-v2",
-    "expires_at": "2030-01-01T01:00:00Z"
-  }
+  "access_token": "access-2",
+  "refresh_token": "refresh-2",
+  "expires_at": "2099-01-01T00:00:00Z"
 }
 ```
 ::::
 :::::
 
-## Объявите request и операцию
+:::::{tab-set}
+:sync-group: transport
 
-```python
-from dataclasses import dataclass
+::::{tab-item} HTTP
+:sync: http
 
-from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
+`LoginService.refresh(...)` извлекает секрет из текущей модели и вызывает публичную
+refresh-операцию через тот же корень SDK.
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Refresh(HttpOperation[UserSession]):
-    __http__ = Http.post("/auth/refresh", operation_id="refresh", security=None)
-
-    refresh_token: JsonField[str]
-
-class AsyncAuthApi(AsyncApi):
-    refresh = op(Refresh)
+```{literalinclude} ../../../../../../examples/docs/auth_lifecycle.py
+:language: python
+:start-after: "# region docs: auth-lifecycle-service"
+:end-before: "# endregion docs: auth-lifecycle-service"
 ```
 
-## Добавьте refresh в service
+Пример начинает с сохранённого `access-1`. Сервер отклоняет его, после чего runtime вызывает
+refresh и повторяет `GET /account` с `access-2`.
 
-```python
-from eazy_sdk.auth import AuthContext
+```{literalinclude} ../../../../../../examples/docs/auth_refresh.py
+:language: python
+:start-after: "# region docs: auth-refresh-run"
+:end-before: "# endregion docs: auth-refresh-run"
+```
+::::
 
-class LoginService:
-    # acquire(...) показан на странице Login
+::::{tab-item} Браузер
+:sync: browser
 
-    async def refresh(
-        self,
-        session: UserSession,
-        context: AuthContext[AuthSdk],
-    ) -> UserSession:
-        return await context.sdk.auth.refresh(
-            refresh_token=session.refresh_token.get_secret_value(),
-        )
+Браузер хранит токен и срок в состоянии страницы; обновление одной сессии для нескольких вкладок
+показано в {doc}`главе о браузерной сессии </tutorial/session>`.
+
+```{literalinclude} ../../../../../../examples/mail/site/app.py
+:language: html
+:start-after: "<!-- region docs: inbox-html-open -->"
+:end-before: "<!-- endregion docs: inbox-html-open -->"
+```
+::::
+:::::
+
+| Причина refresh | Когда он выполняется | Что происходит с вызовом |
+|---|---|---|
+| `ExpiresAt()` считает сессию просроченной | До отправки | Запрос уходит один раз с новой сессией |
+| Защищённый ответ дал `401` | После первого ответа | Запрос повторяется в пределах `auth_retries` |
+| Refresh завершился ошибкой | Во время обновления | Старая revision не заменяется |
+
+:::{dropdown} Запускаемый файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_refresh.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.auth_refresh -->
+```text
+account: user-42
+GET /account Bearer access-1
+POST /auth/refresh
+GET /account Bearer access-2
 ```
 
-Refresh запускается в двух случаях:
+## Дальше
 
-- `ExpiresAt()` считает текущую session просроченной с учётом `leeway`;
-- защищённый ответ требует auth replay, а у вызова остался `auth_retries` budget.
-
-Каждое сохранение использует ожидаемую revision. Если два refresh выполняются конкурентно,
-поздний ответ со старой revision не перезапишет более новую session. Ошибка response case также не
-изменяет store.
-
-Настройка `session_auth(...)` и полный login flow находятся на странице {doc}`Login </guide/auth/login>`.
+- {doc}`Повторно использовать сессию </guide/auth/session>`
+- {doc}`Войти и получить сессию </guide/auth/login>`
+- {doc}`Настроить повтор HTTP-запроса </guide/reliability/retry>`

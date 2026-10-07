@@ -1,40 +1,13 @@
 ---
-title: Bearer Token
-description: Authorization Bearer для готового access token.
+title: Передать Bearer token
+description: Добавьте готовый access token в Authorization.
 sources:
   - eazy_sdk.auth.BearerScheme
 api_fingerprint: "sha256:e2fff75c3b7db2776393cf39d440eb20d820453e27b30febe997a2f938a562af"
 ---
 
-Используйте статический Bearer token, если приложение уже получило access token и не должно
-автоматически выполнять login или refresh.
-
-```python
-from dataclasses import dataclass
-
-import httpx
-
-from eazy_sdk import AsyncApi, AsyncClient, Http, HttpOperation, Identity, op
-from eazy_sdk.auth import BearerScheme
-from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-
-BEARER = BearerScheme("user-bearer")
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetAccount(HttpOperation[Account]):
-    __http__ = Http.get("/account", security=BEARER)
-
-class AsyncAccountApi(AsyncApi):
-    get_account = op(GetAccount)
-
-identity = Identity(auth=(BEARER.static("access-v1"),))
-client = AsyncClient(
-    base_url="https://api.example.test",
-    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
-)
-account = await AsyncAccountApi(client, identity=identity).get_account()
-await client.aclose()
-```
+Используйте `BearerScheme`, когда приложение уже получило access token и SDK не должен его
+обновлять. Схема добавляет префикс `Bearer` сама.
 
 :::::{grid} 1 1 2 2
 :class-container: http-exchange
@@ -43,33 +16,49 @@ await client.aclose()
 ::::{grid-item}
 :class: http-panel http-panel--request
 
-**→ Request** · ``GET /account``
+**→ Запрос** · ``GET /auth/bearer``
 
 ```json
-{
-  "method": "GET",
-  "url": "/account",
-  "headers": {"Authorization": "Bearer access-v1"},
-  "body": null
-}
+{"headers": {"Authorization": "Bearer access-1"}}
 ```
 ::::
 
 ::::{grid-item}
 :class: http-panel http-panel--response
 
-**← Response** · ``200 OK``
+**← Ответ** · ``200 OK``
 
 ```json
-{
-  "status": 200,
-  "headers": {"Content-Type": "application/json"},
-  "body": {"id": 42, "name": "Ada"}
-}
+{"credential": "access-1"}
 ```
 ::::
 :::::
 
-Имя схемы является диагностическим identity и должно быть стабильным в пределах SDK. Для token,
-который нужно получать и обновлять автоматически, используйте {doc}`Login </guide/auth/login>` и
-{doc}`Refresh </guide/auth/refresh>`.
+```{literalinclude} ../../../../../../examples/docs/auth_bearer.py
+:language: python
+:start-after: "# region docs: auth-bearer"
+:end-before: "# endregion docs: auth-bearer"
+```
+
+Операция объявляет `security=ACCESS_TOKEN`, а `Identity` предоставляет значение этой же схемы.
+Если источник отсутствует, план вызова завершится до HTTP-запроса.
+
+Для входа и автоматического обновления не заменяйте значение в `Identity` вручную. Используйте
+управляемую сессию из разделов про login и refresh.
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_bearer.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.auth_bearer -->
+```text
+token: access-1
+```
+
+## Дальше
+
+- {doc}`Передать JWT </guide/auth/jwt>`
+- {doc}`Войти и получить сессию </guide/auth/login>`
+- {doc}`Обновить сессию </guide/auth/refresh>`

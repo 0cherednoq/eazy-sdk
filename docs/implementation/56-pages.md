@@ -33,17 +33,17 @@
 | `api-reference/testing` | `reference/api/testing` | ok |  |  |  | n/a |
 | `api-reference/verification` | `reference/api/verification` | ok |  |  |  | n/a |
 | `api-reference/xml` | `reference/api/xml` | ok |  |  |  | n/a |
-| `auth/api-key` | `guide/auth/api-key` | ok |  |  |  | n/a |
-| `auth/basic` | `guide/auth/basic` | ok |  |  |  | n/a |
-| `auth/bearer` | `guide/auth/bearer` | ok |  |  |  | n/a |
-| `auth/combined` | `guide/auth/combined` | ok |  |  |  | n/a |
-| `auth/cookie` | `guide/auth/cookie` | ok |  |  |  | n/a |
-| `auth/index` | `guide/auth/index` | ok |  |  |  | n/a |
-| `auth/jwt` | `guide/auth/jwt` | ok |  |  |  | n/a |
-| `auth/login` | `guide/auth/login` | ok |  |  |  | n/a |
-| `auth/refresh` | `guide/auth/refresh` | ok |  |  |  | n/a |
+| `auth/api-key` | `guide/auth/api-key` | ok | ok | ok | ok | n/a |
+| `auth/basic` | `guide/auth/basic` | ok | ok | ok | ok | n/a |
+| `auth/bearer` | `guide/auth/bearer` | ok | ok | ok | ok | n/a |
+| `auth/combined` | `guide/auth/combined` | ok | ok | ok | ok | n/a |
+| `auth/cookie` | `guide/auth/cookie` | ok | ok | ok | ok | n/a |
+| `auth/index` | `guide/auth/index` | ok | n/a | ok | ok | n/a |
+| `auth/jwt` | `guide/auth/jwt` | ok | ok | ok | ok | n/a |
+| `auth/login` | `guide/auth/login` | ok | ok | ok | ok | n/a |
+| `auth/refresh` | `guide/auth/refresh` | ok | ok | ok | ok | n/a |
 | `auth/registration` | `integrations/accounts/registration` | ok |  |  |  | n/a |
-| `auth/session` | `guide/auth/session` | ok |  |  |  | n/a |
+| `auth/session` | `guide/auth/session` | ok | ok | ok | ok | n/a |
 | `auth/verification` | `integrations/accounts/verification` | ok |  |  |  | n/a |
 | `clients/curl-cffi` | `integrations/http/curl-cffi` | ok |  |  |  | n/a |
 | `clients/httpx` | `integrations/http/httpx` | ok |  |  |  | n/a |

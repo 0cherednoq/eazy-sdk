@@ -1,12 +1,13 @@
 ---
-title: Cookie
-description: Передайте готовое значение session cookie.
+title: Передать session cookie
+description: Добавьте готовое значение cookie через Identity.
 sources:
   - eazy_sdk.auth.CookieScheme
 api_fingerprint: "sha256:8c30742714ec92e41f68d080feddc65e5570997389f3fd1dfa82947a71c3bed4"
 ---
 
-Используйте `CookieScheme`, если значение cookie уже известно.
+`CookieScheme` подходит, когда значение session cookie уже известно. Имя cookie задаётся в
+схеме, а значение хранится в `Identity`.
 
 :::::{grid} 1 1 2 2
 :class-container: http-exchange
@@ -15,167 +16,49 @@ api_fingerprint: "sha256:8c30742714ec92e41f68d080feddc65e5570997389f3fd1dfa82947
 ::::{grid-item}
 :class: http-panel http-panel--request
 
-**→ Request** · ``GET /dashboard``
+**→ Запрос** · ``GET /auth/cookie``
 
 ```json
-{
-  "method": "GET",
-  "url": "/dashboard",
-  "headers": {"Cookie": "session_id=session-demo-42"},
-  "body": null
-}
+{"headers": {"Cookie": "mail_session=session-1"}}
 ```
 ::::
 
 ::::{grid-item}
 :class: http-panel http-panel--response
 
-**← Response** · ``200 OK``
+**← Ответ** · ``200 OK``
 
 ```json
-{
-  "status": 200,
-  "headers": {"Content-Type": "application/json"},
-  "body": {"welcome": "Ada"}
-}
+{"credential": "session-1"}
 ```
 ::::
 :::::
 
-```python
-from eazy_sdk.auth import CookieScheme
-
-COOKIE = CookieScheme("session_id", name="dashboard-session")
-auth = COOKIE.static("session-demo-42")
+```{literalinclude} ../../../../../../examples/docs/auth_cookie.py
+:language: python
+:start-after: "# region docs: auth-cookie"
+:end-before: "# endregion docs: auth-cookie"
 ```
 
-Для cookie, которую сервер выдаёт после login, используйте {doc}`Session </guide/auth/session>`.
+`CookieScheme("mail_session")` управляет только объявленным значением. Обычные cookies клиента
+могут существовать рядом, но не удовлетворяют `security=MAIL_SESSION` без источника в `Identity`.
 
-## Cookie после login
+Если cookie выдаёт браузер после интерактивного входа, используйте мост браузерной сессии из
+{doc}`главы о сборке SDK </tutorial/assembly>`, а не копируйте заголовок вручную.
 
-:::::{grid} 1 1 2 2
-:class-container: http-exchange
-:gutter: 2
-
-::::{grid-item}
-:class: http-panel http-panel--request
-
-**→ Request** · ``POST /auth/login``
-
-```json
-{
-  "method": "POST",
-  "url": "/auth/login",
-  "headers": {"Content-Type": "application/json"},
-  "body": {"username": "ada@example.test", "password": "correct-horse"}
-}
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_cookie.py
+:language: python
 ```
-::::
+:::
 
-::::{grid-item}
-:class: http-panel http-panel--response
-
-**← Response** · ``204 No Content``
-
-```json
-{
-  "status": 204,
-  "headers": {
-    "Set-Cookie": "session_id=session-v1; Path=/; HttpOnly; Secure; SameSite=Lax"
-  },
-  "body": null
-}
-```
-::::
-:::::
-
-```python
-from dataclasses import dataclass
-
-from pydantic import BaseModel, SecretStr
-
-from eazy_sdk import (
-    AsyncApi,
-    AsyncRoot,
-    Http,
-    HttpOperation,
-    Identity,
-    JsonField,
-    api_group,
-    op,
-)
-from eazy_sdk.auth import AuthContext, session_cookie
-from eazy_sdk.handlers.httpx import AsyncHttpxHandler
-
-class LoginCredentials(BaseModel):
-    username: str
-    password: SecretStr
-
-class Dashboard(BaseModel):
-    welcome: str
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Login(HttpOperation[None]):
-    __http__ = Http.post("/auth/login", operation_id="login", security=None)
-
-    username: JsonField[str]
-    password: JsonField[str]
-
-class AsyncAuthApi(AsyncApi):
-    login = op(Login)
-
-class CookieLoginService:
-    async def acquire(
-        self,
-        credentials: LoginCredentials,
-        context: AuthContext["DashboardSdk"],
-    ) -> None:
-        envelope = await context.sdk.auth.login.with_response(
-            username=credentials.username,
-            password=credentials.password.get_secret_value(),
-        )
-        return context.capture(envelope)
-
-credentials = LoginCredentials(
-    username="ada@example.test",
-    password=SecretStr("correct-horse"),
-)
-auth = session_cookie(
-    "session_id",
-    credentials=credentials,
-    service=CookieLoginService(),
-    name="dashboard-session",
-)
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetDashboard(HttpOperation[Dashboard]):
-    __http__ = Http.get("/dashboard", operation_id="getDashboard")
-
-class AsyncDashboardApi(AsyncApi):
-    security = auth.scheme
-
-    get_dashboard = op(GetDashboard)
-
-class DashboardSdk(AsyncRoot):
-    auth = api_group(AsyncAuthApi)
-    dashboard = api_group(AsyncDashboardApi)
-
-async with DashboardSdk.from_handler(
-    handler=AsyncHttpxHandler(),
-    base_url="https://api.example.test",
-    identity=Identity(auth=(auth,)),
-) as sdk:
-    dashboard = await sdk.dashboard.get_dashboard()
+<!-- example-output: examples.docs.auth_cookie -->
+```text
+session: session-1
 ```
 
-`CookieLoginService.acquire(...)` вызывает login endpoint через `.with_response(...)` и передаёт
-полученный envelope в `context.capture(...)`. Только так runtime увидит headers ответа: cookie
-service читает `context.responses`, а туда попадают лишь захваченные envelope. Service, который
-просто вызывает `context.sdk.auth.login(...)`, завершится `SessionConfigurationError`, потому что
-`Set-Cookie` до runtime не дойдёт. Из захваченного ответа Eazy SDK берёт `session_id`, а
-`Max-Age`/`Expires` cookie определяют, когда login повторится.
+## Дальше
 
-`session_cookie(...)` создаёт собственную scheme; провайдер сопоставляется с ней по объекту,
-поэтому защищённая ручка ссылается на `auth.scheme`, а не на отдельный `CookieScheme(...)`.
-Первый вызов `sdk.dashboard.get_dashboard()` запускает login, ответ `204` с `Set-Cookie`
-захватывается, и запрос уходит с `Cookie: session_id=session-v1`.
+- {doc}`Войти и получить сессию </guide/auth/login>`
+- {doc}`Повторно использовать сессию </guide/auth/session>`
+- {doc}`Интеграция с браузером </integrations/browser/login>`

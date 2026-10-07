@@ -5655,6 +5655,20 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
 | clean strict Sphinx build | PASS: 93 sources, no warnings. |
 
+### Verification evidence (56.5.3)
+
+| Command | Result |
+|---|---|
+| nine auth-guide example runs | PASS: API key, Basic, Bearer, cookie, JWT, combined credentials, automatic login, 401 refresh/replay and saved-session reuse produced the published output. |
+| focused documentation examples, snapshots, domain ratchet and live probes | PASS: 79 tests; runnable output, literal includes, debt snapshots, reserved domains and the shared HTTP/browser session probes are green. |
+| combined zero-debt run | EXPECTED RED only on 16 code-block and 104 prose findings assigned to later 56.5–56.8 pages; the auth pages add none. |
+| `uv run mypy examples/docs examples/mail/site/app.py` | PASS: no issues in 26 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py` over all ten auth pages | PASS: 0 errors and 0 warnings on every page. The pattern audit found no remaining findings; the outline-test exclusion for procedural guides applies. |
+| page queue and debt audit | PASS: all ten queue rows are filled; four long dashes and thirteen legacy domains from the old auth pages are removed from the snapshots. |
+| documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
+| clean strict Sphinx build | PASS: 93 sources, no warnings; login, refresh and session render synchronized HTTP/browser tabs with source-backed browser HTML fragments. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5696,4 +5710,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.5.3–56.8. No blockers; next step is 56.5.3.
+56.5.4–56.8. No blockers; next step is 56.5.4.
