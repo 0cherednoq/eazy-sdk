@@ -9,7 +9,7 @@ sources:
 api_fingerprint: "sha256:7a2e802983e1b45e134a7cdddf6d58d55d489a225d31b3fd036b8074292546ad"
 ---
 
-`Client` принимает Zapros `BaseHandler`, а `AsyncClient` — `AsyncBaseHandler`. Handler является
+`Client` принимает Zapros `BaseHandler`, а `AsyncClient` принимает `AsyncBaseHandler`. Handler является
 единственной transport extension boundary.
 
 ```python
@@ -30,16 +30,16 @@ client = AsyncClient(
 `ClientConfig` состоит из трёх групп по владельцу: `resilience=` (`retry`, `auth_retries`,
 `max_redirects`, `timeout`, `rate_limiter`), `security=` (guard/anti-bot; `Security.of(...)`
 понижает установочные guard'ы) и `hooks=` (`middleware`). Аутентификация, ключи подписи и DI живут
-в `Identity`; библиотека моделей — в `Serialization` на корне. Плоских полей у конфига больше нет.
+в `Identity`; библиотека моделей находится в `Serialization` на корне. Плоских полей у конфига больше нет.
 
-Рядом с группами живут две host-scoped карты: `crypto=` (payload-crypto по адресу) и `errors=` —
+Рядом с группами находятся две карты, ограниченные хостом: `crypto=` для шифрования по адресу и `errors=` для
 ошибки, которыми хост отвечает независимо от того, какой SDK с ним говорит:
 
 ```python
 config = ClientConfig(errors={"books.example": {429: RateLimited, 503: AccessBlocked}})
 ```
 
-Ключ — точный хост, без порта. Эти кейсы — самый внешний слой: при совпадении статуса выигрывает
+Ключом служит точный хост без порта. Эти варианты образуют самый внешний слой: при совпадении статуса выигрывает
 кейс операции, затем её сервиса, и только потом клиентский.
 
 `CallOptions` управляет timeout, retry/redirect budgets и replay одного вызова. Auth,
@@ -48,7 +48,7 @@ middleware, retry, redirect, rate limit и protection остаются в общ
 
 ## Root SDK convenience
 
-`SyncRoot`/`AsyncRoot` — композиция роутеров. Корень не объявляет операций и не выдаёт клиентов
+`SyncRoot` и `AsyncRoot` составляют композицию роутеров. Корень не объявляет операций и не выдаёт клиентов
 наружу: в публичной поверхности SDK видны только роутеры.
 
 ```python
@@ -65,12 +65,12 @@ await client.aclose()
 ```
 
 Группы создаются лениво. Адрес операции берётся из роутера, если он его объявил, иначе из
-клиента — см. {doc}`Мультисервисный SDK </guide/multi-service>`. Ownership задаётся явно:
+клиента. См. {doc}`Мультисервисный SDK </guide/multi-service>`. Владение задаётся явно:
 
 | Конструктор | Кто закрывает ресурсы |
 |---|---|
 | `Root(client)` | client остаётся у caller |
-| `Root.from_handler(..., owns_handler=True)` | root → созданный им client → handler |
+| `Root.from_handler(..., owns_handler=True)` | root владеет созданным client, а client владеет handler |
 | `Root.from_handler(..., owns_handler=False)` | root закрывает созданный client, caller сохраняет handler |
 
 `close()`/`aclose()` закрывает только те клиенты, которые корень создал сам, и безопасен при
@@ -91,11 +91,11 @@ Root и API groups не сериализуют пользовательские 
 `Client` не создаёт event loop вообще. Синхронный драйвер шагает ту же спецификацию исполнения
 на вызывающем потоке: на синхронном транспорте в конвейере ничто не приостанавливается, поэтому
 цикл не нужен. Отсюда два следствия. Первое: `Client` можно вызывать из кода, где loop уже
-работает (Jupyter, обработчик `asyncio`-сервера) — установленный вызывающим loop не трогается.
+работает, например в Jupyter или обработчике `asyncio`-сервера. Установленный вызывающим цикл событий не меняется.
 Второе: то, что действительно ждёт (backoff, задержка rate limiter, занятый protection-лок),
 блокирует поток, а не крутит loop.
 
-Чего синхронный драйвер не делает — не исполняет настоящий асинхронный ввод-вывод внутри
+Синхронный драйвер не исполняет настоящий асинхронный ввод-вывод внутри
 колбэка. Solver, middleware или auth service, который сам уходит в сеть через `await`,
 приостанавливается, и тогда поднимается `SynchronousSuspensionError`: используйте `AsyncClient`
 или сделайте этот колбэк синхронным. Несколько потоков могут делить один `Client`; single-flight
@@ -115,7 +115,7 @@ Managed protection state принадлежит одному client/handler sess
 client. Proxy, User-Agent и impersonation задаются при construction handler-а: фабрики
 `Client.httpx(proxy=...)`, `Client.requests(proxy=...)`, `Client.curl_cffi(proxy=..., impersonate=...)`
 и их async-варианты настраивают создаваемую сессию и объявляют результат в
-`HandlerProfile.proxy`/`HandlerProfile.impersonation` (для чужой сессии `proxy=` — только
+`HandlerProfile.proxy` и `HandlerProfile.impersonation` (для чужой сессии `proxy=` служит только
 декларация того, что она уже использует). Именно объявленный proxy входит в transport identity
 managed clearance. Для rotation создайте новый handler и client; per-attempt transport identity
 provider отсутствует.
@@ -132,9 +132,9 @@ response = await client.request(
 )
 ```
 
-Единственный ad-hoc метод клиента — `request(method, url, *, params, headers, cookies, json,
+Единственный метод прямого вызова клиента: `request(method, url, *, params, headers, cookies, json,
 content, options)`; он возвращает `NormalizedResponse`. Отдельных verb-методов (`get`, `post`, ...)
-у `Client`/`AsyncClient` нет — HTTP-метод передаётся первым аргументом. Повторяющиеся query names
+у `Client` и `AsyncClient` нет. HTTP-метод передаётся первым аргументом. Повторяющиеся имена query
 запрещены; collection требует явного scalar codec.
 
 ## Stability и extension boundaries

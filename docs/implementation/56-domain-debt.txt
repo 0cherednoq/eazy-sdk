@@ -1,7 +1,4 @@
 # Phase 56.2.5 ratchet. Remove entries when their legacy example or page is migrated.
-docs-site/src/content/docs/reference/api/signing.mdx:59: pay.shop.com
-docs-site/src/content/docs/reference/api/testing.mdx:49: api.test
-docs-site/src/content/docs/reference/api/testing.mdx:53: api.test
 examples/books_to_scrape.py:15: books.toscrape.com
 examples/dummyjson_auth.py:27: dummyjson.com
 examples/dummyjson_session_auth.py:44: dummyjson.com

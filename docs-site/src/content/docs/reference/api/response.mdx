@@ -30,13 +30,14 @@ class UsersApi(AsyncApi):
     get_user = op(GetUser)
 ```
 
-Семья читается из модели: модель с CSS/XPath-селекторами — документ, любая другая — JSON, `str` —
-текст, `bytes` — байты, `None` — пустое тело. Явные `Json(status=201)`, `Html(...)`, `Text()`
+Семья читается из модели: модель с CSS/XPath-селекторами означает документ, любая другая модель
+означает JSON, `str` означает текст, `bytes` означает байты, а `None` означает пустое тело. Явные
+`Json(status=201)`, `Html(...)`, `Text()`
 нужны, когда важны статус, медиа-тип или условие `when=`/`accept=`.
 
 ## Несколько случаев
 
-`success=`, `errors=` и `fallback=` принимают мэппинг «селектор → случай»:
+`success=`, `errors=` и `fallback=` принимают мэппинг селектора на случай:
 
 ```python
 __http__ = Http.get(
@@ -47,16 +48,16 @@ __http__ = Http.get(
 )
 ```
 
-Ключ — статус, диапазон (`"4xx"`, `"5xx"`) или `DEFAULT`; `DEFAULT` допустим только в `fallback=`.
-Значение — модель, представление, класс `ApiError[Model]`, пара `(Model, factory)` или их список.
+Ключом служит статус, диапазон (`"4xx"`, `"5xx"`) или `DEFAULT`; `DEFAULT` допустим только в `fallback=`.
+Значение может быть моделью, представлением, классом `ApiError[Model]`, парой `(Model, factory)` или их списком.
 Эквивалентная запись через `Responses(success=(Success(...),), errors=(Error(...),))` остаётся
-доступной — это то же значение, собранное вручную.
+доступной: это то же значение, собранное вручную.
 
 | Representation | Результат |
 |---|---|
 | `Json(Model, media_type=...)` | dataclass, Pydantic, msgspec или custom model adapter |
-| `Html(Model, media_type=...)` | CSS/XPath extraction → model adapter |
-| `Extracted(Model, using=...)` | Custom primitive extractor → model adapter |
+| `Html(Model, media_type=...)` | CSS/XPath extraction с последующим model adapter |
+| `Extracted(Model, using=...)` | Custom primitive extractor с последующим model adapter |
 | `Parsed(Model, using=...)` | Custom response parser |
 | `Text(media_type=...)` | `str` |
 | `Bytes(media_type=...)` | `bytes` |
@@ -88,23 +89,24 @@ Pyright. Для multi-model parser реализуйте advanced `ResponseParser
 
 ## Результаты и ошибки
 
-Обычный вызов возвращает значение success case. `method.with_response(...)` возвращает
+Обычный вызов даёт значение success case. `method.with_response(...)` возвращает
 `ResponseEnvelope`: `value`, `status_code`, `headers` и normalized raw `response`.
 
-`ApiError[T]` содержит typed `.error` и безопасный `.context`. Свойство `.summary` доступно
-всегда и возвращает `ErrorSummary` — operation_id, статус, media type, номер попытки, метод и
-редактированный target. Именно она переживает `pickle`: сериализованное исключение не несёт ни
-тела ответа, ни его заголовков, а восстановленный `.context` — это `ErrorSummary`.
+В `ApiError[T]` доступны typed `.error` и безопасный `.context`. Свойство `.summary` всегда доступно
+и даёт `ErrorSummary` с operation_id, статусом, media type, номером попытки, методом и
+редактированным target. Именно она переживает `pickle`: сериализованное исключение не несёт ни
+тела ответа, ни его заголовков, а восстановленный `.context` содержит `ErrorSummary`.
 
 Ошибки классификации разделены:
 
-- `UnexpectedResponseError` — подходящей case нет; если ответ пришёл документной медиа, а все
+- `UnexpectedResponseError`: подходящей case нет; если ответ пришёл документной медиа, а все
   кандидаты структурные, сообщение это называет;
-- `MalformedResponseError` — body не разобран выбранным parser/extractor;
-- `AmbiguousResponseError` — совпало больше одной одинаково специфичной case. Специфичность
-  считается так: заявленный критерий > его отсутствие, точный статус > диапазон > `DEFAULT`,
-  явная медиа > wildcard > её отсутствие, кейс операции > кейс сервиса > кейс клиента. Критерий —
-  это `when=`, `accept=` или теги, которые объявила модель.
+- `MalformedResponseError`: body не разобран выбранным parser/extractor;
+- `AmbiguousResponseError`: совпало больше одной одинаково специфичной case. При сравнении наличие
+  заявленного критерия важнее его отсутствия, точный статус важнее диапазона, а диапазон важнее
+  `DEFAULT`. Явная медиа важнее wildcard и отсутствия медиа; кейс операции важнее кейса сервиса,
+  а кейс сервиса важнее кейса клиента. Критерием служит `when=`, `accept=` или тег, который
+  объявила модель.
 
 Parsing session создаётся один раз на response attempt, поэтому custom parser или extractor может
 кэшировать decoded document по identity.

@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.8.2–56.8.4. No blockers; next step is 56.8.2.
+56.8.3–56.8.4. No blockers; next step is the full gate run in 56.8.3.
 
 ### Verification evidence (56.5.5)
 
@@ -5820,3 +5820,15 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/index.mdx` | PASS: 0 errors, 0 warnings. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-homepage` | PASS: 112 sources, no warnings; generated HTML links the new SVG favicon. |
 | live Playwright inspection of `/` | PASS: all four cards and destinations are present; console has 0 errors and 0 warnings. |
+
+### Verification evidence (56.8.2)
+
+| Command | Result |
+|---|---|
+| reference queue and debt audit | PASS: all 21 API pages, migration and changelog have complete queue rows; prose and code-block debt snapshots are empty; reference-domain debt is removed. |
+| `scripts/lint_docs_prose.py` over 23 reference pages | PASS: 0 errors on every page. Stylistic warnings on dry API tables and short entries remain intentionally outside the hard bans required by plan section 6. |
+| focused phase-56 snapshots, probes, lint-wrapper and freshness tests | PASS: 39 passed in 23.21s. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 113 pages. |
+| `uv run --group docs sphinx-build -E -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-reference-final` | PASS: 113 sources, no warnings. |
+| `git diff --check` | PASS. |

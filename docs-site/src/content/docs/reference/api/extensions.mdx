@@ -6,14 +6,14 @@ sources:
 api_fingerprint: "sha256:012dbcc053bce0d35124b6e8fcc2d99267c63c8053981242c1d42902d1691397"
 ---
 
-`eazy_sdk.ext` — узкая implementation boundary для авторов расширений. Это не сокращённый импорт
+`eazy_sdk.ext` задаёт узкую границу реализации для авторов расширений. Это не сокращённый импорт
 всего SDK и не доступ к compiler/runtime. Декларативные объекты импортируются из
 `eazy_sdk.request`, `eazy_sdk.response`, `eazy_sdk.protection` и `eazy_sdk.handlers`.
 
 :::{warning} Alpha-контракт
 Проект находится в alpha. Все имена из `eazy_sdk.ext.__all__` публичны в пределах конкретной
 версии, но могут измениться в следующем alpha-релизе без compatibility alias. Всё, чего нет в
-`__all__`, а также `eazy_sdk.compile`, executor stages и prepared/compiler records — private.
+`__all__`, а также `eazy_sdk.compile`, стадии исполнителя и записи подготовки или компиляции остаются закрытыми.
 :::
 
 ## Выберите семейство
@@ -31,7 +31,7 @@ api_fingerprint: "sha256:012dbcc053bce0d35124b6e8fcc2d99267c63c8053981242c1d4290
 ## Scope и predicate context
 
 `RequestScope` фильтрует правила по scheme, host, path prefix, HTTP method и operation id.
-`ScopeContext` — фактический request context для проверки. Его поле `operation` содержит
+`ScopeContext` содержит фактический контекст запроса для проверки. Его поле `operation` содержит
 `OperationIdentity`; сравнивайте `operation.operation_id`, не identity Python-объекта.
 
 ```python
@@ -97,9 +97,9 @@ prepared request и не должен выполнять network I/O. Для в�
 `ResponseParser.bind(context)` возвращает `BoundResponseParser` для одного ответа.
 `try_parse(Model)` может вызываться для нескольких candidate models. Он возвращает ровно один из:
 
-- `ParsedValue(value)` — model распознана;
-- `NoMatch()` — parser не применим к этой model или response;
-- `Malformed(cause, details=None)` — format подходил, но данные повреждены.
+- `ParsedValue(value)`: модель распознана;
+- `NoMatch()`: парсер не применим к модели или ответу;
+- `Malformed(cause, details=None)`: формат подходил, но данные повреждены.
 
 Union этих трёх результатов называется `ParseAttempt[T]`. Не бросайте parse exception наружу:
 заверните его в `Malformed`. Для callback, заранее связанного с одной model, используйте
@@ -147,7 +147,7 @@ RESPONSES = Responses(
 ```
 
 `ResponseExtractor` отличается тем, что возвращает semantic primitives для последующей загрузки
-model через registry. Его bound-часть — `BoundResponseExtractor.extract(model)`. Оба протокола
+модель через реестр. Связанная часть вызывается как `BoundResponseExtractor.extract(model)`. Оба протокола
 публичны также из `eazy_sdk.response`, потому что `Extracted(...)` является обычной response
 декларацией.
 
@@ -193,29 +193,29 @@ VENDOR_SIGNATURE = custom_signature(
 
 Передайте `VENDOR_SIGNATURE` в `signing=(VENDOR_SIGNATURE,)` объявления операции. Runtime проверяет
 undeclared/missing outputs до отправки. `SigningInput` не даёт мутировать prepared request;
-`SignatureResult` не может добавлять новый target, который не был зарезервирован compiler-ом.
+`SignatureResult` не может добавлять новую цель, которую не зарезервировал компилятор.
 
 ## Матрица стабильности
 
-| Слой | Namespace | Статус | Что это значит |
+| Слой | Пространство имён | Статус | Что это значит |
 |---|---|---|---|
-| Публичный API | `eazy_sdk`, `eazy_sdk.request`, `eazy_sdk.response`, `eazy_sdk.protection`, `eazy_sdk.auth`, `eazy_sdk.clients`, `eazy_sdk.policies`, `eazy_sdk.middleware`, `eazy_sdk.websocket`, `eazy_sdk.crypto` | Stable-in-alpha | Ломающие изменения только между alpha-релизами и всегда с записью в CHANGELOG |
-| Extension SPI | `eazy_sdk.ext` | Stable-in-alpha | Ровно 23 имени из таблицы ниже; расширения пишутся только против них |
-| Advanced protection SPI | `eazy_sdk.protection.advanced` | Provisional | Exact allowlist; lowering-контракты для presets и генераторов, могут меняться при смене executor |
-| Ядро | `eazy_sdk.core` | Provisional | Kernel/plan/errors без зависимостей; используется `ext` и плагинами, но не является authoring-API |
-| Компилятор | `eazy_sdk.compile` | Private | Не импортируйте из приложений и плагинов; `absence_audit` запрещает это плагинам |
-| Внутренности клиентов | `eazy_sdk.clients._core`, `executor`, `_http_stages`, `websocket._client_*` | Private | Могут меняться в любом релизе |
+| Публичный API | `eazy_sdk`, `eazy_sdk.request`, `eazy_sdk.response`, `eazy_sdk.protection`, `eazy_sdk.auth`, `eazy_sdk.clients`, `eazy_sdk.policies`, `eazy_sdk.middleware`, `eazy_sdk.websocket`, `eazy_sdk.crypto` | Стабилен в пределах альфы | Ломающие изменения происходят только между альфа-релизами и записываются в CHANGELOG |
+| SPI расширений | `eazy_sdk.ext` | Стабилен в пределах альфы | Расширения используют только 23 имени из таблицы ниже |
+| Расширенный SPI защит | `eazy_sdk.protection.advanced` | Предварительный | Точный список контрактов понижения для пресетов и генераторов может меняться вместе с исполнителем |
+| Ядро | `eazy_sdk.core` | Предварительный | План, ошибки и чистое ядро без зависимостей используются `ext` и плагинами, но не входят в API автора SDK |
+| Компилятор | `eazy_sdk.compile` | Закрытый | Не импортируйте из приложений и плагинов; `absence_audit` запрещает такие импорты плагинам |
+| Внутренности клиентов | `eazy_sdk.clients._core`, `executor`, `_http_stages`, `websocket._client_*` | Закрытые | Могут меняться в любом релизе |
 
-## Полный экспорт namespace
+## Полный экспорт пространства имён
 
 | Семейство | Все имена в `eazy_sdk.ext.__all__` |
 |---|---|
-| Scope/predicate | `OperationIdentity`, `RequestScope`, `ScopeContext` |
-| Codecs | `BodyCodec`, `EncodeContext`, `ScalarCodec`, `ScalarEncodeContext` |
-| Response | `BoundResponseExtractor`, `BoundResponseParser`, `Malformed`, `NoMatch`, `ParseAttempt`, `ParsedValue`, `ResponseExtractor`, `ResponseParser` |
-| Signing | `CustomCanonicalizer`, `CustomRequestSigner`, `SignatureResult`, `SigningInput`, `custom_base`, `custom_signature`, `read_set`, `whole_prepared_request` |
+| Область и предикат | `OperationIdentity`, `RequestScope`, `ScopeContext` |
+| Кодеки | `BodyCodec`, `EncodeContext`, `ScalarCodec`, `ScalarEncodeContext` |
+| Ответ | `BoundResponseExtractor`, `BoundResponseParser`, `Malformed`, `NoMatch`, `ParseAttempt`, `ParsedValue`, `ResponseExtractor`, `ResponseParser` |
+| Подпись | `CustomCanonicalizer`, `CustomRequestSigner`, `SignatureResult`, `SigningInput`, `custom_base`, `custom_signature`, `read_set`, `whole_prepared_request` |
 
-`ExecutionCore`, `ExecutionRuntime`, `PreparedRequest`, `RequestPreparer`, dependency caches/lowering,
-auth resolution, session storage и `compile_*`/`select_*`/`sign_prepared` не являются SPI. Тесты SDK,
-которые намеренно проверяют эти стадии, импортируют их из owning internal modules и принимают риск
-поломки на любом commit.
+`ExecutionCore`, `ExecutionRuntime`, `PreparedRequest`, `RequestPreparer`, кеши и понижение
+зависимостей, разрешение авторизации, хранение сессии и функции
+`compile_*`/`select_*`/`sign_prepared` не являются SPI. Тесты SDK, которые намеренно проверяют эти
+стадии, импортируют их из внутренних модулей-владельцев и принимают риск поломки на любом коммите.

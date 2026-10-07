@@ -204,7 +204,7 @@ Eazy SDK не включает aliases принудительно. Наприм�
 мутирует переданный object. Nested models, lists, mappings, enums, dates и datetimes рекурсивно
 приводятся к semantic primitives.
 
-У Pydantic `exclude_unset` — аргумент `model_dump`, а не настройка `ConfigDict`. Для плоского
+У Pydantic `exclude_unset` является аргументом `model_dump`, а не настройкой `ConfigDict`. Для плоского
 частичного payload объявите поля операции как `Omittable[T] = UNSET`: `UNSET` не уходит на
 провод, а `None` уходит как `null`. Если такая семантика
 нужна вложенному model-owned документу, задайте её в его `model_dump`/`model_serializer` или в

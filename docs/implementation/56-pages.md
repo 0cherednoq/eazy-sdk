@@ -12,27 +12,27 @@
 
 | Страница | Новый путь | перенос | примеры | текст | линтер | слепая |
 |---|---|---|---|---|---|---|
-| `api-reference/api-methods` | `reference/api/api-methods` | ok |  |  |  | n/a |
-| `api-reference/auth` | `reference/api/auth` | ok |  |  |  | n/a |
-| `api-reference/browser` | `reference/api/browser` | ok |  |  |  | n/a |
-| `api-reference/clients` | `reference/api/clients` | ok |  |  |  | n/a |
-| `api-reference/crypto` | `reference/api/crypto` | ok |  |  |  | n/a |
-| `api-reference/dependencies` | `reference/api/dependencies` | ok |  |  |  | n/a |
-| `api-reference/extensions` | `reference/api/extensions` | ok |  |  |  | n/a |
-| `api-reference/index` | `reference/api/index` | ok |  |  |  | n/a |
-| `api-reference/middleware` | `reference/api/middleware` | ok |  |  |  | n/a |
-| `api-reference/models-codecs` | `reference/api/models-codecs` | ok |  |  |  | n/a |
-| `api-reference/openapi` | `reference/api/openapi` | ok |  |  |  | n/a |
-| `api-reference/protection` | `reference/api/protection` | ok |  |  |  | n/a |
-| `api-reference/registration` | `reference/api/registration` | ok |  |  |  | n/a |
-| `api-reference/request` | `reference/api/request` | ok |  |  |  | n/a |
-| `api-reference/response` | `reference/api/response` | ok |  |  |  | n/a |
-| `api-reference/session` | `reference/api/session` | ok |  |  |  | n/a |
-| `api-reference/signing` | `reference/api/signing` | ok |  |  |  | n/a |
-| `api-reference/sqlmodel` | `reference/api/sqlmodel` | ok |  |  |  | n/a |
-| `api-reference/testing` | `reference/api/testing` | ok |  |  |  | n/a |
-| `api-reference/verification` | `reference/api/verification` | ok |  |  |  | n/a |
-| `api-reference/xml` | `reference/api/xml` | ok |  |  |  | n/a |
+| `api-reference/api-methods` | `reference/api/api-methods` | ok | n/a | ok | ok | n/a |
+| `api-reference/auth` | `reference/api/auth` | ok | n/a | ok | ok | n/a |
+| `api-reference/browser` | `reference/api/browser` | ok | n/a | ok | ok | n/a |
+| `api-reference/clients` | `reference/api/clients` | ok | n/a | ok | ok | n/a |
+| `api-reference/crypto` | `reference/api/crypto` | ok | n/a | ok | ok | n/a |
+| `api-reference/dependencies` | `reference/api/dependencies` | ok | n/a | ok | ok | n/a |
+| `api-reference/extensions` | `reference/api/extensions` | ok | n/a | ok | ok | n/a |
+| `api-reference/index` | `reference/api/index` | ok | n/a | ok | ok | n/a |
+| `api-reference/middleware` | `reference/api/middleware` | ok | n/a | ok | ok | n/a |
+| `api-reference/models-codecs` | `reference/api/models-codecs` | ok | n/a | ok | ok | n/a |
+| `api-reference/openapi` | `reference/api/openapi` | ok | n/a | ok | ok | n/a |
+| `api-reference/protection` | `reference/api/protection` | ok | n/a | ok | ok | n/a |
+| `api-reference/registration` | `reference/api/registration` | ok | n/a | ok | ok | n/a |
+| `api-reference/request` | `reference/api/request` | ok | n/a | ok | ok | n/a |
+| `api-reference/response` | `reference/api/response` | ok | n/a | ok | ok | n/a |
+| `api-reference/session` | `reference/api/session` | ok | n/a | ok | ok | n/a |
+| `api-reference/signing` | `reference/api/signing` | ok | n/a | ok | ok | n/a |
+| `api-reference/sqlmodel` | `reference/api/sqlmodel` | ok | n/a | ok | ok | n/a |
+| `api-reference/testing` | `reference/api/testing` | ok | n/a | ok | ok | n/a |
+| `api-reference/verification` | `reference/api/verification` | ok | n/a | ok | ok | n/a |
+| `api-reference/xml` | `reference/api/xml` | ok | n/a | ok | ok | n/a |
 | `auth/api-key` | `guide/auth/api-key` | ok | ok | ok | ok | n/a |
 | `auth/basic` | `guide/auth/basic` | ok | ok | ok | ok | n/a |
 | `auth/bearer` | `guide/auth/bearer` | ok | ok | ok | ok | n/a |
@@ -97,7 +97,7 @@
 | `more/examples/json-auth` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/signed-api` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/store-sdk` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
-| `more/migration` | `reference/migration` | ok |  |  |  | n/a |
+| `more/migration` | `reference/migration` | ok | n/a | ok | ok | n/a |
 | `signing` | `guide/signing` | ok | ok | ok | ok | n/a |
 
 ## Новые страницы
@@ -134,4 +134,4 @@
 | `architecture/identity` | 56.7 | ok | n/a | ok | ok | n/a |
 | `architecture/extension-points` | 56.7 | ok | n/a | ok | ok | n/a |
 | `architecture/browser` | 56.7 | ok | n/a | ok | ok | n/a |
-| `reference/changelog` | 56.8 |  |  |  |  | n/a |
+| `reference/changelog` | 56.8 | ok | n/a | ok | ok | n/a |

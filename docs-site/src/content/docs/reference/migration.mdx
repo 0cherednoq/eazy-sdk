@@ -5,21 +5,21 @@ freshness: false
 ---
 
 Eazy SDK в альфе переименовывает без deprecated-алиасов: старое имя исчезает, `ImportError`
-или `AttributeError` показывает, что именно нужно поменять. Эта страница — единственная
-подсказка. Каждая строка таблицы проверяется тестом: «стало» импортируется, «было» отсутствует.
+или `AttributeError` показывает, что именно нужно поменять. Эта страница служит единственной
+подсказкой. Каждая строка таблицы проверяется тестом: «стало» импортируется, «было» отсутствует.
 
-## 0.2.0a5 → 0.3.0
+## Переход с 0.2.0a5 на 0.3.0
 
-Корень SDK стал отдельным типом. `SyncApi`/`AsyncApi` — это роутер: операции и атрибуты сервиса
+Корень SDK стал отдельным типом. `SyncApi` и `AsyncApi` являются роутерами: операции и атрибуты сервиса
 (`base_url`, `errors`, `security`, `signing`, `crypto`, `wire`, `signed`, `allow`). Композиция,
 владение клиентами и привязки живут в `SyncRoot`/`AsyncRoot`; `api_group(...)` объявляется только
-на корне. Подробности — {doc}`Мультисервисный SDK </guide/multi-service>`.
+на корне. Подробности: {doc}`Мультисервисный SDK </guide/multi-service>`.
 
 | Было | Стало | Комментарий |
 |---|---|---|
 | `eazy_sdk.SyncApi.from_handler` | `eazy_sdk.SyncRoot.from_handler` | Фабрика переехала на корень; она же создаёт и закрывает свой клиент. |
 | `eazy_sdk.AsyncApi.from_handler` | `eazy_sdk.AsyncRoot.from_handler` | То же для async. |
-| `eazy_sdk.SyncApi.from_client` | `eazy_sdk.SyncRoot` | Второго способа собрать корень нет: `ShopSdk(client)` — обычный конструктор. |
+| `eazy_sdk.SyncApi.from_client` | `eazy_sdk.SyncRoot` | Второго способа собрать корень нет: `ShopSdk(client)` вызывает обычный конструктор. |
 | `eazy_sdk.AsyncApi.from_client` | `eazy_sdk.AsyncRoot` | То же для async. |
 | `eazy_sdk.SyncApi.close` | `eazy_sdk.SyncRoot.close` | Роутер ничем не владеет; закрывает ресурсы корень. |
 | `eazy_sdk.AsyncApi.aclose` | `eazy_sdk.AsyncRoot.aclose` | То же для async. |
@@ -27,19 +27,19 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 
 Аутентификация уехала из транспорта в session scope. `Identity` объявляет auth-схемы, ключи
 подписи, DI и observer; он передаётся корню (`ShopSdk(client, identity=…)`) или отдельному роутеру
-(`UsersApi(client, identity=…)`). Один `Identity` обслуживает все сервисы корня — и когда они делят
-клиент, и когда у каждого свой.
+(`UsersApi(client, identity=…)`). Один `Identity` обслуживает все сервисы корня как при общем
+клиенте, так и при отдельном клиенте у каждого сервиса.
 
 | Было | Стало | Комментарий |
 |---|---|---|
 | `eazy_sdk.ClientConfig.auth` | `eazy_sdk.Identity.auth` | Кортеж настроенных `Auth`; `session_auth(...)`/`SessionScheme.configure(...)` не изменились. |
-| `eazy_sdk.ClientConfig.key_provider` | `eazy_sdk.Identity.key_provider` | Алгоритм подписи — контракт API, ключ — секрет вызывающей стороны. |
+| `eazy_sdk.ClientConfig.key_provider` | `eazy_sdk.Identity.key_provider` | Алгоритм подписи входит в контракт API; ключ остаётся секретом вызывающей стороны. |
 | `eazy_sdk.ClientConfig.dependencies` | `eazy_sdk.Identity.dependencies` | DI зависит от окружения вызова, а не от пула соединений. |
 | `eazy_sdk.ClientConfig.observer` | `eazy_sdk.Identity.observer` | Наблюдатель следует за вызывающей стороной. |
 | `eazy_sdk.Client.bind_sdk` | `eazy_sdk.Identity` | Фабрику scoped SDK регистрирует тот, кому передан `identity=`. |
 
 Корень `eazy_sdk` экспортирует 39 имён вместо 55: то, что нужно автору SDK в первый час. Всё
-остальное импортируется из своего модуля — это не сокрытие, а отказ от второго имени для одной
+остальное импортируется из своего модуля. Это не сокрытие, а отказ от второго имени для одной
 вещи.
 
 | Было | Стало | Комментарий |
@@ -75,64 +75,64 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.ClientConfig.protection` | `eazy_sdk.Security.protection` | Пустой `ProtectionBundle` вместо `None`; `ClientConfig.bundle` не изменился. |
 | `eazy_sdk.ClientConfig.guards` | `eazy_sdk.Security.of` | Публичного поля, которое всегда пусто, больше нет. |
 | `eazy_sdk.ClientConfig.middleware` | `eazy_sdk.Hooks.middleware` | |
-| `eazy_sdk.ClientConfig.models` | `eazy_sdk.Serialization.models` | Библиотека моделей — реализация SDK, объявляется на корне. |
+| `eazy_sdk.ClientConfig.models` | `eazy_sdk.Serialization.models` | Библиотека моделей относится к реализации SDK и объявляется на корне. |
 | `eazy_sdk.ClientConfig.profile` | `eazy_sdk.request.Wire` | `WireProfile` был наполовину мёртв: фаза 48 заменила его контрактом представления на операции. |
 
-Слово «wire» теперь означает ровно одно — представление запроса на проводе. Всё, что влияет на
+Слово «wire» теперь означает ровно одно понятие: представление запроса на проводе. Всё, что влияет на
 байты, объявляется одним `Wire` на операции (и наследуется от роутера и миксина сервиса); всё, что
-не влияет, — одним `Serialization` на корне. Подпись объявляется только по месту: адресных правил
+не влияет, задаётся одним `Serialization` на корне. Подпись указывается только по месту: адресных правил
 `sign(scope=…)` больше нет, потому что опечатка в `hosts=` оставляла запрос молча неподписанным.
-Подробности — {doc}`Представление запроса </guide/requests/representation>`.
+Подробности: {doc}`Представление запроса </guide/requests/representation>`.
 
 | Было | Стало | Комментарий |
 |---|---|---|
 | `eazy_sdk.request.WireOptions` | `eazy_sdk.request.Wire` | `order=FieldOrder(query=…, header=…, cookie=…, body=…)`, `exact=`, `transport=`. |
 | `eazy_sdk.request.SigningRule` | `eazy_sdk.request.hmac_sha256` | Подпись объявляет операция или роутер параметром `signing=`; scoped-правил нет. |
-| `eazy_sdk.request.SigningOverride` | `eazy_sdk.SyncApi` | Переопределение — это объявление на более специфичном роутере. |
+| `eazy_sdk.request.SigningOverride` | `eazy_sdk.SyncApi` | Переопределение задаётся объявлением на более специфичном роутере. |
 | `eazy_sdk.crypto.CryptoWire` | `eazy_sdk.crypto.Encrypted` | Тип шифрованного представления; у HTTP-операции это `wire=Wire(encrypted=…)`. |
-| `eazy_sdk.crypto.CryptoRule.wire` | `eazy_sdk.crypto.CryptoRule.encrypted` | Одно имя для одного понятия и в HTTP, и в WebSocket: `ws.call(encrypted=…)` — тоже. |
+| `eazy_sdk.crypto.CryptoRule.wire` | `eazy_sdk.crypto.CryptoRule.encrypted` | Одно имя используется для одного понятия и в HTTP, и в WebSocket; `ws.call(encrypted=…)` использует его же. |
 
-Новое без замены: `eazy_sdk.serialization.Serialization(json=…, documents=(…,))` — JSON-бэкенд и парсер
+Новое без замены: `eazy_sdk.serialization.Serialization(json=…, documents=(…,))` задаёт JSON-бэкенд и парсер
 документов объявляются на корне, а бэкенд, не способный выполнить контракт операции, отвергается
 при компиляции, а не молча меняет байты.
 
 Понятие конверта уехало из транспорта: `Envelope`, `ProtocolMessage`, `CorrelationKey`,
 `ChannelKey`, `ControlKind` и `InboundMessageKind` живут в `eazy_sdk.protocols` и описывают
-протокол прикладного уровня, а не WebSocket. `WsProtocol` — это `Envelope` плюс то, что есть
-только у соединения. Подробности — {doc}`Протоколы и конверты </guide/protocols>`.
+протокол прикладного уровня, а не WebSocket. `WsProtocol` объединяет `Envelope` с тем, что есть
+только у соединения. Подробности: {doc}`Протоколы и конверты </guide/protocols>`.
 
 | Было | Стало | Комментарий |
 |---|---|---|
 | `eazy_sdk.websocket.CorrelationKey` | `eazy_sdk.protocols.CorrelationKey` | Вместе с `ChannelKey`. |
 | `eazy_sdk.websocket.ProtocolMessage` | `eazy_sdk.protocols.ProtocolMessage` | Вместе с `ControlKind` и `InboundMessageKind`. |
 
-Новое без замены: `eazy_sdk.protocols.JsonRpc` и `@api.rpc("method")` — сервис, у которого имя
-метода лежит в теле, описывается так же, как REST; `rpc_result`, `rpc_error(code, model)` и
+Новое без замены: `eazy_sdk.protocols.JsonRpc` и `@api.rpc("method")` позволяют описать сервис,
+у которого имя метода лежит в теле, так же, как REST; `rpc_result`, `rpc_error(code, model)` и
 `rpc_error_default(model)` строят обычные `Success`/`Error`, второй модели ошибок не появляется.
-Реализация `WsProtocol` получает метод `read(envelope)` — прежняя логика `inspect(frame)` после
-декодирования кадра.
+Реализация `WsProtocol` получает метод `read(envelope)`, куда переезжает прежняя логика
+`inspect(frame)` после декодирования кадра.
 
-Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` — привязка роутера или его миксина к
-другому клиенту и/или адресу при сборке (`bindings=(...)`).
+Новое без замены: `eazy_sdk.bind` и `eazy_sdk.Binding` задают привязку роутера или его миксина
+к другому клиенту и/или адресу при сборке (`bindings=(...)`).
 
-Операция стала классом. Поля класса — это поля запроса, `__http__` — всё, что операция объявляет,
+Операция стала классом. Поля класса являются полями запроса, а `__http__` содержит всё, что операция объявляет,
 а `op(...)` публикует её на роутере. Декоратор остался короткой формой того же самого: он
-синтезирует такой же frozen-класс. Причина — не стиль: у `TypedDict` нет значений по умолчанию и
+синтезирует такой же frozen-класс. Причина заключается не в стиле: у `TypedDict` нет значений по умолчанию и
 нет `default_factory`, а у класса есть, и сам запрос становится значением, которое можно построить,
-изменить и отправить. Подробности — {doc}`Запросы </guide/requests/index>` и {doc}`Запрос как
+изменить и отправить. Подробности: {doc}`Запросы </guide/requests/index>` и {doc}`Запрос как
 значение </guide/requests/values>`.
 
 | Было | Стало | Причина |
 |---|---|---|
-| `def op(self, **request: Unpack[Req]) -> T` | класс `Op(HttpOperation[T])` + `op(Op)` | defaults и `default_factory`, запрос как значение |
+| `def op(self, **request: Unpack[Req]) -> T` | класс `Op(HttpOperation[T])` вместе с `op(Op)` | defaults и `default_factory`, запрос как значение |
 | `responses=Responses(…)` | `success=…`, `errors=…`, `fallback=…` | один способ вместо трёх |
 | `response=Json()` | return-аннотация операции либо `success={200: Model}` | семья выводится из модели |
 | `Annotated[int, Query()]` | `Query[int]` или `Annotated[int, markers.Query("name")]` | короткая форма |
 | `eazy_sdk.Path` (дата-класс) | `eazy_sdk.request.markers.Path` | корневые имена стали алиасами |
 | `eazy_sdk.request.Query` (дата-класс) | `eazy_sdk.request.markers.Query` | то же для остальных маркеров |
 | `Inject(JsonField("x"), dep)` | `Inject(markers.JsonField("x"), dep)` | то же |
-| `Wire(projection=…)` | `projection=BodyProjection(target=…, using=…, encoding=…)` в `__http__` | проекция — представление, не байтовый контракт |
-| `BodyProjection(source=TypedDict, ...)` | `source` опускается: источник — класс операции | одно объявление полей |
+| `Wire(projection=…)` | `projection=BodyProjection(target=…, using=…, encoding=…)` в `__http__` | проекция описывает представление, а не байтовый контракт |
+| `BodyProjection(source=TypedDict, ...)` | `source` опускается, поскольку источником служит класс операции | одно объявление полей |
 | `eazy_sdk.Responses` | `eazy_sdk.response.Responses` | бюджет корня; вместе с `Success` и `Error` |
 | `eazy_sdk.Text` | `eazy_sdk.response.Text` | вместе с `Bytes` |
 | `Error(404, Json(Problem), exception=NotFound)` | `errors={404: NotFound}` при `class NotFound(ApiError[Model])` | модель объявлена один раз |
@@ -145,29 +145,29 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.response.HtmlExtractor` | `eazy_sdk.response.cases.HtmlExtractor` | вместе с `JsonExtractor` |
 | `eazy_sdk.request.TransportProtocol` | `eazy_sdk.request.wire.TransportProtocol` | читает компилятор, не автор SDK |
 | `eazy_sdk.crypto.ResolvedCrypto` | `eazy_sdk.crypto.core.ResolvedCrypto` | результат компиляции, не объявление |
-| `@ws.call("event") async def f(self, *, ...)` | по-прежнему работает; альтернатива — `class F(WsCall[T])` + `op(F)` | классы и для WebSocket |
+| `@ws.call("event") async def f(self, *, ...)` | по-прежнему работает; доступен класс `F(WsCall[T])` вместе с `op(F)` | классы и для WebSocket |
 | `ApiError.context` после pickle | `ApiError.summary` (`ErrorSummary`) | сводка вместо тела ответа и заголовков |
 
-Новое без замены: `Omittable[T] = UNSET` — единственный способ не отправить поле; `unwrap = "/data"`
-на сервисе — конверт снимается один раз; `ClientConfig(errors={host: {...}})` — ошибки, которыми
+Новое без замены: `Omittable[T] = UNSET` служит единственным способом не отправить поле;
+`unwrap = "/data"` на сервисе снимает конверт один раз; `ClientConfig(errors={host: {...}})` задаёт ошибки, которыми
 хост отвечает любому SDK; `RpcOperation`/`Rpc` в `eazy_sdk.protocols` и `WsCall`/`WsSubscribe`/
-`WsSend`/`Ws` в `eazy_sdk.websocket` — те же классы для других протоколов;
-`eazy-sdk-adaptix` — центральный `Retort` как адаптер моделей.
+`WsSend`/`Ws` в `eazy_sdk.websocket` предоставляют те же классы для других протоколов;
+`eazy-sdk-adaptix` предоставляет центральный `Retort` как адаптер моделей.
 
-## 0.2.0a4 → 0.2.0a5
+## Переход с 0.2.0a4 на 0.2.0a5
 
 | Было | Стало | Комментарий |
 |---|---|---|
 | `eazy_sdk.protection.advanced.ChallengeMalformedError` | `eazy_sdk.protection.advanced.ChallengeParseError` | Рантайм-ошибка «челлендж распознан, но не разобран». Детекторная `MalformedChallengeError` не изменилась. |
 | `eazy_sdk.handlers.EmitOptions.proxy` | `eazy_sdk.handlers.HandlerProfile.proxy` | Proxy объявляет handler (`Client.httpx(proxy=...)` и др.), а не per-call опции. Поля `verify_tls`/`stream_response` удалены: их никто не читал. |
-| `eazy_sdk.codegen.session_auth` | `eazy_sdk.codegen.generated_session_auth` | Codegen-хелпер получил своё имя; `eazy_sdk.auth.session_auth` — другая, authoring-функция. |
+| `eazy_sdk.codegen.session_auth` | `eazy_sdk.codegen.generated_session_auth` | Codegen-хелпер получил своё имя; `eazy_sdk.auth.session_auth` является другой authoring-функцией. |
 | `eazy_sdk.codegen.session_scheme` | `eazy_sdk.codegen.generated_session_scheme` | То же для схемы. Сгенерированные модули нужно перегенерировать. |
 | extra `eazy-sdk-html[parsel]` | зависимость `eazy-sdk-html` | `parsel` стал обязательной зависимостью плагина; `pip install "eazy-sdk[html]"` достаточно. |
 
 Новые параметры без брейков: `proxy=` у `Client.httpx/requests/curl_cffi` и
 `AsyncClient.httpx/curl_cffi`, `SolveContext.remaining()`.
 
-## 0.2.0a3 → 0.2.0a4
+## Переход с 0.2.0a3 на 0.2.0a4
 
 ### Фасад и клиенты
 
@@ -178,11 +178,11 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.Client.get` | `eazy_sdk.Client.request` | Сырые verb-методы (`get/post/...`) удалены; остался `request(method, url, ...)`. |
 | `eazy_sdk.AsyncClient.post` | `eazy_sdk.AsyncClient.request` | То же для async. |
 | `eazy_sdk.ClientConfig.challenge_policies` | `eazy_sdk.Security.of` | Guard'ы и presets ставятся через `security=Security.of(...)` (в 0.2.0a4 это было `guards=[...]`). |
-| `eazy_sdk.ClientConfig.challenge_solvers` | `eazy_sdk.Security.protection` | Advanced-политики и solver-биндинги — одна группа `ProtectionBundle`. |
+| `eazy_sdk.ClientConfig.challenge_solvers` | `eazy_sdk.Security.protection` | Advanced-политики и solver-биндинги входят в одну группу `ProtectionBundle`. |
 | `eazy_sdk.clients.AttemptLimitExceeded` | `eazy_sdk.clients.AttemptLimitError` | Единый суффикс `*Error`. |
 | `eazy_sdk.clients.RedirectLimitExceeded` | `eazy_sdk.clients.RedirectLimitError` | |
 | `eazy_sdk.handlers.TransportFailure` | `eazy_sdk.handlers.TransportError` | |
-| `eazy_sdk.exceptions.EazySDKError` | `eazy_sdk.exceptions.EazySdkContextError` | База всех исключений — `eazy_sdk.core.errors.EazySdkError`. |
+| `eazy_sdk.exceptions.EazySDKError` | `eazy_sdk.exceptions.EazySdkContextError` | Базой всех исключений служит `eazy_sdk.core.errors.EazySdkError`. |
 
 ### Protection
 
@@ -192,7 +192,7 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 | `eazy_sdk.protection.advanced.ProtectionSolver` | `eazy_sdk.protection.advanced.ChallengeSolver` | Один протокол солвера. |
 | `eazy_sdk.protection.advanced.SolutionCookieSet` | `eazy_sdk.protection.advanced.PrivateCookieSetBinding` | Фабрика `solution_cookie_set()` осталась. |
 
-Простой путь теперь — класс `Guard` из `eazy_sdk.protection` и `Security.of(...)`.
+Простой путь теперь использует класс `Guard` из `eazy_sdk.protection` и `Security.of(...)`.
 
 ### Вынесенные пакеты
 

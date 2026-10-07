@@ -1,6 +1,6 @@
 ---
 title: Browser
-description: Публичный API eazy-sdk-browser — спека, роутер, клиент, карта, признаки, вход и сессия, драйвер.
+description: "Публичный API eazy-sdk-browser: спека, роутер, клиент, карта, признаки, вход, сессия и драйвер."
 sources:
   - eazy_sdk_browser
 api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
@@ -13,15 +13,15 @@ Browser.act(content, /, *, at=None, scope=None, frames=(), outcomes=None, errors
             inherit_errors=True, handlers=(), requires=(), operation_id=None, tags=())
 Browser.goto(url, /, *, wait="load", at=None, ...)            # переход без карты: TContent = None
 Browser.goto(url, content, /, *, wait="load", at=None, ...)   # переход с картой для исходов
-# остальные ключевые параметры goto — те же, что у act
+# остальные ключевые параметры goto совпадают с act
 
 class BrowserOperation[TContent, TResult]:
     __browser__: ClassVar[_BrowserSpec[TContent]]
     async def act(self, content: TContent) -> None: ...
 ```
 
-Операция — `@dataclass(frozen=True, slots=True, kw_only=True)`. `TContent` — карта элементов
-(`None` у перехода без карты), `TResult` — union исходов или `None`.
+Операция оформляется как `@dataclass(frozen=True, slots=True, kw_only=True)`. `TContent` задаёт
+карту элементов (`None` у перехода без карты), `TResult` задаёт объединение исходов или `None`.
 
 ## Роутер и клиент
 
@@ -43,7 +43,7 @@ await execute(operation, driver, *, base_url="", config=None, options=None)
 
 `op(Operation)` из `eazy_sdk` публикует операцию на роутере: `portal.name(**fields,
 options=...)`, `portal.name.request(**fields)`, `portal.name.send(request)`. Правила
-`errors` операции стоят выше правил роутера; фреймы роутера — снаружи фреймов операции.
+`errors` операции стоят выше правил роутера; фреймы роутера охватывают фреймы операции.
 Роутер ставится в `AsyncRoot` через `api_group(...)` и `bind(Router, client=AsyncBrowserClient(...))`.
 
 ## Исходы
@@ -128,8 +128,8 @@ CookieAuthAdopter(scheme).adopt(cookie_session) -> Auth
 ```
 
 `BrowserLogin.session(...)` требует непустой `cookies`. Клиент с `session=` вызывает
-`ensure` перед операцией, а после отказа, для которого `is_expired` истинно, — `renew` и
-повтор, не больше `auth_retries` раз. `renew` вернул `None` — наружу уходит исходный отказ.
+`ensure` вызывается перед операцией. После отказа, для которого `is_expired` истинно, выполняются
+`renew` и повтор, но не больше `auth_retries` раз. Если `renew` вернул `None`, наружу уходит исходный отказ.
 
 ## Состояние сессии
 
@@ -167,7 +167,7 @@ CapturePolicy(*, resource_types=frozenset({"xhr", "fetch", "document"}),
               max_body_bytes=2 * 1024 * 1024, max_total_bytes=32 * 1024 * 1024)
 ```
 
-Один драйвер на страницу; он отписывается сам, когда страница закрывается. `capture=None` —
+Один драйвер соответствует одной странице; он отписывается при её закрытии. `capture=None`
 сеть не слушается, и профиль не обещает `Capability.network`. Тело больше `max_body_bytes`
 не читается: ответ лежит в буфере с `ResponseView.body_dropped=True`, а карта, которая его
 ждёт, бросает `ResponseMissingError` с причиной.
@@ -189,7 +189,7 @@ page-local ключ. `capture=None` понижает только `network` до
 | Ось | Уровень |
 |---|---|
 | `network` | `CAPTURE_VERIFIED` |
-| `session_state` | `BEST_EFFORT` — cookies контекста, localStorage текущего origin |
+| `session_state` | `BEST_EFFORT`: cookies контекста и localStorage текущего origin |
 | `page_requests` | `CAPTURE_VERIFIED` |
 | `navigation_events` | `CAPTURE_VERIFIED` |
 | `shadow_dom` | `UNSUPPORTED` |
@@ -204,10 +204,10 @@ lease и retry задачи остаются внешней оркестраци
 |---|---|---|
 | `BrowserDeclarationError` | `PlanError` | объявление собрано неверно (D-B-xx) |
 | `BrowserError` | `EazySdkError` | отказ во время сценария |
-| `PageError` | `BrowserError` | объявленный отказ страницы — база исключений SDK |
+| `PageError` | `BrowserError` | объявленный отказ страницы, база исключений SDK |
 | `NotReadyError` | `BrowserError` | условие готовности не выполнилось, правила отказа не объяснили |
-| `ElementNotFoundError` | `BrowserError` | ни один кандидат не нашёлся; `index` — номер узла коллекции |
-| `ResponseMissingError` | `BrowserError` | ответа API, на который ссылается карта, нет — или его тело больше лимита захвата (`reason`) |
+| `ElementNotFoundError` | `BrowserError` | ни один кандидат не найден; `index` содержит номер узла коллекции |
+| `ResponseMissingError` | `BrowserError` | ответ API из карты отсутствует либо его тело превышает лимит захвата (`reason`) |
 | `BrowserSessionError` | `BrowserError` | в сессии нет нужной куки или она истекла; объекту сессии принесли клиента из другого контекста |
 | `TransportError` | из `eazy_sdk.handlers` | драйвер отказал: закрытая страница, сеть, срок перехода |
 
@@ -218,13 +218,13 @@ lease и retry задачи остаются внешней оркестраци
 | D-B-01 | у операции нет `__browser__` |
 | D-B-02 | карта спеки не совпадает с параметром класса |
 | D-B-03 | поле карты без маркера |
-| D-B-04 | возможность, нужная карте или признакам, не объявлена — или объявлена и не используется |
+| D-B-04 | возможность, нужная карте или признакам, не объявлена либо объявлена и не используется |
 | D-B-05 | операция не frozen dataclass |
 | D-B-06 | браузерная операция опубликована не на `AsyncBrowserApi` |
 | D-B-07 | HTTP-операция опубликована на `AsyncBrowserApi` |
 | D-B-08 | тип результата класса не совпадает с union исходов |
 | D-B-09 | у операции-перехода есть `act` |
-| D-B-10 | `{имя}` в адресе перехода — не поле операции |
+| D-B-10 | `{имя}` в адресе перехода не является полем операции |
 
 ## Тестовые драйверы
 
@@ -232,5 +232,6 @@ lease и retry задачи остаются внешней оркестраци
 counts=, values=, attributes=)` пишет действия в `log`; `NetworkFakeDriver`,
 `NavigatingFakeDriver`, `StatefulFakeDriver`, `FetchFakeDriver`, `RichTextFakeDriver` добавляют
 по одной возможности. Несколько `StatefulFakeDriver(context=FakeContext(...))` с общим
-`FakeContext` — вкладки одного контекста: общие куки и журнал `cookie_writes`; `LyingDriver`, `StatelessLiar`, `FetchLiar`, `RichTextLiar` обещают
-возможность в профиле без метода — для проверки адаптеров.
+`FakeContext` моделирует вкладки одного контекста с общими cookies и журналом `cookie_writes`.
+`LyingDriver`, `StatelessLiar`, `FetchLiar`, `RichTextLiar` обещают возможность в профиле без
+метода и служат для проверки адаптеров.

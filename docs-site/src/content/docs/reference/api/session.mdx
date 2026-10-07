@@ -39,7 +39,7 @@ session_cookie(
 ) -> Auth
 ```
 
-`clock` — callable без аргументов, возвращающий timezone-aware `datetime`; по умолчанию
+`clock` принимает callable без аргументов, возвращающий timezone-aware `datetime`; по умолчанию
 `datetime.now(UTC)`. По нему вычисляется `expires_at` cookie из `Max-Age`/`Expires` и
 проверяется активность сохранённой session.
 

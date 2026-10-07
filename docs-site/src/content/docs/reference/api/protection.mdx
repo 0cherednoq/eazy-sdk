@@ -1,6 +1,6 @@
 ---
 title: Protection
-description: High-level response guards, replay policy, errors, and advanced lowering SPI.
+description: Защиты ответа, правила повтора, ошибки и расширенный SPI понижения.
 sources:
   - eazy_sdk.protection
   - eazy_sdk.protection.advanced
@@ -9,30 +9,29 @@ sources:
 api_fingerprint: "sha256:7f76e89bf3c7dbc5eb08f7e4ffda98e146813d77b8871503ef482a4d2b655d84"
 ---
 
-`eazy_sdk.protection` is the application-facing response-guard API. It contains solver and context
-protocols, the `challenge_guard()` builder, declarative solution destinations, replay helpers, and
-stage-specific errors. Compiler, registry, and persistence contracts are not exported here, and
-neither are `ChallengeParseError` and `AmbiguousChallengeError`: those two come only from
-`eazy_sdk.protection.advanced`.
+`eazy_sdk.protection` содержит прикладной API защит ответа: протоколы решателя и контекста,
+конструктор `challenge_guard()`, назначения решения, правила повтора и ошибки стадий. Контракты
+компилятора, реестра и хранения доступны только через `eazy_sdk.protection.advanced`. Там же
+находятся `ChallengeParseError` и `AmbiguousChallengeError`.
 
-## Installable guards
+## Устанавливаемые защиты
 
-| Symbol | Contract |
+| Символ | Контракт |
 |---|---|
-| `ChallengeSolver[TChallenge, TSolution]` | Async `solve(challenge, context) -> solution` protocol |
-| `SolveContext` | Operation identity, immutable response context, attempt number, `deadline`, `fetch`, `identity`, and `request_headers` |
-| `ProtectedFetch` | Async `(url, *, method, headers, body) -> NormalizedResponse` port over the client's own transport session |
-| `TransportIdentity` | Frozen `user_agent`/`proxy`/`impersonation` evidence with a redacted `repr` and a `fingerprint()` digest |
-| `InstallableProtection` | Structural object accepted by `Security.of(...)` and `with_protection()` |
-| `Guard[TChallenge]` | One-class guard: `detect()`, sync/async `solve()`, `self.solution(...)`, class-level `scope`/`cache`/`replay`/`headers`/`query`/`body` |
-| `GuardSolution` | Solution batch built by `Guard.solution()` (cookies, declared headers/query/body, `expires_at`) |
-| `challenge_guard()` | Lowers one detector, solver (object or function), solution mapping, cache and replay policy |
-| `GuardCache` | `"none"`, `"call"` or `"session"`, lowered to per-match, per-call, or session-scoped until-rejected persistence |
-| `host()`, `operation()` | Scope helpers; `RequestScope()` (every request) is the default |
+| `ChallengeSolver[TChallenge, TSolution]` | Асинхронный протокол `solve(challenge, context) -> solution` |
+| `SolveContext` | Операция, неизменяемый контекст ответа, номер попытки, `deadline`, `fetch`, `identity` и `request_headers` |
+| `ProtectedFetch` | Асинхронный порт `(url, *, method, headers, body) -> NormalizedResponse` поверх транспортной сессии клиента |
+| `TransportIdentity` | Неизменяемые сведения `user_agent`, `proxy`, `impersonation` с закрытым `repr` и методом `fingerprint()` |
+| `InstallableProtection` | Структурный объект для `Security.of(...)` и `with_protection()` |
+| `Guard[TChallenge]` | Защита одним классом: `detect()`, синхронный или асинхронный `solve()`, `self.solution(...)`, параметры класса `scope`, `cache`, `replay`, `headers`, `query`, `body` |
+| `GuardSolution` | Группа cookies, объявленных заголовков, query, body и `expires_at`, которую создаёт `Guard.solution()` |
+| `challenge_guard()` | Понижает детектор, решатель, отображение решения, кеш и правило повтора |
+| `GuardCache` | Значения `"none"`, `"call"`, `"session"` для хранения на совпадение, вызов или сессию до отказа |
+| `host()`, `operation()` | Области защиты; по умолчанию используется `RequestScope()` для каждого запроса |
 
 ```python target
 class VendorGuard(Guard[VendorChallenge]):
-    scope = host("api.example.test")
+    scope = host("api.example")
 
     def detect(self, response: ResponseContext[object]) -> VendorChallenge | None:
         return detect_challenge(response)
@@ -44,169 +43,151 @@ class VendorGuard(Guard[VendorChallenge]):
 config = ClientConfig(security=Security.of(VendorGuard()))
 ```
 
-The functional form is `challenge_guard(detect=..., solver=..., apply=solution_fields(...),
-name=..., scope=..., cache=..., replay=...)`. `name` defaults to the detector's function or
-owner-class name, `scope` to every request, `cache` to `"none"`. The solver may be an object
-with sync or async `solve()` or a plain `(challenge, context) -> solution` function. Both forms
-return an immutable installable descriptor and perform no response inspection or network I/O
-during configuration; `guards=` and `with_protection()` lower them identically.
+Функциональная форма принимает `challenge_guard(detect=..., solver=...,
+apply=solution_fields(...), name=..., scope=..., cache=..., replay=...)`. Имя по умолчанию берётся
+из функции детектора или класса-владельца, область охватывает каждый запрос, кеш равен `"none"`.
+Решателем может быть объект с синхронным или асинхронным `solve()` либо функция
+`(challenge, context) -> solution`. Обе формы возвращают неизменяемое устанавливаемое описание и
+не читают ответ или сеть во время настройки. `guards=` и `with_protection()` понижают их одинаково.
 
-`client.invalidate_protection(*targets)` drops cached solutions of the given guards or policy
-names (all when called without arguments) and returns the number of dropped states.
+`client.invalidate_protection(*targets)` удаляет сохранённые решения указанных защит или политик.
+Вызов без аргументов очищает всё состояние; результат равен числу удалённых записей.
 
-The detector receives `ResponseContext[object]` and returns `TChallenge | None`. `None` means no
-match. Raise `MalformedChallengeError` when the response is recognized but malformed. Any other
-detector exception becomes `ChallengeDetectionError` with the original exception as `__cause__`.
+Детектор получает `ResponseContext[object]` и даёт `TChallenge | None`. Значение `None`
+означает отсутствие совпадения. Повреждённую распознанную проверку обозначайте
+`MalformedChallengeError`. Любая другая ошибка детектора становится `ChallengeDetectionError` и
+сохраняет исходное исключение в `__cause__`.
 
-## Solve context
+## Контекст решения
 
-`SolveContext` gives a solver the transport facts and the transport itself, without exposing the
-handler, the cookie jar, or the client:
+`SolveContext` предоставляет решателю сведения о транспорте и ограниченный доступ к нему, но не
+раскрывает handler, хранилище cookies или клиент.
 
-| Field | Contract |
+| Поле | Контракт |
 |---|---|
-| `operation` | Identity of the operation being protected |
-| `response` | Immutable context of the challenge response, `None` for before-call and mandatory flows |
-| `attempt` | Attempt number of the triggering request, `0` for mandatory flows |
-| `deadline` | Solve budget: call timeout counted from the creation of the context, `None` without a timeout; `remaining()` returns the time left (never negative) |
-| `fetch` | `ProtectedFetch` bound to the same handler, proxy, and cookie jar as the triggering request |
-| `identity` | `TransportIdentity` of the attempt: public `User-Agent`, declared proxy, impersonation label |
-| `request_headers` | Headers that actually went out with the triggering request |
+| `operation` | Идентификатор защищаемой операции |
+| `response` | Неизменяемый контекст ответа с проверкой; `None` для предварительных и обязательных потоков |
+| `attempt` | Номер исходной попытки; `0` для обязательного потока |
+| `deadline` | Срок решения от начала вызова; `None` без timeout, `remaining()` не возвращает отрицательное значение |
+| `fetch` | `ProtectedFetch`, привязанный к тому же handler, прокси и хранилищу cookies |
+| `identity` | `TransportIdentity`: публичный `User-Agent`, объявленные прокси и профиль имитации |
+| `request_headers` | Заголовки фактически отправленного запроса |
 
-`fetch` emits directly through the handler: no guard, reaction, replay, middleware, or rate limiter
-runs, so a solver cannot recurse into the protection pipeline that invoked it. Its contract:
+`fetch` обращается напрямую к handler. Защиты, реакции, повторы, middleware и ограничитель частоты
+не запускаются, поэтому решатель не входит повторно в вызвавший его конвейер.
 
-- Redirects are not followed. The executor's redirect loop is bypassed and the first-party handlers
-  never follow redirects, so a `3xx` response is returned as is.
-- Every fetch gets the full `timeout` of the guarded call, not the remainder of `deadline`. A solver
-  that needs a budget checks `context.remaining()`.
-- The request carries the session's cookies, and every `Set-Cookie` it receives is stored in that
-  same jar: a fetch mutates the session the guarded call uses.
-- The URL must be absolute; `identity.user_agent` and `Host` are added unless the caller sets them.
+- Перенаправления не выполняются. Возвращается исходный ответ `3xx`.
+- Каждый запрос получает полный `timeout` защищаемого вызова. Для общего бюджета решатель читает
+  `context.remaining()`.
+- Запрос использует cookies сессии, а полученные `Set-Cookie` сохраняются в то же хранилище.
+- URL должен быть абсолютным. `identity.user_agent` и `Host` добавляются, если вызывающий их не задал.
 
-Transport errors and solver exceptions surface as `ChallengeSolveError` with the original
-exception as `__cause__`.
+Ошибка транспорта или решателя становится `ChallengeSolveError` с исходным исключением в
+`__cause__`.
 
-Managed solutions are stored together with `identity.fingerprint()`. Before a solution is applied
-to a later attempt or call, the runtime compares that digest with the identity of the request
-being prepared. A mismatch (different User-Agent, proxy, or impersonation label) invalidates the
-stored solution instead of replaying it through the wrong identity; the next matching challenge
-is solved again under the new identity. A `SolveContext` constructed outside a running client
-has an empty identity and a `fetch` that raises `ProtectionConfigurationError`.
+Сохранённое решение связано с `identity.fingerprint()`. Перед применением runtime сравнивает этот
+отпечаток с текущей попыткой. Другой `User-Agent`, прокси или профиль имитации отменяет состояние;
+следующая проверка решается заново под новой транспортной идентичностью. Вручную созданный
+`SolveContext` имеет пустую идентичность, а его `fetch` вызывает `ProtectionConfigurationError`.
 
-The identity has exactly one source per attempt. `user_agent` is the public `User-Agent` bound
-for the attempt (caller value, auth, dependencies) *before* any managed solution is applied;
-`proxy` and `impersonation` are what the handler declares in `HandlerProfile`. Headers written by
-a guard or by `solution_fields(headers=...)` never enter the identity, so a solution that rewrites
-`User-Agent` is checked against the same digest at solve time and at apply time.
-`context.request_headers` still reports the headers that actually went out.
+У попытки ровно один источник транспортной идентичности. `user_agent` берётся из публичного
+`User-Agent` после значений вызывающего, авторизации и зависимостей, но до применения решения.
+`proxy` и `impersonation` читает `HandlerProfile`. Заголовки защиты не меняют отпечаток, хотя
+`context.request_headers` показывает фактически отправленные заголовки.
 
-## Solution destinations
+## Назначения решения
 
-`solution_fields()` maps destination names to fields on the typed solution:
+`solution_fields()` связывает имена назначения с полями типизированного решения.
 
-| Parameter | Destination |
+| Параметр | Назначение |
 |---|---|
-| `headers={"X-Token": "token"}` | Fixed request header |
-| `query={"challenge": "token"}` | Fixed query field |
-| `cookies={"clearance": "token"}` | Fixed request cookie |
-| `body={"captcha.token": "token"}` | Private semantic body path |
-| `cookie_set=solution_cookie_set()` | Dynamic iterable of named cookies |
+| `headers={"X-Token": "token"}` | Фиксированный заголовок запроса |
+| `query={"challenge": "token"}` | Фиксированное поле query |
+| `cookies={"clearance": "token"}` | Фиксированный cookie запроса |
+| `body={"captcha.token": "token"}` | Закрытый путь семантического тела |
+| `cookie_set=solution_cookie_set()` | Динамический набор именованных cookies |
 
-All destinations are reserved by the endpoint compiler. A conflict with caller, auth, dependency,
-signature, or another private writer fails before solver or transport I/O. Runtime selects and
-validates the complete solution batch before one atomic patch. It never mutates a
-`PreparedRequest`.
+Компилятор резервирует все назначения. Конфликт с вызывающим, авторизацией, зависимостью,
+подписью или другим закрытым writer обнаруживается до решателя и сети. Runtime сначала выбирает и
+проверяет всю группу решения, затем применяет одно атомарное изменение. `PreparedRequest` не
+изменяется.
 
-## Replay helpers
+## Доказательства безопасного повтора
 
-| Helper | Proof |
+| Функция | Доказательство |
 |---|---|
-| `safe_method(max_replays=1)` | Allows replay only for GET, HEAD, or OPTIONS |
-| `idempotency_key(name, max_replays=1)` | Requires the compiled request to contain the named header |
-| `rejected_before_execution(max_replays=1)` | Protocol proves the request was rejected before execution |
-| `rejected_before_origin(max_replays=1)` | Protocol proves the request did not reach the origin |
+| `safe_method(max_replays=1)` | Повтор разрешён только для GET, HEAD и OPTIONS |
+| `idempotency_key(name, max_replays=1)` | Подготовленный запрос содержит указанный заголовок |
+| `rejected_before_execution(max_replays=1)` | Протокол доказывает отказ до выполнения |
+| `rejected_before_origin(max_replays=1)` | Протокол доказывает, что запрос не дошёл до источника |
 
-`ReplayPolicy.max_replays` must be nonnegative. A zero budget disables challenge replay. A replay
-uses a new attempt and reruns dependency, auth, projection, crypto, encoding, preparation, and
-signing stages.
+`ReplayPolicy.max_replays` не может быть отрицательным. Нулевой бюджет запрещает повтор проверки.
+Новая попытка заново выполняет зависимости, авторизацию, проекцию, шифрование, кодирование,
+подготовку и подпись.
 
-## Managed state and session affinity
+## Управляемое состояние и сессия
 
-Reusable solution state lives only in one `ExecutionRuntime`, which is owned by one SDK client and
-handler session. Session-shared modes (`cache="session"` and the advanced until-expiry/
-until-rejected persistence) serialize concurrent solves of the same challenge behind one lock;
-`cache="call"` and `cache="none"` keep state inside one call, so concurrent calls solve
-independently. Session-scoped state keys use the actual handler object supplied at the client
-boundary. Closing the client clears all managed solutions and single-flight entries.
+Повторно используемое решение живёт в одном `ExecutionRuntime`, которым владеет клиент и его
+handler-сессия. Режимы сессии (`cache="session"` и расширенные until-expiry или until-rejected)
+сводят параллельные решения одной проверки к одному вызову. `cache="call"` и `cache="none"`
+оставляют состояние внутри вызова. Ключ состояния включает фактический handler. Закрытие клиента
+очищает решения и записи согласования.
 
-Proxy, User-Agent, address-family, and impersonation configuration belongs to handler/session
-construction. `Client.httpx(proxy=...)`, `Client.requests(proxy=...)`,
-`Client.curl_cffi(proxy=..., impersonate=...)` and their async counterparts configure the session
-they create and declare the result in `HandlerProfile.proxy`/`HandlerProfile.impersonation`; with a
-caller-supplied session, `proxy=` is only the declaration of what that session already uses. A
-custom handler declares the same facts through its `profile`. Eazy SDK never inspects a transport
-session and has no per-attempt transport identity provider: an undeclared proxy is absent from the
-identity. Create a new handler and client when rotating transport configuration. A new client does
-not reuse the previous client's protection state.
+Прокси, `User-Agent`, семейство адресов и профиль имитации задаются при создании handler-сессии.
+Фабрики клиентов настраивают созданную ими сессию и объявляют параметры в `HandlerProfile`. Для
+переданной пользователем сессии `proxy=` лишь описывает уже заданное значение. Пользовательский
+handler сообщает те же сведения через `profile`. Eazy SDK не исследует сессию транспорта и не
+принимает поставщика идентичности на каждую попытку. При смене транспорта создайте новый handler и
+клиент; их состояние защиты начинается пустым.
 
-Solver technology is not part of preflight. Browser, JavaScript, WASM, and remote API solvers all
-implement the same typed protocol. Preflight retains facts the runtime can prove: solver presence,
-compiled destination validity, body replayability, semantic replay proof, finite budgets, and
-`HandlerProfile` wire fidelity.
+Технология решателя не участвует в предварительной проверке. Браузер, JavaScript, WASM и внешний
+API реализуют один типизированный протокол. До запроса проверяются наличие решателя, назначения,
+повторяемость тела, доказательство безопасного повтора, конечные бюджеты и точность
+`HandlerProfile`.
 
-## Errors
+## Ошибки
 
-| Stage | Error | Raised when |
+| Стадия | Ошибка | Условие |
 |---|---|---|
-| Configuration | `ProtectionConfigurationError` | Guard or lowering is malformed, a solver is missing, or destinations conflict |
-| Detection | `ChallengeDetectionError` | A detector raises an unexpected exception |
-| Detection | `ChallengeParseError` (`eazy_sdk.protection.advanced`) | A detector raised `MalformedChallengeError`: the response is a challenge but its payload is unusable; `policy`, `attempt`, and the detector error as `__cause__` |
-| Detection | `AmbiguousChallengeError` (`eazy_sdk.protection.advanced`) | Two or more definitive policies matched one response with equal priority; a `ProtectionConfigurationError` listing `policies` |
-| Solve | `ChallengeSolveError` | A solver fails |
-| Application | `ChallengeApplicationError` | A solution field or destination value is invalid |
-| Replay | `ReplayDeniedError` | Replayability, semantic proof, or the policy's own replay budget is insufficient |
+| Настройка | `ProtectionConfigurationError` | Повреждена защита или понижение, нет решателя либо конфликтуют назначения |
+| Обнаружение | `ChallengeDetectionError` | Детектор вызвал неожиданное исключение |
+| Обнаружение | `ChallengeParseError` из `eazy_sdk.protection.advanced` | Проверка распознана, но данные непригодны; доступны `policy`, `attempt` и причина |
+| Обнаружение | `AmbiguousChallengeError` из `eazy_sdk.protection.advanced` | Две окончательные политики совпали с равным приоритетом |
+| Решение | `ChallengeSolveError` | Решатель завершился ошибкой |
+| Применение | `ChallengeApplicationError` | Некорректно поле или назначение решения |
+| Повтор | `ReplayDeniedError` | Недостаточно повторяемости, доказательства или бюджета политики |
 
-Stage errors expose policy/attempt metadata and preserve `__cause__`. Their messages do not include
-response bodies, solution values, cookies, credentials, proxy configuration, or solver secrets.
-Replay budgets are counted per policy: one policy cannot replay on another policy's budget.
+Ошибки стадий содержат политику и номер попытки, сохраняют `__cause__` и не включают тела ответов,
+значения решения, cookies, учётные данные, прокси или секреты решателя. Бюджет считается отдельно
+для каждой политики.
 
-Solvers are awaited by the runtime in both clients. In the synchronous `Client` an `async def
-solve()` runs on the calling thread without an event loop, because a solver that only reads the
-challenge and calls `context.fetch(...)` never suspends. One that awaits asynchronous I/O of its
-own does suspend, and raises `SynchronousSuspensionError`: use `AsyncClient` there, or make the
-solver synchronous. `Guard.solve()` and function solvers may be plain synchronous callables.
-Single-flight locks are loop-agnostic, so one sync client shared by several threads still solves
-each session challenge once.
+Runtime ожидает решатели в обоих клиентах. В синхронном `Client` асинхронный `solve()` выполняется
+в вызывающем потоке без цикла событий, пока не приостанавливается на собственном асинхронном
+вводе-выводе. Такая приостановка приводит к `SynchronousSuspensionError`: используйте
+`AsyncClient` либо синхронный решатель. Блокировки согласования не привязаны к циклу событий,
+поэтому общий для нескольких потоков синхронный клиент решает одну проверку сессии один раз.
 
-## Advanced lowering SPI
+## Расширенный SPI понижения
 
-`eazy_sdk.protection.advanced` is the only import path for framework and generated-policy
-contracts. Its exact `__all__` (49 names, sorted; a unit test pins its hash) is:
+`eazy_sdk.protection.advanced` служит единственным путём импорта контрактов фреймворков и
+сгенерированных политик. Его `__all__` закреплён тестом и содержит 49 имён.
 
-- policies: `ChallengePolicy`, `BeforeCallPolicy` (frozen, self-validating keyword-only
-  dataclasses; presets subclass them, the executor performs no second validation) and their
-  builders `challenge_policy()`, `before_call_policy()`;
-- signals: `ResponseSignal`, `SignalInterception`, `SignalMatch`, `SignalOutcome`,
-  `AmbiguousSignal`, `MalformedSignal`;
-- solvers: `SolverRequirement[TChallenge, TSolution]`, `SolverBinding`, `bind_solver()`,
-  `SolverBindings`, `SolverLike`; the `ChallengeSolver` protocol itself is exported by
-  `eazy_sdk.protection`, not here;
-- solve context ports: `ProtectedFetch`, `TransportIdentity`;
-- operations: `OperationReference` (a decorated API method or its declaration) typing
-  `acquire`/`verify`;
-- private destinations: `PrivateBindings`, `PrivateBinding`, `PrivateBindingTarget`,
+- Политики: `ChallengePolicy`, `BeforeCallPolicy`, `challenge_policy()`, `before_call_policy()`.
+- Сигналы: `ResponseSignal`, `SignalInterception`, `SignalMatch`, `SignalOutcome`,
+  `AmbiguousSignal`, `MalformedSignal`.
+- Решатели: `SolverRequirement`, `SolverBinding`, `bind_solver()`, `SolverBindings`, `SolverLike`.
+- Порты контекста: `ProtectedFetch`, `TransportIdentity`.
+- Операции: `OperationReference` для типизации `acquire` и `verify`.
+- Закрытые назначения: `PrivateBindings`, `PrivateBinding`, `PrivateBindingTarget`,
   `PrivateCookieSetBinding`, `SolutionLocation`, `private_bindings()`, `private_header()`,
-  `private_query()`, `private_cookie()`, `private_cookie_set()`, `private_body()`;
-- persistence: `ProtectionPersistence`, `ProtectionPersistenceMode`, `ProtectionStateKey`,
+  `private_query()`, `private_cookie()`, `private_cookie_set()`, `private_body()`.
+- Хранение: `ProtectionPersistence`, `ProtectionPersistenceMode`, `ProtectionStateKey`,
   `ProtectionStateScope`, `per_match()`, `per_attempt()`, `per_call()`, `until_expiry()`,
-  `until_rejected()`, `client_identity()`, `session_identity()`, and the `GuardCache` literal
-  (the simple layer exposes only `cache="none" | "call" | "session"`; `per_attempt` and
-  `until_expiry` are advanced-only);
-- replay: `ReplaySafety`, `BodyReplayPolicy`;
-- mandatory operation flows: `ProtectionFlow`, `protection_flow()`, `FromProtection`;
-- errors: `ChallengeParseError`, `AmbiguousChallengeError`;
-- the internal installable lowering value `ProtectionBundle`.
+  `until_rejected()`, `client_identity()`, `session_identity()`, `GuardCache`.
+- Повтор: `ReplaySafety`, `BodyReplayPolicy`.
+- Обязательные потоки: `ProtectionFlow`, `protection_flow()`, `FromProtection`.
+- Ошибки: `ChallengeParseError`, `AmbiguousChallengeError`.
+- Значение понижения: `ProtectionBundle`.
 
-Concrete cache entries, lock registries, compilation helpers, signal arbitration helpers, and
-solution patch functions are private. Applications should not import the advanced SPI.
+Записи кеша, реестры блокировок, функции компиляции, арбитраж сигналов и применение решения
+остаются закрытыми. Прикладной код не должен импортировать расширенный SPI.

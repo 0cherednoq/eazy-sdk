@@ -1,8 +1,1 @@
 # Generated baseline for phase 56.2.3. Remove each line with the corresponding page debt.
-reference/api/testing.mdx:23: assert
-reference/api/testing.mdx:24: assert
-reference/api/testing.mdx:25: assert
-reference/api/testing.mdx:41: recording-handler
-reference/api/testing.mdx:43: recording-handler
-reference/api/testing.mdx:52: assert
-reference/api/testing.mdx:53: assert

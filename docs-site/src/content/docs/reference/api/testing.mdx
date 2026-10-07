@@ -1,58 +1,61 @@
 ---
-title: Testing and preparation
-description: Offline request inspection and Zapros-native recording handlers.
+title: Подготовка и тестирование
+description: Публичные контракты проверки запроса без сети и записывающих Zapros handlers.
 sources:
   - eazy_sdk.preparation
   - eazy_sdk.testing
 api_fingerprint: "sha256:b114bef1c5d6d35e5eb9bba73c688f0e74316cc5d2b55cebca5c4c0a9356b222"
 ---
 
-## Проверить запрос без сети
+## `PrepareOptions`
 
-`.prepare()` использует тот же bind/resolve/project/encode/crypto/sign pipeline, что и обычный
-вызов, но останавливается перед handler send:
+| Поле | Тип | Значение по умолчанию | Назначение |
+|---|---|---|---|
+| `resolve_managed` | `bool` | `False` | Разрешить авторизацию, зависимости, защиты и ключи |
+| `call_options` | `CallOptions \| None` | `None` | Параметры подготовки конкретного вызова |
 
-```python
-from eazy_sdk import PrepareOptions
+Чистый режим не запускает поставщиков управляемых значений. Если без них запрос нельзя
+подготовить, `PreparationIncompleteError.requirements` перечисляет недостающие возможности.
+Полный режим использует тестовые поставщики, но не отправляет запрос. Его кеш защит отделён от
+рабочего клиента.
 
-prepared = await sdk.users.create.prepare(
-    body={"name": "Ada"},
-    options=PrepareOptions(resolve_managed=False),
-)
+## `PreparedCall`
 
-assert prepared.method == "POST"
-assert prepared.target == "/users"
-assert prepared.encoded_body == b'{"name":"Ada"}'
-```
+`.prepare(...)` останавливает обычный конвейер перед отправкой и возвращает неизменяемое безопасное
+представление.
 
-Pure mode (`resolve_managed=False`) не вызывает dependency/auth/protection/key providers,
-middleware или rate limiter. Если операция без них не готова, вызывается
-`PreparationIncompleteError` со списком requirements.
+| Поле | Тип | Содержимое |
+|---|---|---|
+| `method` | `str` | HTTP-метод |
+| `url` | `str` | Полный безопасный URL |
+| `target` | `str` | Путь и query без источника |
+| `query` | `tuple[PreparedValue, ...]` | Параметры query |
+| `headers` | `tuple[PreparedValue, ...]` | Заголовки |
+| `cookies` | `tuple[PreparedValue, ...]` | Cookies |
+| `body` | `object \| None` | Семантическое тело или `<redacted>` |
+| `encoded_body` | `bytes \| None` | Готовые байты, если тело не секретное и буферизовано |
+| `protocol` | `str` | Версия HTTP |
 
-Full mode (`resolve_managed=True`) разрешает managed values через test providers. Protection cache
-для preparation изолирован от рабочего client. Network send не выполняется в обоих режимах.
+Секретные заголовки, cookies, query и тело заменяются на `<redacted>`. Для секретного тела
+`encoded_body` равен `None`.
 
-`PreparedCall` — immutable safe view. Secret headers, cookies, managed query values и private body
-заменяются на `<redacted>`; secret encoded body не публикуется.
+## Записывающие handlers
 
-## Проверить фактический Zapros request
+`RecordingHandler` и `AsyncRecordingHandler` наследуют Zapros `BaseHandler` и `AsyncBaseHandler`.
+Они сохраняют фактические `Request` на границе транспорта и возвращают заданный `Response`.
 
-```python
-from eazy_sdk.testing import RecordingHandler
+| Член | Контракт |
+|---|---|
+| `requests` | Неизменяемый снимок всех запросов |
+| `last_request` | Последний запрос; без записей вызывает `AssertionError` |
+| `assert_count(expected)` | Проверяет число запросов |
+| `assert_request(index=-1, method=None, url=None)` | Проверяет метод и URL выбранной записи |
+| `close_calls` | Число вызовов `close()` или `aclose()` |
 
-handler = RecordingHandler(
-    status=200,
-    headers={"Content-Type": "application/json"},
-    content=b'{"name":"Ada"}',
-)
+Полный запускаемый пример находится в {doc}`руководстве по тестированию </guide/testing>`.
 
-with StoreSdk.from_handler(handler=handler, base_url="https://api.test") as sdk:
-    sdk.users.get_user(user_id=7)
+## Дальше
 
-handler.assert_count(1)
-handler.assert_request(method="GET", url="https://api.test/users/7")
-```
-
-`AsyncRecordingHandler` предоставляет тот же API для `AsyncApi`. Оба класса наследуют Zapros
-`BaseHandler`/`AsyncBaseHandler` и записывают request, полученный transport boundary; собственного
-preparation algorithm у них нет.
+- {doc}`Проверить SDK локально </guide/testing>`
+- {doc}`Проверить API клиента </reference/api/clients>`
+- {doc}`Проверить запрос как значение </guide/requests/values>`

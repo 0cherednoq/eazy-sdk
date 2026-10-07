@@ -27,7 +27,7 @@ Inject(
 )
 ```
 
-`DependencySpec` передаётся в `requires=(...)`, `Inject` — в `inject=(...)` объявления операции.
+`DependencySpec` передаётся в `requires=(...)`, а `Inject` в `inject=(...)` объявления операции.
 
 ## Binding
 
@@ -47,14 +47,14 @@ value().to_header("X-Value")
 | `field(name).to_body(name)` | Поле тела |
 | `value().to_*` | Весь результат зависимости |
 
-`apply=` пишет в **уже объявленный** слот операции: цель, которой нет среди полей, — ошибка
+`apply=` пишет в **уже объявленный** слот операции: отсутствие цели среди полей означает ошибку
 объявления (`dependency target is not declared: header.X-Device-Id`). `Inject` создаёт слот сам и
 потому не требует поля, но конфликтует с одноимённым полем операции.
 
 ## Cache
 
 `DependencyCachePolicy` поддерживает `NONE`, `CLIENT`, `CALL` и `ATTEMPT`. `dependency(...)` по
-умолчанию `CALL`, `Inject(...)` — `ATTEMPT`.
+умолчанию `CALL`, а `Inject(...)` использует `ATTEMPT`.
 
 ## Registry
 
@@ -63,7 +63,8 @@ registry.register(spec.dependency, provider)
 Identity(dependencies=registry)
 ```
 
-Provider — объект с методом `resolve(context: DependencyContext)`, синхронный или асинхронный;
+Поставщик является объектом с синхронным или асинхронным методом
+`resolve(context: DependencyContext)`;
 callable без `resolve` оборачивается автоматически, когда передан через `provide=` или как
 `Inject.source`. `provide=` задаёт reusable provider identity, но реализация всегда живёт в
 `DependencyRegistry`, а не в операции.
@@ -71,7 +72,7 @@ callable без `resolve` оборачивается автоматически,
 ## Проекция
 
 Проекция, объявленная с двумя параметрами, получает разрешённые значения `requires=` как
-`Injected` — мэппинг `RequestDependency` → значение:
+`Injected` сопоставляет `RequestDependency` со значением:
 
 ```python
 def to_wire(source: CreateOrder, injected: Injected) -> OrderWire: ...

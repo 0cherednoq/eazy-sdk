@@ -1,18 +1,1 @@
 # Generated baseline for phase 56.2.4. Remove entries as pages are rewritten.
-reference/api/api-methods.mdx: em-dash=23
-reference/api/auth.mdx: english-paragraph=2
-reference/api/browser.mdx: em-dash=15
-reference/api/clients.mdx: em-dash=12
-reference/api/dependencies.mdx: em-dash=5
-reference/api/extensions.mdx: em-dash=7
-reference/api/extensions.mdx: english-paragraph=1
-reference/api/index.mdx: english-paragraph=5
-reference/api/models-codecs.mdx: em-dash=1
-reference/api/protection.mdx: english-paragraph=27
-reference/api/request.mdx: em-dash=14
-reference/api/request.mdx: english-paragraph=1
-reference/api/response.mdx: em-dash=14
-reference/api/session.mdx: em-dash=1
-reference/api/signing.mdx: em-dash=3
-reference/api/testing.mdx: em-dash=1
-reference/migration.mdx: em-dash=36

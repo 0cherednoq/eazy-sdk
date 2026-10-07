@@ -16,7 +16,7 @@ ApiKeyScheme.query("api_key", name="api_key")
 CookieScheme("session_id", name="cookie")
 ```
 
-## Credential
+## Учётные данные
 
 ```python
 auth = scheme.static(credential)
@@ -31,19 +31,18 @@ any_of(all_of(USER_AUTH, DEVICE_AUTH), BASIC)
 
 Параметр `security` объявления операции принимает схему, `SecurityAlternative`, `SecurityPolicy` или `None`.
 
-| Factory | Credential type | HTTP placement |
+| Фабрика | Тип учётных данных | Размещение в HTTP |
 |---|---|---|
 | `BasicScheme(name)` | `tuple[str, str]` | `Authorization: Basic ...` |
 | `BearerScheme(name)` | `str` | `Authorization: Bearer ...` |
-| `ApiKeyScheme.header(header, name=...)` | `str` | Request header |
-| `ApiKeyScheme.query(parameter, name=...)` | `str` | Query parameter |
+| `ApiKeyScheme.header(header, name=...)` | `str` | Заголовок запроса |
+| `ApiKeyScheme.query(parameter, name=...)` | `str` | Параметр query |
 | `CookieScheme(cookie, name=...)` | `str` | Cookie |
 
-`scheme.static(credential)` создаёт client auth binding. `all_of(...)` возвращает одну AND
-альтернативу; `any_of(...)` создаёт OR policy. Runtime выбирает только полностью разрешимую
-альтернативу и не смешивает credentials из разных alternatives.
+`scheme.static(credential)` создаёт привязку авторизации клиента. `all_of(...)` возвращает одну
+AND-альтернативу, а `any_of(...)` создаёт OR-политику. Runtime выбирает только полностью
+разрешимую альтернативу и не смешивает учётные данные разных вариантов.
 
-Для lifecycle session используйте `session_auth(...)` или `session_cookie(...)`. Hand-written SDK
-может объявить reusable `session_scheme(...)` в атрибуте `security` роутера и вызвать её `.configure(...)`;
-их API описан в
-{doc}`Session reference </reference/api/session>`.
+Для жизненного цикла сессии используйте `session_auth(...)` или `session_cookie(...)`. Рукописный
+SDK может объявить переиспользуемую `session_scheme(...)` в атрибуте `security` роутера и вызвать
+её `.configure(...)`. Контракты описаны в {doc}`справочнике сессий </reference/api/session>`.
