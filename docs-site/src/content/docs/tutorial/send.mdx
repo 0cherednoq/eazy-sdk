@@ -1,0 +1,155 @@
+---
+title: Отправка письма без опасного повтора
+description: Подпишите POST через HMAC и различите отправку, отклонение и отсутствие подтверждения.
+freshness: false
+---
+
+Композер отвечает одним из трёх способов: показывает подтверждение, открывает диалог об
+отклонённом адресе или не показывает ничего. Последний случай не означает ошибку доставки.
+Клиент не повторяет письмо, а ищет его в «Отправленных» по получателю и теме.
+
+| Ответ сайта | Правило HTTP или признак страницы | Что получает вызывающий |
+|---|---|---|
+| `outcome: sent` | успешный JSON или видимый `[role="status"]` | `SendResult` или `Sent` |
+| `recipient_rejected` | типизированная ошибка или открытый `dialog` | `RecipientRejected` или `Rejected` |
+| `outcome: silent` | JSON без подтверждения на странице | `silent`, затем результат поиска, или `Silent` |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /api/v1/messages/send``
+
+```text
+Authorization: Bearer session-1
+Content-Type: application/json
+X-Mail-Signature: 4a0a5ef967590a6eeec04612bc5a0066c0826b0c3d36af223ab541bc2055c815
+
+{"recipient":"grace@mail.example","subject":"Проверка доставки","body":"Встречаемся в пятницу."}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": "ok",
+  "body": {"outcome": "sent", "message_id": 100}
+}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+Подпись строится после сериализации тела. `body_digest("sha256")` даёт hex-строку хеша,
+`hmac_sha256(...)` подписывает её учебным ключом, а `header_output(...)` записывает результат
+в `X-Mail-Signature`.
+
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+:start-after: "# region docs: http-send-signature"
+:end-before: "# endregion docs: http-send-signature"
+```
+
+`SendMessage` отличает успешный конверт от отклонённого адреса по `Const`. Поиск в
+«Отправленных» остаётся отдельной идемпотентной GET-операцией.
+
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+:start-after: "# region docs: http-send-operations"
+:end-before: "# endregion docs: http-send-operations"
+```
+
+После `silent` код не вызывает `send` второй раз. Он ищет письмо с теми же получателем и темой;
+найденный идентификатор `101` доказывает, что первый запрос уже сработал.
+
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+:start-after: "# region docs: http-send-flow"
+:end-before: "# endregion docs: http-send-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.send`.
+
+<!-- example-output: examples.mail.http.send -->
+```text
+sent: 100
+rejected: RecipientRejected
+silent response: silent
+found in Sent: 101
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+Страница `/compose/` содержит форму и два наблюдаемых признака. Третий исход определяется по
+истечению общего срока ожидания, когда ни подтверждение, ни диалог не появились.
+
+```{literalinclude} ../../../../../examples/mail/site/app.py
+:language: html
+:start-after: "<!-- region docs: composer-html -->"
+:end-before: "<!-- endregion docs: composer-html -->"
+```
+
+HMAC здесь вычисляет JavaScript самой учебной страницы перед `fetch`. Браузерная операция
+отвечает только за поля формы, клик и распознавание результата через `outcomes(...)`.
+
+```{literalinclude} ../../../../../examples/mail/browser/send.py
+:language: python
+:start-after: "# region docs: browser-send-operation"
+:end-before: "# endregion docs: browser-send-operation"
+```
+
+Три последовательных вызова идут через настоящий Chromium и один `MailSite`. Перед новым
+вызовом операция закрывает диалог предыдущего отказа, если он ещё открыт.
+
+```{literalinclude} ../../../../../examples/mail/browser/send.py
+:language: python
+:start-after: "# region docs: browser-send-flow"
+:end-before: "# endregion docs: browser-send-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/send.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.browser.send`.
+
+<!-- example-output: examples.mail.browser.send -->
+```text
+sent: Sent
+rejected: Rejected
+silent: Silent
+```
+::::
+:::::
+
+:::{warning}
+Не повторяйте отправку после тишины в интерфейсе: запрос мог завершиться успешно. Сначала
+найдите письмо в «Отправленных» по устойчивым полям.
+:::
+
+## Дальше
+
+- {doc}`Прочитайте все письма по частям </tutorial/messages>`.
+- {doc}`Сверьте карту учебного сайта </tutorial/index>`.

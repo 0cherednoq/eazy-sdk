@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
 import json
 from collections.abc import Callable, Mapping
@@ -13,6 +15,7 @@ REJECTED_INPUT = "wrong"
 VALID_LOGIN_INPUT = "correct"
 VALID_OTP = "123456"
 SESSION_START = datetime(2030, 1, 1, tzinfo=UTC)
+MAIL_SIGNING_SECRET = b"mail-demo-secret"
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +309,8 @@ class MailSite:
         email = self._authorized_email(request)
         if email is None:
             return _failure(401, "unauthorized", "Session is missing or expired")
-        if request.header("x-mail-signature") != "mail-signature":
+        signature = request.header("x-mail-signature") or ""
+        if not hmac.compare_digest(signature, _mail_signature(request.body)):
             return _failure(403, "signature_rejected", "Signature is missing")
         body = request.json()
         recipient = str(body.get("recipient", ""))
@@ -314,6 +318,8 @@ class MailSite:
         if recipient == "rejected@mail.example":
             return _failure(200, "recipient_rejected", "Recipient was rejected")
         if recipient == "quiet@mail.example":
+            message = MailMessage(100 + len(self.state.sent), email, recipient, subject)
+            self.state.sent.append(message)
             return _success({"outcome": "silent"})
         message = MailMessage(100 + len(self.state.sent), email, recipient, subject)
         self.state.sent.append(message)
@@ -377,6 +383,11 @@ def _page_start(request: SiteRequest) -> int:
 
 def _success(body: Mapping[str, object]) -> SiteResponse:
     return SiteResponse.json(200, {"status": "ok", "body": dict(body)})
+
+
+def _mail_signature(body: bytes) -> str:
+    digest = hashlib.sha256(body).hexdigest().encode()
+    return hmac.new(MAIL_SIGNING_SECRET, digest, hashlib.sha256).hexdigest()
 
 
 def _failure(status: int, code: str, message: str) -> SiteResponse:
@@ -483,16 +494,26 @@ more.addEventListener('click', async () => {
     )
 
 
+_COMPOSER_HTML = """
+<!-- region docs: composer-html -->
+<main data-page="compose">
+  <form data-composer>
+    <input name="recipient" type="email"><input name="subject">
+    <textarea name="body"></textarea><button type="submit">Отправить</button>
+  </form>
+  <div role="status" hidden>Отправлено</div>
+  <dialog data-outcome="rejected">Адрес отклонён</dialog>
+</main>
+<!-- endregion docs: composer-html -->
+"""
+
+
 def _compose_html(token: str) -> str:
     return _page(
         "Новое письмо",
         f'<meta name="mail-token" content="{html.escape(token)}">'
-        '<main data-page="compose"><form data-composer>'
-        '<input name="recipient" type="email"><input name="subject">'
-        '<textarea name="body"></textarea><button type="submit">Отправить</button>'
-        '</form><div role="status" hidden>Отправлено</div>'
-        '<dialog data-outcome="rejected">Адрес отклонён</dialog></main>'
-        """<script>
+        + _COMPOSER_HTML
+        + """<script>
 const token = document.querySelector('meta[name="mail-token"]').content;
 const composer = document.querySelector('[data-composer]');
 const statusNode = document.querySelector('[role="status"]');
@@ -502,14 +523,25 @@ composer.addEventListener('submit', async (event) => {
   statusNode.hidden = true;
   if (rejected.open) rejected.close();
   const fields = new FormData(composer);
+  const body = JSON.stringify(Object.fromEntries(fields));
+  const encoder = new TextEncoder();
+  const digestBytes = await crypto.subtle.digest('SHA-256', encoder.encode(body));
+  const digest = Array.from(new Uint8Array(digestBytes))
+    .map((value) => value.toString(16).padStart(2, '0')).join('');
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode('mail-demo-secret'), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']
+  );
+  const signatureBytes = await crypto.subtle.sign('HMAC', key, encoder.encode(digest));
+  const signature = Array.from(new Uint8Array(signatureBytes))
+    .map((value) => value.toString(16).padStart(2, '0')).join('');
   const response = await fetch('/api/v1/messages/send', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      'X-Mail-Signature': 'mail-signature',
+      'X-Mail-Signature': signature,
     },
-    body: JSON.stringify(Object.fromEntries(fields)),
+    body,
   });
   const documentBody = await response.json();
   if (documentBody.status === 'recipient_rejected') {

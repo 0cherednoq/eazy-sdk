@@ -5572,6 +5572,22 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build to `docs-site/_build/phase56-messages-final` and preview rebuild | PASS: 95 sources, no warnings; live preview route returns 200. |
 | fresh-agent blind review | PASS: six HTTP page requests used one `MailSite`; Chromium performed the real fetch and DOM update; panels, HTML, page rules and prose verified. |
 
+### Verification evidence (56.4.7)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.send` | PASS: the signed POST returned message `100`; the rejected address became `RecipientRejected`; the silent response was not retried and GET found message `101` in Sent. |
+| `uv run python -m examples.mail.browser.send` | PASS: live Chromium returned `Sent`, `Rejected` and `Silent`; the page-generated WebCrypto HMAC was accepted by the same `MailSite`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS after the review correction: 35 passed; runnable output and the live browser flow match the page. |
+| focused phase-56 suite with debt snapshots and domain ratchet | PASS: 38 passed; the new page added no code-block or prose debt. The global zero-debt assertions still report only the recorded pages scheduled for later 56.5–56.8 work. |
+| `uv run mypy examples/mail/site examples/mail/http/send.py examples/mail/browser/send.py tests/unit/test_phase56_docs_probes.py` | PASS: no issues in 6 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/send.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 96 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| strict Sphinx build and preview rebuild | PASS: 96 sources, no warnings; `/tutorial/send/` returns 200 and contains both outputs, synchronized tabs and the actual signature. |
+| fresh-agent blind review plus provenance recheck | PASS after replacing the hand-copied composer HTML with a `literalinclude` from the exact `_COMPOSER_HTML` used by `MailSite`. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5613,4 +5629,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.7–56.8. No blockers; next step is 56.4.7.
+56.4.8–56.8. No blockers; next step is 56.4.8.

@@ -1,7 +1,10 @@
 """Executable probes that de-risk the phase-56 documentation examples."""
 
+import hashlib
+import hmac
 import json
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -27,10 +30,12 @@ from examples.mail.browser.login_probe import (
     WrongPasswordError,
 )
 from examples.mail.browser.messages import main as browser_messages_main
+from examples.mail.browser.send import main as browser_send_main
 from examples.mail.browser.session import main as browser_session_main
 from examples.mail.http.captcha import main as captcha_main
 from examples.mail.http.login_failures import main as http_login_main
 from examples.mail.http.messages import main as http_messages_main
+from examples.mail.http.send import main as http_send_main
 from examples.mail.http.session import main as http_session_main
 from examples.mail.site import MailSite, handle_httpx, intercept_page
 from examples.mail.site._playwright import playwright_mail
@@ -132,6 +137,31 @@ def test_browser_messages_probe_loads_the_second_batch(
     assert captured.out.splitlines() == [
         "first batch: [42, 43]",
         "after more: [42, 43, 44, 45]",
+    ]
+
+
+def test_http_send_probe_signs_and_handles_all_three_outcomes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http_send_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "sent: 100",
+        "rejected: RecipientRejected",
+        "silent response: silent",
+        "found in Sent: 101",
+    ]
+
+
+def test_browser_send_probe_distinguishes_all_three_outcomes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_send_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "sent: Sent",
+        "rejected: Rejected",
+        "silent: Silent",
     ]
 
 
@@ -280,22 +310,26 @@ def test_complete_teaching_site_serves_the_http_tutorial() -> None:
         assert refreshed["body"]["access_token"] == "session-refresh-1"
         assert refreshed["body"]["refresh_token"] == "refresh-2"
 
-        send_headers = {**auth, "X-Mail-Signature": "mail-signature"}
-        sent = client.post(
-            "/api/v1/messages/send",
-            headers=send_headers,
-            json={"recipient": "grace@mail.example", "subject": "Проверка"},
-        ).json()
-        rejected = client.post(
-            "/api/v1/messages/send",
-            headers=send_headers,
-            json={"recipient": "rejected@mail.example", "subject": "Проверка"},
-        ).json()
-        silent = client.post(
-            "/api/v1/messages/send",
-            headers=send_headers,
-            json={"recipient": "quiet@mail.example", "subject": "Проверка"},
-        ).json()
+        def signed_post(message: dict[str, str]) -> dict[str, Any]:
+            request = client.build_request(
+                "POST",
+                "/api/v1/messages/send",
+                headers=auth,
+                json=message,
+            )
+            digest = hashlib.sha256(request.content).hexdigest().encode()
+            request.headers["X-Mail-Signature"] = hmac.new(
+                b"mail-demo-secret",
+                digest,
+                hashlib.sha256,
+            ).hexdigest()
+            return cast("dict[str, Any]", client.send(request).json())
+
+        sent = signed_post({"recipient": "grace@mail.example", "subject": "Проверка"})
+        rejected = signed_post(
+            {"recipient": "rejected@mail.example", "subject": "Проверка"}
+        )
+        silent = signed_post({"recipient": "quiet@mail.example", "subject": "Проверка"})
         found = client.get(
             "/api/v1/messages/sent?recipient=grace%40mail.example&subject=%D0%9F%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0"
         ).json()
