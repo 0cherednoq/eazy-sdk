@@ -6,6 +6,9 @@ import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -106,3 +109,43 @@ async def async_guide_client(site: GuideSite) -> AsyncIterator[AsyncClient]:
         handler=AsyncHttpxHandler(raw, owns_client=True),
     ) as client:
         yield client
+
+
+def _origin_handler(site: GuideSite) -> type[BaseHTTPRequestHandler]:
+    class OriginHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self) -> None:
+            parsed = urlsplit(self.path)
+            request = httpx.Request(
+                "GET",
+                f"http://{self.headers['Host']}{parsed.path}",
+                params=parsed.query,
+                headers=self.headers.items(),
+            )
+            response = site(request)
+            self.send_response(response.status_code)
+            for name, value in response.headers.multi_items():
+                if name.casefold() != "content-length":
+                    self.send_header(name, value)
+            self.send_header("content-length", str(len(response.content)))
+            self.end_headers()
+            self.wfile.write(response.content)
+
+        def log_message(self, format: str, *args: object) -> None:
+            _ = format, args
+
+    return OriginHandler
+
+
+@contextmanager
+def guide_origin(site: GuideSite) -> Iterator[str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _origin_handler(site))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()

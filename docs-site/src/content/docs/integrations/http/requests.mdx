@@ -1,37 +1,51 @@
 ---
-title: Requests
-description: Синхронный transport на базе requests.Session.
+title: Подключить Requests
+description: Используйте синхронную requests.Session как транспорт Eazy SDK.
 sources:
   - eazy_sdk.Client
 api_fingerprint: "sha256:9c50890282011d4c39ae2e70d6a942d36f93adf750e7166ade3922926784ef16"
 ---
 
+Установите extra `requests`:
+
 ```bash
 uv add "eazy-sdk[requests]"
 ```
 
-```python
-import requests
+Фабрика создаёт `requests.Session` и передаёт ей каждый подготовленный запрос:
 
-from eazy_sdk import Client
-from eazy_sdk.handlers.requests import RequestsHandler
-
-raw = requests.Session()
-raw.headers.clear()
-client = Client(
-    base_url="https://api.example",
-    handler=RequestsHandler(raw, owns_session=True),
-)
-users = SyncUsersApi(client)
-user = users.get_user(user_id=42)
-client.close()
+```{literalinclude} ../../../../../../examples/docs/integration_requests.py
+:language: python
+:start-after: "# docs:integration-requests:start"
+:end-before: "# docs:integration-requests:end"
 ```
 
-Requests поддерживает только синхронный client. `base_url` передаётся wrapper-у, потому что
-`requests.Session` не имеет собственного base URL. Очистка default headers нужна только если API
-требует точный набор или порядок headers. Короткая форма
-`Client.requests(base_url=..., proxy="http://proxy:8080")` создаёт очищенную сессию сама и
-объявляет proxy в `HandlerProfile.proxy`.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_requests.py
+:language: python
+```
+:::
 
-API-класс не зависит от transport и не меняется при переходе с HTTPX на Requests. Redirects и
-retries оставьте выключенными на уровне adapter-а, чтобы budgets контролировал Eazy SDK.
+<!-- example-output: examples.docs.integration_requests -->
+```text
+message: 42 План на пятницу
+```
+
+Requests поддерживает только синхронный `Client`. Для готовой сессии используйте
+`Client.requests(base_url=..., session=session)`. Eazy SDK не закроет переданную сессию;
+закройте её там, где она была создана.
+
+Адаптер отключает автоматические перенаправления, но Requests управляет частью служебных
+заголовков. Он не поддерживает повторяющиеся заголовки запроса и потоковое тело. Операция с
+такими требованиями завершится ошибкой до отправки, если её профиль требует точной поддержки.
+
+:::{note}
+Если API чувствителен к порядку заголовков, их регистру или TLS-отпечатку, выберите HTTPX либо
+`curl_cffi` после проверки нужного уровня в профиле обработчика.
+:::
+
+## Дальше
+
+- {doc}`Сравнить HTTP-клиенты </integrations/http/index>`
+- {doc}`Подключить curl_cffi </integrations/http/curl-cffi>`
+- {doc}`Объявить требования операции </guide/requests/representation>`

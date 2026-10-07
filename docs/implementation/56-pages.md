@@ -45,10 +45,10 @@
 | `auth/registration` | `integrations/accounts/registration` | ok |  |  |  | n/a |
 | `auth/session` | `guide/auth/session` | ok | ok | ok | ok | n/a |
 | `auth/verification` | `integrations/accounts/verification` | ok |  |  |  | n/a |
-| `clients/curl-cffi` | `integrations/http/curl-cffi` | ok |  |  |  | n/a |
-| `clients/httpx` | `integrations/http/httpx` | ok |  |  |  | n/a |
-| `clients/index` | `integrations/http/index` | ok |  |  |  | n/a |
-| `clients/requests` | `integrations/http/requests` | ok |  |  |  | n/a |
+| `clients/curl-cffi` | `integrations/http/curl-cffi` | ok | ok | ok | ok | n/a |
+| `clients/httpx` | `integrations/http/httpx` | ok | ok | ok | ok | n/a |
+| `clients/index` | `integrations/http/index` | ok | n/a | ok | ok | n/a |
+| `clients/requests` | `integrations/http/requests` | ok | ok | ok | ok | n/a |
 | `getting-started/index` | `start/index` | ok |  |  |  |  |
 | `getting-started/installation` | `start/installation` | ok | n/a | ok | ok | ok |
 | `getting-started/quickstart` | `start/quickstart` | ok | ok | ok | ok | ok |
@@ -117,7 +117,7 @@
 | `tutorial/assembly` | 56.4 | ok | ok | ok | ok | ok |
 | `guide/testing` | 56.5 | ok | ok | ok | ok | n/a |
 | `integrations/index` | 56.6 |  |  |  |  | n/a |
-| `integrations/http/custom-handler` | 56.6 |  |  |  |  | n/a |
+| `integrations/http/custom-handler` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/browser/playwright` | 56.6 |  |  |  |  | n/a |
 | `integrations/browser/pydoll` | 56.6 |  |  |  |  | n/a |
 | `integrations/models/pydantic` | 56.6 |  |  |  |  | n/a |

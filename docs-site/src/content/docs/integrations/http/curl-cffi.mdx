@@ -1,35 +1,50 @@
 ---
-title: curl_cffi
-description: Sync и async transport с browser impersonation.
+title: Подключить curl_cffi
+description: Отправляйте запросы с браузерным TLS-отпечатком через синхронный или асинхронный клиент.
 sources:
   - eazy_sdk.AsyncClient
 api_fingerprint: "sha256:5b860d03be71fe991e32d14023c6415b181d2f0e548f4db2cf4df025336e378a"
 ---
 
+Установите extra `curl-cffi`:
+
 ```bash
 uv add "eazy-sdk[curl-cffi]"
 ```
 
-```python
-from curl_cffi import requests
+Передайте вариант браузера через `impersonate`. Он попадёт в профиль обработчика и станет
+частью транспортной идентичности защиты:
 
-from eazy_sdk import AsyncClient
-from eazy_sdk.handlers.curl_cffi import AsyncCurlCffiZaprosHandler
-
-raw = requests.AsyncSession()
-client = AsyncClient(
-    base_url="https://api.example",
-    handler=AsyncCurlCffiZaprosHandler(raw, owns_session=True),
-)
-users = AsyncUsersApi(client)
-user = await users.get_user(user_id=42)
-await client.aclose()
+```{literalinclude} ../../../../../../examples/docs/integration_curl_cffi.py
+:language: python
+:start-after: "# docs:integration-curl-cffi:start"
+:end-before: "# docs:integration-curl-cffi:end"
 ```
 
-Sync-вариант использует `requests.Session` и `SyncUsersApi`. Impersonation, TLS fingerprint и proxy
-принадлежат transport/session configuration; typed API остаётся тем же. Короткая форма
-`AsyncClient.curl_cffi(base_url=..., impersonate="chrome", proxy="http://proxy:8080")` создаёт
-сессию сама и объявляет `impersonate`/`proxy` в `HandlerProfile`, чтобы managed clearance была
-привязана к этой identity.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_curl_cffi.py
+:language: python
+```
+:::
 
-Если operation требует exact wire capability, adapter проверит её до dependency resolver и сети.
+<!-- example-output: examples.docs.integration_curl_cffi -->
+```text
+message: 42 План на пятницу
+impersonation: chrome
+```
+
+Синхронный вариант строится через `Client.curl_cffi(...)`. Обе фабрики отключают собственные
+cookies и перенаправления сессии, чтобы ими управлял общий исполнитель Eazy SDK.
+
+`curl_cffi` нужен, когда сайт сравнивает TLS-отпечаток с ожидаемым браузером. Само значение
+`impersonate` не доказывает совпадение с конкретным браузером навсегда: поддерживаемые варианты
+и отпечатки зависят от установленной версии `curl_cffi`.
+
+Готовую `Session` или `AsyncSession` передавайте через `session=`. В этом режиме `proxy=` и
+`impersonate=` должны описывать реальную конфигурацию сессии, а закрывает её создавший код.
+
+## Дальше
+
+- {doc}`Сравнить HTTP-клиенты </integrations/http/index>`
+- {doc}`Связать браузерную сессию с HTTP </tutorial/assembly>`
+- {doc}`Написать свой обработчик </integrations/http/custom-handler>`

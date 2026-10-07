@@ -1,33 +1,30 @@
 ---
-title: Клиенты
-description: Выберите HTTP-клиент для Eazy SDK.
+title: Выбрать HTTP-клиент
+description: Сравните HTTPX, Requests, curl_cffi и собственный обработчик по режиму работы и точности передачи запроса.
 freshness: false
 ---
 
-| Клиент | Sync | Async |
-|---|:---:|:---:|
-| HTTPX | ✓ | ✓ |
-| Requests | ✓ | — |
-| curl_cffi | ✓ | ✓ |
+HTTP-клиент отвечает только за отправку подготовленного запроса. Операции, модели, авторизация,
+повторы и разбор ответа остаются общими для всех вариантов.
 
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} HTTPX
-:link: /integrations/http/httpx
-:link-type: doc
+| Вариант | Режим | Когда выбирать |
+|---|---|---|
+| HTTPX | синхронный и асинхронный | Обычный SDK без требований к браузерному TLS-отпечатку |
+| Requests | синхронный | Проект уже владеет `requests.Session` |
+| curl_cffi | синхронный и асинхронный | Сайт проверяет TLS-отпечаток или ожидает браузерное соединение |
+| Свой обработчик | зависит от реализации | Нужен другой транспорт или корпоративная сетевая библиотека |
 
-Обычный выбор для нового SDK.
+Короткие фабрики `Client.httpx(...)`, `Client.requests(...)` и `Client.curl_cffi(...)` создают
+адаптер и закрывают созданный ими сетевой клиент вместе с Eazy SDK. Если передать готовый
+`client=` или `session=`, сетевым объектом продолжает владеть вызывающий код.
+
+:::{note}
+Повторы и переходы по перенаправлениям выполняет Eazy SDK. Не включайте эти механизмы повторно
+в сетевом клиенте: новая попытка должна заново подготовить, зашифровать и подписать запрос.
 :::
-:::{grid-item-card} Requests
-:link: /integrations/http/requests
-:link-type: doc
 
-Используйте существующую requests.Session.
-:::
-:::{grid-item-card} curl_cffi
-:link: /integrations/http/curl-cffi
-:link-type: doc
+## Дальше
 
-Клиент с browser impersonation.
-:::
-::::
+- {doc}`Подключить HTTPX </integrations/http/httpx>`
+- {doc}`Подключить curl_cffi </integrations/http/curl-cffi>`
+- {doc}`Написать свой обработчик </integrations/http/custom-handler>`

@@ -1,0 +1,49 @@
+---
+title: Подключить свой HTTP-обработчик
+description: Реализуйте границу Zapros BaseHandler и передайте её синхронному клиенту Eazy SDK.
+sources:
+  - eazy_sdk.Client
+freshness: false
+---
+
+Собственный обработчик нужен, если готовые адаптеры не поддерживают вашу сетевую библиотеку.
+Он принимает полностью подготовленный `zapros.Request` и возвращает `zapros.Response`.
+
+```{literalinclude} ../../../../../../examples/docs/integration_custom_handler.py
+:language: python
+:start-after: "# docs:integration-custom-handler:start"
+:end-before: "# docs:integration-custom-handler:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_custom_handler.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_custom_handler -->
+```text
+message: 42 План на пятницу
+```
+
+Метод `handle(...)` не должен сам повторять запрос, переходить по `Location`, менять cookies или
+перекодировать готовое тело. Эти решения принимает исполнитель Eazy SDK. Асинхронный вариант
+реализует `AsyncBaseHandler.ahandle(...)` и передаётся в `AsyncClient`.
+
+Если обработчик владеет сетевым ресурсом, реализуйте `close()` либо `aclose()`. По умолчанию
+клиент вызывает его при закрытии. Для внешнего ресурса передайте `owns_handler=False` и закройте
+ресурс на уровне владельца.
+
+Без собственного `HandlerProfile` обработчик получает консервативный профиль. Объявляйте более
+сильные возможности только после проверки фактических байтов и поведения транспорта.
+
+:::{warning}
+Обработчик является последней границей перед сетью. Не записывайте секретные заголовки или
+открытое тело запроса в журнал диагностики.
+:::
+
+## Дальше
+
+- {doc}`Сравнить HTTP-клиенты </integrations/http/index>`
+- {doc}`Объявить точное представление </guide/requests/representation>`
+- {doc}`Проверить SDK локально </guide/testing>`

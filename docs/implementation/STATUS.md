@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.6.1–56.8. No blockers; next step is 56.6.1.
+56.6.2–56.8. No blockers; next step is 56.6.2.
 
 ### Verification evidence (56.5.5)
 
@@ -5737,3 +5737,16 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | page queue and debt audit | PASS: all 13 queue rows are filled; one obsolete `MockTransport` block, eight prose findings and seven legacy domain rows are removed from the debt snapshots. |
 | documentation metadata and freshness | PASS: 94 valid pages; 71 freshness fingerprints current. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-guides` | PASS: 94 sources, no warnings. |
+
+### Verification evidence (56.6.1)
+
+| Command | Result |
+|---|---|
+| four HTTP-integration example runs | PASS: synchronous and asynchronous HTTPX, Requests, asynchronous curl_cffi with Chrome impersonation, and a custom Zapros handler reached the local origin and returned the published message. |
+| focused documentation examples, snapshots and domain ratchet | PASS: 73 tests; all four outputs match their pages, all includes resolve, and no new documentation or domain debt appeared. |
+| `uv run mypy examples/docs` | PASS: no issues in 43 source files. |
+| `uv run ruff check examples/docs` | PASS. |
+| `scripts/lint_docs_prose.py` over all five HTTP pages | PASS: 0 errors and 0 warnings on every page; the pattern audit found no remaining findings. The outline-test exclusion applies to the four procedural pages. |
+| page queue and debt audit | PASS: all five queue rows are filled; two obsolete long-dash findings are removed from the prose snapshot. |
+| documentation metadata and freshness | PASS: 95 valid pages; 71 freshness fingerprints current. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-http-integrations` | PASS: 95 sources, no warnings. |

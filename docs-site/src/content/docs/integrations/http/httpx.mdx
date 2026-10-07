@@ -1,50 +1,59 @@
 ---
-title: HTTPX
-description: Sync или async transport на базе HTTPX.
+title: Подключить HTTPX
+description: Используйте один API в синхронном или асинхронном приложении через HTTPX.
 sources:
   - eazy_sdk.Client
   - eazy_sdk.AsyncClient
 api_fingerprint: "sha256:593af40b3edaab04e18562d52ef17b5623b8db865eb3d08fd35f977481650ad7"
 ---
 
+Установите extra `httpx`, если не ставили группу `all`:
+
 ```bash
 uv add "eazy-sdk[httpx]"
 ```
 
-HTTPX является рекомендуемым adapter для нового sync или async SDK. Передайте готовый
-`httpx.Client` или `httpx.AsyncClient`; Eazy SDK сохраняет его base URL, transport, proxy и
-connection pool.
+## Синхронный клиент
 
-```python
-import httpx
-
-from eazy_sdk import AsyncClient, Client
-from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
-
-async_client = AsyncClient(
-    base_url=base_url,
-    handler=AsyncHttpxHandler(httpx.AsyncClient(), owns_client=True),
-)
-async_api = AsyncUsersApi(async_client)
-user = await async_api.get_user(user_id=42)
-await async_client.aclose()
-
-sync_client = Client(
-    base_url=base_url,
-    handler=HttpxHandler(httpx.Client(), owns_client=True),
-)
-sync_api = SyncUsersApi(sync_client)
-user = sync_api.get_user(user_id=42)
-sync_client.close()
+```{literalinclude} ../../../../../../examples/docs/integration_httpx.py
+:language: python
+:start-after: "# docs:integration-httpx-sync:start"
+:end-before: "# docs:integration-httpx-sync:end"
 ```
 
-Короткая форма `Client.httpx(base_url=..., proxy="http://proxy:8080", timeout=10.0)` создаёт
-`httpx.Client` сама (остальные keyword-аргументы уходят в его конструктор) и объявляет `proxy` в
-`HandlerProfile.proxy`, так что managed clearance привязывается к этому proxy. Для готового
-`client=` аргумент `proxy=` — только декларация того, что он уже использует.
+## Асинхронный клиент
 
-Для гарантированного закрытия используйте `async with` или `with` вокруг client. Не
-включайте автоматические redirects/retries на стороне HTTPX: ими управляет общий Eazy SDK
-executor, который заново выполняет preparation и signing для каждой попытки.
+```{literalinclude} ../../../../../../examples/docs/integration_httpx.py
+:language: python
+:start-after: "# docs:integration-httpx-async:start"
+:end-before: "# docs:integration-httpx-async:end"
+```
 
-Оба варианта используют один execution pipeline и возвращают одинаковые typed values.
+Обе фабрики создают HTTPX-клиент без автоматических перенаправлений. Контекстный менеджер
+закрывает пул соединений. `AsyncClient.httpx(...)` принимает параметры конструктора
+`httpx.AsyncClient`, а `Client.httpx(...)` параметры `httpx.Client`.
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_httpx.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_httpx -->
+```text
+sync: 42 План на пятницу
+async: 42 План на пятницу
+```
+
+Чтобы использовать существующий пул, передайте `client=`. Eazy SDK не закроет переданный
+HTTPX-клиент. Параметр `proxy=` при этом только объявляет уже настроенный прокси в профиле
+обработчика; он не меняет конфигурацию чужого объекта.
+
+HTTPX сохраняет повторяющиеся заголовки и готовые байты тела. Точный уровень возможностей
+зафиксирован в `HTTPX_HANDLER_PROFILE` и зависит от проверенной версии HTTPX.
+
+## Дальше
+
+- {doc}`Сравнить HTTP-клиенты </integrations/http/index>`
+- {doc}`Передать готовую Requests-сессию </integrations/http/requests>`
+- {doc}`Проверить SDK локально </guide/testing>`
