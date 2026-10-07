@@ -1,34 +1,45 @@
 ---
-title: Redirect
-description: Следование HTTP redirect в пределах заданного лимита.
+title: Обработать HTTP redirect
+description: Следуйте Location внутри общего цикла попыток.
 sources:
   - eazy_sdk.clients.CallOptions
 api_fingerprint: "sha256:84586e1b658a2f2abef02237f487e4afac0c8f72982dc493fc2221486b1dd660"
 ---
 
-Eazy SDK обрабатывает redirect внутри общего attempt loop. Adapter-side redirects должны быть
-выключены, иначе новый request минует preparation, signing и budgets.
+Отключите автоматические redirects у transport adapter. Тогда Eazy SDK проверит лимит, область
+credentials и безопасность повторной отправки перед переходом.
 
-```python
-from eazy_sdk.clients import CallOptions
-
-result = await api.payments.create(
-    body=request,
-    options=CallOptions(max_redirects=2),
-)
+```{literalinclude} ../../../../../../examples/docs/reliability_redirect.py
+:language: python
+:start-after: "# region docs: reliability-redirect"
+:end-before: "# endregion docs: reliability-redirect"
 ```
 
-Пример: `POST /payments` с JSON `{"amount":"49.90"}` получает status `303`, header
-`Location: /payments/pay_42`; следующий attempt отправляет `GET /payments/pay_42` без body. `307`
-и `308` сохраняют method/body и требуют replay proof. Исчерпание лимита даёт
-`RedirectLimitError`.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/reliability_redirect.py
+:language: python
+```
+:::
 
-| Status | Следующий method | Body |
+<!-- example-output: examples.docs.reliability_redirect -->
+```text
+result: redirected
+GET api.mail.example/redirect
+GET api.mail.example/final
+```
+
+| Статус | Следующий method | Тело |
 |---|---|---|
-| `301`, `302` | определяется redirect policy | обычно удаляется при переходе на GET |
-| `303` | `GET` | удаляется |
-| `307`, `308` | сохраняется | сохраняется только при replay-safe body |
+| `301`, `302` | По redirect policy | Обычно удаляется при переходе на `GET` |
+| `303` | `GET` | Удаляется |
+| `307`, `308` | Сохраняется | Требует replay-safe body |
 
-Каждый переход заново выполняет scoped middleware contribution, preparation, auth и signing.
-Redirect target остаётся subject to scope/security policy; неожиданный authority не получает
-credentials автоматически.
+Каждый переход повторно применяет scoped middleware, авторизацию, подготовку и подпись.
+Неожиданный authority не получает credentials автоматически. Исчерпание `max_redirects` приводит
+к `RedirectLimitError`.
+
+## Дальше
+
+- {doc}`Настроить retry </guide/reliability/retry>`
+- {doc}`Подписать новый target </guide/signing>`
+- {doc}`Выбрать HTTP-клиент </integrations/http/index>`

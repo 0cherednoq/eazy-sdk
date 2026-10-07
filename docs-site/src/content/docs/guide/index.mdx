@@ -1,201 +1,71 @@
 ---
-title: Руководства
-description: Карта пользовательских функций Eazy SDK.
+title: Руководство
+description: Выберите задачу, которую нужно решить в SDK.
 template: splash
 freshness: false
 hero:
-  tagline: Откройте страницу с нужным запросом, ответом или поведением клиента.
+  tagline: От запроса и ответа до сессии, повторов и нескольких сервисов.
   actions:
     - text: Быстрый старт
-      link: /getting-started/quickstart/
-      icon: right-arrow
-    - text: API Reference
-      link: /api-reference/
-      variant: minimal
+      link: /start/quickstart/
+    - text: Учебный SDK
+      link: /tutorial/
+      type: secondary
 ---
 
-## HTTP
-
-::::{grid} 1 1 2 2
+::::{grid} 1 2 2 3
 :gutter: 2
-:::{grid-item-card} Объявление операции
-:link: /guide/requests/declarative
-:link-type: doc
 
-Класс операции и декоратор как короткая форма.
+:::{grid-item-card} Отправить запрос
+:link: /guide/requests/
+
+Все формы HTTP request.
 :::
-:::{grid-item-card} Запросы
-:link: /guide/requests/index
-:link-type: doc
 
-Path, query, headers, cookies или body.
+:::{grid-item-card} Разобрать ответ
+:link: /guide/responses/
+
+Типизированный успех, ошибки, метаданные ответа, HTML и точное правило выбора response case.
 :::
-:::{grid-item-card} Ответы
-:link: /guide/responses/index
-:link-type: doc
 
-Успешная модель, ошибка API или HTML.
+:::{grid-item-card} Добавить авторизацию
+:link: /guide/auth/
+
+Ключи, login и сессия.
 :::
-:::{grid-item-card} Клиенты
-:link: /integrations/http/index
-:link-type: doc
 
-HTTPX, Requests или curl_cffi.
+:::{grid-item-card} Управлять вызовом
+:link: /guide/reliability/retry/
+
+Повторы, redirects, лимит частоты, middleware и значения приложения на каждой стадии вызова.
 :::
-:::{grid-item-card} Мультисервисный SDK
-:link: /guide/multi-service
-:link-type: doc
 
-Несколько сервисов, роутеры и `bind()`.
+:::{grid-item-card} Защитить данные
+:link: /guide/signing/
+
+Подпись, crypto и guards.
 :::
-:::{grid-item-card} Подпись
-:link: /guide/signing
-:link-type: doc
 
-Добавьте HMAC-подпись к готовому запросу.
-:::
-:::{grid-item-card} Шифрование
-:link: /guide/encryption
-:link-type: doc
+:::{grid-item-card} Собрать SDK
+:link: /guide/multi-service/
 
-Шифруйте поля или всё тело до отправки.
-:::
-:::{grid-item-card} Бэкенды сериализации
-:link: /integrations/models/index
-:link-type: doc
-
-Модели, JSON и парсеры документов.
+Несколько сервисов и транспортов в одном проверяемом корне SDK.
 :::
 ::::
 
-## Доступ
+## Карта раздела
 
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} Авторизация
-:link: /guide/auth/index
-:link-type: doc
+| Задача | Страница |
+|---|---|
+| Обойти все страницы результата | {doc}`Пагинация </guide/pagination>` |
+| Передать контекст устройства или tenant | {doc}`Зависимости запроса </guide/dependencies>` |
+| Наблюдать или изменить жизненный цикл вызова | {doc}`Middleware </guide/middleware>` |
+| Описать JSON-RPC или другой конверт | {doc}`Протоколы и конверты </guide/protocols>` |
+| Объявить потоковый API | {doc}`WebSocket </guide/websocket>` |
+| Проверить SDK локально | {doc}`Тестирование SDK </guide/testing>` |
 
-Выберите схему доступа к API.
-:::
-:::{grid-item-card} Login
-:link: /guide/auth/login
-:link-type: doc
+## Дальше
 
-Получите session по credentials.
-:::
-:::{grid-item-card} Регистрация
-:link: /integrations/accounts/registration
-:link-type: doc
-
-Создайте аккаунт.
-:::
-:::{grid-item-card} Verification
-:link: /integrations/accounts/verification
-:link-type: doc
-
-Подтвердите созданный аккаунт.
-:::
-::::
-
-## Поведение
-
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} Dependencies
-:link: /guide/dependencies
-:link-type: doc
-
-Передайте вычисляемые значения в запрос.
-:::
-:::{grid-item-card} Пагинация
-:link: /guide/pagination
-:link-type: doc
-
-Объявите страницы на операции, обходите их через `pages()` и `items()`.
-:::
-:::{grid-item-card} Middleware
-:link: /guide/middleware
-:link-type: doc
-
-Добавьте обработчик вызова клиента.
-:::
-:::{grid-item-card} Retry
-:link: /guide/reliability/retry
-:link-type: doc
-
-Повторите запрос после временной ошибки.
-:::
-:::{grid-item-card} Redirect
-:link: /guide/reliability/redirect
-:link-type: doc
-
-Ограничьте число переходов.
-:::
-:::{grid-item-card} Rate limit
-:link: /guide/reliability/rate-limit
-:link-type: doc
-
-Ограничьте частоту запросов.
-:::
-::::
-
-## Инструменты
-
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} Protection
-:link: /guide/protection
-:link-type: doc
-
-Cloudflare, Turnstile или reCAPTCHA.
-:::
-:::{grid-item-card} OpenAPI
-:link: /integrations/generators/openapi
-:link-type: doc
-
-Сгенерируйте SDK из schema.
-:::
-:::{grid-item-card} SQLModel
-:link: /integrations/accounts/sqlmodel
-:link-type: doc
-
-Сохраните аккаунты в базе данных.
-:::
-:::{grid-item-card} XML
-:link: /integrations/documents/xml
-:link-type: doc
-
-Отправьте XML body.
-:::
-::::
-
-## Браузер
-
-::::{grid} 1 1 2 2
-:gutter: 2
-:::{grid-item-card} Браузерный SDK
-:link: /integrations/browser/index
-:link-type: doc
-
-Операция страницы, роутер и клиент поверх Playwright или Pydoll 3.
-:::
-:::{grid-item-card} Browser pool и Pydoll
-:link: /integrations/browser/browser-pool
-:link-type: doc
-
-Владение вкладкой, контекстной сессией и retry без смешивания слоёв.
-:::
-:::{grid-item-card} Исходы и отказы
-:link: /integrations/browser/outcomes
-:link-type: doc
-
-Признаки страницы, правила отказа и помехи.
-:::
-:::{grid-item-card} Вход и сессия
-:link: /integrations/browser/login
-:link-type: doc
-
-Вход через браузер и та же сессия у HTTP-клиента.
-:::
-::::
+- {doc}`Выбрать формат запроса </guide/requests/index>`
+- {doc}`Выбрать способ авторизации </guide/auth/index>`
+- {doc}`Собрать почтовый SDK целиком </tutorial/assembly>`

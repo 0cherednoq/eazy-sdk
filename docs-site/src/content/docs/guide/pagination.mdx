@@ -1,274 +1,55 @@
 ---
-title: Пагинация
-description: Стратегия страниц объявляется на классе операции через __pages__; pages() и items() на роутере обходят их без пользовательского цикла.
+title: Обойти страницы результата
+description: Объявите стратегию в __pages__ и используйте pages() или items().
 sources:
   - eazy_sdk.pagination
 draft: false
 api_fingerprint: "sha256:6e7813bf02a0d0e2213da9125d4a5fc22e1f690c8dbe07307963b8d4f047b592"
 ---
 
-Сервис отдаёт список порциями, а вызывающему коду нужны все элементы. Обычно ради этого на
-роутере появляется метод-генератор с циклом, счётчиком страниц и условиями остановки. В Eazy SDK
-эти четыре факта объявляются на самой операции, а цикл живёт в библиотеке: `pages()` отдаёт
-страницы, `items()` — их элементы.
+Стратегия пагинации принадлежит классу операции. Обычный вызов возвращает одну страницу, а
+`pages()` и `items()` строят следующие запросы через неизменяемое значение операции.
 
-## Короткий пример
-
-```python
-from dataclasses import dataclass
-
-import httpx
-from pydantic import BaseModel
-
-from eazy_sdk import UNSET, Client, Header, Http, HttpOperation, Omittable, Path, Query, SyncApi, op
-from eazy_sdk.pagination import Pages
-
-
-class Document(BaseModel):
-    id: str
-    title: str
-
-
-class DocumentsPage(BaseModel):
-    items: list[Document]
-    pages_count: int
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListDocuments(HttpOperation[DocumentsPage]):
-    __http__ = Http.get("/documents")
-    __pages__ = Pages.numbered(
-        DocumentsPage,
-        page="page",
-        size="per_page",
-        items=lambda r: r.items,
-        total_pages=lambda r: r.pages_count,
-    )
-
-    case_id: Query[str]
-    page: Query[int] = 1
-    per_page: Query[int] = 2
-
-
-class DocumentsApi(SyncApi):
-    documents = op(ListDocuments)
-
-
-DOCUMENTS = [("d-1", "Иск"), ("d-2", "Отзыв"), ("d-3", "Определение"), ("d-4", "Решение"), ("d-5", "Жалоба")]
-
-
-def server(request: httpx.Request) -> httpx.Response:
-    page = int(request.url.params["page"])
-    size = int(request.url.params["per_page"])
-    chunk = DOCUMENTS[(page - 1) * size : page * size]
-    return httpx.Response(
-        200,
-        json={
-            "items": [{"id": i, "title": t} for i, t in chunk],
-            "pages_count": -(-len(DOCUMENTS) // size),
-        },
-    )
-
-
-with Client.httpx(
-    base_url="https://api.court.example", transport=httpx.MockTransport(server)
-) as client:
-    api = DocumentsApi(client)
-
-    for page in api.documents.pages(case_id="A40-1/2026"):
-        print("страница:", [d.id for d in page.items])
-
-    print("всего:", [d.title for d in api.documents.items(case_id="A40-1/2026")])
+```{literalinclude} ../../../../../examples/docs/pagination.py
+:language: python
+:start-after: "# region docs: pagination"
+:end-before: "# endregion docs: pagination"
 ```
 
+`page=` и `size=` называют поля Python-класса, а не параметры на проводе. `items=` извлекает
+элементы, `total_pages=` сообщает последнюю страницу. Несовпадающий тип результата или опечатка
+в имени поля останавливает объявление роутера при импорте.
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../examples/docs/pagination.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.pagination -->
 ```text
-страница: ['d-1', 'd-2']
-страница: ['d-3', 'd-4']
-страница: ['d-5']
-всего: ['Иск', 'Отзыв', 'Определение', 'Решение', 'Жалоба']
+page 1: Иск, Отзыв
+page 2: Решение
 ```
 
-Обычный вызов `api.documents(case_id=..., page=2)` не меняется: `__pages__` читают только
-`pages()` и `items()`.
+## Выбрать стратегию
 
-## Что объявляет `Pages.numbered`
-
-| Аргумент | Что это | Обязателен |
+| Стратегия | Поле следующего запроса | Признак окончания |
 |---|---|---|
-| первый позиционный | класс результата операции, тот же, что в `HttpOperation[T]` | да |
-| `page=` | имя поля операции с номером страницы | да |
-| `items=` | функция от результата к списку элементов | да |
-| `size=` | имя поля операции с размером страницы | нет |
-| `total_pages=` | функция от результата к числу страниц | нет |
+| `Pages.numbered` | Номер страницы | Общее число страниц, короткая или пустая страница |
+| `Pages.offset` | Смещение | Общее число элементов, короткая или пустая страница |
+| `Pages.cursor` | Cursor из ответа | Отсутствующий следующий cursor |
+| `Pages.next_url` | Готовая ссылка | Отсутствующая ссылка |
 
-`page=` и `size=` — это имена полей класса операции, а не имена параметров на проводе:
-следующий запрос строится через `evolve()`, как и вручную. Класс результата передаётся первым
-аргументом ради IDE: параметр лямбды `r` выводится как `DocumentsPage`, автодополнение по `r.`
-работает, а mypy проверяет, что `r.pages_count` действительно `int`. Если тип не совпадает с
-`HttpOperation[T]`, `op()` откажет при импорте:
+`items()` разворачивает страницы в один поток. Аргумент `key=` пропускает повторяющиеся элементы
+и завершает обход, если новая страница не добавила ни одного значения. `max_pages=` ограничивает
+число запросов, а `options=` применяется к каждой странице.
 
-```text
-PlanError: ListDocuments.__pages__ declares result Document, the operation returns DocumentsPage
-```
+Каждая страница проходит обычные retry, middleware, авторизацию, защиту и подпись. Синхронный
+роутер возвращает iterator, асинхронный async iterator.
 
-То же при опечатке в имени поля:
+## Дальше
 
-```text
-PlanError: ListDocuments.__pages__ names unknown field 'pgae'; fields: case_id, page, per_page
-```
-
-## Как решается, есть ли следующая страница
-
-Правила применяются по порядку после каждой страницы; первое сработавшее останавливает обход.
-
-1. Страница не дала ни одного элемента.
-2. `total_pages=` объявлен, и текущий номер уже равен числу страниц.
-3. `size=` объявлен, и элементов на странице меньше размера.
-4. Иначе тот же запрос с номером страницы на единицу больше.
-
-В примере выше третья страница остановила обход по правилу 2, а без `total_pages=` её остановило
-бы правило 3: один элемент при `per_page=2`. Сервис без обоих признаков остановится по правилу 1,
-когда отдаст пустую страницу.
-
-Первая страница — та, что записана в полях запроса. `api.documents.pages(case_id=..., page=3)`
-начинает с третьей.
-
-## `items()`: элементы и повторы
-
-`items()` разворачивает страницы в один поток элементов. Если сервер после последней страницы
-отдаёт её же на любой следующий номер, правила выше не сработают: страница полная и не пустая.
-Для этого у `items()` есть `key=`:
-
-```python
-seen = [d.id for d in api.documents.items(case_id="A40-1/2026", key=lambda d: d.id)]
-```
-
-Элемент с уже виденным ключом пропускается, а страница, не давшая ни одного нового элемента,
-считается пустой и завершает обход по правилу 1. Так двадцатистрочный метод с `seen: set[str]`
-превращается в один аргумент.
-
-## Ограничение и параметры каждой страницы
-
-```python
-first_two = list(api.documents.pages(case_id="A40-1/2026", max_pages=2))
-```
-
-`max_pages=` ограничивает число запросов; `None` — до естественной остановки. `options=`
-передаётся каждому запросу страницы: каждая страница — это обычный `send()` операции, со всеми
-retry, middleware и защитами роутера.
-
-## Смещение вместо номера: `Pages.offset`
-
-Когда сервис адресует страницы числом уже отданных элементов, стратегия та же по форме, но
-поля другие: `offset=` и необязательный `limit=` — имена полей операции, `total=` — функция от
-результата к общему числу элементов.
-
-```python
-class Slice(BaseModel):
-    items: list[Document]
-    total: int
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListSlice(HttpOperation[Slice]):
-    __http__ = Http.get("/documents")
-    __pages__ = Pages.offset(
-        Slice,
-        offset="offset",
-        limit="limit",
-        items=lambda r: r.items,
-        total=lambda r: r.total,
-    )
-
-    case_id: Query[str]
-    offset: Query[int] = 0
-    limit: Query[int] = 100
-```
-
-Следующий запрос получает `offset + <сколько элементов вернул сервер>`, а не `offset + limit`:
-сервер, который отдал меньше, чем просили, не приводит к пропуску. Остановка, по порядку:
-
-1. Страница не дала ни одного элемента.
-2. `total=` объявлен, и `offset` плюс длина страницы достигли общего числа.
-3. `limit=` объявлен, и элементов на странице меньше лимита.
-4. Иначе тот же запрос со сдвинутым `offset`.
-
-## Токен продолжения: `Pages.cursor`
-
-Сервис, который вместо номера или смещения отдаёт непрозрачный токен следующей страницы,
-объявляется через `cursor=` — имя поля операции, куда токен кладётся, — и `next_cursor=` —
-функцию от результата к токену. `None` из `next_cursor` означает, что следующей страницы нет.
-
-```python
-class Feed(BaseModel):
-    items: list[Document]
-    next: str | None
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListFeed(HttpOperation[Feed]):
-    __http__ = Http.get("/documents")
-    __pages__ = Pages.cursor(
-        Feed,
-        cursor="after",
-        items=lambda r: r.items,
-        next_cursor=lambda r: r.next,
-    )
-
-    case_id: Query[str]
-    after: Query[Omittable[str]] = UNSET
-```
-
-Первая страница уходит с тем, что лежит в поле: здесь `UNSET`, то есть без параметра `after`
-вовсе. Каждая следующая несёт токен предыдущей. Остановка, по порядку:
-
-1. Страница не дала ни одного элемента.
-2. `next_cursor=` вернул `None`.
-3. Иначе тот же запрос с новым токеном.
-
-Чтобы начать с середины, передайте токен в вызов: `api.feed.items(case_id=..., after="c1")`.
-
-## Готовая ссылка: `Pages.next_url`
-
-Сервис, который отдаёт в ответе URL следующей страницы, объявляется без имён полей вовсе:
-только `items=` и `next_url=` — функция от результата к ссылке или `None`.
-
-```python
-class Listing(BaseModel):
-    items: list[Document]
-    next: str | None
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListListing(HttpOperation[Listing]):
-    __http__ = Http.get("/v/{version}/documents")
-    __pages__ = Pages.next_url(Listing, items=lambda r: r.items, next_url=lambda r: r.next)
-
-    version: Path[str] = "1"
-    case_id: Query[str]
-    trace: Header[str] = "sdk"
-```
-
-Первая страница уходит по обычному адресу операции. Каждая следующая уходит по ссылке как
-есть: путь и query-параметры операции к ней не добавляются, сервер уже закодировал в ссылке
-всё, что ему нужно. Заголовки, cookies и тело по-прежнему берутся из полей операции, поэтому
-`trace` уйдёт с каждой страницей. Относительная ссылка резолвится против фактического адреса
-страницы, которая её отдала. Ссылка на другой хост тоже допустима. Остановка, по порядку:
-
-1. Страница не дала ни одного элемента.
-2. `next_url=` вернул `None`.
-3. Иначе тот же запрос по новой ссылке.
-
-## Асинхронный роутер
-
-На `AsyncApi` те же методы отдают асинхронные генераторы:
-
-```python
-async for document in api.documents.items(case_id="A40-1/2026"):
-    ...
-```
-
-## Чего здесь нет
-
-- Декоратор `@api.get` не поддерживает `__pages__`: стратегии нужен класс с полями.
-- Тип элементов `items()` — `Any`: связанная операция знает тип страницы, но не тип элемента.
+- {doc}`Работать с запросом как со значением </guide/requests/values>`
+- {doc}`Настроить retry </guide/reliability/retry>`
+- {doc}`Справочник операций </reference/api/api-methods>`

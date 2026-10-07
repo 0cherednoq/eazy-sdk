@@ -1,6 +1,6 @@
 ---
-title: Подпись запросов
-description: HMAC по method, target и digest точных request bytes.
+title: Подписать запрос
+description: Вычислите HMAC по окончательным байтам и храните ключ в Identity.
 sources:
   - eazy_sdk.request.hmac_sha256
   - eazy_sdk.request.SigningKey
@@ -10,63 +10,51 @@ sources:
 api_fingerprint: "sha256:d5b2d146f4a67efeaaaf7f15220db08a5f21a39a7e3cb34b2376c46630fd3969"
 ---
 
-Создайте подпись из typed компонентов и передайте её в `signing=` операции или в атрибут
-`signing` роутера. Ключи приходят из `Identity(key_provider=…)`: алгоритм — контракт API,
-ключ — секрет вызывающей стороны. Secret не входит в operation arguments.
+Подпись является частью контракта операции, а секретный ключ принадлежит `Identity`. Поэтому
+вызывающий метод не принимает ключ и не может случайно отправить его как данные запроса.
 
-```python
-from dataclasses import dataclass
-
-from eazy_sdk import AsyncApi, Http, HttpOperation, Identity, JsonField, op
-from eazy_sdk.request import (
-    SigningKey,
-    SigningKeyRequirement,
-    body_digest,
-    header_output,
-    hmac_sha256,
-    join,
-    method,
-    path,
-)
-
-PAYMENTS_KEY = SigningKeyRequirement("payments-key")
-VENDOR_HMAC = hmac_sha256(
-    key=PAYMENTS_KEY,
-    base=join(
-        method(),
-        path(),
-        body_digest("sha256"),
-        separator=b"\n",
-    ),
-    output=header_output("X-Signature"),
-)
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CreatePayment(HttpOperation[Payment]):
-    __http__ = Http.post("/payments", signing=(VENDOR_HMAC,))
-
-    amount: JsonField[int]
-
-class PaymentsApi(AsyncApi):
-    create = op(CreatePayment)
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+:start-after: "# region docs: http-send-signature"
+:end-before: "# endregion docs: http-send-signature"
 ```
 
-Key provider разрешает `SigningKeyRequirement` перед первой отправкой:
+`SigningKeyRequirement` называет нужный ключ. `body_digest("sha256")` читает окончательные байты
+тела, а `header_output(...)` записывает результат в разрешённый заголовок.
 
-```python
-def load_signing_key(requirement: SigningKeyRequirement) -> SigningKey:
-    if requirement == PAYMENTS_KEY:
-        return SigningKey("replace-with-secret")
-    raise LookupError(requirement.name)
-
-identity = Identity(key_provider=load_signing_key)
+```{literalinclude} ../../../../../examples/mail/http/send.py
+:language: python
+:start-after: "# region docs: http-send-operations"
+:end-before: "# endregion docs: http-send-operations"
 ```
 
-Eazy SDK сначала сериализует точные bytes, затем считает digest и добавляет signature header.
-Retry и redirect заново выполняют preparation/signing. Пример: request JSON `{"amount":100}` с
-headers `Content-Type: application/json` и `X-Signature: ...`; response status `201`, JSON
-`{"id":"p-1"}`.
+```{literalinclude} ../../../../../examples/docs/signing.py
+:language: python
+:start-after: "# region docs: signing-run"
+:end-before: "# endregion docs: signing-run"
+```
 
-Signer читает immutable prepared request. Он может писать только объявленные outputs. Missing key,
-неподдерживаемый exact wire profile или конфликт output завершается до adapter emit. Не записывайте
-key и signature base с secrets в observer logs.
+:::{dropdown} Запускаемый файл целиком
+```{literalinclude} ../../../../../examples/docs/signing.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.signing -->
+```text
+signed message: 100
+```
+
+Runtime сначала строит wire-представление, кодирует и при необходимости шифрует его. Только
+после этого signer получает неизменяемый prepared request. Retry и redirect готовят и подписывают
+новую попытку заново.
+
+Отсутствующий ключ, неподдерживаемый профиль точных байтов или конфликт двух writers завершают
+вызов до отправки. Не выводите ключ, основу подписи с секретными полями или готовую подпись в
+журнал приложения.
+
+## Дальше
+
+- {doc}`Зашифровать payload </guide/encryption>`
+- {doc}`Подписать письмо в учебном SDK </tutorial/send>`
+- {doc}`Справочник подписи </reference/api/signing>`

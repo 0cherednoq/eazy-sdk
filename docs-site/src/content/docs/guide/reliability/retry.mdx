@@ -1,6 +1,6 @@
 ---
-title: Retry
-description: Повтор запроса после временной ошибки.
+title: Повторить временную ошибку
+description: Настройте безопасный retry и ограничьте число попыток.
 sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.RetryPolicy
@@ -8,49 +8,44 @@ sources:
 api_fingerprint: "sha256:dc2a9ba07a68292b556ac8d9af702387d6ad8fd86119a79781cb658bbd855342"
 ---
 
-Настройте retry один раз в `ClientConfig` и при необходимости сузьте budget через `CallOptions`
-конкретного вызова.
+`RetryPolicy.safe(...)` повторяет временные отказы только для операций, безопасность которых
+можно доказать. Пример получает `503`, заново готовит `GET` и принимает второй ответ.
 
-```python
-from eazy_sdk import AsyncClient, ClientConfig, Resilience, RetryPolicy
-from eazy_sdk.clients import CallOptions
-
-config = ClientConfig(
-    resilience=Resilience(retry=RetryPolicy.safe(max_attempts=3), timeout=5.0)
-)
-client = AsyncClient(base_url=base_url, handler=handler, config=config)
-
-payment = await api.payments.get_payment(
-    payment_id="pay_42",
-    options=CallOptions(max_attempts=4, transport_retries=1),
-)
+```{literalinclude} ../../../../../../examples/docs/reliability_retry.py
+:language: python
+:start-after: "# region docs: reliability-retry"
+:end-before: "# endregion docs: reliability-retry"
 ```
 
-Safe policy повторяет только replay-safe операции для временных status/transport failures. Для
-семантически безопасного POST установите `idempotent=True` в `__http__`; одноразовый stream требует
-`ReplayableStreamBody`. Каждый attempt заново выполняет preparation и signing.
-Если operation использует payload crypto, field/encoded transforms также выполняются заново:
-ciphertext и nonce предыдущей попытки не переиспользуются.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/reliability_retry.py
+:language: python
+```
+:::
 
-Пример первого ответа: status `503`, header `Retry-After: 1`; успешный повтор: status `200`, JSON
-`{"id":"pay_42"}`.
+<!-- example-output: examples.docs.reliability_retry -->
+```text
+result: ready
+attempts: 2
+```
 
-Protection reaction имеет независимый replay budget из `ReplayPolicy`. Каждый такой replay
-заново применяет актуальные private bindings, projection, crypto, encoding и signing; истёкший
-или rejected managed state не переиспользуется.
+Каждая попытка заново разрешает зависимости с политикой `ATTEMPT`, строит wire-представление,
+шифрует и подписывает байты. Одноразовый stream можно повторить только через
+`ReplayableStreamBody`. Для безопасного POST операция должна явно объявить `idempotent=True`.
 
-`max_replays` проверяется при создании policy: отрицательное значение запрещено, а ноль отключает
-protection replay и не уменьшает обычный attempt limit. Idempotency proof должен быть непустым
-валидным HTTP field name.
-
-## Budgets
-
-| Настройка | Назначение |
+| Бюджет | Что ограничивает |
 |---|---|
-| `max_attempts` | Общий предел всех попыток, включая auth и redirects |
-| `transport_retries` | Повторы после transport failure |
-| `auth_retries` | Повторы после refresh session |
-| `retry` | Policy, которая решает, какие status/method можно повторить |
+| `max_attempts` | Все попытки логического вызова |
+| `transport_retries` | Повторы после ошибки транспорта |
+| `auth_retries` | Повторы после обновления сессии |
+| `max_redirects` | Переходы по `Location` |
+| `RetryPolicy` | Методы, статусы, задержку и backoff |
 
-Истечение timeout или cancellation останавливает ожидание и не создаёт скрытый background retry.
-Если semantic safety нельзя доказать, executor возвращает replay error вместо повторной отправки.
+Общий timeout и cancellation останавливают ожидание. Protection replay имеет отдельное
+доказательство и бюджет, но всё равно расходует обычную попытку отправки.
+
+## Дальше
+
+- {doc}`Обработать redirect </guide/reliability/redirect>`
+- {doc}`Ограничить частоту отправки </guide/reliability/rate-limit>`
+- {doc}`Добавить middleware </guide/middleware>`

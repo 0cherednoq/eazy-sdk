@@ -1,5 +1,4 @@
 # Generated baseline for phase 56.2.3. Remove each line with the corresponding page debt.
-guide/pagination.mdx:74: mock-transport
 integrations/browser/index.mdx:94: route-fulfill
 integrations/browser/login.mdx:71: recording-handler
 integrations/browser/login.mdx:114: server-stub

@@ -1,220 +1,67 @@
 ---
-title: Dependencies
-description: Device context, tenant и другие значения, которые знает приложение, а не вызывающий ручку код.
+title: Передать зависимость запроса
+description: Добавьте device, tenant или другое значение приложения без аргумента каждого метода.
 sources:
   - eazy_sdk.dependencies
 draft: false
 api_fingerprint: "sha256:2ac8cc949d12120c8b00ac9aaba682aaf59fd2a1ac37ee1b9e59235e068d1fd3"
 ---
 
-У каждого значения в запросе есть владелец. `order_id` принадлежит вызывающей стороне и потому
-является полем операции. `device_id`, тип устройства, tenant или версия приложения принадлежат
-приложению, которое собрало SDK: они одинаковы для всех вызовов и не должны появляться в
-сигнатуре каждой ручки. Такие значения объявляются зависимостью.
+Зависимость подходит для значения, которым владеет приложение, а не вызывающий код. Автор SDK
+объявляет тип и назначение, приложение регистрирует provider, а runtime разрешает значение перед
+подготовкой запроса.
 
-Разделение ролей всегда одно и то же:
-
-| Кто | Что делает |
-|---|---|
-| Автор SDK | объявляет, какое значение нужно операции и куда оно попадёт |
-| Пользователь SDK | регистрирует provider и передаёт его в `Identity` |
-| Runtime | разрешает значение до отправки, кэширует по политике и повторяет для retry |
-
-Способов ровно три, и они различаются тем, куда попадает значение.
-
-## 1. Прямо в место запроса: `Inject`
-
-Когда значение целиком занимает один header, query-параметр, cookie или поле тела, публичного поля
-для него не нужно вовсе.
-
-```python
-from dataclasses import dataclass
-
-from eazy_sdk import Http, HttpOperation, Inject, SyncApi, op
-from eazy_sdk.dependencies import DependencyCachePolicy, DependencyContext
-from eazy_sdk.request import markers
-
-
-@dataclass(frozen=True, slots=True)
-class DeviceContext:
-    device_id: str
-    device_type: str
-    app_version: str
-
-
-@dataclass(frozen=True, slots=True)
-class DeviceHeader:
-    device: DeviceContext
-
-    def resolve(self, context: DependencyContext) -> str:
-        return self.device.device_id
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetRates(HttpOperation[Rates]):
-    __http__ = Http.get(
-        "/rates",
-        inject=(
-            Inject(
-                markers.Header("X-Device-Id"),
-                DeviceHeader(DEVICE_CONTEXT),
-                cache=DependencyCachePolicy.CLIENT,
-            ),
-        ),
-    )
+```{literalinclude} ../../../../../examples/docs/dependencies.py
+:language: python
+:start-after: "# region docs: dependencies"
+:end-before: "# endregion docs: dependencies"
 ```
 
-Источником может быть константа, callable без аргументов, callable, принимающий
-`DependencyContext`, или объект с методом `resolve`. Место обязано иметь явное имя на проводе, и
-это имя не должно совпадать с полем операции:
+`DEVICE` выбирает поле `id` результата и пишет его в объявленный `X-Device-Id`. Поле операции
+имеет `UNSET` по умолчанию, поэтому provider заполняет его только тогда, когда вызывающий не
+передал значение сам.
 
-```text
-PlanError: injected header wire name collides with another slot: 'X-Device-Id'
+`DependencyRegistry` принадлежит `Identity` и обслуживает все роутеры корня. Отсутствующий
+обязательный provider останавливает вызов до сети.
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../examples/docs/dependencies.py
+:language: python
 ```
-
-## 2. В тело через проекцию: `requires=` и `Injected`
-
-Если значение должно оказаться внутри вложенного документа, форму документа строит проекция, а
-зависимость даёт ей значение. Объявление получает имя и тип, поэтому в диагностике оно видно, а
-результат проверяется по типу.
-
-```python
-from typing import cast
-
-from eazy_sdk.dependencies import Injected, dependency
-from eazy_sdk.request import Body, BodyProjection
-
-DEVICE = dependency(DeviceContext, name="device")
-
-
-@dataclass(frozen=True, slots=True)
-class RegisterUserProjection:
-    def __call__(self, user: RegisterUser, injected: Injected) -> RegisterUserWire:
-        device = cast(DeviceContext, injected[DEVICE.dependency])
-        return {
-            "account": {"login": user.login, "email": user.email},
-            "client": {"device_id": device.device_id, "type": device.device_type},
-        }
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RegisterUser(HttpOperation[RegisteredUser]):
-    __http__ = Http.post(
-        "/register",
-        requires=(DEVICE,),
-        projection=BodyProjection(
-            target=RegisterUserWire, using=RegisterUserProjection(), encoding=Body.json()
-        ),
-    )
-
-    login: str
-    email: str
-```
-
-Проекция с двумя параметрами получает разрешённые `requires=` вторым аргументом. Полный пример —
-в {doc}`Представлении запроса </guide/requests/representation>`; исполняемый — в
-`examples/flat_model_wire_body.py`.
-
-## 3. В объявленное поле: `apply=`
-
-Зависимость может заполнять поле, которое операция уже объявила, — тогда вызывающая сторона
-может передать значение сама, а если не передала, его подставит provider.
-
-```python
-from eazy_sdk import UNSET, Omittable
-from eazy_sdk.dependencies import dependency, field, value
-
-DEVICE = dependency(
-    DeviceContext,
-    name="device",
-    apply=(
-        field("device_id").to_header("X-Device-Id"),
-        field("device_type").to_query("platform"),
-    ),
-    cache=DependencyCachePolicy.CLIENT,
-)
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetOrder(HttpOperation[Order]):
-    __http__ = Http.get("/orders/{order_id}", requires=(DEVICE,))
-
-    order_id: Path[str]
-    device_id: Annotated[Omittable[str], markers.Header("X-Device-Id")] = UNSET
-    platform: Annotated[Omittable[str], markers.Query("platform")] = UNSET
-```
-
-`field(name)` выбирает атрибут результата, `value()` — весь результат; цель — header, query, cookie
-или поле тела. Цель обязана существовать: в отличие от `Inject`, `apply=` пишет в уже объявленный
-слот.
-
-```text
-PlanError: dependency target is not declared: header.X-Device-Id
-```
-
-## Provider принадлежит вызывающей стороне
-
-Реализация регистрируется в `DependencyRegistry` и передаётся в `Identity`, а не объявляется в
-операции. Provider — объект с методом `resolve(context)`; он может быть синхронным или
-асинхронным.
-
-```python
-from eazy_sdk import Identity
-from eazy_sdk.dependencies import DependencyRegistry
-
-
-@dataclass(frozen=True, slots=True)
-class StaticDevice:
-    device: DeviceContext
-
-    def resolve(self, context: DependencyContext) -> DeviceContext:
-        return self.device
-
-
-dependencies = DependencyRegistry()
-dependencies.register(
-    DEVICE.dependency,
-    StaticDevice(DeviceContext(device_id="device-7", device_type="desktop", app_version="3.4.1")),
-)
-
-sdk = ShopSdk(client, identity=Identity(dependencies=dependencies))
-```
-
-`Identity` обслуживает все роутеры корня, поэтому device context передаётся один раз на весь SDK.
-Provider, читающий актуальное значение из keychain, конфигурации или другого сервиса, устроен так
-же — это тот же объект с `resolve`.
-
-Если реализация известна автору объявления, её можно указать сразу:
-`dependency(DeviceContext, name="device", provide=load_device_context)`. В реестр она всё равно
-попадает — просто регистрирует её объявление, а не пользователь.
-
-## Кэширование и повторы
-
-| Cache policy | Пересчёт |
-|---|---|
-| `NONE` | при каждом обращении |
-| `CLIENT` | один раз на время жизни роутера |
-| `CALL` | один раз на логический вызов API (по умолчанию) |
-| `ATTEMPT` | заново на каждую retry- или redirect-попытку |
-
-Значение, которое должно быть свежим в каждой попытке — nonce, timestamp, короткоживущий
-токен, — объявляется `ATTEMPT`. Значение, которое дорого получить и которое не меняется, —
-`CLIENT`. У `Inject` политика по умолчанию — `ATTEMPT`.
-
-Зависимости разрешаются до сетевых side effects и применяются одним атомарным патчем.
-Отсутствующий provider, значение неверного типа и конфликт двух bindings за одно место завершают
-вызов до отправки:
-
-```text
-PlanError: missing provider: device
-```
-
-Resolver не получает mutable request и не может обойти подпись: сначала разрешаются значения,
-затем собирается запрос, и только потом он подписывается. `secret=True` убирает значение из
-диагностики.
-
-:::{note} Не всё, что приходит извне, — зависимость
-Access token и session — это {doc}`авторизация </guide/auth/index>`, решение CAPTCHA —
-{doc}`protection </guide/protection>`, ключ подписи — `Identity(key_provider=…)`. У каждого
-из них свои повторы и свой момент обновления, поэтому отдельный механизм здесь не дублирование.
 :::
+
+<!-- example-output: examples.docs.dependencies -->
+```text
+device: device-7
+```
+
+## Выбрать способ применения
+
+| Способ | Когда использовать |
+|---|---|
+| `Inject(...)` | Значение целиком занимает новый header, query, cookie или поле тела |
+| `requires=` с `apply=` | Значение заполняет уже объявленный слот операции |
+| `requires=` с `BodyProjection` | Значение нужно внутри private wire-документа |
+
+## Выбрать срок кэша
+
+| Политика | Когда provider вызывается снова |
+|---|---|
+| `NONE` | При каждом обращении к зависимости |
+| `CLIENT` | После создания нового роутера |
+| `CALL` | Для нового логического вызова |
+| `ATTEMPT` | Для каждой попытки, включая retry и redirect |
+
+Nonce и timestamp обычно требуют `ATTEMPT`, а неизменяемый device context можно хранить с
+`CLIENT`. Маркер `secret=True` скрывает значение из диагностики.
+
+:::{note}
+Access token относится к авторизации, captcha к защите, а ключ HMAC к `key_provider`. У этих
+значений другой жизненный цикл, поэтому не оформляйте их как обычные зависимости.
+:::
+
+## Дальше
+
+- {doc}`Построить private wire-представление </guide/requests/representation>`
+- {doc}`Подписать запрос </guide/signing>`
+- {doc}`Справочник зависимостей </reference/api/dependencies>`

@@ -56,21 +56,21 @@
 | `guides/browser/index` | `integrations/browser/index` | ok |  |  |  | n/a |
 | `guides/browser/login` | `integrations/browser/login` | ok |  |  |  | n/a |
 | `guides/browser/outcomes` | `integrations/browser/outcomes` | ok |  |  |  | n/a |
-| `guides/dependencies` | `guide/dependencies` | ok |  |  |  | n/a |
-| `guides/index` | `guide/index` | ok |  |  |  | n/a |
-| `guides/middleware` | `guide/middleware` | ok |  |  |  | n/a |
-| `guides/multi-service` | `guide/multi-service` | ok |  |  |  | n/a |
+| `guides/dependencies` | `guide/dependencies` | ok | ok | ok | ok | n/a |
+| `guides/index` | `guide/index` | ok | n/a | ok | ok | n/a |
+| `guides/middleware` | `guide/middleware` | ok | ok | ok | ok | n/a |
+| `guides/multi-service` | `guide/multi-service` | ok | ok | ok | ok | n/a |
 | `guides/openapi` | `integrations/generators/openapi` | ok |  |  |  | n/a |
-| `guides/pagination` | `guide/pagination` | ok |  |  |  | n/a |
-| `guides/payload-crypto` | `guide/encryption` | ok |  |  |  | n/a |
+| `guides/pagination` | `guide/pagination` | ok | ok | ok | ok | n/a |
+| `guides/payload-crypto` | `guide/encryption` | ok | ok | ok | ok | n/a |
 | `guides/protection/cloudflare` | `integrations/protection/cloudflare` | ok |  |  |  | n/a |
 | `guides/protection/index` | `guide/protection` | ok | ok | ok | ok | n/a |
 | `guides/protection/recaptcha` | `integrations/protection/recaptcha` | ok |  |  |  | n/a |
 | `guides/protection/turnstile` | `integrations/protection/turnstile` | ok |  |  |  | n/a |
-| `guides/protocols` | `guide/protocols` | ok |  |  |  | n/a |
-| `guides/reliability/rate-limit` | `guide/reliability/rate-limit` | ok |  |  |  | n/a |
-| `guides/reliability/redirect` | `guide/reliability/redirect` | ok |  |  |  | n/a |
-| `guides/reliability/retry` | `guide/reliability/retry` | ok |  |  |  | n/a |
+| `guides/protocols` | `guide/protocols` | ok | ok | ok | ok | n/a |
+| `guides/reliability/rate-limit` | `guide/reliability/rate-limit` | ok | ok | ok | ok | n/a |
+| `guides/reliability/redirect` | `guide/reliability/redirect` | ok | ok | ok | ok | n/a |
+| `guides/reliability/retry` | `guide/reliability/retry` | ok | ok | ok | ok | n/a |
 | `guides/requests/bytes` | `guide/requests/bytes` | ok | ok | ok | ok | n/a |
 | `guides/requests/cookies` | `guide/requests/cookies` | ok | ok | ok | ok | n/a |
 | `guides/requests/declarative` | `guide/requests/declarative` | ok | ok | ok | ok | n/a |
@@ -89,7 +89,7 @@
 | `guides/responses/success` | `guide/responses/success` | ok | ok | ok | ok | n/a |
 | `guides/serialization` | `integrations/models/index` | ok |  |  |  | n/a |
 | `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok |  |  |  | n/a |
-| `guides/websocket` | `guide/websocket` | ok |  |  |  | n/a |
+| `guides/websocket` | `guide/websocket` | ok | ok | ok | ok | n/a |
 | `guides/xml` | `integrations/documents/xml` | ok |  |  |  | n/a |
 | `index` | `index` | ok |  |  |  | n/a |
 | `more/examples/html-login` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
@@ -98,7 +98,7 @@
 | `more/examples/signed-api` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/store-sdk` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/migration` | `reference/migration` | ok |  |  |  | n/a |
-| `signing` | `guide/signing` | ok |  |  |  | n/a |
+| `signing` | `guide/signing` | ok | ok | ok | ok | n/a |
 
 ## Новые страницы
 
@@ -115,7 +115,7 @@
 | `tutorial/send` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/encryption` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/assembly` | 56.4 | ok | ok | ok | ok | ok |
-| `guide/testing` | 56.5 |  |  |  |  | n/a |
+| `guide/testing` | 56.5 | ok | ok | ok | ok | n/a |
 | `integrations/index` | 56.6 |  |  |  |  | n/a |
 | `integrations/http/custom-handler` | 56.6 |  |  |  |  | n/a |
 | `integrations/browser/playwright` | 56.6 |  |  |  |  | n/a |

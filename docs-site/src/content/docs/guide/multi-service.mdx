@@ -1,6 +1,6 @@
 ---
-title: Мультисервисный SDK
-description: Адрес сервиса объявляет роутер, исполнителя выбирает сборка через bind().
+title: Собрать SDK для нескольких сервисов
+description: Объявите адрес на роутере и измените сборку через bind().
 sources:
   - eazy_sdk.SyncRoot
   - eazy_sdk.AsyncRoot
@@ -10,222 +10,56 @@ sources:
 api_fingerprint: "sha256:fdfd3e03461fa2a302105337ecc2cc98c86b0a67936d08086d7e4aa284325cf6"
 ---
 
-Адрес сервиса — часть описания API, наравне с path. Роутер объявляет его атрибутом класса, а
-общее для нескольких роутеров одного сервиса выносится в обычный базовый класс. Отдельного типа
-для «домена» нет: общие атрибуты в Python выражаются наследованием.
+Один корень, несколько адресов.
 
-```python
-from dataclasses import dataclass
+Адрес сервиса является частью контракта роутера. Общий клиент может обслуживать разные hosts,
+сохраняя единые transport policy и состояние handler.
 
-from eazy_sdk import Http, HttpOperation, JsonField, Path, SyncApi, SyncRoot, api_group, op
-
-class PaymentsService:
-    """Обычный миксин: всё, что общее у роутеров одного сервиса."""
-
-    base_url = "https://pay.shop.com"
-    errors = PAYMENT_ERRORS
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RegisterCard(HttpOperation[Card]):
-    __http__ = Http.post("/v1/cards", success={201: Card})
-
-    number: JsonField[str]
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GetBook(HttpOperation[Book]):
-    __http__ = Http.get("/books/{book_id}")
-
-    book_id: Path[int]
-
-class CardApi(PaymentsService, SyncApi):
-    register = op(RegisterCard)
-
-class BooksApi(SyncApi):
-    get = op(GetBook)
-
-class ShopSdk(SyncRoot):
-    books = api_group(BooksApi)   # адрес не объявлен → берётся из клиента
-    card = api_group(CardApi)     # адрес из PaymentsService
+```{literalinclude} ../../../../../examples/docs/multi_service.py
+:language: python
+:start-after: "# region docs: multi-service"
+:end-before: "# endregion docs: multi-service"
 ```
 
-Однохостовый SDK не пишет ни миксина, ни привязок: объявление не длиннее обычного.
+`BooksApi` наследует адрес клиента. `CardsApi` получает адрес от `BillingService`, а `bind(...)`
+заменяет его для stage-сборки без изменения декларации API.
 
-## Резолв адреса операции
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../examples/docs/multi_service.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.multi_service -->
+```text
+book: SDK Patterns
+card: card-42
+GET api.mail.example/books/7
+POST stage-billing.mail.example/cards
+```
+
+## Порядок выбора адреса
 
 | Приоритет | Источник |
 |---|---|
-| 1 | Абсолютный URL в самой декларации операции |
-| 2 | `base_url` из `bind(...)` для класса роутера или его базы |
-| 3 | `base_url`, объявленный на классе роутера или унаследованный по MRO |
+| 1 | Абсолютный URL операции |
+| 2 | `base_url` из наиболее точного `bind(...)` |
+| 3 | `base_url` роутера или его миксина |
 | 4 | `base_url` клиента |
 
-Отсюда главное свойство: мультисервисный SDK работает **на одном клиенте**. Отдельный клиент
-нужен только там, где отличаются транспортные политики: другой impersonation/TLS-профиль, другой
-proxy, отдельная guard-сессия, другие retry и timeout, другой handler.
+Отдельный клиент нужен, когда сервису требуется другой proxy, TLS-профиль, handler, timeout или
+собственная guard-сессия. Передайте его через `bind(Router, client=...)`; в остальных случаях
+новый клиент только раздробит cookies, connection pool и управляемое состояние без пользы.
 
-## Сборка: `bind()`
+Контрактные defaults роутера включают `security`, `signing`, `crypto`, `wire`, `errors` и
+`base_url`. Операция может заменить правила, а `security=None`, `signing=()` и `crypto=None`
+явно отключают соответствующее наследование.
 
-`bind()` принимает **класс** — роутер или его миксин. Совпадение ищется по MRO, наиболее
-специфичный класс выигрывает.
+`Root(client)` не владеет переданным клиентом. `Root.from_handler(...)` создаёт и закрывает его
+сам, а клиент из `bind(..., client=...)` всегда остаётся во владении сборки.
 
-```python
-from eazy_sdk import Client, bind
+## Дальше
 
-main = Client.httpx(base_url="https://api.shop.com")
-
-# один клиент на все сервисы: адреса берутся из роутеров
-sdk = ShopSdk(main)
-
-# платежам нужен свой impersonation и своя guard-сессия
-sdk = ShopSdk(
-    main,
-    bindings=(bind(CardApi, client=Client.curl_cffi(impersonate="chrome")),),
-)
-
-# stage: та же декларация, другой адрес — на весь сервис сразу
-sdk = ShopSdk(main, bindings=(bind(PaymentsService, base_url="https://stage-pay.shop.com"),))
-```
-
-Один клиент на несколько сервисов означает общую guard/protection-сессию, общий proxy и общий
-cookie jar; cookie при этом остаются домен-скоупными по RFC 6265. Если сервису нужна собственная
-транспортная политика — дайте ему свой клиент через `bind(..., client=...)`.
-
-## Контракт объявляется один раз
-
-Подпись, шифрование и представление — такие же атрибуты сервиса, как `base_url`: они объявляются
-на роутере или на общем миксине и наследуются по MRO. Повторять их в каждой операции не нужно.
-
-```python
-from dataclasses import dataclass
-
-from eazy_sdk import AsyncApi, Http, HttpOperation, JsonField, op
-from eazy_sdk.crypto import encrypt_encoded, encrypt_outbound, payload_crypto
-from eazy_sdk.request import JsonPolicy, Wire, header_output, hmac_sha256, method
-
-ROUTER_SIGNATURE = hmac_sha256(
-    key=SIGNING_KEY, base=method(), output=header_output("X-Router"), name="router"
-)
-SERVICE_CRYPTO = payload_crypto(
-    "payments", outbound=encrypt_outbound(encoded=encrypt_encoded(using=cipher))
-)
-
-class PaymentsService:
-    base_url = "https://pay.shop.com"
-    security = PAYMENTS_TOKEN
-    signing = (ROUTER_SIGNATURE,)
-    crypto = SERVICE_CRYPTO
-    wire = Wire(encoding=JsonPolicy(ensure_ascii=True))
-    errors = PAYMENT_ERRORS
-    signed = True          # операция без подписи отвергается при компиляции
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Charge(HttpOperation[Receipt]):
-    """Подпись, crypto и wire — от сервиса."""
-
-    __http__ = Http.post("/charge")
-
-    account: JsonField[str]
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Refund(HttpOperation[Receipt]):
-    """Своя подпись, шифрования нет."""
-
-    __http__ = Http.post("/refund", signing=(REFUND_SIGNATURE,), crypto=None)
-
-    account: JsonField[str]
-
-class PaymentsApi(PaymentsService, AsyncApi):
-    charge = op(Charge)
-    refund = op(Refund)
-```
-
-Объявление в `__http__` не «добавляется» к сервисному, а **заменяет** его целиком: глядя на
-операцию, всегда видно, чем именно она подписана. Единственное исключение — `errors` и `wire`,
-где складывать безопасно, потому что ни то, ни другое не может тихо ослабить требование сервера.
-
-| Атрибут | Слияние по MRO | На операции |
-|---|---|---|
-| `base_url` | побеждает ближайший непустой | абсолютный URL в пути сильнее всех |
-| `security` | побеждает ближайший объявленный | `security=` заменяет, `security=None` снимает схему |
-| `signing` | побеждает ближайший непустой | `signing=` заменяет, `signing=()` снимает подпись |
-| `crypto` | побеждает ближайший объявленный | `crypto=` заменяет, `crypto=None` отключает |
-| `wire` | `Wire.over(...)` — по полям | по полям поверх сервисного |
-| `errors` | складываются | `errors=` добавляются, `inherit_errors=False` отбрасывает сервисные |
-| `protocol` | побеждает ближайший объявленный | не объявляется: берётся конвертом `Rpc.method` |
-| `allow`, `signed` | ближайший объявленный / логическое «или» | не объявляются |
-
-Снять наследование на подклассе роутера нельзя: пустое значение (`signing = ()`, `security =
-None`) читается как «не объявлено» и наследование не отменяет — отказ от сервисного правила
-выражается на операции, где он виден.
-
-Что **не** наследуется от сервиса: успешные случаи (они задают тип результата, а он —
-часть сигнатуры операции; как убрать повтор, см.
-{doc}`Успешный ответ </guide/responses/success>`), `protections`, `requires`/`inject`,
-`idempotent`.
-
-## Что объявляет роутер, что клиент
-
-| Уровень | Что несёт | Почему |
-|---|---|---|
-| Роутер / миксин сервиса | `base_url`, `errors`, `security`, `signing`, `crypto`, `wire`, `signed`, `allow` | контракт API: что сервер требует и что возвращает |
-| Клиент | `base_url` по умолчанию, retry, timeout, proxy, impersonation, handler, guard/protection | доставка байтов |
-
-Цепочка дефолтов — одна: корень → MRO роутера → объявление операции. Слияние выполняется один раз
-при разрешении дескриптора операции, а не на каждом вызове.
-
-## Роутер другого транспорта
-
-Корень собирает не только HTTP-роутеры. Роутер другого транспорта — например, браузерный
-`AsyncBrowserApi` из `eazy-sdk-browser` — попадает в `api_group`, если умеет собрать себя сам:
-у класса есть метод `__compose__(client)`. Корень решает только одно — какой клиент ему дать
-через `bind(Router, client=...)`; сервисные атрибуты, allowlist и адрес такого роутера корень не
-читает и как HTTP не резолвит: у него свой словарь.
-
-```python
-class PortalSdk(AsyncRoot):
-    api = api_group(CompaniesApi)         # HTTP: запросы через BrowserHandler
-    portal = api_group(CompaniesPortal)   # браузер: клики на той же странице
-
-
-sdk = PortalSdk(http, bindings=(bind(CompaniesPortal, client=AsyncBrowserClient(driver)),))
-created = await sdk.api.create(name="ООО Ромашка", inn="7701234567")
-dialog = await sdk.portal.open_create_company()
-```
-
-Без `bind(..., client=)` такой роутер получит клиент корня по умолчанию — и откажется от него
-сам, если это не его клиент. Класс без `__compose__` и не роутер ядра `api_group` отвергает.
-
-## Ошибки объявления и сборки
-
-| Ситуация | Когда падает |
-|---|---|
-| Два миксина в MRO объявляют разный `base_url` | при объявлении роутера |
-| `base_url` не абсолютный URL | при объявлении роутера |
-| Операция несёт схему или подпись вне `allow` | при сборке корня |
-| `bind()` на класс, которого нет ни в одном MRO групп корня | при сборке корня |
-| Две привязки одинаковой специфичности | при сборке корня |
-| `api_group` объявлен на роутере, а не на корне | при объявлении роутера |
-| Операция объявлена на классе корня | при объявлении корня |
-| `api_group` на классе, который не роутер ядра и не собирает себя (`__compose__`) | при объявлении корня |
-
-`allow` — это allowlist схем и подписей сервиса: он не даёт унести чужой токен на чужой хост.
-Пока `allow` не объявлен, ограничения нет.
-
-## Владение клиентами
-
-`Root(client)` не владеет клиентом: его закрывает тот, кто создал. `Root.from_handler(...)`
-создаёт клиент сам и закрывает его в `close()`/`aclose()`; повторный вызов безопасен. Клиенты,
-переданные через `bind(..., client=...)`, корень не закрывает никогда.
-
-## Одна сессия на несколько сервисов
-
-Сессия принадлежит не транспорту, а вызывающей стороне: `identity=` на корне обслуживает все его
-роутеры — и когда сервисы делят клиент, и когда у каждого свой (см.
-{doc}`Session auth </guide/auth/session>`).
-
-```python
-sdk = ShopSdk(main, identity=Identity(auth=(SHOP_SESSION.configure(...),)))
-```
-
-`allow` на миксине сервиса ограничивает, какие схемы и подписи вообще можно нести на этот адрес,
-поэтому один логин на два сервиса не означает, что токен уедет на третий.
+- {doc}`Собрать учебный SDK </tutorial/assembly>`
+- {doc}`Передать общую Identity </guide/auth/session>`
+- {doc}`Выбрать HTTP-клиент </integrations/http/index>`

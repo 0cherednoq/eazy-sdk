@@ -1,11 +1,4 @@
 # Phase 56.2.5 ratchet. Remove entries when their legacy example or page is migrated.
-docs-site/src/content/docs/guide/encryption.mdx:213: pay.shop.com
-docs-site/src/content/docs/guide/multi-service.mdx:25: pay.shop.com
-docs-site/src/content/docs/guide/multi-service.mdx:74: api.shop.com
-docs-site/src/content/docs/guide/multi-service.mdx:86: stage-pay.shop.com
-docs-site/src/content/docs/guide/multi-service.mdx:113: pay.shop.com
-docs-site/src/content/docs/guide/protocols.mdx:36: rpc.shop.com
-docs-site/src/content/docs/guide/websocket.mdx:131: stream.example.test
 docs-site/src/content/docs/integrations/accounts/registration.mdx:29: example.test
 docs-site/src/content/docs/integrations/accounts/registration.mdx:118: example.test
 docs-site/src/content/docs/integrations/accounts/sqlmodel.mdx:37: example.test

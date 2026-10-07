@@ -1,43 +1,44 @@
 ---
-title: Rate limit
-description: Ограничение частоты фактических HTTP-запросов.
+title: Ограничить частоту отправки
+description: Резервируйте каждую фактическую попытку перед transport send.
 sources:
   - eazy_sdk.ClientConfig
   - eazy_sdk.ratelimit_runtime
 api_fingerprint: "sha256:f1b8c86f47f0406a85262c308e317783c914ff78d9851c9e4f759b6338c9e226"
 ---
 
-Реализуйте limiter и передайте его в `ClientConfig`. Limiter резервирует право на фактическую
-отправку, а не на logical API call.
+Считать нужно отправки.
 
-```python
-from eazy_sdk import Client, ClientConfig, Resilience
-from eazy_sdk.ratelimit_runtime import RateLimitDecision
+Rate limiter вызывается перед каждой физической отправкой, а не один раз на логический метод.
+Поэтому retry, redirect и replay защитной проверки получают отдельную reservation.
 
-class ApiLimiter:
-    async def reserve(self, context):
-        delay = await bucket.reserve(context.authority)
-        return RateLimitDecision(delay=delay)
-
-client = Client(
-    base_url=base_url,
-    handler=handler,
-    config=ClientConfig(resilience=Resilience(rate_limiter=ApiLimiter())),
-)
+```{literalinclude} ../../../../../../examples/docs/reliability_rate_limit.py
+:language: python
+:start-after: "# region docs: reliability-rate-limit"
+:end-before: "# endregion docs: reliability-rate-limit"
 ```
 
-Conditional challenge replay получает новую reservation. Single-flight solve и managed
-protection cache сами по себе reservation не потребляют: limiter вызывается только перед
-фактическим transport send.
+`context.authority` позволяет разделить buckets по сервисам. Также доступны операция, номер и вид
+попытки. Limiter возвращает задержку, но не отправляет HTTP-запрос самостоятельно.
 
-`ClientConfig.with_protection()` сохраняет существующий limiter в новом immutable config; preset
-не создаёт отдельный transport path или reservation mechanism.
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/reliability_rate_limit.py
+:language: python
+```
+:::
 
-Limiter применяется перед каждой отправкой, включая retry и redirect.
+<!-- example-output: examples.docs.reliability_rate_limit -->
+```text
+result: limited
+reservation: api.mail.example attempt=1
+```
 
-`context.authority` позволяет разделить buckets по upstream. Limiter может учитывать operation,
-attempt и deadline из context, но не должен отправлять HTTP request самостоятельно.
+Ожидание учитывает cancellation и общий timeout. Повтор после `429` создаёт новую reservation;
+получение и проверка обязательной protection тоже проходят limiter, когда реализованы обычными
+scoped API-операциями, и потому не образуют скрытый transport path.
 
-Если reservation возвращает delay, executor ждёт с поддержкой cancellation и общего timeout.
-Retry после `429` создаёт новую reservation. Nested login, protection acquire и verify также
-проходят limiter, потому что являются обычными scoped API-методами.
+## Дальше
+
+- {doc}`Настроить retry </guide/reliability/retry>`
+- {doc}`Обработать защитную проверку </guide/protection>`
+- {doc}`Добавить middleware </guide/middleware>`

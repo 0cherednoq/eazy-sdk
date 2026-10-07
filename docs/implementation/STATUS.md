@@ -5723,4 +5723,17 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.5.5–56.8. No blockers; next step is 56.5.5.
+56.6.1–56.8. No blockers; next step is 56.6.1.
+
+### Verification evidence (56.5.5)
+
+| Command | Result |
+|---|---|
+| 12 remaining-guide example runs | PASS: dependencies, pagination, middleware, three reliability policies, multi-service routing, protocol envelopes, WebSocket modes, signing, encryption and testing produced the output published on their pages. |
+| focused documentation examples, snapshots and domain ratchet | PASS: 69 tests; every runnable guide file has exactly one matching output block, all includes resolve, and the rewritten pages add no documentation or domain debt. |
+| `uv run mypy examples/docs` | PASS: no issues in 39 source files. |
+| `uv run ruff check examples/docs` | PASS. |
+| `scripts/lint_docs_prose.py` over all 13 pages | PASS: 0 errors and 0 warnings on every page; the pattern audit found no remaining findings. The outline-test exclusion for procedural guides applies. |
+| page queue and debt audit | PASS: all 13 queue rows are filled; one obsolete `MockTransport` block, eight prose findings and seven legacy domain rows are removed from the debt snapshots. |
+| documentation metadata and freshness | PASS: 94 valid pages; 71 freshness fingerprints current. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-guides` | PASS: 94 sources, no warnings. |
