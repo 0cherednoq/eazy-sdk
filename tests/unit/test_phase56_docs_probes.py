@@ -5,15 +5,34 @@ from dataclasses import dataclass, field
 
 import httpx
 import pytest
+from eazy_sdk_browser import AsyncBrowserClient, BrowserCallOptions, Failure, Observation, enforce
+from eazy_sdk_browser.testing import FakeDriver
 
-from examples.mail.browser.login_probe import Identify, LoginPortal, Mailbox, OtpStep, PasswordStep
+from examples.mail.browser.login_failures import main as browser_login_main
+from examples.mail.browser.login_probe import (
+    ACCOUNT_FAILURES,
+    OTP_FAILURES,
+    PASSWORD_FAILURES,
+    VALID_LOGIN_INPUT,
+    AccountBlockedError,
+    AccountNotFoundError,
+    CaptchaRequiredError,
+    Identify,
+    LoginPortal,
+    Mailbox,
+    OtpStep,
+    PasswordStep,
+    WrongCodeError,
+    WrongPasswordError,
+)
 from examples.mail.http.captcha_probe import main as captcha_main
-from examples.mail.http.login_probe import main
+from examples.mail.http.login_failures import main as http_login_main
 from examples.mail.site import MailSite, handle_httpx, intercept_page
+from examples.mail.site.browser_driver import TeachingLoginDriver
 
 
 def test_http_login_probe_prints_all_six_outcomes(capsys: pytest.CaptureFixture[str]) -> None:
-    main()
+    http_login_main()
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "wrong password: WrongPassword",
@@ -22,6 +41,21 @@ def test_http_login_probe_prints_all_six_outcomes(capsys: pytest.CaptureFixture[
         "second factor: OtpStep",
         "wrong code: WrongCode",
         "captcha: CaptchaRequired",
+    ]
+
+
+def test_browser_login_probe_prints_all_six_executed_outcomes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_login_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "wrong password: WrongPasswordError",
+        "account not found: AccountNotFoundError",
+        "account blocked: AccountBlockedError",
+        "second factor: OtpStep",
+        "wrong code: WrongCodeError",
+        "captcha: CaptchaRequiredError",
     ]
 
 
@@ -47,6 +81,41 @@ def test_browser_login_probe_declares_three_typed_steps() -> None:
     assert identify_outcomes.cases[0].to is PasswordStep
     assert password_outcomes.cases[0].to is OtpStep
     assert otp_outcomes.cases[0].to is Mailbox
+
+
+@pytest.mark.asyncio
+async def test_browser_login_probe_executes_the_three_typed_steps() -> None:
+    driver = TeachingLoginDriver()
+    portal = LoginPortal(AsyncBrowserClient(driver))
+    options = BrowserCallOptions(timeout=0.01)
+
+    password = await portal.identify(email="ada@mail.example", options=options)
+    otp = await password.submit(password=VALID_LOGIN_INPUT)
+    mailbox = await otp.submit(code="123456")
+
+    assert isinstance(password, PasswordStep)
+    assert isinstance(otp, OtpStep)
+    assert isinstance(mailbox, Mailbox)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("selector", "rules", "error"),
+    [
+        ('[data-code="wrong_password"]', PASSWORD_FAILURES, WrongPasswordError),
+        ('[data-code="account_not_found"]', ACCOUNT_FAILURES, AccountNotFoundError),
+        ('[data-code="account_blocked"]', ACCOUNT_FAILURES, AccountBlockedError),
+        ('[data-code="wrong_code"]', OTP_FAILURES, WrongCodeError),
+        ('[data-page="captcha"]', PASSWORD_FAILURES, CaptchaRequiredError),
+    ],
+)
+async def test_browser_login_failures_match_their_page_markers(
+    selector: str,
+    rules: tuple[Failure, ...],
+    error: type[Exception],
+) -> None:
+    with pytest.raises(error):
+        await enforce(rules, Observation(FakeDriver(present={selector})))
 
 
 @dataclass(slots=True)
@@ -189,11 +258,48 @@ async def test_complete_teaching_site_serves_the_browser_tutorial() -> None:
     assert status == 200
     assert b'name="email"' in identify
 
+    form_headers = {"content-type": "application/x-www-form-urlencoded"}
+    _, _, missing = await visit(
+        "POST",
+        "https://mail.example/login/identify",
+        body=b"email=missing%40mail.example",
+        headers=form_headers,
+    )
+    _, _, blocked = await visit(
+        "POST",
+        "https://mail.example/login/identify",
+        body=b"email=blocked%40mail.example",
+        headers=form_headers,
+    )
+    _, _, wrong_password = await visit(
+        "POST",
+        "https://mail.example/login/password",
+        body=b"login_id=login%3Aada%40mail.example&password=wrong",
+        headers=form_headers,
+    )
+    _, _, wrong_code = await visit(
+        "POST",
+        "https://mail.example/login/otp",
+        body=b"login_id=login%3Aada%40mail.example&code=000000",
+        headers=form_headers,
+    )
+    _, _, captcha = await visit(
+        "POST",
+        "https://mail.example/login/password",
+        body=b"login_id=login%3Acaptcha%40mail.example&password=correct",
+        headers=form_headers,
+    )
+    assert b'data-code="account_not_found"' in missing
+    assert b'data-code="account_blocked"' in blocked
+    assert b'data-code="wrong_password"' in wrong_password
+    assert b'data-code="wrong_code"' in wrong_code
+    assert b'data-page="captcha"' in captcha
+
     _, _, password = await visit(
         "POST",
         "https://mail.example/login/identify",
         body=b"email=ada%40mail.example",
-        headers={"content-type": "application/x-www-form-urlencoded"},
+        headers=form_headers,
     )
     assert b'data-page="password"' in password
     assert b"login%3Aada" not in password
@@ -202,7 +308,7 @@ async def test_complete_teaching_site_serves_the_browser_tutorial() -> None:
         "POST",
         "https://mail.example/login/password",
         body=b"login_id=login%3Aada%40mail.example&password=correct",
-        headers={"content-type": "application/x-www-form-urlencoded"},
+        headers=form_headers,
     )
     assert status == 303
     assert headers["location"] == "/login/otp?login_id=login%3Aada%40mail.example"
@@ -217,7 +323,7 @@ async def test_complete_teaching_site_serves_the_browser_tutorial() -> None:
         "POST",
         "https://mail.example/login/otp",
         body=b"login_id=login%3Aada%40mail.example&code=123456",
-        headers={"content-type": "application/x-www-form-urlencoded"},
+        headers=form_headers,
     )
     assert status == 303
     assert headers["location"] == "/inbox/"

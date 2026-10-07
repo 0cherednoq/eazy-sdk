@@ -5281,6 +5281,11 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   даёт полные карты HTTP-ручек и браузерных признаков и объясняет общий `MailSite`. После слепой
   проверки исправлены два старых hero-маршрута; кнопка подгрузки и композер получили рабочие
   обработчики страницы. Шифрование честно ограничено HTTP-линией как клиентское преобразование.
+- 56.4.3: новые `tutorial/login` и `tutorial/login-failures` показывают трёхшаговый вход и шесть
+  его исходов для HTTP и браузера. HTTP-линия выполняет операции через локальный обработчик,
+  браузерная проводит `LoginPortal` через `TeachingLoginDriver`, который отправляет формы тому же
+  `MailSite` и строит DOM-признаки из фактического HTML. Обвязка вынесена из публикуемых файлов;
+  на страницах остались `literalinclude`, панели запросов/ответов и буквальные HTML-фрагменты.
 
 ### Commands run while planning
 
@@ -5495,6 +5500,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | fresh-agent blind review after corrections | PASS: provenance, routes, endpoint map, interactive page behavior and encryption boundary agree with the plan and implementation. |
 | combined phase-56 debt snapshots | EXPECTED RED: 28 passed, 2 failed; the remaining prose debt and test scaffolding are confined to pages assigned to 56.5-56.6 and the temporary legacy examples removed in 56.4.10. |
 
+### Verification evidence (56.4.3)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.login_success` | PASS: `session: session-ada`. |
+| `uv run python -m examples.mail.http.login_failures` | PASS: six HTTP outcomes match the published output. |
+| `uv run python -m examples.mail.browser.login_failures` | PASS: six browser operations execute through `TeachingLoginDriver` and `MailSite`; output matches the page. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 22 passed. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 19 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
+| prose linter on `tutorial/login.mdx` and `tutorial/login-failures.mdx` | PASS: both 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 92 pages. |
+| strict Sphinx build to `docs-site/_build/user-preview` | PASS after moving nested HTTP panels above the transport tabs: 92 sources, no warnings. |
+| fresh-agent blind review after two correction rounds | PASS: factual HTTP/HTML panels, clean published files, all six executed browser outcomes and page-queue tracking verified. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5536,4 +5556,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.3–56.8. No blockers; next step is 56.4.3.
+56.4.4–56.8. No blockers; next step is 56.4.4.

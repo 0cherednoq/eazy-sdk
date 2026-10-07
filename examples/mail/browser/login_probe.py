@@ -10,6 +10,8 @@ from eazy_sdk_browser import (
     Browser,
     BrowserOperation,
     Element,
+    Failure,
+    PageError,
     css,
     outcomes,
     visible,
@@ -19,6 +21,59 @@ from eazy_sdk_browser import (
 from eazy_sdk import op
 
 VALID_LOGIN_INPUT = "correct"
+
+
+class WrongPasswordError(PageError):
+    """Пароль не подошёл."""
+
+
+class AccountNotFoundError(PageError):
+    """Аккаунт не найден."""
+
+
+class AccountBlockedError(PageError):
+    """Аккаунт заблокирован."""
+
+
+class WrongCodeError(PageError):
+    """Код подтверждения не подошёл."""
+
+
+class CaptchaRequiredError(PageError):
+    """Страница запросила капчу."""
+
+
+# region docs: browser-login-failures
+# examples/mail/browser/login_probe.py
+ACCOUNT_FAILURES = (
+    Failure(
+        when=visible(css('[data-code="account_not_found"]')),
+        exception=AccountNotFoundError,
+    ),
+    Failure(
+        when=visible(css('[data-code="account_blocked"]')),
+        exception=AccountBlockedError,
+    ),
+)
+
+PASSWORD_FAILURES = (
+    Failure(
+        when=visible(css('[data-code="wrong_password"]')),
+        exception=WrongPasswordError,
+    ),
+    Failure(
+        when=visible(css('[data-page="captcha"]')),
+        exception=CaptchaRequiredError,
+    ),
+)
+
+OTP_FAILURES = (
+    Failure(
+        when=visible(css('[data-code="wrong_code"]')),
+        exception=WrongCodeError,
+    ),
+)
+# endregion docs: browser-login-failures
 
 
 class IdentifyPage:
@@ -72,6 +127,8 @@ async def _otp_stalled(content: OtpPage) -> NoReturn:
     raise TimeoutError("mailbox did not appear")
 
 
+# region docs: browser-login-operations
+# examples/mail/browser/login_probe.py
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Identify(BrowserOperation[IdentifyPage, PasswordStep]):
     __browser__ = Browser.act(
@@ -95,6 +152,7 @@ class SubmitPassword(BrowserOperation[PasswordPage, OtpStep]):
     __browser__ = Browser.act(
         PasswordPage,
         at=css('input[name="password"]'),
+        errors=PASSWORD_FAILURES,
         outcomes=outcomes(
             when(visible(css('input[name="code"]')), to=OtpStep),
             otherwise=_password_stalled,
@@ -113,6 +171,7 @@ class SubmitOtp(BrowserOperation[OtpPage, Mailbox]):
     __browser__ = Browser.act(
         OtpPage,
         at=css('input[name="code"]'),
+        errors=OTP_FAILURES,
         outcomes=outcomes(
             when(visible(css('[data-page="mailbox"]')), to=Mailbox),
             otherwise=_otp_stalled,
@@ -124,16 +183,22 @@ class SubmitOtp(BrowserOperation[OtpPage, Mailbox]):
     async def act(self, content: OtpPage) -> None:
         await content.code.fill(self.code)
         await content.submit.click()
+# endregion docs: browser-login-operations
 
 
 # region docs: browser-login-router
+# examples/mail/browser/login_probe.py
 class LoginPortal(AsyncBrowserApi):
+    errors = ACCOUNT_FAILURES
+
     identify = op(Identify)
     password = op(SubmitPassword)
     otp = op(SubmitOtp)
 # endregion docs: browser-login-router
 
 
+# region docs: browser-login-flow
+# examples/mail/browser/login_probe.py
 async def typed_login(portal: LoginPortal) -> Mailbox:
     """Make loss of a step type fail the ordinary mypy gate."""
 
@@ -141,3 +206,4 @@ async def typed_login(portal: LoginPortal) -> Mailbox:
     otp: OtpStep = await password.submit(password=VALID_LOGIN_INPUT)
     mailbox: Mailbox = await otp.submit(code="123456")
     return mailbox
+# endregion docs: browser-login-flow

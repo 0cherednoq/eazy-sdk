@@ -3,16 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Callable
 from typing import Annotated
 
-import httpx
-
-from eazy_sdk import Client, Http, HttpOperation, JsonField, SyncApi, op
-from eazy_sdk.handlers.httpx import HttpxHandler
+from eazy_sdk import Http, HttpOperation, JsonField, SyncApi, op
 from eazy_sdk.response import ApiError, Const, Error, Json, Payload
-
-from examples.mail.site import handle_httpx
 
 BASE_URL = "https://mail.example"
 WRONG_INPUT = "wrong"
@@ -53,6 +47,8 @@ class SessionResponse:
     body: Payload[Session]
 
 
+# region docs: http-login-failures
+# examples/mail/http/login_probe.py
 @dataclass(frozen=True, slots=True)
 class WrongPasswordDetails:
     code: Annotated[str, Const("wrong_password")]
@@ -138,8 +134,11 @@ class LoginService:
         Error(200, Json(WrongCodeResponse), exception=WrongCode),
         Error(403, Json(CaptchaRequiredResponse), exception=CaptchaRequired),
     )
+# endregion docs: http-login-failures
 
 
+# region docs: http-login-operations
+# examples/mail/http/login_probe.py
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Identify(HttpOperation[PasswordStep]):
     __http__ = Http.post("/login/identify", success={200: Json(PasswordStepResponse)})
@@ -161,64 +160,13 @@ class SubmitOtp(HttpOperation[Session]):
 
     login_id: JsonField[str]
     code: JsonField[str]
+# endregion docs: http-login-operations
 
 
 # region docs: http-login-router
+# examples/mail/http/login_probe.py
 class LoginApi(LoginService, SyncApi):
     identify = op(Identify)
     password = op(SubmitPassword)
     otp = op(SubmitOtp)
 # endregion docs: http-login-router
-
-
-def _client() -> Client:
-    raw = httpx.Client(
-        transport=httpx.MockTransport(handle_httpx),
-        headers={},
-        cookies={},
-    )
-    return Client(handler=HttpxHandler(raw, owns_client=True))
-
-
-def _print_error(label: str, call: Callable[[], object]) -> None:
-    try:
-        call()
-    except ApiError as error:
-        print(f"{label}: {type(error).__name__}")
-
-
-def main() -> None:
-    with _client() as client:
-        login = LoginApi(client)
-
-        password_step = login.identify(email="ada@mail.example")
-        _print_error(
-            "wrong password",
-            lambda: login.password(login_id=password_step.login_id, password=WRONG_INPUT),
-        )
-        _print_error(
-            "account not found",
-            lambda: login.identify(email="missing@mail.example"),
-        )
-        _print_error(
-            "account blocked",
-            lambda: login.identify(email="blocked@mail.example"),
-        )
-
-        otp_step = login.password(login_id=password_step.login_id, password=VALID_INPUT)
-        print(f"second factor: {type(otp_step).__name__}")
-        _print_error(
-            "wrong code",
-            lambda: login.otp(login_id=otp_step.login_id, code="000000"),
-        )
-        _print_error(
-            "captcha",
-            lambda: login.password(
-                login_id=login.identify(email="captcha@mail.example").login_id,
-                password=VALID_INPUT,
-            ),
-        )
-
-
-if __name__ == "__main__":
-    main()

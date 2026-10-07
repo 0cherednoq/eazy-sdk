@@ -1,0 +1,148 @@
+---
+title: Вход в три шага
+description: Три операции проводят аккаунт от адреса почты до готовой сессии.
+freshness: false
+---
+
+Вход не стоит прятать в один метод. После адреса сайт показывает форму пароля, после пароля
+переводит на второй фактор и только после кода выдаёт сессию. Отдельная операция на каждый шаг
+сохраняет этот порядок в типах.
+
+| Шаг | Запрос или страница | Следующее состояние |
+|---|---|---|
+| Адрес | `POST /login/identify` или поле `email` | `PasswordStep` |
+| Пароль | `POST /login/password` или поле `password` | `OtpStep` |
+| Код | `POST /login/otp` или поле `code` | `Session` или `Mailbox` |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /login/identify``
+
+```json
+{"email": "ada@mail.example"}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": "ok",
+  "body": {"login_id": "login:ada@mail.example"}
+}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+Каждый HTTP-вызов получает конверт с `status` и `body`. `Payload` снимает внешний конверт,
+поэтому операция возвращает сразу модель следующего шага.
+
+```{literalinclude} ../../../../../examples/mail/http/login_probe.py
+:language: python
+:start-after: "# region docs: http-login-operations"
+:end-before: "# endregion docs: http-login-operations"
+```
+
+Роутер публикует три операции и наследует общие варианты отказа от `LoginService`.
+
+```{literalinclude} ../../../../../examples/mail/http/login_probe.py
+:language: python
+:start-after: "# region docs: http-login-router"
+:end-before: "# endregion docs: http-login-router"
+```
+
+В прикладном коде результат предыдущего вызова даёт данные для следующего:
+
+```{literalinclude} ../../../../../examples/mail/http/login_success.py
+:language: python
+:start-after: "# region docs: http-login-flow"
+:end-before: "# endregion docs: http-login-flow"
+```
+
+:::{dropdown} Файлы примера целиком
+```{literalinclude} ../../../../../examples/mail/http/login_probe.py
+:language: python
+```
+
+```{literalinclude} ../../../../../examples/mail/http/login_success.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.login_success`.
+
+<!-- example-output: examples.mail.http.login_success -->
+```text
+session: session-ada
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+Браузерные операции заполняют по одной форме. После клика правило `when(...)` ждёт признак
+следующей страницы, а `to=` строит состояние с тем же роутером.
+
+После отправки адреса тот же `MailSite` возвращает страницу пароля:
+
+```html
+<main data-page="password">
+  <form method="post" action="/login/password">
+    <input name="login_id" type="hidden" value="login:ada@mail.example">
+    <label>Пароль <input name="password" type="password"></label>
+    <button type="submit">Войти</button>
+  </form>
+</main>
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+:start-after: "# region docs: browser-login-operations"
+:end-before: "# endregion docs: browser-login-operations"
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+:start-after: "# region docs: browser-login-router"
+:end-before: "# endregion docs: browser-login-router"
+```
+
+Цепочка ниже проходит обычный mypy-гейт. Если операция вернёт не тот шаг, присваивание не
+сойдётся по типу.
+
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+:start-after: "# region docs: browser-login-flow"
+:end-before: "# endregion docs: browser-login-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+```
+:::
+::::
+:::::
+
+`PasswordStep` и `OtpStep` хранят тот же `LoginPortal`, поэтому вызывающему коду не нужно
+пересобирать клиент между страницами. HTTP-линия передаёт `login_id`, браузерная сохраняет
+контекст страницы; обе следуют одному порядку сайта.
+
+## Дальше
+
+- {doc}`Разберите все исходы входа </tutorial/login-failures>`.
+- {doc}`Вернитесь к карте учебного сайта </tutorial/index>`.

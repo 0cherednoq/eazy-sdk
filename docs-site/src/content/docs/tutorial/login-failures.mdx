@@ -1,0 +1,164 @@
+---
+title: Чем вход может закончиться
+description: Шесть ответов входа как модели HTTP, признаки страницы и точные исключения.
+freshness: false
+---
+
+Успешный вход проходит через второй фактор. Остальные ответы должны иметь собственные имена:
+тогда приложение ловит ожидаемый отказ по типу, а не разбирает текст или адрес страницы.
+
+| Случай | Что получает вызывающий |
+|---|---|
+| Неверный пароль | `WrongPassword` или `WrongPasswordError` |
+| Аккаунт не найден | `AccountNotFound` или `AccountNotFoundError` |
+| Аккаунт заблокирован | `AccountBlocked` или `AccountBlockedError` |
+| Нужен второй фактор | `OtpStep` |
+| Неверный код | `WrongCode` или `WrongCodeError` |
+| Нужна капча | `CaptchaRequired` или `CaptchaRequiredError` |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /login/password``
+
+```json
+{
+  "login_id": "login:ada@mail.example",
+  "password": "wrong"
+}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": "wrong_password",
+  "body": {
+    "code": "wrong_password",
+    "message": "Password is incorrect"
+  }
+}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+В JSON имя варианта повторяется во внешнем `status` и во внутреннем `body.code`. `Const`
+проверяет оба дискриминатора до создания исключения. Капча приходит с HTTP-статусом `403`,
+остальные ожидаемые ответы этого сайта остаются внутри `200`.
+
+```{literalinclude} ../../../../../examples/mail/http/login_probe.py
+:language: python
+:start-after: "# region docs: http-login-failures"
+:end-before: "# endregion docs: http-login-failures"
+```
+
+| Ответ сайта | Правило | Результат |
+|---|---|---|
+| `status = wrong_password` | `Error(200, Json(WrongPasswordResponse), ...)` | `WrongPassword` |
+| `status = account_not_found` | `Error(200, Json(AccountNotFoundResponse), ...)` | `AccountNotFound` |
+| `status = account_blocked` | `Error(200, Json(AccountBlockedResponse), ...)` | `AccountBlocked` |
+| `status = ok`, модель `OtpStep` | успешный ответ `SubmitPassword` | `OtpStep` |
+| `status = wrong_code` | `Error(200, Json(WrongCodeResponse), ...)` | `WrongCode` |
+| HTTP `403`, `kind = captcha` | `Error(403, Json(CaptchaRequiredResponse), ...)` | `CaptchaRequired` |
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/login_probe.py
+:language: python
+```
+
+```{literalinclude} ../../../../../examples/mail/http/login_failures.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.login_failures`.
+
+<!-- example-output: examples.mail.http.login_failures -->
+```text
+wrong password: WrongPassword
+account not found: AccountNotFound
+account blocked: AccountBlocked
+second factor: OtpStep
+wrong code: WrongCode
+captcha: CaptchaRequired
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+Страница сообщает об отказах атрибутами `data-code`. Правила аккаунта принадлежат роутеру,
+а неверный пароль, капча и неверный код остаются у операций своих шагов.
+
+При неверном пароле браузер видит этот фрагмент фактического ответа сайта:
+
+```html
+<main data-page="failure" data-code="wrong_password">
+  <p role="alert">Password is incorrect</p>
+</main>
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+:start-after: "# region docs: browser-login-failures"
+:end-before: "# endregion docs: browser-login-failures"
+```
+
+| Признак страницы | Где объявлен | Результат |
+|---|---|---|
+| `data-code="wrong_password"` | шаг пароля | `WrongPasswordError` |
+| `data-code="account_not_found"` | `LoginPortal.errors` | `AccountNotFoundError` |
+| `data-code="account_blocked"` | `LoginPortal.errors` | `AccountBlockedError` |
+| поле `code` | исход шага пароля | `OtpStep` |
+| `data-code="wrong_code"` | шаг кода | `WrongCodeError` |
+| `data-page="captcha"` | шаг пароля | `CaptchaRequiredError` |
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/login_probe.py
+:language: python
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/login_failures.py
+:language: python
+```
+:::
+
+Команда `uv run python -m examples.mail.browser.login_failures` выполняет каждую операцию через
+`TeachingLoginDriver`. Драйвер передаёт формы тому же `MailSite` и отдаёт операции DOM-признаки
+полученной страницы.
+
+<!-- example-output: examples.mail.browser.login_failures -->
+```text
+wrong password: WrongPasswordError
+account not found: AccountNotFoundError
+account blocked: AccountBlockedError
+second factor: OtpStep
+wrong code: WrongCodeError
+captcha: CaptchaRequiredError
+```
+::::
+:::::
+
+:::{note}
+`OtpStep` не является ошибкой. Это ожидаемое продолжение входа, поэтому оно объявлено исходом
+операции, а не исключением.
+:::
+
+## Дальше
+
+- {doc}`Сверьте карту учебного сайта </tutorial/index>`.
+- {doc}`Вернитесь к входу в три шага </tutorial/login>`.
