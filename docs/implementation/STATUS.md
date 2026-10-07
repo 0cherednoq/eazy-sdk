@@ -5290,6 +5290,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   распознаёт `403`, применяет clearance-cookie и один раз повторяет отклонённый POST. Браузерная
   линия запускает Chromium через `PlaywrightDriver`: `Handle` нажимает кнопку виджета, а тот же
   вызов операции пароля дожидается `OtpStep`. Оба транспорта работают через общий `MailSite`.
+- 56.4.5: HTTP-линия читает access-токен, refresh-токен и срок из HTML, передаёт их
+  `session_auth`, обновляет сессию до запроса по `ExpiresAt` и после настоящего `401`, затем
+  повторяет защищённую операцию. Браузерная линия создаёт `BrowserSession` через `BrowserLogin`;
+  две страницы одного реального Chromium-контекста сходятся в один вход и общую cookie.
 
 ### Commands run while planning
 
@@ -5533,6 +5537,21 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build to `docs-site/_build/user-preview` | PASS: 93 sources, no warnings; live preview route returns 200. |
 | fresh-agent blind review after correction | PASS: educational provenance and real `PlaywrightDriver`/`intercept_page` execution verified. |
 
+### Verification evidence (56.4.5)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.session` | PASS: HTML gave `session-1`; expiry refresh gave `session-refresh-1`; a real `401` caused the second refresh and replay with `session-refresh-2`. |
+| `uv run python -m examples.mail.browser.session` | PASS: two tabs in one live Chromium context received `mail_session=session-ada` after one login. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 28 passed; both runnable outputs match the page. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 23 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/session.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 94 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| strict Sphinx build to `docs-site/_build/phase56-session-final` and preview rebuild | PASS: 94 sources, no warnings; live preview route returns 200. |
+| fresh-agent blind review plus post-change recheck | PASS: exact `session_auth` binding, HTML acquisition, both refresh paths, real same-context Chromium flow, page rules and prose verified. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5574,4 +5593,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.5–56.8. No blockers; next step is 56.4.5.
+56.4.6–56.8. No blockers; next step is 56.4.6.

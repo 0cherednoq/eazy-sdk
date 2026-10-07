@@ -6,11 +6,13 @@ import html
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode
 
 REJECTED_INPUT = "wrong"
 VALID_LOGIN_INPUT = "correct"
 VALID_OTP = "123456"
+SESSION_START = datetime(2030, 1, 1, tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +119,9 @@ class SiteState:
     messages: list[MailMessage] = field(default_factory=_messages)
     sent: list[MailMessage] = field(default_factory=list)
     sessions: dict[str, str] = field(default_factory=lambda: {"session-1": "ada@mail.example"})
+    refresh_tokens: dict[str, str] = field(
+        default_factory=lambda: {"refresh-1": "ada@mail.example"}
+    )
     password_cookies: list[str | None] = field(default_factory=list)
     captcha_solves: list[str] = field(default_factory=list)
     refreshes: int = 0
@@ -211,7 +216,13 @@ class MailSite:
         token = f"session-{account.email.split('@', maxsplit=1)[0]}"
         self.state.sessions[token] = account.email
         if request.is_json:
-            return _success({"access_token": token})
+            return _success(
+                {
+                    "access_token": token,
+                    "refresh_token": "refresh-1",
+                    "expires_at": (SESSION_START + timedelta(minutes=5)).isoformat(),
+                }
+            )
         return SiteResponse.redirect("/inbox/", cookie=f"mail_session={token}; Path=/; HttpOnly")
 
     def _login_failure(self, request: SiteRequest, code: str, message: str) -> SiteResponse:
@@ -224,7 +235,15 @@ class MailSite:
 
     def _inbox_page(self, request: SiteRequest) -> SiteResponse:
         token = _cookie(request, "mail_session") or "session-1"
-        return SiteResponse.html(200, _inbox_html(token, self.state.messages))
+        return SiteResponse.html(
+            200,
+            _inbox_html(
+                token,
+                "refresh-1",
+                SESSION_START + timedelta(minutes=5),
+                self.state.messages,
+            ),
+        )
 
     def _compose_page(self, request: SiteRequest) -> SiteResponse:
         token = _cookie(request, "mail_session") or "session-1"
@@ -263,13 +282,24 @@ class MailSite:
         return _success(body)
 
     def _refresh(self, request: SiteRequest) -> SiteResponse:
-        email = self._authorized_email(request)
+        refresh_token = str(request.json().get("refresh_token", ""))
+        email = self.state.refresh_tokens.pop(refresh_token, None)
         if email is None:
-            return _failure(401, "unauthorized", "Session is missing or expired")
+            return _failure(401, "unauthorized", "Refresh token is missing or expired")
         self.state.refreshes += 1
         token = f"session-refresh-{self.state.refreshes}"
+        next_refresh = f"refresh-{self.state.refreshes + 1}"
         self.state.sessions[token] = email
-        return _success({"access_token": token, "expires_in": 3600})
+        self.state.refresh_tokens[next_refresh] = email
+        return _success(
+            {
+                "access_token": token,
+                "refresh_token": next_refresh,
+                "expires_at": (
+                    SESSION_START + timedelta(hours=self.state.refreshes, minutes=5)
+                ).isoformat(),
+            }
+        )
 
     def _send(self, request: SiteRequest) -> SiteResponse:
         email = self._authorized_email(request)
@@ -411,7 +441,12 @@ def _failure_html(code: str, message: str) -> str:
     )
 
 
-def _inbox_html(token: str, messages: list[MailMessage]) -> str:
+def _inbox_html(
+    token: str,
+    refresh_token: str,
+    expires_at: datetime,
+    messages: list[MailMessage],
+) -> str:
     rows = "".join(
         f'<li data-message-id="{message.id}"><b>{html.escape(message.sender)}</b> '
         f"{html.escape(message.subject)}</li>"
@@ -420,6 +455,8 @@ def _inbox_html(token: str, messages: list[MailMessage]) -> str:
     return _page(
         "Входящие",
         f'<meta name="mail-token" content="{html.escape(token)}">'
+        f'<meta name="mail-refresh" content="{html.escape(refresh_token)}">'
+        f'<meta name="mail-expires" content="{expires_at.isoformat()}">'
         f'<main data-page="mailbox"><ul data-collection="messages">{rows}</ul>'
         '<button data-action="more">Ещё</button></main>'
         """<script>

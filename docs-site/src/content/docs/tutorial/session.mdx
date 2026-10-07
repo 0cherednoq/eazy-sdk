@@ -1,0 +1,150 @@
+---
+title: Обновление сессии без ручного повтора
+description: Возьмите токен из HTML и обновляйте сессию по сроку или после отказа сайта.
+freshness: false
+---
+
+Сессия живёт дольше одного запроса. Страница входящих уже содержит access-токен, refresh-токен и
+срок действия. HTTP-клиент читает их как `MailSession`; браузер хранит ту же сессию в cookie
+контекста. Прикладной код вызывает только защищённую операцию, а вход, обновление и повтор остаются
+внутри жизненного цикла.
+
+| Ситуация | Что видит сайт | Что делает SDK | Результат |
+|---|---|---|---|
+| Первый HTTP-запрос | сессии ещё нет | читает токены из HTML | `session-1` |
+| Срок почти вышел | до `expires_at` меньше запаса | обновляет до запроса | `session-refresh-1` |
+| Access-токен отвергнут | защищённая ручка отвечает `401` | обновляет и повторяет один раз | `session-refresh-2` |
+| Две вкладки контекста | общая cookie `mail_session` | проводит один вход под локом | обе вкладки открыты |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``POST /api/v1/session/refresh``
+
+```json
+{"refresh_token":"refresh-1"}
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{"status":"ok","body":{"access_token":"session-refresh-1","refresh_token":"refresh-2","expires_at":"2030-01-01T01:05:00+00:00"}}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+Три поля одной Pydantic-модели выполняют две задачи. `CSS(...)` извлекает значения из HTML,
+а `Bearer`, `RefreshToken` и `ExpiresAt` описывают их роль в сессии. Запас в десять секунд не
+даёт отправить токен, который истечёт во время запроса.
+
+```{literalinclude} ../../../../../examples/mail/http/session.py
+:language: python
+:start-after: "# region docs: http-session-model"
+:end-before: "# endregion docs: http-session-model"
+```
+
+При первом защищённом вызове `MailSessionService.acquire` читает страницу входящих. Для
+обновления сервис передаёт refresh-токен обычной незащищённой операции; access-токен туда не
+нужен и не создаёт цикл авторизации.
+
+```{literalinclude} ../../../../../examples/mail/http/session.py
+:language: python
+:start-after: "# region docs: http-session-service"
+:end-before: "# endregion docs: http-session-service"
+```
+
+Один и тот же вызов `sdk.user.current()` показывает оба пути. Сначала часы пересекают локальный
+срок, затем сайт забывает ещё живой access-токен и отвечает `401`.
+
+```{literalinclude} ../../../../../examples/mail/http/session.py
+:language: python
+:start-after: "# region docs: http-session-flow"
+:end-before: "# endregion docs: http-session-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/session.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.session`.
+
+<!-- example-output: examples.mail.http.session -->
+```text
+HTML session: ada@mail.example via session-1
+expiry refresh: session-refresh-1
+401 refresh: session-refresh-2
+refresh requests: 2
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+После успешного входа MailSite отдаёт страницу с таким фрагментом:
+
+```html
+<meta name="mail-token" content="session-ada">
+```
+
+`MailLoginService` проходит уже объявленные три шага и экспортирует состояние контекста.
+`BrowserLogin` проверяет, что в нём появилась cookie `mail_session`; пустой результат входом не
+считается.
+
+```{literalinclude} ../../../../../examples/mail/browser/session.py
+:language: python
+:start-after: "# region docs: browser-session-login"
+:end-before: "# endregion docs: browser-session-login"
+```
+
+`BrowserSession` создаётся на контекст, а не на вкладку. Два клиента с разными страницами получают
+один объект сессии: параллельные первые переходы сходятся в один вход, затем обе вкладки используют
+cookie контекста.
+
+```{literalinclude} ../../../../../examples/mail/browser/session.py
+:language: python
+:start-after: "# region docs: browser-session-flow"
+:end-before: "# endregion docs: browser-session-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/session.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.browser.session`.
+
+<!-- example-output: examples.mail.browser.session -->
+```text
+browser logins: 1
+tabs in context: 2
+session cookie: session-ada
+```
+::::
+:::::
+
+:::{note}
+У `BrowserSession` один объект на один контекст. Для второго контекста создайте второй объект через
+`login.session(...)`; общее хранилище может согласовать их ревизии, но не объединяет cookie jars.
+:::
+
+## Дальше
+
+- {doc}`Посмотрите, как сессия появилась после входа </tutorial/login>`.
+- {doc}`Сверьте карту учебного сайта </tutorial/index>`.

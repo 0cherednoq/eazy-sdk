@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 from playwright.async_api import async_playwright
 
-from eazy_sdk_browser import AsyncBrowserClient
+from eazy_sdk_browser import AsyncBrowserClient, SessionSource
 from eazy_sdk_browser.handlers.playwright import PlaywrightDriver
 
 from . import PageRoute, intercept_page
@@ -31,6 +31,21 @@ class MailBrowser:
         self.site = MailSite()
         await self.page.context.clear_cookies()
         await self.page.goto("https://mail.example/login/")
+
+    def session_client[TRevision](self, session: SessionSource[TRevision]) -> AsyncBrowserClient:
+        return AsyncBrowserClient(
+            PlaywrightDriver(self.page, capture=None),
+            base_url="https://mail.example",
+            session=session,
+        )
+
+    async def new_tab[TRevision](self, session: SessionSource[TRevision]) -> AsyncBrowserClient:
+        page = await self.page.context.new_page()
+        return AsyncBrowserClient(
+            PlaywrightDriver(page, capture=None),
+            base_url="https://mail.example",
+            session=session,
+        )
 
 
 @asynccontextmanager

@@ -26,8 +26,10 @@ from examples.mail.browser.login_probe import (
     WrongCodeError,
     WrongPasswordError,
 )
+from examples.mail.browser.session import main as browser_session_main
 from examples.mail.http.captcha import main as captcha_main
 from examples.mail.http.login_failures import main as http_login_main
+from examples.mail.http.session import main as http_session_main
 from examples.mail.site import MailSite, handle_httpx, intercept_page
 from examples.mail.site._playwright import playwright_mail
 
@@ -80,6 +82,31 @@ def test_browser_captcha_probe_continues_the_password_operation(
         "challenge solved: mail-login",
         "password submits: 1",
         "same operation: OtpStep",
+    ]
+
+
+def test_http_session_probe_refreshes_by_expiry_and_rejection(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http_session_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "HTML session: ada@mail.example via session-1",
+        "expiry refresh: session-refresh-1",
+        "401 refresh: session-refresh-2",
+        "refresh requests: 2",
+    ]
+
+
+def test_browser_session_probe_logs_in_once_for_two_tabs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_session_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "browser logins: 1",
+        "tabs in context: 2",
+        "session cookie: session-ada",
     ]
 
 
@@ -220,8 +247,12 @@ def test_complete_teaching_site_serves_the_http_tutorial() -> None:
         assert [item["id"] for item in cursor_page["items"]] == [44, 45]
         assert next_url_page["items"] == cursor_page["items"]
 
-        refreshed = client.post("/api/v1/session/refresh", headers=auth).json()
+        refreshed = client.post(
+            "/api/v1/session/refresh",
+            json={"refresh_token": session["body"]["refresh_token"]},
+        ).json()
         assert refreshed["body"]["access_token"] == "session-refresh-1"
+        assert refreshed["body"]["refresh_token"] == "refresh-2"
 
         send_headers = {**auth, "X-Mail-Signature": "mail-signature"}
         sent = client.post(
