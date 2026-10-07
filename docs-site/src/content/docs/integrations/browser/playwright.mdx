@@ -1,0 +1,49 @@
+---
+title: Подключить Playwright
+description: Передайте Playwright Page драйверу и выполните браузерный роутер.
+sources:
+  - eazy_sdk_browser
+api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
+---
+
+Установите браузерный плагин и Chromium:
+
+```bash
+uv add "eazy-sdk-browser[playwright]"
+uv run playwright install chromium
+```
+
+`PlaywrightDriver` оборачивает одну `Page`. Один экземпляр драйвера должен жить не дольше этой
+страницы:
+
+```{literalinclude} ../../../../../../examples/docs/integration_playwright.py
+:language: python
+:start-after: "# docs:integration-playwright:start"
+:end-before: "# docs:integration-playwright:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_playwright.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_playwright -->
+```text
+messages: [42, 43, 44, 45]
+driver: playwright
+```
+
+Клиент владеет драйвером из-за `owns_driver=True`, поэтому выход из контекста снимает подписки
+на события и дожидается чтения уже полученных ответов. Саму страницу и браузер по-прежнему
+закрывает код, который создал Playwright.
+
+По умолчанию драйвер захватывает подходящие ответы сети в ограниченный буфер. Передайте
+`capture=None`, если операции не используют сетевые признаки: профиль сразу запретит
+`Capability.network`, и несовместимая операция завершится до действия на странице.
+
+## Дальше
+
+- {doc}`Сравнить драйверы </integrations/browser/index>`
+- {doc}`Подключить Pydoll 3 </integrations/browser/pydoll>`
+- {doc}`Настроить вход и сессию </integrations/browser/login>`

@@ -52,10 +52,10 @@
 | `getting-started/index` | `start/index` | ok |  |  |  |  |
 | `getting-started/installation` | `start/installation` | ok | n/a | ok | ok | ok |
 | `getting-started/quickstart` | `start/quickstart` | ok | ok | ok | ok | ok |
-| `guides/browser/browser-pool` | `integrations/browser/browser-pool` | ok |  |  |  | n/a |
-| `guides/browser/index` | `integrations/browser/index` | ok |  |  |  | n/a |
-| `guides/browser/login` | `integrations/browser/login` | ok |  |  |  | n/a |
-| `guides/browser/outcomes` | `integrations/browser/outcomes` | ok |  |  |  | n/a |
+| `guides/browser/browser-pool` | `integrations/browser/browser-pool` | ok | n/a | ok | ok | n/a |
+| `guides/browser/index` | `integrations/browser/index` | ok | n/a | ok | ok | n/a |
+| `guides/browser/login` | `integrations/browser/login` | ok | ok | ok | ok | n/a |
+| `guides/browser/outcomes` | `integrations/browser/outcomes` | ok | ok | ok | ok | n/a |
 | `guides/dependencies` | `guide/dependencies` | ok | ok | ok | ok | n/a |
 | `guides/index` | `guide/index` | ok | n/a | ok | ok | n/a |
 | `guides/middleware` | `guide/middleware` | ok | ok | ok | ok | n/a |
@@ -118,8 +118,8 @@
 | `guide/testing` | 56.5 | ok | ok | ok | ok | n/a |
 | `integrations/index` | 56.6 |  |  |  |  | n/a |
 | `integrations/http/custom-handler` | 56.6 | ok | ok | ok | ok | n/a |
-| `integrations/browser/playwright` | 56.6 |  |  |  |  | n/a |
-| `integrations/browser/pydoll` | 56.6 |  |  |  |  | n/a |
+| `integrations/browser/playwright` | 56.6 | ok | ok | ok | ok | n/a |
+| `integrations/browser/pydoll` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/models/pydantic` | 56.6 |  |  |  |  | n/a |
 | `integrations/models/msgspec` | 56.6 |  |  |  |  | n/a |
 | `integrations/models/dataclass` | 56.6 |  |  |  |  | n/a |

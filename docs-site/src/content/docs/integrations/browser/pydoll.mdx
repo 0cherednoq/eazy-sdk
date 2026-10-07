@@ -1,0 +1,48 @@
+---
+title: Подключить Pydoll 3
+description: Передайте существующую Chromium-вкладку адаптеру PydollDriver.
+sources:
+  - eazy_sdk_browser
+api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
+---
+
+Установите extra `pydoll`:
+
+```bash
+uv add "eazy-sdk-browser[pydoll]"
+```
+
+Адаптер поддерживает `pydoll-python>=3,<4`. Он принимает готовую `Tab` и не запускает браузер
+самостоятельно:
+
+```{literalinclude} ../../../../../../examples/docs/integration_pydoll.py
+:language: python
+:start-after: "# docs:integration-pydoll:start"
+:end-before: "# docs:integration-pydoll:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_pydoll.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_pydoll -->
+```text
+messages: [42, 43, 44, 45]
+driver: pydoll
+```
+
+Закрытие `PydollDriver` снимает только его CDP callbacks и освобождает внутренний буфер ответов.
+Вкладку и браузер закрывает создавший их код. Для нескольких вкладок одного контекста передайте
+им одинаковый `context_key`; без него каждый драйвер считается отдельным контекстом.
+
+Pydoll выгружает cookies контекста и localStorage текущего origin на уровне `BEST_EFFORT`.
+Shadow DOM через обычный локатор не поддерживается. Операция, которая явно требует
+`Capability.shadow_dom`, будет отвергнута до выполнения.
+
+## Дальше
+
+- {doc}`Сравнить драйверы </integrations/browser/index>`
+- {doc}`Подключить вкладку из пула </integrations/browser/browser-pool>`
+- {doc}`Объявить исходы страницы </integrations/browser/outcomes>`

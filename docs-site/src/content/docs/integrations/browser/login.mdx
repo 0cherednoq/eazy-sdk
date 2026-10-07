@@ -1,371 +1,59 @@
 ---
-title: Вход и сессия
-description: BrowserLogin — одно объявление входа на сайт, BrowserSession — сессия одного контекста, мост сессии в HTTP-клиент.
+title: Разделить вход между вкладками
+description: Объявите BrowserLogin и используйте одну BrowserSession в одном контексте браузера.
 sources:
   - eazy_sdk_browser
 api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
 ---
 
-Вход в сервис стоит дорого: капча, антибот, второй фактор. Поэтому SDK сам знает, как
-войти, а пользователь просто вызывает методы: перед операцией SDK проверяет сессию, при
-необходимости входит, а после отказа «сессия кончилась» входит заново и повторяет операцию.
+`BrowserLogin` описывает способ входа и признаки живой сессии. Учётные данные и состояние
+принадлежат `BrowserSession`, которую получают через `login.session(...)`.
 
-Знание разнесено по трём объектам с разным временем жизни:
+Сервис входа работает на странице того же клиента и возвращает состояние контекста:
 
-| Объект | Живёт | Что знает |
-|---|---|---|
-| `BrowserLogin` | всегда, одно на сайт | как войти, какая кука обязательна, какие отказы значат «сессия кончилась» |
-| `BrowserSession` | столько, сколько контекст браузера | хранилище, ревизию, один вход на все вкладки контекста |
-| `AsyncBrowserClient` | столько, сколько вкладка | как выполнить операцию на этой странице |
-
-Сколько контекстов и вкладок открыть, с каким прокси и когда, SDK не решает. Это работа
-кода вызывающего или пула браузеров.
-
-## Объявление входа
-
-`BrowserLogin` описывает сайт, а не аккаунт. В нём нет ни учётных данных, ни хранилища, поэтому
-одно объявление обслуживает сколько угодно аккаунтов:
-
-```python
-MAIL_LOGIN = BrowserLogin(
-    service=MailLogin(),             # async acquire(credentials, context) -> BrowserState
-    cookies=("sid",),                # без живой sid сессия не сессия
-    expired=(SessionExpiredError,),  # отказы, после которых входят заново
-)
+```{literalinclude} ../../../../../../examples/mail/browser/session.py
+:language: python
+:start-after: "# region docs: browser-session-login"
+:end-before: "# endregion docs: browser-session-login"
 ```
 
-| Поле | Что значит |
-|---|---|
-| `service` | объект с `async acquire(credentials, context) -> BrowserState`. `refresh(state, context)` не обязателен: без него сессию обновляют новым входом |
-| `cookies` | куки, без живого экземпляра которых сессия не годится. Кука, которая истекает раньше чем через `leeway` (30 с), уже не считается живой |
-| `expired` | исключения правил отказа, после которых входят заново |
+Один объект сессии можно передать нескольким вкладкам одного контекста:
 
-Методы объявления чистые, состояния у них нет:
-
-```python
-MAIL_LOGIN.validate(state) -> bool                                   # жива ли сессия
-MAIL_LOGIN.is_expired(error) -> bool                                 # этот отказ — «кончилась»?
-await MAIL_LOGIN.sign_in(client, credentials) -> BrowserState        # войти на странице клиента
-await MAIL_LOGIN.refresh(client, credentials, state) -> BrowserState  # свой refresh или вход заново
+```{literalinclude} ../../../../../../examples/docs/integration_browser_login.py
+:language: python
+:start-after: "# docs:integration-browser-login:start"
+:end-before: "# docs:integration-browser-login:end"
 ```
 
-`sign_in` и `refresh` проверяют результат. Если вход завершился, а объявленной куки нет или
-она истекает, они бросают `BrowserSessionError`.
-
-## Без пула: одна сессия на контекст
-
-Почта из встроенных страниц. Вход выдаёт куку `sid`, а сервер пускает в ящик только с
-последней выданной. Сервер здесь — перехват запросов в Python, поэтому видно, сколько
-раз SDK входил.
-
-```python
-import asyncio
-from dataclasses import dataclass, field
-from typing import Annotated, NoReturn
-
-from playwright.async_api import Route, async_playwright
-
-from eazy_sdk import AsyncApi, AsyncClient, Http, HttpOperation, Identity, op
-from eazy_sdk.auth import CookieScheme
-from eazy_sdk.auth.session import MemorySessionStore
-from eazy_sdk.testing import AsyncRecordingHandler
-from eazy_sdk_browser import (
-    AsyncBrowserApi,
-    AsyncBrowserClient,
-    Browser,
-    BrowserLogin,
-    BrowserLoginContext,
-    BrowserOperation,
-    BrowserState,
-    Element,
-    Failure,
-    PageError,
-    browser_cookie_auth,
-    css,
-    outcomes,
-    url,
-    visible,
-    when,
-)
-from eazy_sdk_browser.handlers.playwright import PlaywrightDriver, to_storage_state
-
-BASE = "https://mail.example.test"
-
-LOGIN_PAGE = """<!doctype html>
-<html lang="ru">
-  <body>
-    <input name="user"><input name="password" type="password">
-    <button class="login" type="button">Войти</button>
-    <script>
-      document.querySelector("button.login").addEventListener("click", async () => {
-        const issued = await (await fetch("/session", { method: "POST" })).text();
-        document.cookie = `sid=${issued}; path=/; max-age=3600`;
-        location.href = "/inbox";
-      });
-    </script>
-  </body>
-</html>"""
-
-INBOX_PAGE = '<!doctype html><html lang="ru"><body><div class="inbox">Входящие</div></body></html>'
-BACK_TO_LOGIN = '<!doctype html><script>location.replace("/login")</script>'
-
-
-@dataclass
-class MailServer:
-    """Сервер почты: выдаёт `sid` при входе и пускает в ящик только с последней выданной."""
-
-    logins: int = 0
-    valid: str | None = None
-
-    def forget(self) -> None:
-        self.valid = None
-
-    async def serve(self, route: Route) -> None:
-        path = route.request.url.removeprefix(BASE)
-        if path == "/session":
-            self.logins += 1
-            self.valid = f"s{self.logins}"
-            await route.fulfill(body=self.valid)
-        elif path == "/inbox" and f"sid={self.valid}" in (await route.request.all_headers()).get(
-            "cookie", ""
-        ):
-            await route.fulfill(content_type="text/html; charset=utf-8", body=INBOX_PAGE)
-        elif path == "/inbox":
-            await route.fulfill(content_type="text/html; charset=utf-8", body=BACK_TO_LOGIN)
-        else:
-            await route.fulfill(content_type="text/html; charset=utf-8", body=LOGIN_PAGE)
-
-
-class LoginForm:
-    user: Annotated[Element, css('input[name="user"]')]
-    password: Annotated[Element, css('input[name="password"]')]
-    submit: Annotated[Element, css("button.login")]
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class OpenLogin(BrowserOperation[None, None]):
-    __browser__ = Browser.goto("/login", at=css("button.login"))
-
-
-class LoginHangsError(PageError):
-    """После входа ящик так и не открылся."""
-
-
-async def _signed_in(content: LoginForm) -> None:
-    _ = content
-
-
-async def _login_hangs(content: LoginForm) -> NoReturn:
-    _ = content
-    raise LoginHangsError
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SignIn(BrowserOperation[LoginForm, None]):
-    # Вход засчитан, когда открылся ящик: кука к этому моменту уже в браузере.
-    __browser__ = Browser.act(
-        LoginForm,
-        at=css("button.login"),
-        outcomes=outcomes(when(visible(css("div.inbox")), then=_signed_in), otherwise=_login_hangs),
-    )
-
-    user: str
-    password: str
-
-    async def act(self, content: LoginForm) -> None:
-        await content.user.fill(self.user)
-        await content.password.fill(self.password)
-        await content.submit.click()
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class OpenInbox(BrowserOperation[None, None]):
-    __browser__ = Browser.goto("/inbox", at=css("div.inbox"))
-
-
-class SessionExpiredError(PageError):
-    """Почта увела на вход."""
-
-
-class Entrance(AsyncBrowserApi):
-    open_login = op(OpenLogin)
-    sign_in = op(SignIn)
-
-
-class Mail(AsyncBrowserApi):
-    errors = (Failure(when=url.contains("/login"), exception=SessionExpiredError),)
-
-    open_inbox = op(OpenInbox)
-
-
-@dataclass(frozen=True, slots=True)
-class Credentials:
-    user: str
-    password: str = field(repr=False)
-
-
-class MailLogin:
-    async def acquire(self, credentials: Credentials, context: BrowserLoginContext) -> BrowserState:
-        entrance = Entrance(context.client)
-        await entrance.open_login()
-        await entrance.sign_in(user=credentials.user, password=credentials.password)
-        return await context.export_state()
-
-
-# Одно объявление на сайт: ни учётных данных, ни хранилища в нём нет.
-MAIL_LOGIN = BrowserLogin(
-    service=MailLogin(),
-    cookies=("sid",),
-    expired=(SessionExpiredError,),
-)
-
-MAIL_SESSION = CookieScheme("sid", name="mail-session")
-
-
-@dataclass(frozen=True, slots=True)
-class Folders(HttpOperation[bytes]):
-    __http__ = Http.get("/api/folders", security=MAIL_SESSION)
-
-
-class MailApi(AsyncApi):
-    folders = op(Folders)
-
-
-async def main() -> None:
-    server = MailServer()
-    ada = Credentials("ada", "correct-horse")
-    store = MemorySessionStore[BrowserState]()  # общее на все контексты аккаунта
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch()
-
-        # Контекст 1: две вкладки, один объект сессии на контекст.
-        first = await browser.new_context()
-        await first.route(f"{BASE}/**", server.serve)
-        mail = MAIL_LOGIN.session(ada, store=store, identity="ada")
-        async with (
-            PlaywrightDriver(await first.new_page()) as tab_a,
-            PlaywrightDriver(await first.new_page()) as tab_b,
-        ):
-            a = AsyncBrowserClient(tab_a, base_url=BASE, session=mail)
-            b = AsyncBrowserClient(tab_b, base_url=BASE, session=mail)
-            await asyncio.gather(Mail(a).open_inbox(), Mail(b).open_inbox())
-            print("две вкладки, входов:", server.logins)
-
-            server.forget()  # сервер забыл сессию: ящик уводит на вход
-            await Mail(a).open_inbox()
-            print("после отказа, входов:", server.logins)
-            state = await mail.state(a)
-
-        # Контекст 2 создаётся с состоянием первого: сессию принимают без входа.
-        second = await browser.new_context(storage_state=to_storage_state(state))
-        await second.route(f"{BASE}/**", server.serve)
-        other = MAIL_LOGIN.session(ada, store=store, identity="ada")
-        async with PlaywrightDriver(await second.new_page()) as tab_c:
-            await Mail(AsyncBrowserClient(tab_c, base_url=BASE, session=other)).open_inbox()
-        print("второй контекст, входов:", server.logins)
-
-        # Та же сессия — HTTP-клиенту. Запрос записывается, а не уходит в сеть.
-        handler = AsyncRecordingHandler(status=200, content=b"[]")
-        auth = await browser_cookie_auth(state, MAIL_SESSION, "sid")
-        async with AsyncClient(base_url=BASE, handler=handler) as http:
-            await MailApi(http, identity=Identity(auth=(auth,))).folders()
-        print("Cookie:", handler.last_request.headers.get("cookie"))
-        await browser.close()
-
-
-asyncio.run(main())
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_browser_login.py
+:language: python
 ```
+:::
 
-Вывод:
-
+<!-- example-output: examples.docs.integration_browser_login -->
 ```text
-две вкладки, входов: 1
-после отказа, входов: 2
-второй контекст, входов: 2
-Cookie: sid=s2
+browser logins: 1
+tabs in context: 2
+session cookie: session-ada
 ```
 
-Что произошло:
+Первый вызов берёт блокировку сессии и входит. Параллельный вызов ждёт ту же ревизию, поэтому
+две вкладки выполняют один вход. Объект сессии нельзя переносить в другой контекст; новый
+контекст получает новый объект и общее хранилище ревизий.
 
-1. `MAIL_LOGIN.session(ada, store=store, identity="ada")` создал объект сессии для первого
-   контекста. Клиенты обеих вкладок получили один и тот же объект через `session=mail`.
-2. Две первые операции пришли параллельно. Первая взяла лок сессии: в контексте сессии нет,
-   в хранилище тоже, поэтому она вошла на **своей** странице. Для входа сервис получил клиента
-   той же вкладки, но без сессии, иначе вход потребовал бы входа. Вторая операция дождалась
-   лока и взяла готовую ревизию. Итог — **один вход на две вкладки**. Куки из хранилища не
-   записывались: вход уже положил их в контекст.
-3. `server.forget()` — сервер забыл сессию. `open_inbox` увёл на `/login`, правило отказа
-   роутера бросило `SessionExpiredError` из `expired`. Клиент вызвал `mail.renew(...)`: вход
-   заново на этой странице, новая ревизия в хранилище. Затем клиент повторил операцию.
-   Повторов не больше `BrowserClientConfig.auth_retries`, по умолчанию 1.
-4. `await mail.state(a)` вернул состояние контекста без операции: куки и localStorage.
-5. Второй контекст создан со `storage_state=to_storage_state(state)`. Его объект сессии
-   увидел, что в контексте уже лежит годная сессия, и принял её без входа. Ревизию он взял
-   из общего хранилища, куки не переписывал.
-6. `browser_cookie_auth` провёл ту же сессию через `BridgedSessionAdopter` ядра: выбрал куку
-   `sid` и построил `Auth` для схемы `MAIL_SESSION`.
+| Объект | Владеет |
+|---|---|
+| `BrowserLogin` | сервисом входа, обязательными cookies и типами истечения |
+| `BrowserSession` | учётными данными, блокировкой, хранилищем и ревизией контекста |
+| `AsyncBrowserClient` | выполнением операций одной страницы |
 
-### Правила
+Если отказ входит в `expired=`, клиент обновляет сессию и повторяет операцию в пределах
+`auth_retries`. `browser_cookie_auth(...)` превращает сохранённую cookie в статическую
+HTTP-авторизацию; после нового браузерного входа мост нужно построить снова.
 
-- **Один `BrowserSession` на контекст.** Объект, которому принесли клиента из другого
-  контекста, бросает `BrowserSessionError`. Второй контекст того же аккаунта получает второй
-  объект.
-- **`store` у контекстов одного аккаунта общий.** Их согласует только хранилище ревизий, как
-  два `Auth` в HTTP. `store=None` даёт каждому объекту своё хранилище в памяти. Такой объект
-  годится только для одного контекста: после повторного входа два контекста не договорятся
-  о ревизии.
-- **Повторный вход меняет куки под соседними вкладками.** Сессия у контекста общая.
-  Соседи со старой ревизией получат тот же отказ, дождутся лока и повторят операцию с новой
-  ревизией, не входя второй раз.
-- **В живой контекст пишутся только куки** и только когда их там нет. Контекст, созданный со
-  `storage_state`, и контекст, где сайт сам ротировал куку, записи не получают: иначе
-  свежую куку затёрла бы старая из хранилища.
-- **localStorage — только при создании контекста.** Если сайту нужен localStorage, контекст
-  создают со `storage_state`. Перед первой вкладкой состояние берут из хранилища:
-  `to_storage_state(await sessions.load(account))`. Если там пусто, первый контекст
-  открывают без `storage_state`, а после входа `await mail.state(client)` даёт состояние
-  для следующего.
-- Драйвер без `Capability.session_state` отсекается первым же `ensure`, до вызова сервиса
-  входа: `CapabilityMismatchError`.
+## Дальше
 
-## С пулом браузеров
-
-Если контекстами владеет пул, входом тоже владеет пул. Он создаёт контекст со
-`storage_state` из своего хранилища, входит на временной вкладке и после отказа закрывает
-контекст. Клиент получает источник сессии пула — любой объект с протоколом `SessionSource`
-(`is_expired`, `ensure`, `renew`). `renew` такого источника возвращает `None`: клиент не
-повторяет операцию, а бросает исходный отказ сайта, и пул открывает новый контекст. Повторный
-вход тогда никогда не меняет куки под соседними вкладками. От плагина пулу нужны только
-чистые методы `BrowserLogin` и `to_storage_state`. Адаптер пула — отдельный модуль
-`integrations/pool`, в этот плагин он не входит.
-
-## Сессия за аккаунтом
-
-Чтобы сессия пережила процесс, её хранят за аккаунтом в хранилище `eazy-sdk-accounts`:
-
-```python
-from eazy_sdk_accounts.storage import AccountWorkspace, MemoryStorage
-from eazy_sdk_browser.handlers.playwright import to_storage_state
-from eazy_sdk_browser.integrations.accounts import BrowserSessions
-
-workspace = AccountWorkspace(MemoryStorage())
-sessions = BrowserSessions(workspace)
-account = await workspace.accounts.get_or_create("ada@mail.example.test", provider="mail")
-
-saved = await sessions.load(account)  # None — сохранять было нечего
-context = await browser.new_context(
-    storage_state=to_storage_state(saved) if saved is not None else None
-)
-mail = MAIL_LOGIN.session(ada, store=sessions.store(account), identity="ada@mail.example.test")
-```
-
-`sessions.store(account)` — `RepositorySessionStore` над службой сессий аккаунта. Состояние
-лежит в `SessionData`, ревизия и ключ сессии — в `SessionData.meta`. Сохранение пишет в
-историю аккаунта событие `account.authorized`. `sessions.save(account, state)` сохраняет
-готовое состояние без жизненного цикла. Браузера интеграция хранилища не видит.
-
-## Ограничение моста
-
-`browser_cookie_auth` отдаёт статический `Auth`: у HTTP-клиента нет своего входа, чтобы
-обновить куку. Когда браузер входит заново, мост проходят ещё раз с новой сессией
-`await mail.state(client)`.
+- {doc}`Разобрать сессию по шагам </tutorial/session>`
+- {doc}`Связать браузер и HTTP </tutorial/assembly>`
+- {doc}`Подключить вкладку из пула </integrations/browser/browser-pool>`

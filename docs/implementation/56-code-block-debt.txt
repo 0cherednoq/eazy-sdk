@@ -1,12 +1,4 @@
 # Generated baseline for phase 56.2.3. Remove each line with the corresponding page debt.
-integrations/browser/index.mdx:94: route-fulfill
-integrations/browser/login.mdx:71: recording-handler
-integrations/browser/login.mdx:114: server-stub
-integrations/browser/login.mdx:128: route-fulfill
-integrations/browser/login.mdx:132: route-fulfill
-integrations/browser/login.mdx:134: route-fulfill
-integrations/browser/login.mdx:136: route-fulfill
-integrations/browser/login.mdx:268: recording-handler
 reference/api/testing.mdx:23: assert
 reference/api/testing.mdx:24: assert
 reference/api/testing.mdx:25: assert

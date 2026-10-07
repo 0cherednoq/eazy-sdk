@@ -1,217 +1,56 @@
 ---
-title: Исходы и отказы
-description: Признаки страницы, outcomes(), Failure и Handle — чем страница отвечает на действие.
+title: Различить исходы страницы
+description: Объявите успешные состояния, отказы и результат по истечении времени.
 sources:
   - eazy_sdk_browser
 api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
 ---
 
-После действия страница отвечает по-разному: открылся ящик, появилась ошибка, аккаунт
-заблокирован или не произошло ничего. Операция не разбирает это `if`-ами в теле —
-ответы объявлены: **исходы** в `outcomes(...)`, **отказы** в `Failure(...)`.
+После действия страница может подтвердить успех, показать отказ или не изменить наблюдаемое
+состояние. `outcomes(...)` связывает признаки страницы с типизированными результатами:
 
-## Страница и её варианты
-
-Одна форма входа, четыре реакции на клик. Каждая — строка HTML, которую страница вставит
-после нажатия:
-
-| Вариант | Что появится после клика |
-|---|---|
-| `success` | `<div class="inbox">Входящие</div>` |
-| `wrong-password` | `<div class="error">Неверный пароль</div>` |
-| `locked` | `<p>Аккаунт заблокирован</p>` |
-| `silence` | ничего |
-
-## Операция и правила
-
-```python
-import asyncio
-from dataclasses import dataclass
-from typing import Annotated, NoReturn
-
-from playwright.async_api import async_playwright
-
-from eazy_sdk import op
-from eazy_sdk_browser import (
-    AsyncBrowserApi,
-    AsyncBrowserClient,
-    Browser,
-    BrowserCallOptions,
-    BrowserOperation,
-    Element,
-    Failure,
-    Observation,
-    PageError,
-    css,
-    outcomes,
-    text,
-    text_of,
-    visible,
-    when,
-)
-from eazy_sdk_browser.handlers.playwright import PlaywrightDriver
-
-
-def login_page(reaction: str) -> str:
-    """Форма входа; что появится после клика, задаёт вариант."""
-    return f"""<!doctype html>
-<html lang="ru">
-  <body>
-    <button class="login" type="button">Войти</button>
-    <script>
-      document.querySelector("button.login").addEventListener("click", () => {{
-        document.body.insertAdjacentHTML("beforeend", {reaction!r});
-      }});
-    </script>
-  </body>
-</html>"""
-
-
-VARIANTS = {
-    "success": login_page('<div class="inbox">Входящие</div>'),
-    "wrong-password": login_page('<div class="error">Неверный пароль</div>'),
-    "locked": login_page("<p>Аккаунт заблокирован</p>"),
-    "silence": login_page(""),
-}
-
-
-class LoginForm:
-    submit: Annotated[Element, css("button.login")]
-
-
-@dataclass(frozen=True, slots=True)
-class Mailbox:
-    """Вход удался."""
-
-
-class WrongPasswordError(PageError):
-    """Неверный пароль."""
-
-
-class AccountLockedError(PageError):
-    """Аккаунт заблокирован."""
-
-
-class LoginHangsError(PageError):
-    """Страница не ответила на вход."""
-
-
-async def wrong_password(page: Observation) -> Exception:
-    return WrongPasswordError(await text_of(css("div.error"))(page))
-
-
-async def mailbox(content: LoginForm) -> Mailbox:
-    return Mailbox()
-
-
-async def hangs(content: LoginForm) -> NoReturn:
-    raise LoginHangsError
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SignIn(BrowserOperation[LoginForm, Mailbox]):
-    __browser__ = Browser.act(
-        LoginForm,
-        at=css("button.login"),
-        outcomes=outcomes(when(visible(css("div.inbox")), then=mailbox), otherwise=hangs),
-    )
-
-    async def act(self, content: LoginForm) -> None:
-        await content.submit.click()
-
-
-class MailPortal(AsyncBrowserApi):
-    errors = (
-        Failure(when=visible(css("div.error")), exception=wrong_password),
-        Failure(when=text.contains("заблокирован"), exception=AccountLockedError),
-    )
-
-    sign_in = op(SignIn)
-
-
-async def main() -> None:
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch()
-        for name, html in VARIANTS.items():
-            page = await browser.new_page()
-            await page.set_content(html)
-            async with AsyncBrowserClient(PlaywrightDriver(page), owns_driver=True) as client:
-                try:
-                    result = await MailPortal(client).sign_in(
-                        options=BrowserCallOptions(timeout=1.0)
-                    )
-                except PageError as error:
-                    print(f"{name}: {type(error).__name__}: {error}")
-                else:
-                    print(f"{name}: {result}")
-            await page.close()
-        await browser.close()
-
-
-asyncio.run(main())
+```{literalinclude} ../../../../../../examples/mail/browser/send.py
+:language: python
+:start-after: "# region docs: browser-send-operation"
+:end-before: "# endregion docs: browser-send-operation"
 ```
 
-Вывод:
+Один запуск проходит все три состояния настоящей страницы:
 
+```{literalinclude} ../../../../../../examples/docs/integration_browser_outcomes.py
+:language: python
+:start-after: "# docs:integration-browser-outcomes:start"
+:end-before: "# docs:integration-browser-outcomes:end"
+```
+
+:::{dropdown} Файл целиком
+```{literalinclude} ../../../../../../examples/docs/integration_browser_outcomes.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.integration_browser_outcomes -->
 ```text
-success: Mailbox()
-wrong-password: WrongPasswordError: Неверный пароль
-locked: AccountLockedError: Аккаунт заблокирован.
-silence: LoginHangsError: Страница не ответила на вход.
+outcomes: Sent, Rejected, Silent
 ```
 
-| Вариант | Что сработало | Результат |
+| Что наблюдает клиент | Что срабатывает | Что получает вызывающий |
 |---|---|---|
-| `success` | исход `when(visible(css("div.inbox")), then=mailbox)` | `Mailbox()` |
-| `wrong-password` | правило `Failure(when=visible(css("div.error")), exception=wrong_password)` — фабрика читает текст баннера | `WrongPasswordError("Неверный пароль")` |
-| `locked` | правило `Failure(when=text.contains("заблокирован"), exception=AccountLockedError)` — класс без подробностей берёт докстринг | `AccountLockedError` |
-| `silence` | ни исхода, ни отказа за `timeout=1.0` — `otherwise=hangs` | `LoginHangsError` |
+| Видимая строка состояния | первый `when(...)` | `Sent` |
+| Видимый диалог отказа | второй `when(...)` | `Rejected` |
+| Ни один признак до дедлайна | `otherwise` | `Silent` |
 
-## Порядок в цикле ожидания
+Правила `Failure(...)` проверяются перед успешными исходами и выбрасывают `PageError`. Помехи
+`Handle(...)` выполняются ещё раньше, чтобы баннер или диалог не скрывал настоящий результат.
+Первое совпавшее правило завершает ожидание.
 
-После действия раннер опрашивает страницу по кругу до дедлайна `timeout`:
+:::{note}
+`otherwise` должен отражать реальный контракт сайта. Верните отдельный тип для допустимого
+молчания или выбросьте исключение, если отсутствие признака означает сбой.
+:::
 
-1. **помехи** (`handlers=`) — баннер согласия перекрывает и отказ, и исход, поэтому его
-   убирают первым;
-2. **правила отказа** — сначала правила операции (`errors=` в спеке), потом роутера
-   (`errors = ...`); первое совпавшее бросает исключение;
-3. **исходы** — по порядку; первый совпавший признак строит результат;
-4. дедлайн — `otherwise=`.
+## Дальше
 
-`otherwise` с возвращаемым `NoReturn` делает «ничего не произошло» отказом и не добавляет
-члена в тип результата: `SignIn` возвращает `Mailbox`, а не `Mailbox | None`.
-
-## Признаки
-
-Признак смотрит на страницу такой, какая она на этом круге, и не ждёт: ждёт цикл.
-
-| Признак | Истинен, когда |
-|---|---|
-| `visible(css("div.inbox"))` | виден узел любого из кандидатов локатора |
-| `text.contains("заблокирован")` | видимый текст страницы содержит фрагмент (без учёта регистра по умолчанию) |
-| `url.contains("/login")`, `url.matches(r"/companies/\d+")` | адрес страницы подходит |
-| `response.arrived("/api/companies")` | после действия пришёл ответ API по адресу; нужен `Capability.network` |
-| `navigated()` | после действия главный фрейм куда-то перешёл; нужен `Capability.navigation_events` |
-
-Признаки комбинируются: `url.contains("/login") | text.contains("Войдите заново")`,
-`navigated() & visible(css("form.login"))`, `~visible(css("div.spinner"))`.
-
-## Помехи
-
-Баннер, который надо закрыть, чтобы добраться до дела, объявляется рядом с правилами:
-
-```python
-from eazy_sdk_browser import AsyncBrowserApi, Handle, click, css, visible
-
-COOKIE_BANNER = Handle(
-    when=visible(css("div.cookie-banner")),
-    do=click(css("div.cookie-banner button.accept")),
-)
-
-
-class MailPortal(AsyncBrowserApi):
-    handlers = (COOKIE_BANNER,)
-```
-
-Помеху убирают ещё до действия — клик сквозь баннер ушёл бы в баннер — и снова ищут в цикле
-ожидания. `once=True` (по умолчанию) означает «один раз за операцию».
+- {doc}`Пройти полный сценарий отправки </tutorial/send>`
+- {doc}`Настроить вход и сессию </integrations/browser/login>`
+- {doc}`Проверить API браузера </reference/api/browser>`

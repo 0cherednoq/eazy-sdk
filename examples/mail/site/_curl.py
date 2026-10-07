@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from typing import TYPE_CHECKING
@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 def _handler(site: MailSite) -> type[BaseHTTPRequestHandler]:
     class MailHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+
+        def handle(self) -> None:
+            # Browsers may drop an idle keep-alive socket while the local origin stops.
+            with suppress(ConnectionResetError):
+                super().handle()
 
         def do_GET(self) -> None:
             self._serve()

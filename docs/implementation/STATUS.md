@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.6.2–56.8. No blockers; next step is 56.6.2.
+56.6.3–56.8. No blockers; next step is 56.6.3.
 
 ### Verification evidence (56.5.5)
 
@@ -5750,3 +5750,18 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | page queue and debt audit | PASS: all five queue rows are filled; two obsolete long-dash findings are removed from the prose snapshot. |
 | documentation metadata and freshness | PASS: 95 valid pages; 71 freshness fingerprints current. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-http-integrations` | PASS: 95 sources, no warnings. |
+
+### Verification evidence (56.6.2)
+
+| Command | Result |
+|---|---|
+| live Playwright and Pydoll 3 example runs | PASS: both adapters executed the same inbox operation in Chromium and returned message IDs 42–45; Pydoll exited without stderr after the local-origin keep-alive fix. |
+| browser outcomes and shared-session example runs | PASS: the composer returned `Sent`, `Rejected`, `Silent`; two tabs shared one login and `session-ada`. |
+| focused documentation examples, snapshots and domain ratchet | PASS: 77 tests; published output, literal includes and all three debt snapshots agree with the rewritten pages. |
+| `uv run mypy examples/docs examples/mail/site/_curl.py` | PASS: no issues in 48 source files. |
+| matching `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py` over all six browser pages | PASS: 0 errors and 0 warnings on every page; the pattern audit found no remaining findings. The outline-test exclusion applies to procedural pages. |
+| capability-table audit | PASS: all six rows match `PLAYWRIGHT_PROFILE` and `PYDOLL_PROFILE`; `capture=None` disables only network capture in both implementations. |
+| page queue and debt audit | PASS: all six rows are filled; eight obsolete code-block findings, 40 long dashes and six legacy domains are removed from the snapshots. |
+| documentation metadata and freshness | PASS: 97 valid pages; 73 freshness fingerprints current. |
+| strict Sphinx build | PASS: 97 sources, no warnings. |

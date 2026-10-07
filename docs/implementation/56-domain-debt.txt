@@ -3,12 +3,6 @@ docs-site/src/content/docs/integrations/accounts/registration.mdx:29: example.te
 docs-site/src/content/docs/integrations/accounts/registration.mdx:118: example.test
 docs-site/src/content/docs/integrations/accounts/sqlmodel.mdx:37: example.test
 docs-site/src/content/docs/integrations/accounts/verification.mdx:76: example.test
-docs-site/src/content/docs/integrations/browser/index.mdx:26: portal.example.test
-docs-site/src/content/docs/integrations/browser/index.mdx:103: portal.example.test
-docs-site/src/content/docs/integrations/browser/index.mdx:173: portal.example.test
-docs-site/src/content/docs/integrations/browser/login.mdx:92: mail.example.test
-docs-site/src/content/docs/integrations/browser/login.mdx:353: mail.example.test
-docs-site/src/content/docs/integrations/browser/login.mdx:359: mail.example.test
 docs-site/src/content/docs/integrations/generators/openapi.mdx:27: museum.example.test
 docs-site/src/content/docs/integrations/protection/cloudflare.mdx:55: api.example.test
 docs-site/src/content/docs/integrations/protection/turnstile.mdx:46: api.example.test

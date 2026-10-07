@@ -1,56 +1,39 @@
 ---
-title: Browser pool и Pydoll
-description: Подключение PydollDriver к PageLease без смешивания site-операций, контекстной сессии и retry задачи.
+title: Подключить вкладку из пула
+description: Разделите владение вкладкой, драйвером, сессией контекста и повтором задачи.
 sources:
   - eazy_sdk_browser
 api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
 ---
 
-`eazy_sdk_browser` исполняет одну декларативную site-операцию на готовой странице.
-`browser_pool` владеет процессами, контекстами, identity, proxy, вкладками, конкурентностью и
-повтором всей задачи. Граница проходит по `PageLease[Tab]`:
+Пул управляет процессами браузера, контекстами, прокси, вкладками и повтором всей задачи.
+`eazy-sdk-browser` получает одну выданную вкладку и выполняет на ней одну или несколько операций.
 
-```text
-BrowserPool[Pydoll] -> PageLease[Tab] -> page attachment PydollDriver
-                    -> AsyncBrowserClient -> site operation
-```
+| Ресурс | Владелец | Когда закрывает |
+|---|---|---|
+| Процесс и контекст | пул | при выводе контекста или остановке пула |
+| Вкладка | аренда пула | при завершении или отмене задачи |
+| `PydollDriver` | attachment вкладки | вместе с тёплой вкладкой |
+| `AsyncBrowserClient` | код задачи | до возврата аренды |
+| Сессия контекста | поток входа пула | при смене ревизии или контекста |
 
-## Attachment одной вкладки
+Attachment должен создать один `PydollDriver(tab, context_key=lease.context)` на тёплую
+вкладку. Одинаковый `context_key` сообщает драйверам соседних вкладок, что cookies и состояние
+относятся к одному контексту. Закрытие драйвера снимает его CDP callbacks, но не закрывает
+вкладку.
 
-```python
-from eazy_sdk_browser import AsyncBrowserClient
-from eazy_sdk_browser.handlers.pydoll import PydollDriver as EazyPydollDriver
+В режиме пула не создавайте `BrowserSession` на каждой вкладке. Пул входит на временной странице,
+сохраняет состояние контекста и выдаёт вкладку вместе с источником сессии. Если операция сообщает
+об истечении сессии, источник не меняет cookies под соседними вкладками: отказ выходит к пулу,
+а тот создаёт новый контекст.
 
-async with pool.page(identity) as lease:
-    driver = await lease.attachment(
-        "eazy-sdk-browser:pydoll",
-        lambda tab: EazyPydollDriver(tab, context_key=lease.context),
-    )
-    sdk = PortalSdk(AsyncBrowserClient(driver, base_url=BASE_URL))
-    result = await sdk.orders.list()
-```
+:::{warning}
+Повтор операции внутри клиента и повтор всей задачи пулом не должны конкурировать. После внешнего
+побочного эффекта зафиксируйте аренду; до фиксации только пул решает, можно ли повторить задачу.
+:::
 
-Attachment создаётся один раз на тёплую вкладку. Когда пул выбрасывает или закрывает вкладку,
-он вызывает `PydollDriver.aclose()` ровно один раз. Адаптер снимает только свои CDP callback-и;
-вкладку, Network domain, браузер и контекст он не закрывает.
+## Дальше
 
-## Сессия принадлежит контексту
-
-В pool-режиме не создавайте `BrowserSession` на каждую вкладку. Вход исполняет
-`browser_pool.SessionFlow`: он вызывает `BrowserLogin.sign_in()`, сохраняет context state и
-выдаёт вкладку уже в нужном контексте. `AsyncBrowserClient` внутри lease создаётся без
-`session=`.
-
-Classifier пула переводит объявленную ошибку `login.is_expired(error)` в
-`ErrorKind.session`. Пул выводит старый контекст, следующая попытка получает новый и снова
-проходит `SessionFlow.open()`. Retry одной Eazy-операции не должен конкурировать с retry задачи
-пула; после `lease.commit()` задача не повторяется.
-
-## Ограничения Pydoll
-
-- поддерживается `pydoll-python>=3,<4` и только Chromium-based браузеры;
-- `session_state=BEST_EFFORT`: cookies контекста плюс localStorage текущего origin;
-- запись localStorage выполняет владелец контекста до выдачи страницы;
-- shadow DOM в первой версии не объявлен;
-- `context_key=lease.context` обязателен, если несколько вкладок должны считаться одним
-  контекстом.
+- {doc}`Подключить Pydoll 3 </integrations/browser/pydoll>`
+- {doc}`Настроить вход и сессию </integrations/browser/login>`
+- {doc}`Проверить API браузера </reference/api/browser>`

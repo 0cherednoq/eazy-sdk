@@ -1,189 +1,40 @@
 ---
-title: Браузер
-description: Браузерный SDK на eazy-sdk-browser — операция страницы, роутер и клиент поверх Playwright или Pydoll 3.
+title: Выбрать браузерный драйвер
+description: Сравните Playwright и Pydoll 3 и подключите декларативные операции страницы.
 sources:
   - eazy_sdk_browser
 api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
 ---
 
-`eazy-sdk-browser` описывает браузерный сценарий так же, как `eazy-sdk` описывает HTTP-метод.
-Операция — frozen dataclass с одной спекой `__browser__`, публикуется `op()` на роутере
-`AsyncBrowserApi`, а драйвер приходит клиентом `AsyncBrowserClient`. Карта элементов
-объявляется аннотациями, результат действия — признаками страницы.
+`eazy-sdk-browser` отделяет сценарий сайта от конкретного браузера. Операция объявляет переход,
+элементы и наблюдаемые исходы. `AsyncBrowserClient` выполняет её через драйвер одной страницы.
 
-## Установка
+## Сравнить возможности
 
-```bash
-uv add "eazy-sdk-browser[playwright]"
-uv run playwright install chromium
-# или нативный Chromium-адаптер Pydoll
-uv add "eazy-sdk-browser[pydoll]"
-```
-
-## Первая операция
-
-Страница со списком компаний — встроенный HTML, без сети: playwright отдаёт его по адресу
-`https://portal.example.test/companies`.
-
-```python
-import asyncio
-from dataclasses import dataclass
-from typing import Annotated, NoReturn
-
-from playwright.async_api import Route, async_playwright
-
-from eazy_sdk import op
-from eazy_sdk_browser import (
-    AsyncBrowserApi,
-    AsyncBrowserClient,
-    Browser,
-    BrowserOperation,
-    Elements,
-    PageError,
-    css,
-    each,
-    outcomes,
-    visible,
-    when,
-)
-from eazy_sdk_browser.handlers.playwright import PlaywrightDriver
-
-PAGE = """<!doctype html>
-<html lang="ru">
-  <body>
-    <table class="companies">
-      <tr><td>ООО Ромашка</td></tr>
-      <tr><td>АО Лютик</td></tr>
-    </table>
-  </body>
-</html>"""
-
-ROWS = "table.companies tr"
-
-
-class CompaniesTable:
-    rows: Annotated[Elements, each(css(ROWS))]
-
-
-class NoCompaniesError(PageError):
-    """Таблица компаний не появилась."""
-
-
-async def names(content: CompaniesTable) -> list[str]:
-    return await content.rows.texts()
-
-
-async def no_table(content: CompaniesTable) -> NoReturn:
-    raise NoCompaniesError
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ListCompanies(BrowserOperation[CompaniesTable, list[str]]):
-    __browser__ = Browser.goto(
-        "/companies",
-        CompaniesTable,
-        outcomes=outcomes(when(visible(css(ROWS)), then=names), otherwise=no_table),
-    )
-
-
-class Portal(AsyncBrowserApi):
-    list_companies = op(ListCompanies)
-
-
-async def serve(route: Route) -> None:
-    await route.fulfill(content_type="text/html; charset=utf-8", body=PAGE)
-
-
-async def main() -> None:
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch()
-        page = await browser.new_page()
-        await page.route("**/companies", serve)
-        async with AsyncBrowserClient(
-            PlaywrightDriver(page), base_url="https://portal.example.test", owns_driver=True
-        ) as client:
-            print(await Portal(client).list_companies())
-        await browser.close()
-
-
-asyncio.run(main())
-```
-
-Вывод:
-
-```text
-['ООО Ромашка', 'АО Лютик']
-```
-
-### Та же операция на Pydoll 3
-
-Pydoll-адаптер принимает готовый нативный `Tab`; браузером и вкладкой владеет вызывающий код:
-
-```python
-from pydoll.browser import Chrome
-from pydoll.browser.options import ChromiumOptions
-
-from eazy_sdk_browser import AsyncBrowserClient
-from eazy_sdk_browser.handlers.pydoll import PydollDriver
-
-options = ChromiumOptions()
-options.headless = True
-browser = Chrome(options=options)
-tab = await browser.start()
-try:
-    async with PydollDriver(tab) as driver:
-        print(await Portal(AsyncBrowserClient(driver, base_url=BASE_URL)).list_companies())
-finally:
-    await browser.stop()
-```
-
-Поддерживается `pydoll-python>=3,<4`. Это Chromium-based backend. Он выгружает cookies всего
-контекста и localStorage текущего origin (`session_state=BEST_EFFORT`); закрытые shadow roots
-первой версией не обещаны.
-
-Что здесь объявлено:
-
-- `CompaniesTable` — карта элементов. Поле `rows` — коллекция строк таблицы: `each(...)`
-  отдаёт `Elements` с `count()`, `nth(i)`, `texts()` и обходом `async for`.
-- `ListCompanies` — операция-переход. `Browser.goto("/companies", CompaniesTable, ...)`
-  открывает адрес от `base_url` клиента и собирает карту.
-- `outcomes(...)` — исходы: строки появились — вернуть их тексты, нет — `NoCompaniesError`.
-  Тип результата `list[str]` в параметре класса сверяется с исходами ещё при импорте.
-- `Portal` — роутер. `op(ListCompanies)` публикует операцию как `portal.list_companies()`,
-  тем же `op()`, что и HTTP-операции.
-
-## Действие и переход
-
-| Спека | Тело операции | Когда |
+| Возможность | Playwright | Pydoll 3 |
 |---|---|---|
-| `Browser.act(Content, at=..., ...)` | метод `async act(self, content)` | действие на открытой странице: заполнить, нажать |
-| `Browser.goto("/path/{field}", [Content], at=..., wait="load")` | сам переход, `act` нет | открыть адрес; `{field}` — поле операции, подставляется закодированным |
+| Наблюдение за ответами сети | подтверждено захватом | подтверждено захватом |
+| Cookies и localStorage | подтверждено захватом | частичная поддержка |
+| Запрос из контекста страницы | подтверждено захватом | подтверждено захватом |
+| События перехода | подтверждено захватом | подтверждено захватом |
+| Shadow DOM через обычный локатор | подтверждено захватом | не поддерживается |
+| HTML в редакторе | подтверждено захватом | подтверждено захватом |
 
-Условие готовности `at=` проверяет раннер: у действия — до него, у перехода — на открытой
-странице. Если условие не выполнилось, раннер сначала проверяет правила отказа: кнопки нет,
-потому что портал увёл на вход, — это истёкшая сессия, а не «страница не готова».
+Таблица повторяет `PLAYWRIGHT_PROFILE` и `PYDOLL_PROFILE`. Если создать драйвер с
+`capture=None`, оба профиля объявят наблюдение за сетью неподдерживаемым. Остальные возможности
+не меняются.
 
-Сколько ждать исход, элемент, ответ и переход — свойство клиента и вызова, а не операции:
+Playwright удобен для нового проекта и полноценно работает с состоянием контекста. Pydoll нужен,
+когда приложение уже управляет Chromium через Pydoll 3 или передаёт вкладки из пула. Операции и
+роутеры при смене драйвера не меняются.
 
-```python
-from eazy_sdk_browser import AsyncBrowserClient, BrowserCallOptions, BrowserClientConfig
-
-client = AsyncBrowserClient(
-    driver,
-    base_url="https://portal.example.test",
-    config=BrowserClientConfig(timeout=10.0, element_timeout=5.0, navigation_timeout=30.0),
-)
-names = await Portal(client).list_companies(options=BrowserCallOptions(timeout=2.0))
-```
+:::{note}
+Профиль описывает проверенную границу адаптера, а не все функции браузерной библиотеки. Доступ к
+нативной `Page` или `Tab` остаётся у драйвера для действий вне декларативного контракта.
+:::
 
 ## Дальше
 
-- [Исходы и отказы](/integrations/browser/outcomes) — признаки страницы, правила отказа, помехи.
-- [Вход и сессия](/integrations/browser/login) — `BrowserLogin`, хранилище аккаунтов и мост в
-  HTTP-клиент.
-- [Browser pool и Pydoll](/integrations/browser/browser-pool) — кто владеет вкладкой, контекстом,
-  сессией и retry.
-- [API Reference](/reference/api/browser) — публичные классы и диагностики D-B-xx.
-
-Полный сценарий портала — форма, ответ API, HTTP- и браузерный роутер в одном `AsyncRoot` —
-лежит в `examples/browser_portal.py`.
+- {doc}`Подключить Playwright </integrations/browser/playwright>`
+- {doc}`Подключить Pydoll 3 </integrations/browser/pydoll>`
+- {doc}`Объявить исходы страницы </integrations/browser/outcomes>`
