@@ -362,7 +362,7 @@ reference/        Справочник
 | 56.5.1 | руководство: запросы, 12 страниц | строки в очереди заполнены | complete | 11 runnable-файлов и общий локальный сайт; 44 теста, mypy/ruff, 0/0 prose lint, freshness и 93-page strict build PASS | 2026-10-07 |
 | 56.5.2 | руководство: ответы, 4 страницы | строки в очереди заполнены | complete | три runnable-примера и обзор; 47 тестов, mypy/ruff, 0/0 prose lint, freshness и 93-page strict build PASS | 2026-10-07 |
 | 56.5.3 | руководство: авторизация, 10 страниц, вкладки по правилу 12 | строки в очереди заполнены | complete | девять runnable-примеров; HTTP/браузер tabs для login, refresh и session; 79 тестов, mypy/ruff, 0/0 prose lint и strict build PASS | 2026-10-07 |
-| 56.5.4 | руководство: защита, перевод на русский | строка в очереди заполнена | pending | | |
+| 56.5.4 | руководство: защита, перевод на русский | строка в очереди заполнена | complete | HTTP/browser tabs, запускаемый captcha replay; 68 тестов, mypy/ruff, 0/0 prose lint, freshness и strict build PASS | 2026-10-07 |
 | 56.5.5 | руководство: остальное и новая `guide/testing` | строки в очереди заполнены | pending | | |
 | 56.6.1 | интеграции: HTTP-клиенты | строки в очереди заполнены | pending | | |
 | 56.6.2 | интеграции: браузер, таблица возможностей Playwright и Pydoll | строки в очереди заполнены | pending | | |

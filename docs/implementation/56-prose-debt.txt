@@ -3,7 +3,6 @@ guide/dependencies.mdx: em-dash=15
 guide/encryption.mdx: em-dash=14
 guide/multi-service.mdx: em-dash=15
 guide/pagination.mdx: em-dash=12
-guide/protection.mdx: english-paragraph=20
 guide/protocols.mdx: em-dash=11
 guide/signing.mdx: em-dash=2
 guide/websocket.mdx: em-dash=9

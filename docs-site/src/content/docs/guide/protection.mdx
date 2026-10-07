@@ -1,223 +1,151 @@
 ---
-title: Protection
-description: Install first-party anti-bot presets or define a typed response guard.
+title: Обработать защитную проверку
+description: Распознайте challenge, получите решение и безопасно повторите запрос.
 freshness: false
 ---
 
-Use protection guards when an operation can return a challenge that must be solved before a safe
-replay. A guard detects the challenge, calls one typed solver, applies the complete solution before
-request preparation, and sends a newly prepared request through the same handler session.
+Guard нужен, когда сайт вместо обычного ответа возвращает защитную проверку. Он распознаёт
+помеху, вызывает типизированный solver, применяет решение и заново готовит исходный запрос в той
+же транспортной сессии.
+
+## Выбрать готовую защиту
+
+Установите пакет с поддерживаемыми пресетами:
 
 ```bash
 uv add eazy-sdk-presets
 ```
 
-## Install a first-party preset
+Готовые страницы описывают настройку {doc}`Cloudflare Challenge Pages
+</integrations/protection/cloudflare>`, {doc}`Turnstile </integrations/protection/turnstile>` и
+{doc}`reCAPTCHA </integrations/protection/recaptcha>`. Пресет устанавливается в корне SDK через
+`ClientConfig(security=Security.of(guard))`.
 
-Create the handler and solver in your SDK composition root. Install the returned preset through
-`ClientConfig(security=Security.of(...))`; the immutable `ClientConfig.with_protection(...)` call is equivalent.
-The solver below is a stub: the [Cloudflare page](/integrations/protection/cloudflare) shows a complete
-one.
+## Объявить свой guard
 
-```python target
-from eazy_sdk import ClientConfig, Security
-from eazy_sdk.protection import SolveContext, host
-from eazy_sdk_presets import cloudflare
+Пример сайта требует captcha после отправки пароля. HTTP-клиент решает её cookie, а браузер
+нажимает кнопку внутри той же операции.
 
+:::::{tab-set}
+:sync-group: transport
 
-class CloudflareSolver:
-    def __init__(self, browser_pool: object) -> None:
-        self.browser_pool = browser_pool
+::::{tab-item} HTTP
+:sync: http
 
-    async def solve(
-        self,
-        challenge: cloudflare.CloudflareChallenge,
-        context: SolveContext,
-    ) -> cloudflare.CloudflareClearance:
-        raise NotImplementedError("solve the challenge with your browser pool")
+`detect(...)` возвращает `LoginCaptcha` только для знакомого ответа `403`. `solve(...)` получает
+`SolveContext` и создаёт решение с cookie через `self.solution(...)`.
 
-
-browser_pool = object()  # your own browser or lease pool
-
-guard = cloudflare.challenge_pages(
-    scope=host("api.example.test"),
-    solver=CloudflareSolver(browser_pool),
-)
-
-config = ClientConfig(security=Security.of(guard))
+```{literalinclude} ../../../../../examples/mail/http/captcha_probe.py
+:language: python
+:start-after: "# region docs: http-captcha-guard"
+:end-before: "# endregion docs: http-captcha-guard"
 ```
 
-The solver implements `Challenge -> Solution`. Whether it uses a browser, JavaScript, WASM, or a
-remote API is private to the solver. The runtime does not require implementation flags.
+Guard устанавливается один раз в `ClientConfig`. После решения runtime повторяет отклонённый
+password-запрос в пределах бюджета `max_replays=1`.
 
-## Define a custom response guard
-
-Subclass `Guard` for a custom protocol. `detect()` receives an immutable `ResponseContext` and
-returns either one typed challenge or `None`; `solve()` (sync or async) returns
-`self.solution(...)`. Install the instance with `ClientConfig(security=Security.of(...))`:
-
-```python target
-from dataclasses import dataclass
-
-from eazy_sdk import ClientConfig, Security
-from eazy_sdk.protection import (
-    Guard,
-    GuardSolution,
-    MalformedChallengeError,
-    SolveContext,
-    host,
-    rejected_before_origin,
-)
-from eazy_sdk.response import ResponseContext
-
-
-@dataclass(frozen=True)
-class KadChallenge:
-    revision: int
-
-
-def compute_proof(module: bytes, revision: int) -> bytes:
-    # Application-specific: run the origin's proof-of-work module.
-    raise NotImplementedError
-
-
-class KadGuard(Guard[KadChallenge]):
-    scope = host("kad.arbitr.ru")
-    cache = "session"
-    replay = rejected_before_origin(max_replays=1)
-
-    def detect(self, response: ResponseContext[object]) -> KadChallenge | None:
-        if response.response.status_code != 403:
-            return None
-        document = response.json
-        if document.error is not None or not isinstance(document.value, dict):
-            raise MalformedChallengeError("invalid KAD challenge document")
-        revision = document.value.get("revision")
-        if not isinstance(revision, int):
-            raise MalformedChallengeError("challenge revision is missing")
-        return KadChallenge(revision)
-
-    async def solve(self, challenge: KadChallenge, context: SolveContext) -> GuardSolution:
-        # Both requests reuse the handler, proxy, and cookie jar of the challenged call,
-        # so the clearance is issued to the identity that will replay the request.
-        module = await context.fetch("https://kad.arbitr.ru/challenge.wasm")
-        proof = compute_proof(module.body, challenge.revision)
-        validated = await context.fetch(
-            "https://kad.arbitr.ru/validate",
-            method="POST",
-            headers={"Content-Type": "application/json"},
-            body=proof,
-        )
-        document = validated.json()
-        return self.solution(
-            cookies={"pr_fp": document["pr_fp"], "wasm": document["wasm"]},
-            expires_in=3600,
-        )
-
-
-config = ClientConfig(security=Security.of(KadGuard()))
+```{literalinclude} ../../../../../examples/mail/http/captcha.py
+:language: python
+:start-after: "# region docs: http-captcha-flow"
+:end-before: "# endregion docs: http-captcha-flow"
 ```
 
-Class attributes configure the guard:
+```{literalinclude} ../../../../../examples/docs/protection.py
+:language: python
+:start-after: "# region docs: protection-run"
+:end-before: "# endregion docs: protection-run"
+```
+::::
 
-| Attribute | Default | Meaning |
+::::{tab-item} Браузер
+:sync: browser
+
+Браузер видит настоящую страницу проверки:
+
+```{literalinclude} ../../../../../examples/mail/site/app.py
+:language: html
+:start-after: "<!-- region docs: captcha-html -->"
+:end-before: "<!-- endregion docs: captcha-html -->"
+```
+
+`Handle` следит за элементом captcha, нажимает кнопку и возвращает управление исходной
+`BrowserOperation`. Для вызывающего переход к `OtpStep` остаётся одним методом.
+
+```{literalinclude} ../../../../../examples/mail/browser/captcha.py
+:language: python
+:start-after: "# region docs: browser-captcha-operation"
+:end-before: "# endregion docs: browser-captcha-operation"
+```
+::::
+:::::
+
+| Ответ сайта | Что делает правило | Что получает вызывающий |
 |---|---|---|
-| `scope` | every request of the client | `host(...)`, `operation(...)`, or any `RequestScope` |
-| `cache` | `"session"` | `"none"`: solve every match; `"call"`: reuse within one call; `"session"`: share across calls through the same handler session until rejected or `expires_at` |
-| `replay` | `safe_method(max_replays=1)` | Replay proof and budget |
-| `headers`, `query`, `body` | `()` | Destination names `self.solution(headers=...)` may set; cookies need no declaration |
-| `name` | class name | Policy identity, also accepted by `client.invalidate_protection()` |
-| `revision` | `1` | Positive integer that is part of the managed-state key next to `name`; bump it so that solutions cached under the previous revision are no longer applied |
+| Обычный ответ | `detect(...)` возвращает `None` | Результат операции |
+| Знакомая помеха | Solver создаёт `GuardSolution` | Результат повторённой операции |
+| Повреждённая помеха | Detector сообщает ошибку разбора | Типизированную ошибку стадии |
+| Бюджет исчерпан | Повтор запрещён | `ReplayDeniedError` |
 
-Cookies are applied as a managed dynamic set. `self.solution(expires_in=...)` bounds the session
-cache; without it the solution lives until the origin rejects it. Only `cache="session"` shares
-one in-flight solve between concurrent calls that hit the same challenge; with `cache="call"`
-and `cache="none"` the state never leaves the call, so concurrent calls solve independently.
+:::{dropdown} Запускаемый файл целиком
+```{literalinclude} ../../../../../examples/docs/protection.py
+:language: python
+```
+:::
 
-Drop a cached solution explicitly, for example after the origin changed its protocol:
-
-```python target
-client.invalidate_protection(kad_guard)   # by guard
-client.invalidate_protection("KadGuard")  # by policy name
-client.invalidate_protection()            # everything cached in this session
+<!-- example-output: examples.docs.protection -->
+```text
+challenge: mail-login
+password requests: 2
+clearance cookie: login_clearance=solved
+result: OtpStep
 ```
 
-`challenge_guard()` is the functional equivalent for a detector function plus a solver function
-or object; `solution_fields()` declares its destinations. `ClientConfig.with_protection(...)`
-remains equivalent to `guards=`.
+## Настроить область, хранение и повтор
 
-Every replay reruns dependencies, auth, projection, crypto, encoding, preparation, and signing.
-The detector and solver never receive a mutable or prepared request.
+| Атрибут | Назначение |
+|---|---|
+| `scope` | Ограничивает правило хостом, операцией или другим `RequestScope` |
+| `cache="none"` | Решение не покидает текущую попытку |
+| `cache="call"` | Решение повторно используется только внутри одного вызова |
+| `cache="session"` | Решение разделяется вызовами одной транспортной сессии |
+| `replay` | Задаёт доказательство безопасности и число повторов |
+| `revision` | Отделяет новое правило от ранее сохранённых решений |
 
-## Solve through the same session
+`headers`, `query` и `body` объявляют назначения, которые разрешено менять решению. Для cookie
+отдельное разрешение не требуется. Кэш можно очистить методом `client.invalidate_protection(...)` для
+конкретного guard, имени политики или всей сессии.
 
-A clearance is usually bound to the network identity that earned it: the same IP, User-Agent, and
-TLS fingerprint. `SolveContext` therefore carries two ports instead of the raw handler:
+## Решать в той же транспортной сессии
 
-- `context.fetch(url, *, method, headers, body)` sends a request through the handler, proxy, and
-  cookie jar of the challenged call and returns a `NormalizedResponse`. It bypasses guards,
-  reactions, replay, middleware, and rate limiting, so a solver can download challenge assets or
-  POST a validation form without recursing into the pipeline that invoked it. Redirects are not
-  followed (a `3xx` comes back as is), each fetch gets the full call timeout rather than the
-  remaining `deadline`, and every `Set-Cookie` it receives lands in the session's jar.
-- `context.identity` is the `TransportIdentity` of the attempt: the public `user_agent`, the
-  `proxy` the handler declares (`Client.httpx(proxy=...)` and friends fill `HandlerProfile.proxy`;
-  credentials are redacted in `repr`), and the handler's `impersonation` label.
-  `context.request_headers` holds the headers that actually went out; `context.deadline` is the
-  solve budget (the call timeout counted from the creation of the context) and
-  `context.remaining()` the time left in it.
+`context.fetch(...)` загружает вспомогательный ресурс через тот же handler, proxy и cookie jar.
+Такой запрос обходит guards, middleware, rate limit и повтор, поэтому solver не вызывает сам себя.
+Каждый полученный `Set-Cookie` остаётся в сессии защищённого вызова.
 
-Managed solutions remember `identity.fingerprint()`. When the client later prepares a request
-under a different User-Agent, proxy, or impersonation label, the stored clearance is invalidated
-instead of being replayed through the wrong identity, and the next challenge is solved again.
-The identity is computed from the public values of the attempt before any managed solution is
-applied, so a guard may own `User-Agent` (declare it in `headers`) without changing the identity
-its own solution is bound to. A proxy the handler does not declare is not part of the identity:
-pass `proxy=` to the client factory, or set `HandlerProfile.proxy` on a custom handler.
+`context.identity` описывает `User-Agent`, объявленный proxy и метку impersonation. Сохранённое
+решение привязано к этому отпечатку и сбрасывается при смене сетевой личности.
 
-Managed clearance still belongs to one SDK client and its handler session. Rotate proxies by
-acquiring a new lease and creating a new handler and client. The fragment below is application
-code: `proxy_pool` is your lease pool, `create_sdk(proxy=...)` your factory that builds the
-handler (for example `AsyncClient.httpx(proxy=lease.url)`) and the SDK around it:
+:::{warning}
+Если solver использует отдельный браузер или HTTP-клиент вместо `context.fetch(...)`, он сам
+должен сохранить тот же proxy, `User-Agent`, TLS-отпечаток и cookies.
+:::
 
-```python target
-# Fragment: proxy_pool, create_sdk and run_operation are defined by the application.
-async with proxy_pool.acquire() as lease:
-    async with create_sdk(proxy=lease.url) as sdk:
-        return await run_operation(sdk)
-```
+## Разобрать ошибку стадии
 
-A new client starts with empty protection state. Solvers that hold their own browser or HTTP
-session outside `context.fetch` remain responsible for sharing that session with the handler.
+| Ошибка | Стадия |
+|---|---|
+| `ProtectionConfigurationError` | Некорректная схема до транспортного вызова |
+| `ChallengeDetectionError` | Неожиданная ошибка detector |
+| `ChallengeParseError` | Помеха распознана, но её данные повреждены |
+| `ChallengeSolveError` | Solver не получил решение |
+| `ChallengeApplicationError` | Решение нельзя безопасно применить |
+| `ReplayDeniedError` | Нет доказанного или доступного повтора |
 
-## Handle stage-specific errors
+Ошибки сохраняют исходное исключение в `__cause__`, но не включают тело ответа, cookies или
+credentials в собственное сообщение. Низкоуровневые контракты генераторов находятся в
+`eazy_sdk.protection.advanced`; прикладному SDK обычно достаточно `Guard` или готового пресета.
 
-- `ProtectionConfigurationError` reports malformed guards, missing solvers, or destination
-  conflicts before transport I/O.
-- `ChallengeDetectionError` wraps an unexpected detector exception.
-- `ChallengeParseError` reports a recognized but unusable challenge (`MalformedChallengeError`
-  from the detector is its `__cause__`); `AmbiguousChallengeError` reports two guards claiming one
-  response. Both are exported only from `eazy_sdk.protection.advanced`, not from
-  `eazy_sdk.protection`; import them from there to catch them by type.
-- `ChallengeSolveError` wraps a solver failure.
-- `ChallengeApplicationError` reports an invalid solution batch before replay.
-- `ReplayDeniedError` reports an exhausted per-guard budget or an unproven replay.
+## Дальше
 
-Stage errors retain the original exception as `__cause__`. Their own message contains policy and
-attempt metadata, not response bodies, cookies, credentials, or solver secrets.
-
-## Use the advanced SPI for framework lowering
-
-SDK and plugin authors who generate policies can import low-level signal, requirement, binding,
-persistence, and bundle contracts from `eazy_sdk.protection.advanced`. Application code should use
-`challenge_guard()` or a first-party preset instead.
-
-Mandatory operation flows remain in the advanced SPI because they bind generated operation
-results into compiler-reserved fields. They are independent from response challenge guards and
-from auth/session storage.
-
-## First-party presets
-
-- [Cloudflare Challenge Pages](/integrations/protection/cloudflare)
-- [Turnstile](/integrations/protection/turnstile)
-- [reCAPTCHA](/integrations/protection/recaptcha)
+- {doc}`Решить captcha в учебном SDK </tutorial/captcha>`
+- {doc}`Подключить Cloudflare Challenge Pages </integrations/protection/cloudflare>`
+- {doc}`Справочник защиты </reference/api/protection>`

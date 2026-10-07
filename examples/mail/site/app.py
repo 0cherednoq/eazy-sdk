@@ -486,16 +486,22 @@ def _password_html(login_id: str) -> str:
     )
 
 
+_CAPTCHA_HTML = """
+<!-- region docs: captcha-html -->
+<!-- examples/mail/site/app.py -->
+<main data-page="captcha" data-login-id="{login_id}">
+  <div class="captcha" data-site-key="mail-login">Подтвердите вход</div>
+  <form method="post" action="/login/captcha">
+    <input name="login_id" type="hidden" value="{login_id}">
+    <button data-action="solve" type="submit">Я не робот</button>
+  </form>
+</main>
+<!-- endregion docs: captcha-html -->
+"""
+
+
 def _captcha_html(login_id: str) -> str:
-    return _page(
-        "Проверка",
-        f'<main data-page="captcha" data-login-id="{html.escape(login_id)}">'
-        '<div class="captcha" data-site-key="mail-login">Подтвердите вход</div>'
-        '<form method="post" action="/login/captcha">'
-        f'<input name="login_id" type="hidden" value="{html.escape(login_id)}">'
-        '<button data-action="solve" type="submit">Я не робот</button>'
-        "</form></main>",
-    )
+    return _page("Проверка", _CAPTCHA_HTML.format(login_id=html.escape(login_id)))
 
 
 def _otp_html(login_id: str) -> str:

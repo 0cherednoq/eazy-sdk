@@ -5669,6 +5669,19 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
 | clean strict Sphinx build | PASS: 93 sources, no warnings; login, refresh and session render synchronized HTTP/browser tabs with source-backed browser HTML fragments. |
 
+### Verification evidence (56.5.4)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.docs.protection` and live browser captcha example | PASS: HTTP guard solved `mail-login`, replayed the password request with `login_clearance=solved`, and Chromium reached `OtpStep` inside one browser operation. |
+| focused runnable-output, debt-snapshot, domain and live-probe suite | PASS: 68 tests. |
+| `uv run mypy examples/docs/protection.py examples/mail/site/app.py` | PASS: no issues in 2 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `scripts/lint_docs_prose.py docs-site/src/content/docs/guide/protection.mdx` | PASS: 0 errors and 0 warnings; the Russian pattern audit found no remaining findings. The outline-test exclusion for a procedural guide applies. |
+| page queue and debt audit | PASS: the row is complete; 20 English paragraphs and two non-example domains from the old page are removed from the snapshots. |
+| documentation metadata and freshness | PASS: 93 valid pages; 70 freshness fingerprints current. |
+| clean strict Sphinx build | PASS: 93 sources, no warnings; synchronized HTTP/browser tabs use runnable source and a real rendered captcha fragment. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5710,4 +5723,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.5.4–56.8. No blockers; next step is 56.5.4.
+56.5.5–56.8. No blockers; next step is 56.5.5.

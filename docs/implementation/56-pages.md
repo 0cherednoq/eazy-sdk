@@ -64,7 +64,7 @@
 | `guides/pagination` | `guide/pagination` | ok |  |  |  | n/a |
 | `guides/payload-crypto` | `guide/encryption` | ok |  |  |  | n/a |
 | `guides/protection/cloudflare` | `integrations/protection/cloudflare` | ok |  |  |  | n/a |
-| `guides/protection/index` | `guide/protection` | ok |  |  |  | n/a |
+| `guides/protection/index` | `guide/protection` | ok | ok | ok | ok | n/a |
 | `guides/protection/recaptcha` | `integrations/protection/recaptcha` | ok |  |  |  | n/a |
 | `guides/protection/turnstile` | `integrations/protection/turnstile` | ok |  |  |  | n/a |
 | `guides/protocols` | `guide/protocols` | ok |  |  |  | n/a |
