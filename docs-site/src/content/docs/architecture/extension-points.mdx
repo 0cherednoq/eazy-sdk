@@ -1,0 +1,54 @@
+---
+title: Точки расширения
+description: Добавляйте транспорт, кодек или парсер без второго пути выполнения.
+sources:
+  - eazy_sdk.HandlerProfile
+  - eazy_sdk.ext.BodyCodec
+  - eazy_sdk.ext.ResponseParser
+  - eazy_sdk.ext.CustomRequestSigner
+api_fingerprint: "sha256:a6ffb7684da18d8e1f06374f2212866f749e962cbd082c664cbc52aafd69919e"
+---
+
+Расширение Eazy SDK подключается к владельцу конкретного решения. Оно не заменяет исполнитель и
+не добавляет параллельный конвейер
+([`eazy_sdk.ext`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/ext/__init__.py)).
+
+```{mermaid}
+flowchart TD
+    Contract["Контракт операции"] --> Codecs["ScalarCodec / BodyCodec"]
+    Contract --> Signing["CustomRequestSigner"]
+    Response["Ответ"] --> Parser["ResponseParser / Extractor"]
+    Prepared["PreparedRequest"] --> Handler["Zapros handler"]
+    Requirements["Требования транспорта"] --> Profile["HandlerProfile"]
+    Profile --> Validate["Проверка до отправки"]
+    Codecs --> Executor["Единый исполнитель"]
+    Signing --> Executor
+    Parser --> Executor
+    Handler --> Executor
+```
+
+## Как выбрать границу
+
+| Требуется | Контракт | Модуль |
+| --- | --- | --- |
+| Кодировать одно значение или тело | `ScalarCodec`, `BodyCodec` | [`eazy_sdk.codecs`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/codecs/core.py) |
+| Извлечь данные из ответа | `ResponseExtractor` | [`eazy_sdk.response.cases`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py) |
+| Полностью разобрать ответ | `ResponseParser` | [`eazy_sdk.response.cases`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py) |
+| Построить нестандартную подпись | `CustomCanonicalizer`, `CustomRequestSigner` | [`eazy_sdk.request.signatures`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/request/signatures.py) |
+| Ограничить область применения | `RequestScope` | [`eazy_sdk.core`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/core/__init__.py) |
+| Отправить запрос другим HTTP-клиентом | Zapros handler и `HandlerProfile` | [`eazy_sdk.handlers.profile`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/handlers/profile.py) |
+
+`HandlerProfile` сообщает наблюдаемые возможности транспорта: протокол, точность адреса,
+заголовки, готовые байты тела, cookies и перенаправления. Исполнитель сравнивает профиль с
+требованиями операции до отправки и перечисляет все несовпадения в `CapabilityMismatchError`
+([`validate_profile`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/handlers/profile.py)).
+
+Порядок стадий запроса расширять нельзя. Новый кодек, проекция, конверт, шифрование или подпись
+работают внутри уже объявленной стадии `REQUEST_PIPELINE`
+([`eazy_sdk.request.pipeline`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/request/pipeline.py)).
+
+## Дальше
+
+- {doc}`Написать обработчик транспорта </integrations/http/custom-handler>`
+- {doc}`Проверить публичные точки расширения </reference/api/extensions>`
+- {doc}`Понять путь запроса </architecture/request-path>`

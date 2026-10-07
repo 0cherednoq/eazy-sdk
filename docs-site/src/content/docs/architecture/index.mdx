@@ -1,0 +1,49 @@
+---
+title: Слои и границы
+description: Поймите, кто объявляет операцию, выполняет её и владеет состоянием Eazy SDK.
+sources:
+  - eazy_sdk.AsyncRoot
+  - eazy_sdk.ClientConfig
+  - eazy_sdk.Identity
+  - eazy_sdk.Serialization
+api_fingerprint: "sha256:fd7c9194d3fc92f80736bc7044759a7c3a925ced36330d26784664acdcd2bef6"
+---
+
+Кто за что отвечает?
+
+Архитектура Eazy SDK разделяет декларацию контракта, выполнение вызова и работу транспорта.
+Корень SDK только собирает роутеры, назначает им клиентов и адреса. Он не содержит операций
+([`eazy_sdk.root`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/root.py)).
+
+```{mermaid}
+flowchart LR
+    Author["Автор SDK"] --> Declaration["Операции и роутеры"]
+    Declaration --> Compile["Компиляция контракта"]
+    Compile --> Execute["Единый исполнитель"]
+    Execute --> Transport["Обработчик транспорта"]
+    Transport --> Service["HTTP-сервис"]
+    Identity["Identity"] --> Execute
+    Serialization["Serialization"] --> Compile
+    Config["ClientConfig"] --> Execute
+```
+
+## Владельцы решений
+
+| Слой | Владеет | Не владеет | Модуль |
+| --- | --- | --- | --- |
+| Декларация | Поля, путь, ответы, подпись, шифрование | Соединение и повторы | [`eazy_sdk.api`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/api.py) |
+| Корень SDK | Состав роутеров, привязка клиента и адреса | Операции и состояние транспорта | [`eazy_sdk.root`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/root.py) |
+| Identity | Авторизация, ключи подписи, зависимости, наблюдатель | Cookies, прокси и пул соединений | [`eazy_sdk.identity`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/identity.py) |
+| Serialization | Адаптеры моделей и кодеки данных | Политика повторов | [`eazy_sdk.serialization`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/serialization.py) |
+| ClientConfig | Повторы, перенаправления, защиты и middleware | Учётные данные и модели | [`eazy_sdk.clients.config`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/config.py) |
+| Обработчик | Преобразование подготовленного запроса в сетевой обмен | Семантика операции | [`eazy_sdk.handlers`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/handlers/__init__.py) |
+
+Синхронный и асинхронный клиенты используют одну спецификацию выполнения. Синхронный драйвер
+пошагово завершает ту же корутину без отдельного цикла событий; настоящий асинхронный ввод-вывод
+требует `AsyncClient` ([`eazy_sdk.driver`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/driver.py)).
+
+## Дальше
+
+- {doc}`Проследить путь запроса </architecture/request-path>`
+- {doc}`Разобрать попытки и повторы </architecture/attempts>`
+- {doc}`Найти точку расширения </architecture/extension-points>`

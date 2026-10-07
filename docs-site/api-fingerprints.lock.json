@@ -1,4 +1,63 @@
 {
+  "architecture/attempts.mdx": {
+    "fingerprint": "sha256:cd2fd45107bcbae01e6810ab50064d744852871a1089e5a55903a8a8b610158a",
+    "symbols": {
+      "eazy_sdk.RetryPolicy": "sha256:e4d4e7f990bde277571cd1f2c07311dbd92f00eddf6426c94c29ec1467f3e7b9",
+      "eazy_sdk.clients.attempts.AttemptState": "sha256:fbaf9ab4ff0079fbd12af686d256ff07b1626f807d1f28a623ee50bb3a5ca9f3",
+      "eazy_sdk.clients.base.CallOptions": "sha256:fda10bef5760218a10458522467d5a2c9946a5cafbfec69356698274859e00db"
+    }
+  },
+  "architecture/browser.mdx": {
+    "fingerprint": "sha256:63369c2924053739a15f966d3a4db6fbd57b03afb71dcd576169d3334399a6c6",
+    "symbols": {
+      "eazy_sdk_browser.AsyncBrowserClient": "sha256:ec7384ee5f60d84237ef9d943b069cba93b755e8c690d872edaf4bc7b0978373",
+      "eazy_sdk_browser.BrowserOperation": "sha256:a4dcb935925ab21afa3f02bda5c81bc8024ebb2d794eb179e1c89c17f1da6400",
+      "eazy_sdk_browser.BrowserProfile": "sha256:61f766edbea3a5fe68ad0b2584992ba5dd165ada0cfd24a81386133dd7bd1059",
+      "eazy_sdk_browser.BrowserState": "sha256:771edfb12459e5324d54e6855e1c0cdc9b3bb5abcd3ff5cfc233e822f3ae4c77"
+    }
+  },
+  "architecture/extension-points.mdx": {
+    "fingerprint": "sha256:a6ffb7684da18d8e1f06374f2212866f749e962cbd082c664cbc52aafd69919e",
+    "symbols": {
+      "eazy_sdk.HandlerProfile": "sha256:3ba85c364acd4555746ff50d3f54fdfa0e6de62626ef2aa207640a277971681f",
+      "eazy_sdk.ext.BodyCodec": "sha256:3ebfd871a3ea67f894e82de1312dec25d068247cd583f1ea59931814997a4518",
+      "eazy_sdk.ext.CustomRequestSigner": "sha256:d5a17ea077ca9b0089df0fa2aed0aa339cbe53cde916359e9257853973d21f78",
+      "eazy_sdk.ext.ResponseParser": "sha256:cd83f75d3b9edffafb2c9d0c7186b07f7a4604d52f1456a3b78c5c7d8ee6240a"
+    }
+  },
+  "architecture/identity.mdx": {
+    "fingerprint": "sha256:771e520f024ee23a81fbdf38680f8740d97fb8f66ef350e0b60dfdf078ab2bab",
+    "symbols": {
+      "eazy_sdk.AsyncRoot": "sha256:44cf586d971afbb639b46e6f4187bd465775c52a85468c4d00b74044062f65e7",
+      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.auth.session_auth": "sha256:303c50f1bf36c34d6b3ebbc8b901f2a64f155f2e7b576ebd53f8e862af02d0fc"
+    }
+  },
+  "architecture/index.mdx": {
+    "fingerprint": "sha256:fd7c9194d3fc92f80736bc7044759a7c3a925ced36330d26784664acdcd2bef6",
+    "symbols": {
+      "eazy_sdk.AsyncRoot": "sha256:44cf586d971afbb639b46e6f4187bd465775c52a85468c4d00b74044062f65e7",
+      "eazy_sdk.ClientConfig": "sha256:3186e8116acfa6c4b39f87f6a4811d6ed70002433bf46832d30caf58d45c890c",
+      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.Serialization": "sha256:a477e233bb1a2a600192f72c40d9cfe276e820102cc1847e8bb6c7e6e0c33b3a"
+    }
+  },
+  "architecture/request-path.mdx": {
+    "fingerprint": "sha256:666cbf279bb9d24ac35c0ff6862af6de697068dec22f058e0f984e651cb67951",
+    "symbols": {
+      "eazy_sdk.PreparedCall": "sha256:b88f09bb45b14507cf68c74801b776b2df20457e3853061320d164545e9d44d6",
+      "eazy_sdk.request.pipeline.REQUEST_PIPELINE": "sha256:849086b5032f6882fc49d5f8b7aa5947493406d25129b7650aa996afa8d45500",
+      "eazy_sdk.response.Responses": "sha256:e108ce171ae4381157f4c5c92e3d0ca47051659d2a5c57fffddbc756668141b4"
+    }
+  },
+  "architecture/response-cases.mdx": {
+    "fingerprint": "sha256:0e6773ffef352630f99cf3fc85e120dd823719e5c101e19373af7e595c5040ac",
+    "symbols": {
+      "eazy_sdk.UnexpectedResponseError": "sha256:5c29cdbcbc97b8609229dd58a38e5e7b9412624d6cefacfca01bef2a972b78ed",
+      "eazy_sdk.response.ResponseContext": "sha256:cc40d4612b39f291e34d16aae1940dc130f26a0d90f5775c57161a0cb63bcd86",
+      "eazy_sdk.response.Responses": "sha256:e108ce171ae4381157f4c5c92e3d0ca47051659d2a5c57fffddbc756668141b4"
+    }
+  },
   "guide/auth/api-key.mdx": {
     "fingerprint": "sha256:da86d1aae404ad80bd9415d1f97b97750188f76e9529cce582c8d9438c0c2911",
     "symbols": {

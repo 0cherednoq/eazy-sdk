@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.7.2–56.8. No blockers; next step is 56.7.2.
+56.8. No blockers; next step is 56.8.1.
 
 ### Verification evidence (56.5.5)
 
@@ -5800,3 +5800,14 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | `uv add --group docs "sphinxcontrib-mermaid>=2,<3"` | PASS: resolved and locked `sphinxcontrib-mermaid` 2.1.1 in the docs group. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/probes/mermaid docs-site/_build/phase56-mermaid-probe` | PASS: the standalone Mermaid source built without warnings. |
 | rendered probe inspection | PASS: `index.html` contains `pre.mermaid`, the `flowchart LR` source and the Mermaid module loader. |
+
+### Verification evidence (56.7.2)
+
+| Command | Result |
+|---|---|
+| architecture source audit | PASS: seven pages declare 23 freshness sources, contain one Mermaid diagram each and link 47 factual claims or table rows to the implementing modules. |
+| `scripts/lint_docs_prose.py` over all seven pages | PASS: 0 errors and 0 warnings on every page. |
+| documentation metadata and freshness | PASS: 112 valid pages; all 80 tracked pages are fresh. |
+| focused prose, code-block and domain snapshot tests | PASS: 3 passed. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-architecture` | PASS: 112 sources, no warnings; all seven Mermaid blocks are present in the rendered site. |
+| live Playwright inspection of `/architecture/` | PASS: the diagram rendered as an accessible SVG with labelled nodes; navigation, table and next links rendered correctly. The only console error is the pre-existing missing `/favicon.ico`, deferred to the homepage polish in 56.8.1. |

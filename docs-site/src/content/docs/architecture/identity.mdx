@@ -1,0 +1,53 @@
+---
+title: Identity и сессия
+description: Разделите пользователя, состояние авторизации и транспортные ресурсы.
+sources:
+  - eazy_sdk.Identity
+  - eazy_sdk.auth.session_auth
+  - eazy_sdk.AsyncRoot
+api_fingerprint: "sha256:771e520f024ee23a81fbdf38680f8740d97fb8f66ef350e0b60dfdf078ab2bab"
+---
+
+`Identity` представляет одну область сессии. Она хранит привязки авторизации, поставщика ключей
+подписи, зависимости и наблюдателя. Cookies, прокси и пул соединений принадлежат клиенту, а не
+Identity ([`eazy_sdk.identity`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/identity.py)).
+
+Это граница пользователя, а не транспорта.
+
+```{mermaid}
+flowchart LR
+    Identity["Identity пользователя"] --> Root["Корень SDK"]
+    Root --> Accounts["AccountApi"]
+    Root --> Messages["MessagesApi"]
+    Identity --> Auth["Auth providers"]
+    Identity --> Keys["Ключи подписи"]
+    Identity --> Dependencies["Зависимости"]
+    Client["Клиент транспорта"] --> Accounts
+    Client --> Messages
+    Client --> Pool["Соединения, cookies, proxy"]
+```
+
+Корень разрешает Identity один раз и передаёт одну runtime-область всем своим роутерам. Две
+привязки одной схемы в одной Identity отклоняются как ошибка плана
+([`_identity_scope`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/identity.py),
+[`eazy_sdk.root`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/root.py)).
+
+Одна Identity может обслуживать несколько сервисов и клиентов. Другому пользователю нужна другая
+Identity, но не обязательно новый пул соединений. Привязка `bind(...)` независимо выбирает клиент
+и адрес для каждого класса роутера
+([`eazy_sdk.root`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/root.py)).
+
+`session_auth(...)` соединяет учётные данные, сервис входа и хранилище сессии. Поставщик получает
+сессию перед запросом, обновляет её заранее по сроку или после `401`, затем повторяет только
+идемпотентную операцию
+([`eazy_sdk.auth.session_runtime`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/auth/session_runtime.py)).
+
+Для входа и обновления Identity получает ограниченную копию SDK на отдельном графе жизненного
+цикла. Такая копия не регистрирует фабрику повторно и не может рекурсивно вызвать тот же вход
+([`bind_session_lifecycle`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/identity.py)).
+
+## Дальше
+
+- {doc}`Настроить вход </guide/auth/login>`
+- {doc}`Управлять сессией </guide/auth/session>`
+- {doc}`Собрать несколько сервисов </guide/multi-service>`

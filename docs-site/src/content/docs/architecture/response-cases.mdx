@@ -1,0 +1,55 @@
+---
+title: Выбор варианта ответа
+description: Узнайте, как статус, тип данных и содержимое выбирают типизированный исход.
+sources:
+  - eazy_sdk.response.Responses
+  - eazy_sdk.response.ResponseContext
+  - eazy_sdk.UnexpectedResponseError
+api_fingerprint: "sha256:0e6773ffef352630f99cf3fc85e120dd823719e5c101e19373af7e595c5040ac"
+---
+
+Как ответ получает один типизированный исход?
+
+`Responses` рассматривает ответ как набор объявленных успешных и ошибочных вариантов. Сначала он
+отбирает кандидатов по статусу, типу данных и условию `when`, затем читает тело только через их
+парсеры или экстракторы
+([`eazy_sdk.response.cases`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).
+
+```{mermaid}
+flowchart TD
+    Response["NormalizedResponse"] --> Filter["Статус + media type + when"]
+    Filter -->|нет кандидатов| Fallback["Fallback или Unexpected"]
+    Filter --> Parse["Извлечь и разобрать тело"]
+    Parse --> Accept["accept или теги модели"]
+    Accept --> Rank["Выбрать самый специфичный case"]
+    Rank --> Success["SuccessOutcome"]
+    Rank --> Error["ErrorOutcome"]
+    Rank --> Ambiguous["AmbiguousResponseOutcome"]
+    Parse --> Malformed["MalformedOutcome"]
+```
+
+## Приоритет вариантов
+
+Если тело приняли несколько вариантов, побеждает более узкое объявление. Порядок сравнения:
+
+1. Вариант с критерием содержимого перед вариантом без критерия.
+2. Точный статус перед диапазоном, диапазон перед `DEFAULT`.
+3. Точный тип данных перед шаблоном, шаблон перед отсутствующим ограничением.
+4. Операция перед сервисом, сервис перед клиентом.
+
+Полное равенство остаётся неоднозначностью, потому что декларация не даёт основания выбрать один
+вариант ([`_most_specific`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).
+
+`ResponseContext` лениво предоставляет байты, текст, JSON, заголовки и cookies. Один разобранный
+артефакт кешируется и используется всеми конкурирующими вариантами ответа
+([`ResponseContext`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).
+
+`unwrap()` успешного исхода возвращает значение. Ошибочный исход создаёт объявленный `ApiError`,
+а неожиданный, повреждённый и неоднозначный ответы получают отдельные типы ошибок
+([`ResponseOutcome`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).
+
+## Дальше
+
+- {doc}`Объявить успешный ответ </guide/responses/success>`
+- {doc}`Объявить ошибку API </guide/responses/errors>`
+- {doc}`Подключить свой парсер </architecture/extension-points>`

@@ -1,0 +1,60 @@
+---
+title: Путь запроса
+description: Проследите вызов от метода роутера до типизированного ответа.
+sources:
+  - eazy_sdk.request.pipeline.REQUEST_PIPELINE
+  - eazy_sdk.PreparedCall
+  - eazy_sdk.response.Responses
+api_fingerprint: "sha256:666cbf279bb9d24ac35c0ff6862af6de697068dec22f058e0f984e651cb67951"
+---
+
+Что происходит после вызова метода?
+
+Вызов метода роутера проходит один и тот же путь в синхронном и асинхронном клиентах. Дескриптор
+связывает аргументы, а компилятор заранее проверяет контракт операции
+([`eazy_sdk.api`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/api.py),
+[`eazy_sdk.compile.http_compiler`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/compile/http_compiler.py)).
+
+```{mermaid}
+flowchart TD
+    Call["Вызов метода"] --> Bind["Связать аргументы"]
+    Bind --> Plan["Получить скомпилированный контракт"]
+    Plan --> Values["Авторизация, зависимости, защиты"]
+    Values --> Attempt["Собрать текущую попытку"]
+    Attempt --> Pipeline["Конвейер представления"]
+    Pipeline --> Send["Отправить через handler"]
+    Send --> Normalize["Нормализовать ответ"]
+    Normalize --> Cases["Выбрать response case"]
+    Cases --> Result["Значение или типизированная ошибка"]
+```
+
+## Порядок представления тела
+
+`REQUEST_PIPELINE` объявлен один раз и содержит шесть фиксированных стадий
+([`eazy_sdk.request.pipeline`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/request/pipeline.py)):
+
+1. Проекция публичной модели в модель представления.
+2. Конверт протокола.
+3. Шифрование выбранных полей документа.
+4. Кодирование документа в байты.
+5. Шифрование готовых байтов.
+6. Подпись окончательного запроса.
+
+Подпись всегда последняя, поэтому она читает именно те байты, которые уйдут в транспорт. Набор
+стадий закрыт; операция может пропустить неприменимую стадию, но не добавить новый вид стадии
+([`eazy_sdk.request.pipeline`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/request/pipeline.py)).
+
+`ExecutionCore` выполняет объявленный порядок, а `_AttemptRun` хранит данные одной попытки.
+Обработчик получает уже подготовленный запрос и возвращает нормализованный ответ
+([`eazy_sdk.clients.executor`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/executor.py)).
+
+После транспорта `Responses.inspect(...)` сопоставляет ответ с декларациями операции. Обычный
+вызов разворачивает результат, а `.with_response(...)` добавляет исходный нормализованный ответ
+без второго сетевого пути
+([`eazy_sdk.response.cases`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).
+
+## Дальше
+
+- {doc}`Разобрать попытки и повторы </architecture/attempts>`
+- {doc}`Понять выбор варианта ответа </architecture/response-cases>`
+- {doc}`Посмотреть конвейер на примере шифрования </guide/encryption>`

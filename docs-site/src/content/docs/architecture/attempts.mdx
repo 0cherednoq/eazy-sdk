@@ -1,0 +1,57 @@
+---
+title: Попытка и повторы
+description: Поймите бюджеты повторов, переходы и предел одного вызова.
+sources:
+  - eazy_sdk.clients.attempts.AttemptState
+  - eazy_sdk.clients.base.CallOptions
+  - eazy_sdk.RetryPolicy
+api_fingerprint: "sha256:cd2fd45107bcbae01e6810ab50064d744852871a1089e5a55903a8a8b610158a"
+---
+
+Почему один вызов не повторяется бесконечно?
+
+Каждая отправка имеет неизменяемый `AttemptState`: номер, причину, адрес, эффективный метод и
+остатки бюджетов. Политика читает состояние и исход, затем возвращает `Continue`, `Stop` или
+`Fail` без сетевых эффектов
+([`eazy_sdk.clients.attempts`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py)).
+
+```{mermaid}
+stateDiagram-v2
+    [*] --> Attempt: initial
+    Attempt --> Attempt: transport retry
+    Attempt --> Attempt: response retry
+    Attempt --> Attempt: redirect
+    Attempt --> Attempt: auth refresh
+    Attempt --> Attempt: protection reaction
+    Attempt --> Success: terminal response
+    Attempt --> Failure: rejected or exhausted
+    Success --> [*]
+    Failure --> [*]
+```
+
+## Независимые бюджеты
+
+| Бюджет | Кто расходует | Модуль |
+| --- | --- | --- |
+| `transport` | Ошибка транспорта или повторяемый ответ | [`eazy_sdk.clients.attempts`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py) |
+| `auth` | Обновление отклонённой авторизации | [`eazy_sdk.clients.attempts`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py) |
+| `redirect` | Переход на новый адрес | [`eazy_sdk.clients.attempts`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py) |
+| `replays[policy]` | Реакция конкретной защиты | [`eazy_sdk.clients.attempts`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py) |
+
+Каждая политика расходует только свой бюджет. Жёсткий предел фиксируется при начале вызова и
+добавляет бюджеты защит к `max_attempts`; расход одного бюджета не уменьшает остальные
+([`AttemptBudgets.of`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/attempts.py)).
+
+Классификатор ответа выбирает один переход в установленном порядке: предложение middleware,
+повторяемый статус, сигнал защиты, обновление авторизации, перенаправление или терминальный исход
+([`eazy_sdk.clients._decisions`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/_decisions.py)).
+
+Повтор небезопасной операции запрещён для транспорта, middleware и обновления авторизации.
+Исполнитель возвращает `UnsafeReplayError`, если правило требует повторить неидемпотентную операцию
+([`eazy_sdk.clients._decisions`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/_decisions.py)).
+
+## Дальше
+
+- {doc}`Настроить повторы </guide/reliability/retry>`
+- {doc}`Настроить перенаправления </guide/reliability/redirect>`
+- {doc}`Понять выбор варианта ответа </architecture/response-cases>`

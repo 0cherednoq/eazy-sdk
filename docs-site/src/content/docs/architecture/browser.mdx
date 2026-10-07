@@ -1,0 +1,59 @@
+---
+title: Браузерный слой
+description: Поймите границу между сценарием сайта, страницей и средой браузера.
+sources:
+  - eazy_sdk_browser.AsyncBrowserClient
+  - eazy_sdk_browser.BrowserOperation
+  - eazy_sdk_browser.BrowserProfile
+  - eazy_sdk_browser.BrowserState
+api_fingerprint: "sha256:63369c2924053739a15f966d3a4db6fbd57b03afb71dcd576169d3334399a6c6"
+---
+
+Где заканчивается сценарий сайта?
+
+Браузерный плагин описывает сайт, а адаптер управляет конкретной средой браузера. Сценарий не
+знает, кто создал процесс, контекст, прокси или антидетект-профиль
+([`eazy_sdk_browser.driver`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/driver.py)).
+
+Среда браузера при этом остаётся снаружи.
+
+```{mermaid}
+flowchart TD
+    Router["AsyncBrowserApi"] --> Operation["BrowserOperation"]
+    Operation --> Runtime["operations.run"]
+    Runtime --> Driver["Driver страницы"]
+    Driver --> Adapter["Playwright или Pydoll"]
+    Session["SessionSource"] --> Client["AsyncBrowserClient"]
+    Client --> Runtime
+    Profile["BrowserProfile"] --> Check["Проверка возможностей"]
+    Check --> Runtime
+    Factory["Приложение: браузер и контекст"] --> Adapter
+```
+
+## Граница страницы
+
+Минимальный `Driver` умеет находить элементы, читать страницу и переходить по адресу. Сеть,
+состояние сессии, запросы из страницы, события перехода, shadow DOM и редактор объявлены отдельно
+в `BrowserProfile`
+([`eazy_sdk_browser.driver`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/driver.py),
+[`eazy_sdk_browser.profile`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/profile.py)).
+
+Операция объявляет адрес, действия, признаки готовности, исходы и необходимые возможности.
+`operations.run(...)` проверяет профиль до первого действия, выполняет переход и превращает
+наблюдаемое состояние страницы в типизированный результат
+([`eazy_sdk_browser.operations`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/operations.py)).
+
+`AsyncBrowserClient` владеет драйвером только при `owns_driver=True`. Источник сессии вызывает
+`ensure` перед операцией и может один раз обновить отклонённую ревизию в пределах
+`auth_retries`; клиент не знает о хранилище или пуле контекстов
+([`eazy_sdk_browser.client`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/client.py)).
+
+`BrowserState` переносит cookies и localStorage между контекстами. В живой контекст сессия
+добавляет только cookies: повторная запись localStorage при каждой навигации затёрла бы изменения
+сайта ([`eazy_sdk_browser.state`](https://github.com/0cherednoq/eazy-sdk/blob/master/plugins/browser/eazy_sdk_browser/state.py)).
+
+## Дальше
+
+- {doc}`Выбрать браузерный адаптер </integrations/browser/index>`
+- {doc}`Настроить вход в браузере </integrations/browser/login>`
+- {doc}`Разделить страницы по контекстам </integrations/browser/browser-pool>`

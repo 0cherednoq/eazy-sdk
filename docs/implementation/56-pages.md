@@ -127,11 +127,11 @@
 | `integrations/documents/html` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/generators/asyncapi` | 56.6 | ok | ok | ok | ok | n/a |
 | `integrations/accounts/index` | 56.6 | ok | ok | ok | ok | n/a |
-| `architecture/index` | 56.7 |  |  |  |  | n/a |
-| `architecture/request-path` | 56.7 |  |  |  |  | n/a |
-| `architecture/attempts` | 56.7 |  |  |  |  | n/a |
-| `architecture/response-cases` | 56.7 |  |  |  |  | n/a |
-| `architecture/identity` | 56.7 |  |  |  |  | n/a |
-| `architecture/extension-points` | 56.7 |  |  |  |  | n/a |
-| `architecture/browser` | 56.7 |  |  |  |  | n/a |
+| `architecture/index` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/request-path` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/attempts` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/response-cases` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/identity` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/extension-points` | 56.7 | ok | n/a | ok | ok | n/a |
+| `architecture/browser` | 56.7 | ok | n/a | ok | ok | n/a |
 | `reference/changelog` | 56.8 |  |  |  |  | n/a |
