@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a9 - 2026-10-07
+
 Fixed:
 
 - `Inject` values no longer land in another `Inject`'s slot. Every attempt created a fresh

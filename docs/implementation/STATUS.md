@@ -5934,3 +5934,22 @@ Not a phase: a defect fix on `fix/inject-dependency-identity`, reported by a con
 | `uv run ruff check` | PASS. |
 | `uv run lint-imports` | PASS. |
 | `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |
+
+## Release closure 0.2.0a9 (2026-10-07)
+
+A fix-only release carrying the `Inject` dependency identity fix above. Version set in
+`pyproject.toml`, `eazy_sdk/__init__.py`, `plugins/browser/eazy_sdk_browser/__init__.py`, the
+OpenAPI consumer fixture and `uv.lock`.
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q` | PASS: 1753 passed, 11 skipped in 427.87s. |
+| `uv run mypy` | PASS: no issues found in 503 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS: 5 contracts kept. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 80 pages fresh. |
+| strict Sphinx build (`-W --keep-going`) | PASS: no warnings. |
+| `uv build`, `uvx twine check --strict` | PASS: one wheel and one sdist. |
+| `scripts/package_audit.py` | PASS. |
+| `scripts/extras_smoke.py` | PASS: 17 extras install from the wheel and import. |
+| from `docs-site/`: `npm run check`, `npm run build` | Not run: the site is built by Sphinx since phase 56. |
