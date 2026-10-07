@@ -57,7 +57,10 @@ async def playwright_mail() -> AsyncIterator[MailBrowser]:
         runtime = MailBrowser(
             browser,
             page,
-            AsyncBrowserClient(PlaywrightDriver(page, capture=None)),
+            AsyncBrowserClient(
+                PlaywrightDriver(page, capture=None),
+                base_url="https://mail.example",
+            ),
             MailSite(),
         )
 

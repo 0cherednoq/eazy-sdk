@@ -271,6 +271,7 @@ class MailSite:
         has_more = next_start < len(self.state.messages)
         body: dict[str, object] = {
             "items": [message.document() for message in items],
+            "total": len(self.state.messages),
             "next_offset": next_start if has_more else None,
             "next_cursor": f"cursor-{next_start}" if has_more else None,
             "next_url": (

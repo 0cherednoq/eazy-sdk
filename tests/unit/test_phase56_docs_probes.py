@@ -26,9 +26,11 @@ from examples.mail.browser.login_probe import (
     WrongCodeError,
     WrongPasswordError,
 )
+from examples.mail.browser.messages import main as browser_messages_main
 from examples.mail.browser.session import main as browser_session_main
 from examples.mail.http.captcha import main as captcha_main
 from examples.mail.http.login_failures import main as http_login_main
+from examples.mail.http.messages import main as http_messages_main
 from examples.mail.http.session import main as http_session_main
 from examples.mail.site import MailSite, handle_httpx, intercept_page
 from examples.mail.site._playwright import playwright_mail
@@ -107,6 +109,29 @@ def test_browser_session_probe_logs_in_once_for_two_tabs(
         "browser logins: 1",
         "tabs in context: 2",
         "session cookie: session-ada",
+    ]
+
+
+def test_http_messages_probe_runs_all_three_pagination_strategies(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http_messages_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "offset: [42, 43, 44, 45]",
+        "cursor: [42, 43, 44, 45]",
+        "next URL: [42, 43, 44, 45]",
+    ]
+
+
+def test_browser_messages_probe_loads_the_second_batch(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_messages_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "first batch: [42, 43]",
+        "after more: [42, 43, 44, 45]",
     ]
 
 
@@ -244,6 +269,7 @@ def test_complete_teaching_site_serves_the_http_tutorial() -> None:
         ).json()["body"]
         next_url_page = client.get(offset_page["next_url"], headers=auth).json()["body"]
         assert [item["id"] for item in offset_page["items"]] == [42, 43]
+        assert offset_page["total"] == 4
         assert [item["id"] for item in cursor_page["items"]] == [44, 45]
         assert next_url_page["items"] == cursor_page["items"]
 

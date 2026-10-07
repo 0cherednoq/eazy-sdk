@@ -5294,6 +5294,10 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
   `session_auth`, обновляет сессию до запроса по `ExpiresAt` и после настоящего `401`, затем
   повторяет защищённую операцию. Браузерная линия создаёт `BrowserSession` через `BrowserLogin`;
   две страницы одного реального Chromium-контекста сходятся в один вход и общую cookie.
+- 56.4.6: одна HTTP-ручка списка объявлена с `Pages.offset`, `Pages.cursor` и `Pages.next_url`;
+  каждый обход возвращает четыре письма без пользовательского цикла. Браузерная операция читает
+  первые два `li` через `each(...)`, нажимает настоящую кнопку «Ещё» в Chromium и после fetch к
+  тому же `MailSite` получает коллекцию из четырёх элементов.
 
 ### Commands run while planning
 
@@ -5552,6 +5556,22 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build to `docs-site/_build/phase56-session-final` and preview rebuild | PASS: 94 sources, no warnings; live preview route returns 200. |
 | fresh-agent blind review plus post-change recheck | PASS: exact `session_auth` binding, HTML acquisition, both refresh paths, real same-context Chromium flow, page rules and prose verified. |
 
+### Verification evidence (56.4.6)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail.http.messages` | PASS: offset, cursor and next URL each returned IDs 42–45. |
+| `uv run python -m examples.mail.browser.messages` | PASS: live Chromium read `[42, 43]`, clicked «Ещё» and then read `[42, 43, 44, 45]`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py tests/unit/test_phase56_example_domains.py` | PASS: 32 passed; both runnable outputs match the page. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 25 source files. |
+| `uv run ruff check examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/messages.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs python docs-site/scripts/validate_docs.py` | PASS: 95 pages. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 73 pages fresh. |
+| first strict Sphinx build of `tutorial/messages` | RED: the `http` lexer rejected a lone header line; the block was correctly marked as `text`. |
+| strict Sphinx build to `docs-site/_build/phase56-messages-final` and preview rebuild | PASS: 95 sources, no warnings; live preview route returns 200. |
+| fresh-agent blind review | PASS: six HTTP page requests used one `MailSite`; Chromium performed the real fetch and DOM update; panels, HTML, page rules and prose verified. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5593,4 +5613,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.6–56.8. No blockers; next step is 56.4.6.
+56.4.7–56.8. No blockers; next step is 56.4.7.

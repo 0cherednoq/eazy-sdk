@@ -111,7 +111,7 @@
 | `tutorial/login-failures` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/captcha` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/session` | 56.4 | ok | ok | ok | ok | ok |
-| `tutorial/messages` | 56.4 |  |  |  |  |  |
+| `tutorial/messages` | 56.4 | ok | ok | ok | ok | ok |
 | `tutorial/send` | 56.4 |  |  |  |  |  |
 | `tutorial/encryption` | 56.4 |  |  |  |  |  |
 | `tutorial/assembly` | 56.4 |  |  |  |  |  |

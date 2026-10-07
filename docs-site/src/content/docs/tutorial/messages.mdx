@@ -1,0 +1,148 @@
+---
+title: Чтение всех писем по частям
+description: Обойдите один список через offset, cursor или next URL и подгрузите письма кнопкой.
+freshness: false
+---
+
+Почта отдаёт по два письма. HTTP-клиент может следовать смещению, курсору или готовой ссылке;
+браузер видит первую пару в HTML и просит страницу подгрузить вторую. Во всех четырёх случаях
+результат один: письма `42`, `43`, `44` и `45` в исходном порядке.
+
+| Вариант | Адрес следующей порции | Условие остановки |
+|---|---|---|
+| HTTP, `Pages.offset` | `offset + len(items)` | достигнут `total` |
+| HTTP, `Pages.cursor` | `next_cursor` из ответа | курсор равен `null` |
+| HTTP, `Pages.next_url` | готовый `next_url` | ссылка равна `null` |
+| Браузер, `each(...)` | кнопка `data-action="more"` | четвёртый элемент появился в коллекции |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /api/v1/threads/status/smart?offset=0&limit=2``
+
+```text
+Authorization: Bearer session-1
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": "ok",
+  "body": {
+    "items": [
+      {"id": 42, "sender": "ada@mail.example", "recipient": "reader@mail.example", "subject": "Планы на пятницу"},
+      {"id": 43, "sender": "grace@mail.example", "recipient": "reader@mail.example", "subject": "Сверка протокола"}
+    ],
+    "total": 4,
+    "next_offset": 2,
+    "next_cursor": "cursor-2",
+    "next_url": "/api/v1/threads/status/smart?offset=2&limit=2"
+  }
+}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+Три операции обращаются к одной ручке и разбирают одну модель ответа. Различается только
+`__pages__`: стратегия называет поля запроса и функцию, которая читает указатель следующей
+порции.
+
+```{literalinclude} ../../../../../examples/mail/http/messages.py
+:language: python
+:start-after: "# region docs: http-message-pages"
+:end-before: "# endregion docs: http-message-pages"
+```
+
+Цикл не попадает в прикладной код. Метод `items()` отправляет каждую следующую операцию с той же
+авторизацией, разбирает ответ обычным способом и отдаёт сообщения по одному.
+
+```{literalinclude} ../../../../../examples/mail/http/messages.py
+:language: python
+:start-after: "# region docs: http-message-flow"
+:end-before: "# endregion docs: http-message-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/http/messages.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.http.messages`.
+
+<!-- example-output: examples.mail.http.messages -->
+```text
+offset: [42, 43, 44, 45]
+cursor: [42, 43, 44, 45]
+next URL: [42, 43, 44, 45]
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+Первая страница входящих содержит два элемента и кнопку:
+
+```html
+<ul data-collection="messages"><li data-message-id="42"><b>ada@mail.example</b> Планы на пятницу</li><li data-message-id="43"><b>grace@mail.example</b> Сверка протокола</li></ul><button data-action="more">Ещё</button>
+```
+
+`each(...)` связывает поле карты со всеми видимыми `li`. Сначала операция читает снимок
+коллекции, затем нажимает кнопку и ждёт элемент с индексом `3`. После этого новый снимок уже
+содержит обе порции.
+
+```{literalinclude} ../../../../../examples/mail/browser/messages.py
+:language: python
+:start-after: "# region docs: browser-message-collection"
+:end-before: "# endregion docs: browser-message-collection"
+```
+
+Вызов открывает `/inbox/` в настоящем Chromium. JavaScript страницы отправляет второй запрос к
+тому же `MailSite` и добавляет полученные узлы в список.
+
+```{literalinclude} ../../../../../examples/mail/browser/messages.py
+:language: python
+:start-after: "# region docs: browser-message-flow"
+:end-before: "# endregion docs: browser-message-flow"
+```
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../examples/mail/browser/messages.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail.browser.messages`.
+
+<!-- example-output: examples.mail.browser.messages -->
+```text
+first batch: [42, 43]
+after more: [42, 43, 44, 45]
+```
+::::
+:::::
+
+:::{note}
+`Elements.count()` и `Elements.texts()` читают снимок без ожидания. Когда нужен будущий узел,
+обращайтесь к `nth(i)`: действие над ним ждёт появления элемента в пределах таймаута.
+:::
+
+## Дальше
+
+- {doc}`Проверьте, как список получает действующую сессию </tutorial/session>`.
+- {doc}`Сверьте карту учебного сайта </tutorial/index>`.
