@@ -508,6 +508,15 @@ def _failure_html(code: str, message: str) -> str:
     )
 
 
+_INBOX_HTML_OPEN = """
+<!-- region docs: inbox-html-open -->
+<!-- examples/mail/site/app.py -->
+<main data-page="mailbox">
+  <ul data-collection="messages">
+<!-- endregion docs: inbox-html-open -->
+"""
+
+
 def _inbox_html(
     token: str,
     refresh_token: str,
@@ -524,8 +533,9 @@ def _inbox_html(
         f'<meta name="mail-token" content="{html.escape(token)}">'
         f'<meta name="mail-refresh" content="{html.escape(refresh_token)}">'
         f'<meta name="mail-expires" content="{expires_at.isoformat()}">'
-        f'<main data-page="mailbox"><ul data-collection="messages">{rows}</ul>'
-        '<button data-action="more">Ещё</button></main>'
+        + _INBOX_HTML_OPEN
+        + rows
+        + '</ul><button data-action="more">Ещё</button></main>'
         """<script>
 const token = document.querySelector('meta[name="mail-token"]').content;
 const more = document.querySelector('[data-action="more"]');

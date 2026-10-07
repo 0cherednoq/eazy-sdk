@@ -5603,6 +5603,20 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | strict Sphinx build and preview rebuild | PASS: 97 sources, no warnings; `/tutorial/encryption/` returns 200 with exact ciphertext, output and synchronized tabs. |
 | fresh-agent blind review after three corrections | PASS: terminology, `plaintext_statuses` and browser response decryption are explicit; no remaining findings. |
 
+### Verification evidence (56.4.9)
+
+| Command | Result |
+|---|---|
+| `uv run python -m examples.mail http` | PASS: HTTPX root exposes account/messages, returns Ada and messages 42–43, and sends encrypted message 100. |
+| `uv run python -m examples.mail browser` | PASS: real Chromium logs in once; the browser cookie becomes Bearer auth for a real `AsyncClient.curl_cffi`; the same `BrowserMailSdk` calls HTTP groups and its bound `MailboxApi` on one `MailSite`. |
+| `uv run pytest -q tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: 41 passed; both assembled entry-point outputs match the page. |
+| `uv run mypy examples/mail tests/unit/test_phase56_docs_probes.py tests/unit/test_phase56_docs_examples.py` | PASS: no issues in 34 source files. |
+| matching focused `uv run ruff check` | PASS. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/tutorial/assembly.mdx` | PASS: 0 errors, 0 warnings. |
+| documentation metadata and freshness | PASS: 98 valid pages; 73 freshness fingerprints current. |
+| strict Sphinx build and preview rebuild | PASS: 98 sources, no warnings; `/tutorial/assembly/` returns 200 with exact outputs and synchronized tabs. |
+| fresh-agent blind review plus correction recheck | PASS after changing the group claim from runtime instances to inherited router classes and sourcing the browser HTML fragment from `_INBOX_HTML_OPEN`, which `MailSite` actually renders. |
+
 ### Verification evidence (56.0.6)
 
 | Command | Result |
@@ -5644,4 +5658,4 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.4.9–56.8. No blockers; next step is 56.4.9.
+56.4.10–56.8. No blockers; next step is 56.4.10.

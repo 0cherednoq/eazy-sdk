@@ -8,11 +8,11 @@ from typing import Annotated
 from pydantic import BaseModel
 
 from eazy_sdk import UNSET, Http, HttpOperation, Identity, Omittable, Query, SyncApi, op
-from eazy_sdk.auth import BearerScheme
 from eazy_sdk.pagination import Pages
 from eazy_sdk.response import Const, Json, Payload
 
 from examples.mail.http._client import mail_client
+from examples.mail.http.send import MAIL_BEARER
 
 
 class Message(BaseModel):
@@ -33,9 +33,6 @@ class MessagePage(BaseModel):
 class MessagePageEnvelope(BaseModel):
     status: Annotated[str, Const("ok")]
     body: Payload[MessagePage]
-
-
-MAIL_BEARER = BearerScheme("mail-bearer")
 
 
 # region docs: http-message-pages

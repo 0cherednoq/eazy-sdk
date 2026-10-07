@@ -11,6 +11,7 @@ import pytest
 from eazy_sdk_browser import BrowserCallOptions, Failure, Observation, enforce
 from eazy_sdk_browser.testing import FakeDriver
 
+from examples.mail.browser.assembly import main as browser_assembly_main
 from examples.mail.browser.captcha import main as browser_captcha_main
 from examples.mail.browser.login_failures import main as browser_login_main
 from examples.mail.browser.login_probe import (
@@ -32,6 +33,7 @@ from examples.mail.browser.login_probe import (
 from examples.mail.browser.messages import main as browser_messages_main
 from examples.mail.browser.send import main as browser_send_main
 from examples.mail.browser.session import main as browser_session_main
+from examples.mail.http.assembly import main as http_assembly_main
 from examples.mail.http.captcha import main as captcha_main
 from examples.mail.http.encryption import main as http_encryption_main
 from examples.mail.http.login_failures import main as http_login_main
@@ -174,6 +176,34 @@ def test_http_encryption_probe_round_trips_fields_and_body(
     assert captured.out.splitlines() == [
         "encrypted message: 100",
         "found clear subject: Секретная встреча",
+    ]
+
+
+def test_http_assembly_entry_point_runs_the_complete_root(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    http_assembly_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "transport: httpx",
+        "routers: account, messages",
+        "user: ada@mail.example",
+        "message ids: [42, 43]",
+        "encrypted send: 100",
+    ]
+
+
+def test_browser_assembly_shares_one_session_with_curl_cffi(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    browser_assembly_main()
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "transport: curl_cffi + Chromium",
+        "browser logins: 1",
+        "user via browser session: ada@mail.example",
+        "message ids: [42, 43]",
+        "browser router: mailbox",
     ]
 
 

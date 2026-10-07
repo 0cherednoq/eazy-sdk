@@ -1,0 +1,150 @@
+---
+title: Сборка HTTP- и браузерных роутеров
+description: Соберите один корень SDK и передайте браузерную сессию клиенту curl_cffi.
+freshness: false
+---
+
+Корень называет доступные роутеры и выбирает для каждого клиент. `MailSdk` собирает HTTP-группы
+аккаунта и писем. `BrowserMailSdk` наследует их без повторного объявления и добавляет
+`MailboxApi`, который работает на странице Chromium.
+
+| Решение сборки | HTTP-запуск | Браузерный запуск |
+|---|---|---|
+| Корень | `MailSdk` | `BrowserMailSdk` |
+| HTTP-клиент | HTTPX | curl_cffi с профилем Chrome 124 |
+| HTTP-роутеры | `AccountApi`, `MessagesApi` | те же классы роутеров |
+| Браузерный роутер | нет | `MailboxApi` через `bind(...)` |
+| Сессия HTTP | статический Bearer для учебного запуска | токен из `mail_session` после одного входа в Chromium |
+
+:::::{grid} 1 1 2 2
+:class-container: http-exchange
+:gutter: 2
+
+::::{grid-item}
+:class: http-panel http-panel--request
+
+**→ Request** · ``GET /api/v1/user/short``
+
+```text
+Authorization: Bearer session-ada
+```
+::::
+
+::::{grid-item}
+:class: http-panel http-panel--response
+
+**← Response** · ``200 OK``
+
+```json
+{
+  "status": "ok",
+  "body": {"email": "ada@mail.example", "display_name": "Ada"}
+}
+```
+::::
+:::::
+
+:::::{tab-set}
+:sync-group: transport
+
+::::{tab-item} HTTP
+:sync: http
+
+`api_group(...)` публикует роутер на корне. Объявление не создаёт второй клиент и не копирует
+операции: группа получает клиент, `Identity` и сериализацию во время сборки корня.
+
+```{literalinclude} ../../../../../examples/mail/sdk.py
+:language: python
+:start-after: "# region docs: mail-sdk-routers"
+:end-before: "# endregion docs: mail-sdk-routers"
+```
+
+HTTP-запуск передаёт одному `MailSdk` общий `Identity`. `account.current()` использует правило
+роутера, пагинация и зашифрованная отправка сохраняют правила своих операций.
+
+```{literalinclude} ../../../../../examples/mail/http/assembly.py
+:language: python
+:start-after: "# region docs: http-sdk-flow"
+:end-before: "# endregion docs: http-sdk-flow"
+```
+
+:::{dropdown} Файл корня целиком
+```{literalinclude} ../../../../../examples/mail/sdk.py
+:language: python
+```
+:::
+
+:::{dropdown} Файл HTTP-запуска целиком
+```{literalinclude} ../../../../../examples/mail/http/assembly.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail http`.
+
+<!-- example-output: examples.mail.http.assembly -->
+```text
+transport: httpx
+routers: account, messages
+user: ada@mail.example
+message ids: [42, 43]
+encrypted send: 100
+```
+::::
+
+::::{tab-item} Браузер
+:sync: browser
+
+`BrowserLogin` входит один раз и отдаёт состояние контекста. `browser_cookie_auth(...)` извлекает
+токен из `mail_session` и строит Bearer-авторизацию для тех же HTTP-операций. Реальный
+`AsyncClient.curl_cffi(...)` отправляет запросы, а `bind(...)` оставляет `MailboxApi` на клиенте
+Chromium.
+
+Браузерный роутер ждёт `data-page="mailbox"`, а карта писем работает с коллекцией внутри него.
+Обе метки приходят из фактического HTML учебного сайта:
+
+```{literalinclude} ../../../../../examples/mail/site/app.py
+:language: html
+:start-after: "<!-- region docs: inbox-html-open -->"
+:end-before: "<!-- endregion docs: inbox-html-open -->"
+```
+
+```{literalinclude} ../../../../../examples/mail/browser/assembly.py
+:language: python
+:start-after: "# region docs: browser-sdk-flow"
+:end-before: "# endregion docs: browser-sdk-flow"
+```
+
+`mail_origin(...)` лишь поднимает локальную границу учебного `MailSite`. В приложении
+`base_url` указывает на сервис, а выбор `impersonate="chrome124"` и устройство корня остаются
+такими же.
+
+:::{dropdown} Файл браузерного запуска целиком
+```{literalinclude} ../../../../../examples/mail/browser/assembly.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.mail browser`.
+
+<!-- example-output: examples.mail.browser.assembly -->
+```text
+transport: curl_cffi + Chromium
+browser logins: 1
+user via browser session: ada@mail.example
+message ids: [42, 43]
+browser router: mailbox
+```
+::::
+:::::
+
+:::{note}
+Корень не владеет клиентом, переданным через `bind(...)`. Поэтому браузерный клиент закрывается
+в `finally`, а HTTP-клиент, созданный контекстным менеджером, закрывается своим менеджером.
+:::
+
+## Дальше
+
+- {doc}`Вернитесь к жизненному циклу сессии </tutorial/session>`.
+- {doc}`Сверьте карту всего учебного сайта </tutorial/index>`.
+- {doc}`Выберите следующий раздел документации </start/next>`.
