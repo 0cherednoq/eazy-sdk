@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/0cherednoq/eazy-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/0cherednoq/eazy-sdk/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://0cherednoq.github.io/eazy-sdk/)
-[![PyPI](https://img.shields.io/pypi/v/eazy-sdk-core.svg?include_prereleases&cacheSeconds=300)](https://pypi.org/project/eazy-sdk-core/)
-[![Python](https://img.shields.io/pypi/pyversions/eazy-sdk-core.svg?cacheSeconds=300)](https://pypi.org/project/eazy-sdk-core/)
+[![PyPI](https://img.shields.io/pypi/v/eazy-sdk-core.svg?include_prereleases)](https://pypi.org/project/eazy-sdk-core/)
+[![Python](https://img.shields.io/pypi/pyversions/eazy-sdk-core.svg)](https://pypi.org/project/eazy-sdk-core/)
 
 Библиотека для Python, на которой пишут типизированные SDK к чужим HTTP API, WebSocket и сайтам.
 Запрос объявляется классом, ответ разбирается в модель, а вход, обновление сессии, подпись,

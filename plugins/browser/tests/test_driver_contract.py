@@ -183,6 +183,8 @@ async def _driver(
 
     options = ChromiumOptions()  # type: ignore[no-untyped-call]
     options.headless = True
+    # A shared CI runner can take longer than Pydoll's default 10 s to bring Chrome up.
+    options.start_timeout = 30
     pydoll_browser = Chrome(options=options)
     tab = await pydoll_browser.start()
     pydoll_driver = PydollDriver(tab, context_key=context_key, capture=capture)
@@ -425,6 +427,8 @@ async def _pydoll_close_contract(url: str) -> None:
 
     options = ChromiumOptions()  # type: ignore[no-untyped-call]
     options.headless = True
+    # A shared CI runner can take longer than Pydoll's default 10 s to bring Chrome up.
+    options.start_timeout = 30
     browser = Chrome(options=options)
     tab = await browser.start()
 

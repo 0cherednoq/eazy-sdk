@@ -151,6 +151,8 @@ async def _evaluate(tab: Tab, expression: str) -> object:
 async def test_capture_budgets_callback_ownership_and_closed_tab() -> None:
     options = ChromiumOptions()  # type: ignore[no-untyped-call]
     options.headless = True
+    # A shared CI runner can take longer than Pydoll's default 10 s to bring Chrome up.
+    options.start_timeout = 30
     browser = Chrome(options=options)
     tab = await browser.start()
     with _server() as server:
@@ -227,6 +229,8 @@ async def test_capture_budgets_callback_ownership_and_closed_tab() -> None:
 async def test_any_of_uses_one_deadline() -> None:
     options = ChromiumOptions()  # type: ignore[no-untyped-call]
     options.headless = True
+    # A shared CI runner can take longer than Pydoll's default 10 s to bring Chrome up.
+    options.start_timeout = 30
     browser = Chrome(options=options)
     tab = await browser.start()
     with _server() as server:
