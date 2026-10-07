@@ -42,6 +42,7 @@ myst_title_to_header = True
 
 html_theme = "shibuya"
 html_title = f"{project} {release}"
+html_favicon = "src/content/docs/_static/favicon.svg"
 html_theme_options = {
     "accent_color": "green",
     "globaltoc_expand_depth": 1,

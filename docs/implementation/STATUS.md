@@ -5723,7 +5723,7 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 
 ### Remaining work / blockers
 
-56.8. No blockers; next step is 56.8.1.
+56.8.2–56.8.4. No blockers; next step is 56.8.2.
 
 ### Verification evidence (56.5.5)
 
@@ -5811,3 +5811,12 @@ tie to a real service (plan §1). Step-level progress lives in the plan's "Со�
 | focused prose, code-block and domain snapshot tests | PASS: 3 passed. |
 | `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-architecture` | PASS: 112 sources, no warnings; all seven Mermaid blocks are present in the rendered site. |
 | live Playwright inspection of `/architecture/` | PASS: the diagram rendered as an accessible SVG with labelled nodes; navigation, table and next links rendered correctly. The only console error is the pre-existing missing `/favicon.ico`, deferred to the homepage polish in 56.8.1. |
+
+### Verification evidence (56.8.1)
+
+| Command | Result |
+|---|---|
+| homepage card audit | PASS: exactly four task-first entries lead to start, tutorial, guide and integrations; the queue row is complete. |
+| `uv run python scripts/lint_docs_prose.py docs-site/src/content/docs/index.mdx` | PASS: 0 errors, 0 warnings. |
+| `uv run --group docs sphinx-build -E -a -W --keep-going -b dirhtml -c docs-site docs-site/src/content/docs docs-site/_build/phase56-homepage` | PASS: 112 sources, no warnings; generated HTML links the new SVG favicon. |
+| live Playwright inspection of `/` | PASS: all four cards and destinations are present; console has 0 errors and 0 warnings. |

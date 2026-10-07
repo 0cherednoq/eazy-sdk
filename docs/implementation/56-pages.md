@@ -91,7 +91,7 @@
 | `guides/sqlmodel` | `integrations/accounts/sqlmodel` | ok | ok | ok | ok | n/a |
 | `guides/websocket` | `guide/websocket` | ok | ok | ok | ok | n/a |
 | `guides/xml` | `integrations/documents/xml` | ok | ok | ok | ok | n/a |
-| `index` | `index` | ok |  |  |  | n/a |
+| `index` | `index` | ok | n/a | ok | ok | n/a |
 | `more/examples/html-login` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/index` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
 | `more/examples/json-auth` | удаляется в 56.4 | n/a | n/a | n/a | n/a | n/a |
