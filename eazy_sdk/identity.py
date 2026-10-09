@@ -1,8 +1,9 @@
 """Identity: the session scope that owns credentials, signing keys and dependencies.
 
-A client carries bytes: its cookie jar, connection pool, proxy and guard session belong to
-the transport. Who the caller is does not: credentials, the session store behind them, the
-signing keys and the dependency registry belong to an :class:`Identity`. One identity can
+A client carries bytes: its connection pool, proxy and guard session belong to the transport.
+Who the caller is does not: credentials, the session store behind them, the cookies a site
+has set for this user, the signing keys and the dependency registry belong to an
+:class:`Identity`. One identity can
 serve several services over one client or over several, and a second user needs a second
 identity, not a second connection pool.
 """

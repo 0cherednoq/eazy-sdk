@@ -3,7 +3,7 @@ title: Обработать HTTP redirect
 description: Следуйте Location внутри общего цикла попыток.
 sources:
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:84586e1b658a2f2abef02237f487e4afac0c8f72982dc493fc2221486b1dd660"
+api_fingerprint: "sha256:8e7d84406d37526f806419393dd060ef79e8e4ba539a74ba86b25276692b5ec9"
 ---
 
 Отключите автоматические redirects у transport adapter. Тогда Eazy SDK проверит лимит, область
@@ -37,6 +37,12 @@ GET api.mail.example/final
 Каждый переход повторно применяет scoped middleware, авторизацию, подготовку и подпись.
 Неожиданный authority не получает credentials автоматически. Исчерпание `max_redirects` приводит
 к `RedirectLimitError`.
+
+`Resilience(max_redirects=N, client_redirects=True)` добавляет к статусам переход, записанный в
+странице тегом `<meta http-equiv="refresh">`. Он выполняется запросом `GET`, расходует тот же
+запас и срабатывает, только если страницу не приняла ни одна модель операции. Тег внутри
+`<noscript>`, задержка больше пяти секунд и адрес самой страницы переходом не считаются. Переход
+через `window.location` требует исполнения скрипта и клиентом не выполняется.
 
 На сайте с объявленными `Cookies(...)` каждый шаг перехода получает куки, которые поставили
 предыдущие шаги, и только те, что предназначены его хосту.

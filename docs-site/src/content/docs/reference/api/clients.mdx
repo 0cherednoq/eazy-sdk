@@ -6,7 +6,7 @@ sources:
   - eazy_sdk.AsyncClient
   - eazy_sdk.ClientConfig
   - eazy_sdk.clients.CallOptions
-api_fingerprint: "sha256:7a2e802983e1b45e134a7cdddf6d58d55d489a225d31b3fd036b8074292546ad"
+api_fingerprint: "sha256:85da10e3f07784916d48408a937fe029c93cb120f5370f2170f18c2bdd19eefc"
 ---
 
 `Client` принимает Zapros `BaseHandler`, а `AsyncClient` принимает `AsyncBaseHandler`. Handler является
@@ -28,7 +28,7 @@ client = AsyncClient(
 остаётся у caller. Sync client отклоняет async handler и наоборот.
 
 `ClientConfig` состоит из трёх групп по владельцу: `resilience=` (`retry`, `auth_retries`,
-`max_redirects`, `timeout`, `rate_limiter`), `security=` (guard/anti-bot; `Security.of(...)`
+`max_redirects`, `client_redirects`, `timeout`, `rate_limiter`), `security=` (guard/anti-bot; `Security.of(...)`
 понижает установочные guard'ы) и `hooks=` (`middleware`). Аутентификация, ключи подписи и DI живут
 в `Identity`; библиотека моделей находится в `Serialization` на корне. Плоских полей у конфига больше нет.
 

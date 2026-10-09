@@ -5,6 +5,60 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Breaking:
+
+- A cookie the server set is sent one way only: through the cookie jar of the caller's
+  `Identity`, switched on by `Cookies(...)` on the SDK root. Everything that carried such a
+  cookie by hand is removed, with no aliases:
+  - `session_cookie(...)`, `eazy_sdk.auth.cookies` (`HttpCookieSession`,
+    `parse_session_cookie`) — declare `Cookies(required=(...))` and an ordinary
+    `session_scheme(Model)`;
+  - `Placed.cookie(...)` and `Placed.cookies()`, together with the cookie-set auth placement
+    (`AuthPlacement.many`) — the jar carries what the site set;
+  - `eazy_sdk_browser.BrowserCookie` — use `eazy_sdk.cookies.StoredCookie`. Its `domain` has
+    no leading dot; `host_only=False` is what sends a cookie to subdomains, and a dotted
+    domain raises `ValueError`;
+  - `browser_cookie_auth`, `BrowserCookieBridge`, `CookieAuthAdopter` — hand a browser session
+    to an HTTP SDK with `Identity(cookies=CookieState(state.cookies))`.
+- `SessionStore.save(key, value, revision, cookies=None)` and `StoredSession.cookies`. A store
+  written for a token session keeps working; a store used on a cookie site must accept
+  `cookies`. `eazy_sdk_sqlmodel` keeps the snapshot in a new nullable column: an existing
+  database needs `ALTER TABLE sessions ADD COLUMN cookie_state JSON`.
+- A browser session saved by an earlier version is not read: its cookies encoded their scope in
+  a leading dot. It loads as an empty state and the owner signs in again.
+- `session_scheme(Model)` no longer refuses a model that places nothing: that is the session of
+  a site that keeps everything in cookies. On a service without `Cookies(...)` the first
+  protected call raises `SessionConfigurationError` instead.
+
+Added:
+
+- `Cookies(required=(), leeway=..., public_suffixes=None)` in `eazy_sdk.auth`, declared on an
+  SDK root or a router and inherited like `security`. Every cookie the site sets goes back
+  where it belongs: to the next operation, to the next hop of a redirect, to another host of
+  the same site. `required` names the cookies without which a session is not valid.
+- `eazy_sdk.cookies`: `StoredCookie`, `CookieState` and `CookieJar`, following RFC 6265
+  (host-only and domain scope, path and expiry rules, `Secure`, limits). A cookie without
+  `Domain` belongs to the host that set it; a cookie without an expiry is kept and saved.
+- One jar per `Identity`: two identities over one client share no cookie, one identity over two
+  clients shares all of them. `Identity(cookies=CookieState(...))` starts from a saved set.
+- The cookie snapshot is saved with the session under one revision, and read back even when the
+  saved session is no longer valid. The library never clears a user's cookies by itself, so a
+  site recognizes the device at the next login, as it does with a browser.
+- `Http.get(..., cookies=False)` keeps one operation out of the jar, both ways.
+- `Resilience(max_redirects=N, client_redirects=True)` and `CallOptions(client_redirects=True)`
+  follow a redirect written into a page with `<meta http-equiv="refresh">`, as a `GET` on the
+  same budget as a `3xx`. Only a page no declared case could read is treated as such a stub.
+- A solver's own requests (`ProtectedFetch`) now really share the caller's cookies on a cookie
+  site; before this the shared jar existed only in the docstring.
+
+Changed:
+
+- On a service that declares `Cookies(...)`: a security scheme that places a credential in a
+  cookie (`CookieScheme`) is a declaration error, and so is an operation that writes the
+  `Cookie` header by a field or `Inject`. A `Cookie[...]` field still works: it overrides the
+  session's cookie of the same name for that request and is not stored.
+- Without `Cookies(...)` nothing changes: a request is still fully determined by its operation.
+
 ## 0.2.0a10 - 2026-10-09
 
 Added:

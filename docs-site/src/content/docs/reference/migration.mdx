@@ -28,6 +28,41 @@ Eazy SDK в альфе переименовывает без deprecated-алиа
 Дополнение ставит сторонние библиотеки интеграции. Её код уже лежит в пакете, поэтому без
 дополнения импорт интеграции завершится `ImportError` с именем недостающей библиотеки.
 
+## Куки сессии: один способ (0.2.0a11)
+
+Куку, которую поставил сайт, библиотека несёт сама: корень SDK объявляет `Cookies(...)`, а набор
+кук принадлежит `Identity`. Все прежние способы отправить такую куку удалены.
+
+| Было | Стало |
+|---|---|
+| `eazy_sdk.auth.session_cookie` | `eazy_sdk.auth.Cookies` |
+| `eazy_sdk.auth.Placed.cookie` | `eazy_sdk.auth.Cookies` |
+| `eazy_sdk.auth.Placed.cookies` | `eazy_sdk.auth.Cookies` |
+| `eazy_sdk.auth.cookies.parse_session_cookie` | `eazy_sdk.response.FromCookie` |
+| `eazy_sdk.auth.cookies.HttpCookieSession` | `eazy_sdk.cookies.StoredCookie` |
+| `eazy_sdk_browser.BrowserCookie` | `eazy_sdk.cookies.StoredCookie` |
+| `eazy_sdk_browser.browser_cookie_auth` | `eazy_sdk.cookies.CookieState` |
+| `eazy_sdk_browser.BrowserCookieBridge` | `eazy_sdk.cookies.CookieState` |
+| `eazy_sdk_browser.CookieAuthAdopter` | `eazy_sdk.cookies.CookieState` |
+
+Что поменять в коде:
+
+- **Сессия на куках.** Вместо `session_cookie("sid", ...)` объявите на корне
+  `cookies = Cookies(required=("sid",))` и обычную `session_scheme(Model)`. Модель может не
+  размещать ничего, если вся сессия живёт в куках.
+- **Поля для кук в шагах входа.** Удалите `FromCookie` в ответе и `Cookie[str]` в следующем
+  запросе, если они только переносили куку сайта. `FromCookie` остаётся для значения, которое
+  нужно как данные.
+- **Браузерная сессия для HTTP.** Вместо `browser_cookie_auth(state, scheme, "sid")` передайте
+  `Identity(cookies=CookieState(state.cookies))`.
+- **Запись куки.** `StoredCookie.domain` пишется без ведущей точки. Куку для домена с поддоменами
+  задаёт `host_only=False`; точка в домене приводит к `ValueError`.
+- **Своё хранилище сессий.** `SessionStore.save` получил необязательный аргумент `cookies`.
+  Хранилищу токенной сессии менять нечего; хранилищу сайта с куками аргумент нужен.
+- **База `eazy_sdk_sqlmodel`.** Таблица сессий получила колонку. Для уже созданной базы
+  выполните `ALTER TABLE sessions ADD COLUMN cookie_state JSON`.
+- **Сохранённые браузерные сессии** прежнего формата не читаются: по ним выполняется вход.
+
 ## Переход с 0.2.0a5 на 0.3.0
 
 Корень SDK стал отдельным типом. `SyncApi` и `AsyncApi` являются роутерами: операции и атрибуты сервиса

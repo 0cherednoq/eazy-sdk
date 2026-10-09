@@ -14,6 +14,7 @@ from eazy_sdk import AsyncClient, Client
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler, HttpxHandler
 
 BASE_URL = "https://mail.example"
+AUTH_URL = "https://auth.mail.example"
 MAILBOX = "ada@mail.example"
 PASSWORD = "mail-password"  # noqa: S105 - the teaching site's only account
 SESSION_ID = "sid-42"
@@ -28,6 +29,12 @@ MAIL_PAGE = f"""<!doctype html>
 </script>
 <main><h1>Inbox</h1></main>
 </body></html>
+"""
+
+SYNC_STUB = f"""<!doctype html>
+<html><head><title>Redirecting</title>
+<meta http-equiv="refresh" content="0;URL='{AUTH_URL}/sdc?from=%2Fmailbox%2F'"/>
+</head></html>
 """
 
 LOGIN_PAGE = """<!doctype html>
@@ -48,6 +55,12 @@ class RedirectSite:
             return self._login(request)
         if path == "/inbox/":
             return self._inbox(request)
+        if path == "/mailbox/":
+            return self._mailbox(request)
+        if path == "/sdc":
+            return _redirect(
+                f"{BASE_URL}/mailbox/", cookie="sdcs=synced; Domain=mail.example; Path=/"
+            )
         if path == "/api/folders":
             return self._folders(request)
         if path == "/api/devices":
@@ -71,6 +84,24 @@ class RedirectSite:
             200,
             headers={"content-type": "text/html; charset=utf-8"},
             content=(MAIL_PAGE if signed_in else LOGIN_PAGE).encode(),
+        )
+
+    def _mailbox(self, request: httpx.Request) -> httpx.Response:
+        """Serve the mailbox of a site that syncs its session across hosts first.
+
+        A signed-in caller first gets a stub that sends it to the auth host, which sets one more
+        cookie and sends it back. Only then is the page served.
+        """
+
+        cookies = _cookies(request)
+        if cookies.get("sid") != SESSION_ID:
+            page = LOGIN_PAGE
+        elif cookies.get("sdcs") != "synced":
+            page = SYNC_STUB
+        else:
+            page = MAIL_PAGE
+        return httpx.Response(
+            200, headers={"content-type": "text/html; charset=utf-8"}, content=page.encode()
         )
 
     def _folders(self, request: httpx.Request) -> httpx.Response:

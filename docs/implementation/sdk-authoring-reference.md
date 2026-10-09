@@ -601,3 +601,16 @@ Retry, redirect, reaction и auth refresh создают новую attempt и �
 - `eazy_sdk_html.Regex(pattern, flags=0)`: a selector over the document text as received.
 - A redirect status an operation declares a case on is read by the operation, not followed.
 
+## Phase 58: a session's cookies travel like in a browser
+
+- `eazy_sdk.auth.Cookies(required=(), leeway=..., public_suffixes=None)`: declared on a root or
+  router; switches on the identity's cookie jar for the service.
+- `eazy_sdk.cookies.StoredCookie`, `CookieState`, `CookieJar`: the cookie record, a snapshot and
+  the RFC 6265 store. `Identity(cookies=CookieState(...))` seeds a user's jar.
+- `Http.get(..., cookies=False)`: one operation outside the jar.
+- `Resilience(client_redirects=True)`: follow `<meta http-equiv="refresh">` on the redirect budget.
+- `SessionStore.save(..., cookies=None)`, `StoredSession.cookies`: the snapshot kept with a session.
+- Removed: `session_cookie`, `Placed.cookie`, `Placed.cookies`, `eazy_sdk.auth.cookies`,
+  `eazy_sdk_browser.BrowserCookie`, `browser_cookie_auth`, `BrowserCookieBridge`,
+  `CookieAuthAdopter`.
+

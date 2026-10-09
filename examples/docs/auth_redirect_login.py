@@ -10,7 +10,17 @@ import httpx
 from eazy_sdk_html import CSS, Regex
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk import AsyncApi, AsyncRoot, Http, HttpOperation, Identity, api_group, op
+from eazy_sdk import (
+    AsyncApi,
+    AsyncRoot,
+    ClientConfig,
+    Http,
+    HttpOperation,
+    Identity,
+    Resilience,
+    api_group,
+    op,
+)
 from eazy_sdk.auth import AuthContext, Cookies, Placed, session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import Form
@@ -73,7 +83,7 @@ class SubmitCredentials(HttpOperation[SignedIn]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class OpenInbox(HttpOperation[MailPage]):
-    __http__ = Http.get("/inbox/", security=None)
+    __http__ = Http.get("/mailbox/", security=None)
 
 
 class LoginApi(AsyncApi):
@@ -132,6 +142,7 @@ class MailSdk(AsyncRoot):
         return cls.from_handler(
             handler=AsyncHttpxHandler(raw, owns_client=True),
             base_url=BASE_URL,
+            config=ClientConfig(resilience=Resilience(max_redirects=3, client_redirects=True)),
             identity=Identity(auth=(auth,)),
         )
 
