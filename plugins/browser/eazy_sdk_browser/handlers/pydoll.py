@@ -25,6 +25,7 @@ from pydoll.protocol.network.events import NetworkEvent
 from pydoll.protocol.network.types import CookieSameSite
 from pydoll.protocol.page.events import PageEvent
 
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityLevel, TransportError
 from eazy_sdk_browser.errors import BrowserDeclarationError
 from eazy_sdk_browser.fetch import PageFetchError, PageReply, PageRequest
@@ -34,7 +35,7 @@ from eazy_sdk_browser.handlers.capture import DEFAULT_CAPTURE, CapturePolicy
 from eazy_sdk_browser.locators import Locator, Pick
 from eazy_sdk_browser.network import ResponseView
 from eazy_sdk_browser.profile import BrowserProfile
-from eazy_sdk_browser.state import BrowserCookie, BrowserState, Origin
+from eazy_sdk_browser.state import BrowserState, Origin
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Sequence
@@ -389,7 +390,7 @@ class PydollDriver:
             cookies=tuple(_cookie_in(item) for item in raw_cookies), origins=origins
         )
 
-    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None:
+    async def add_cookies(self, cookies: tuple[StoredCookie, ...]) -> None:
         await self._ready("add_cookies")
         if cookies:
             raw = cast("list[CookieParam]", [_cookie_out(cookie) for cookie in cookies])
@@ -637,13 +638,25 @@ def _body_bytes(body: str, mime_type: str) -> bytes:
         return body.encode("utf-8")
 
 
-def _cookie_in(raw: Cookie) -> BrowserCookie:
+def _scope_in(domain: str) -> tuple[str, bool]:
+    """Домен браузера в терминах библиотеки: точка впереди значит «и поддомены»."""
+    return domain.lstrip(".").lower(), not domain.startswith(".")
+
+
+def _scope_out(cookie: StoredCookie) -> str:
+    """Обратно: без точки браузер отдаст куку только этому хосту."""
+    return cookie.domain if cookie.host_only else f".{cookie.domain}"
+
+
+def _cookie_in(raw: Cookie) -> StoredCookie:
     expires = float(raw.get("expires", 0) or 0)
     same_site = raw.get("sameSite", "")
-    return BrowserCookie(
+    domain, host_only = _scope_in(str(raw.get("domain", "")))
+    return StoredCookie(
         name=str(raw.get("name", "")),
         value=str(raw.get("value", "")),
-        domain=str(raw.get("domain", "")),
+        domain=domain,
+        host_only=host_only,
         path=str(raw.get("path", "/")),
         expires_at=datetime.fromtimestamp(expires, tz=UTC) if expires > 0 else None,
         secure=bool(raw.get("secure", False)),
@@ -652,14 +665,11 @@ def _cookie_in(raw: Cookie) -> BrowserCookie:
     )
 
 
-def _cookie_out(cookie: BrowserCookie) -> dict[str, Any]:
-    if not cookie.domain:
-        msg = f"кука {cookie.name!r} без домена: браузеру некуда её положить"
-        raise ValueError(msg)
+def _cookie_out(cookie: StoredCookie) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "name": cookie.name,
         "value": cookie.value,
-        "domain": cookie.domain,
+        "domain": _scope_out(cookie),
         "path": cookie.path or "/",
         "secure": cookie.secure,
         "httpOnly": cookie.http_only,

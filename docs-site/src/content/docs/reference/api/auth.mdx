@@ -3,7 +3,7 @@ title: Auth
 description: Публичные схемы статической авторизации.
 sources:
   - eazy_sdk.auth
-api_fingerprint: "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae"
+api_fingerprint: "sha256:1ce95a2ba327e0d664143429d31e644e9cb926a39f56981cb2b5f0c4f801b058"
 ---
 
 ## Схемы
@@ -40,10 +40,13 @@ any_of(all_of(USER_AUTH, DEVICE_AUTH), BASIC)
 | `CookieScheme(cookie, name=...)` | `str` | Cookie |
 | `session_scheme(Model)` с `Placed` | модель сессии | Несколько мест запроса сразу |
 
+`CookieScheme` задаёт ключ, который приносит вызывающий. Сессию, которую сайт ведёт на куках сам,
+объявляет `Cookies(...)` на корне; вместе с `CookieScheme` на одном сервисе она не объявляется.
+
 `scheme.static(credential)` создаёт привязку авторизации клиента. `all_of(...)` возвращает одну
 AND-альтернативу, а `any_of(...)` создаёт OR-политику. Runtime выбирает только полностью
 разрешимую альтернативу и не смешивает учётные данные разных вариантов.
 
-Для жизненного цикла сессии используйте `session_auth(...)` или `session_cookie(...)`. Рукописный
+Для жизненного цикла сессии используйте `session_auth(...)`. Рукописный
 SDK может объявить переиспользуемую `session_scheme(...)` в атрибуте `security` роутера и вызвать
 её `.configure(...)`. Контракты описаны в {doc}`справочнике сессий </reference/api/session>`.

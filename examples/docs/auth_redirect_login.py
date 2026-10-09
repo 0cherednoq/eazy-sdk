@@ -1,4 +1,4 @@
-"""Sign in to a site that answers the login with a redirect and keeps its token in the page."""
+"""Sign in to a site that keeps its session in cookies and answers the login with a redirect."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ import httpx
 from eazy_sdk_html import CSS, Regex
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk import AsyncApi, AsyncRoot, Cookie, Http, HttpOperation, Identity, api_group, op
-from eazy_sdk.auth import AuthContext, Placed, session_scheme
+from eazy_sdk import AsyncApi, AsyncRoot, Http, HttpOperation, Identity, api_group, op
+from eazy_sdk.auth import AuthContext, Cookies, Placed, session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from eazy_sdk.request import Form
-from eazy_sdk.response import ApiError, Const, FromCookie, Location
+from eazy_sdk.response import ApiError, Const, Location
 from examples.docs.redirect_site import BASE_URL, MAILBOX, PASSWORD, RedirectSite
 
 
@@ -32,7 +32,6 @@ class Folders(BaseModel):
 @dataclass(frozen=True, slots=True)
 class SignedIn:
     url: Annotated[str, Location(path="/inbox*")]
-    sid: Annotated[str, FromCookie("sid")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +75,6 @@ class SubmitCredentials(HttpOperation[SignedIn]):
 class OpenInbox(HttpOperation[MailPage]):
     __http__ = Http.get("/inbox/", security=None)
 
-    sid: Cookie[str]
-
 
 class LoginApi(AsyncApi):
     submit = op(SubmitCredentials)
@@ -91,7 +88,6 @@ class LoginApi(AsyncApi):
 class MailSession(BaseModel):
     token: Annotated[SecretStr, Placed.query("token")]
     email: Annotated[str, Placed.query("email", secret=False)]
-    cookies: Annotated[dict[str, str], Placed.cookies()]
 
 
 MAIL_SESSION = session_scheme(MailSession, name="mail-session")
@@ -99,16 +95,12 @@ MAIL_SESSION = session_scheme(MailSession, name="mail-session")
 
 class MailLoginService:
     async def acquire(self, credentials: MailLogin, context: AuthContext[MailSdk]) -> MailSession:
-        signed_in = await context.sdk.login.submit(
+        await context.sdk.login.submit(
             username=credentials.username,
             password=credentials.password.get_secret_value(),
         )
-        page = await context.sdk.login.inbox(sid=signed_in.sid)
-        return MailSession(
-            token=SecretStr(page.token),
-            email=page.email,
-            cookies={"sid": signed_in.sid},
-        )
+        page = await context.sdk.login.inbox()
+        return MailSession(token=SecretStr(page.token), email=page.email)
 
 
 # endregion docs: redirect-login-session
@@ -125,9 +117,13 @@ class MailApi(AsyncApi):
     folders = op(ListFolders)
 
 
+# region docs: redirect-login-root
 class MailSdk(AsyncRoot):
+    cookies = Cookies(required=("sid",))
+
     login = api_group(LoginApi)
     mail = api_group(MailApi)
+    # endregion docs: redirect-login-root
 
     @classmethod
     def open(cls, site: RedirectSite, credentials: MailLogin) -> Self:

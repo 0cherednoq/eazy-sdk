@@ -18,6 +18,7 @@ MAILBOX = "ada@mail.example"
 PASSWORD = "mail-password"  # noqa: S105 - the teaching site's only account
 SESSION_ID = "sid-42"
 PAGE_TOKEN = "page-token-42"  # noqa: S105 - printed by the examples on purpose
+DEVICE_KEY = "device-42"
 
 MAIL_PAGE = f"""<!doctype html>
 <html><head><title>Mail</title></head><body>
@@ -49,6 +50,8 @@ class RedirectSite:
             return self._inbox(request)
         if path == "/api/folders":
             return self._folders(request)
+        if path == "/api/devices":
+            return self._devices(request)
         return httpx.Response(404, json={"error": "route_not_found"})
 
     def _login(self, request: httpx.Request) -> httpx.Response:
@@ -76,6 +79,17 @@ class RedirectSite:
             query.get("token") == PAGE_TOKEN
             and query.get("email") == MAILBOX
             and _cookies(request).get("sid") == SESSION_ID
+        )
+        if not accepted:
+            return httpx.Response(401, json={"folders": []})
+        return httpx.Response(200, json={"folders": ["Inbox", "Sent"]})
+
+    def _devices(self, request: httpx.Request) -> httpx.Response:
+        query = request.url.params
+        accepted = (
+            query.get("token") == PAGE_TOKEN
+            and query.get("email") == MAILBOX
+            and request.headers.get("x-device") == DEVICE_KEY
         )
         if not accepted:
             return httpx.Response(401, json={"folders": []})

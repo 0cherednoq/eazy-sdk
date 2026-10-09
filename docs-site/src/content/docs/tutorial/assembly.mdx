@@ -95,8 +95,9 @@ encrypted send: 100
 ::::{tab-item} Браузер
 :sync: browser
 
-`BrowserLogin` входит один раз и отдаёт состояние контекста. `browser_cookie_auth(...)` извлекает
-токен из `mail_session` и строит Bearer-авторизацию для тех же HTTP-операций. Реальный
+`BrowserLogin` входит один раз и отдаёт состояние контекста. Учебный сайт принимает значение
+куки `mail_session` как Bearer-токен, поэтому пример берёт его из состояния и передаёт в
+`MAIL_BEARER.static(...)` для тех же HTTP-операций. Реальный
 `AsyncClient.curl_cffi(...)` отправляет запросы, а `bind(...)` оставляет `MailboxApi` на клиенте
 Chromium.
 

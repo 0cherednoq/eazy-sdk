@@ -3,7 +3,7 @@ title: Browser
 description: "Публичный API eazy_sdk_browser: спека, роутер, клиент, карта, признаки, вход, сессия и драйвер."
 sources:
   - eazy_sdk_browser
-api_fingerprint: "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46"
+api_fingerprint: "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35"
 ---
 
 ## Операция
@@ -122,9 +122,7 @@ class SessionSource[TRevision](Protocol):          # что клиент зна�
 BrowserSession                                     # SessionSource без пула, один на контекст
 await BrowserSession.state(client) -> BrowserState
 
-await browser_cookie_auth(state, scheme, cookie_name, *, domain=None) -> Auth
-BrowserCookieBridge(cookie_name, domain=None).convert(state) -> HttpCookieSession
-CookieAuthAdopter(scheme).adopt(cookie_session) -> Auth
+Identity(cookies=CookieState(state.cookies))       # та же сессия для HTTP-клиента
 ```
 
 `BrowserLogin.session(...)` требует непустой `cookies`. Клиент с `session=` вызывает
@@ -136,12 +134,12 @@ CookieAuthAdopter(scheme).adopt(cookie_session) -> Auth
 ```python
 class StateAware(Protocol):                        # драйвер с Capability.session_state
     async def export_state(self) -> BrowserState: ...
-    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None: ...
+    async def add_cookies(self, cookies: tuple[StoredCookie, ...]) -> None: ...
     def context_key(self) -> object: ...
 
 BrowserState(cookies=(), origins=())
-BrowserCookie(name, value, domain="", path="/", expires_at=None, secure=False,
-              http_only=False, same_site="")
+StoredCookie(name, value, domain, path="/", host_only=True, expires_at=None,
+             secure=False, http_only=False, same_site="")   # из eazy_sdk.cookies
 Origin(origin, items=())
 
 # eazy_sdk_browser.handlers.playwright

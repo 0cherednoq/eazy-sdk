@@ -34,7 +34,6 @@ from eazy_sdk.auth import (
     SecurityPolicy,
     SessionConfigurationError,
     session_auth,
-    session_cookie,
     session_scheme,
 )
 from eazy_sdk.clients import UnsafeReplayError
@@ -731,100 +730,6 @@ class CookieAuthService:
                 )
             )
         )
-
-
-async def test_session_cookie_captures_set_cookie_without_model_annotations() -> None:
-    calls: list[tuple[str, str]] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        cookie = request.headers.get("Cookie", "")
-        calls.append((request.url.path, cookie))
-        if request.url.path == "/cookie-login":
-            return httpx.Response(
-                200,
-                json={"authenticated": True},
-                headers=[
-                    ("Set-Cookie", "csrf=csrf-1; Path=/; HttpOnly"),
-                    ("Set-Cookie", "session_id=session-1; Path=/; HttpOnly; SameSite=Lax"),
-                ],
-            )
-        return httpx.Response(200, json={"cookie": cookie})
-
-    credentials = LoginCredentials(username="ada", password=SecretStr("secret"))
-    auth = session_cookie(
-        "session_id",
-        credentials=credentials,
-        service=CookieAuthService(),
-    )
-    client = client_from_httpx(
-        httpx.AsyncClient(
-            base_url="https://api.example",
-            transport=httpx.MockTransport(handler),
-            headers={},
-            cookies={},
-        ),
-    )
-
-    identity = Identity(auth=(auth,))
-    first = await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
-    second = await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
-    await client.aclose()
-
-    assert first.json() == second.json() == {"cookie": "session_id=session-1"}
-    assert [path for path, _ in calls].count("/cookie-login") == 1
-
-
-async def test_session_cookie_rotates_with_attributes_and_rolls_back_deletion() -> None:
-    login_calls = 0
-    protected_cookies: list[str] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal login_calls
-        if request.url.path == "/cookie-login":
-            login_calls += 1
-            if login_calls == 1:
-                return httpx.Response(
-                    200,
-                    json={"authenticated": True},
-                    headers={
-                        "Set-Cookie": (
-                            "session_id=first; Domain=api.example; Path=/; Max-Age=3600; "
-                            "Secure; HttpOnly; SameSite=Strict"
-                        )
-                    },
-                )
-            return httpx.Response(
-                200,
-                json={"authenticated": True},
-                headers={"Set-Cookie": "session_id=; Path=/; Max-Age=0"},
-            )
-        cookie = request.headers.get("Cookie", "")
-        protected_cookies.append(cookie)
-        return httpx.Response(401, json={"error": "expired"})
-
-    auth = session_cookie(
-        "session_id",
-        credentials=LoginCredentials(username="ada", password=SecretStr("secret")),
-        service=CookieAuthService(),
-    )
-    client = client_from_httpx(
-        httpx.AsyncClient(
-            base_url="https://api.example",
-            transport=httpx.MockTransport(handler),
-            headers={},
-            cookies={},
-        ),
-    )
-
-    identity = Identity(auth=(auth,))
-    with pytest.raises(SessionConfigurationError, match="active Set-Cookie"):
-        await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
-    with pytest.raises(SessionConfigurationError, match="active Set-Cookie"):
-        await _protected_call(client, auth.scheme, identity=identity, sdk=CookieSessionSdk)
-    await client.aclose()
-
-    assert protected_cookies == ["session_id=first", "session_id=first"]
-    assert login_calls == 3
 
 
 async def test_static_scheme_helper_avoids_public_provider_registry() -> None:

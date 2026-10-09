@@ -174,6 +174,12 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
         self._cookies: tuple[CookieJar, Cookies] | None = None
         self._seeded = False
 
+    @property
+    def carries_cookies(self) -> bool:
+        """Whether this session belongs to a site that keeps it in cookies."""
+
+        return self._cookies is not None
+
     def bind_cookies(self, jar: CookieJar, declared: Cookies) -> None:
         """Tie the session to the user's jar on a site that keeps its session in cookies."""
 

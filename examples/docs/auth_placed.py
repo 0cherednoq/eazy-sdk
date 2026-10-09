@@ -1,4 +1,4 @@
-"""Place one session into the query and the cookies of every protected request."""
+"""Place one session into the query and a header of every protected request."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from eazy_sdk.auth import AuthContext, Placed, session_scheme
 from eazy_sdk.handlers.httpx import AsyncHttpxHandler
 from examples.docs.redirect_site import (
     BASE_URL,
+    DEVICE_KEY,
     MAILBOX,
     PAGE_TOKEN,
     PASSWORD,
-    SESSION_ID,
     RedirectSite,
 )
 
@@ -36,7 +36,7 @@ class Folders(BaseModel):
 class MailSession(BaseModel):
     token: Annotated[SecretStr, Placed.query("token")]
     email: Annotated[str, Placed.query("email", secret=False)]
-    cookies: Annotated[dict[str, str], Placed.cookies()]
+    device: Annotated[SecretStr, Placed.header("X-Device")]
 
 
 MAIL_SESSION = session_scheme(MailSession, name="mail-session")
@@ -44,7 +44,7 @@ MAIL_SESSION = session_scheme(MailSession, name="mail-session")
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListFolders(HttpOperation[Folders]):
-    __http__ = Http.get("/api/folders")
+    __http__ = Http.get("/api/devices")
 
 
 class MailApi(AsyncApi):
@@ -57,13 +57,13 @@ class MailApi(AsyncApi):
 
 
 class MailLoginService:
-    """Stands in for a real login: the next guide declares its steps."""
+    """Stands in for a real login: the guide on cookie sessions declares its steps."""
 
     async def acquire(self, credentials: MailLogin, context: AuthContext[Any]) -> MailSession:
         return MailSession(
             token=SecretStr(PAGE_TOKEN),
             email=credentials.username,
-            cookies={"sid": SESSION_ID},
+            device=SecretStr(DEVICE_KEY),
         )
 
 
@@ -88,8 +88,8 @@ class RecordingSite(RedirectSite):
     seen: str = ""
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/folders":
-            self.seen = f"{request.url.query.decode()} | Cookie: {request.headers.get('cookie')}"
+        if request.url.path == "/api/devices":
+            self.seen = f"{request.url.query.decode()} | X-Device: {request.headers['x-device']}"
         return RedirectSite.__call__(self, request)
 
 

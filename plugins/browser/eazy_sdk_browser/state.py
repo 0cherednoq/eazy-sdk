@@ -17,40 +17,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk_browser.profile import Capability, validate_profile
 
 if TYPE_CHECKING:
-    from datetime import datetime
 
     from eazy_sdk_browser.driver import Driver
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserCookie:
-    """Кука со всеми атрибутами, а не парой «имя-значение».
-
-    `BrowserCookie`, а не `Cookie`: в `eazy-sdk` `Cookie` — маркер поля запроса.
-
-    Атрибуты здесь не для полноты: без `domain` и `path` браузер не примет куку
-    обратно, а без `expires_at` не отличит сессионную от долгой. Ровно поэтому пара
-    «имя-значение» для переноса сессии не годится.
-    """
-
-    name: str
-    value: str = field(repr=False)
-    domain: str = ""
-    path: str = "/"
-    expires_at: datetime | None = None
-    secure: bool = False
-    http_only: bool = False
-    same_site: str = ""
-
-    def is_session(self) -> bool:
-        """Сессионная кука: живёт до закрытия браузера, срока у неё нет."""
-        return self.expires_at is None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +47,7 @@ class Origin:
 class BrowserState:
     """Всё, что делает браузер «уже входившим»: куки и localStorage."""
 
-    cookies: tuple[BrowserCookie, ...] = ()
+    cookies: tuple[StoredCookie, ...] = ()
     origins: tuple[Origin, ...] = ()
 
     def is_empty(self) -> bool:
@@ -91,7 +66,7 @@ class StateAware(Protocol):
         """Куки и localStorage контекста страницы."""
         ...
 
-    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None:
+    async def add_cookies(self, cookies: tuple[StoredCookie, ...]) -> None:
         """Положить куки в контекст страницы. Повторная запись той же куки безвредна."""
         ...
 
@@ -121,4 +96,4 @@ def require_state(driver: Driver) -> StateAware:
     return driver
 
 
-__all__ = ["BrowserCookie", "BrowserState", "Origin", "StateAware", "require_state"]
+__all__ = ["BrowserState", "Origin", "StateAware", "require_state"]

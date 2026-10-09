@@ -29,9 +29,9 @@
     portal = CompaniesPortal(AsyncBrowserClient(driver))
     dialog = await portal.open_create_company()
 
-Имена не пересекаются с `eazy_sdk`: локатор — `Locator`, а не `Query`; кука —
-`BrowserCookie`, а не `Cookie`. Ошибки, профиль возможностей и его шкала берутся из
-ядра, своих у плагина нет.
+Имена не пересекаются с `eazy_sdk`: локатор — `Locator`, а не `Query`. Ошибки, профиль
+возможностей, его шкала и запись куки (`eazy_sdk.cookies.StoredCookie`) берутся из ядра,
+своих у плагина нет.
 
 Почему именно так — `docs/decisions.md`; открытые вопросы — `docs/DESIGN.md`.
 Адаптеры лежат в `eazy_sdk_browser.handlers`, необязательные интеграции — в
@@ -88,7 +88,6 @@ from eazy_sdk_browser.fetch import (  # isort: skip
 )
 
 from eazy_sdk_browser.state import (  # isort: skip
-    BrowserCookie,
     BrowserState,
     Origin,
     StateAware,
@@ -98,13 +97,10 @@ from eazy_sdk_browser.state import (  # isort: skip
 from eazy_sdk_browser.network import response  # isort: skip
 
 from eazy_sdk_browser.login import (  # isort: skip
-    BrowserCookieBridge,
     BrowserLogin,
     BrowserLoginContext,
     BrowserLoginService,
     BrowserSessionError,
-    CookieAuthAdopter,
-    browser_cookie_auth,
 )
 
 from eazy_sdk_browser.navigation import NavigationAware, navigated  # isort: skip
@@ -148,8 +144,6 @@ __all__ = [
     "Browser",
     "BrowserCallOptions",
     "BrowserClientConfig",
-    "BrowserCookie",
-    "BrowserCookieBridge",
     "BrowserDeclarationError",
     "BrowserError",
     "BrowserLogin",
@@ -162,7 +156,6 @@ __all__ = [
     "BrowserSessionError",
     "BrowserState",
     "Capability",
-    "CookieAuthAdopter",
     "CurrentDriver",
     "Driver",
     "EachLocator",
@@ -202,7 +195,6 @@ __all__ = [
     "When",
     "__version__",
     "any_of",
-    "browser_cookie_auth",
     "build_content",
     "click",
     "css",

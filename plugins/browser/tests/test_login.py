@@ -16,8 +16,6 @@ from eazy_sdk_browser import (
     Browser,
     BrowserCallOptions,
     BrowserClientConfig,
-    BrowserCookie,
-    BrowserCookieBridge,
     BrowserDeclarationError,
     BrowserLogin,
     BrowserLoginContext,
@@ -28,14 +26,13 @@ from eazy_sdk_browser import (
     Failure,
     LoadState,
     PageError,
-    browser_cookie_auth,
     css,
     url,
 )
 from eazy_sdk_browser.testing import StatefulFakeDriver
 
 from eazy_sdk import AsyncApi, AsyncClient, Http, HttpOperation, Identity, op
-from eazy_sdk.auth import CookieScheme
+from eazy_sdk.cookies import Cookies, CookieState, StoredCookie
 from eazy_sdk.testing import AsyncRecordingHandler
 
 pytestmark = pytest.mark.unit
@@ -46,15 +43,16 @@ INBOX_URL = f"{BASE}/inbox"
 NOW = datetime(2030, 1, 1, tzinfo=UTC)
 FAST = BrowserCallOptions(timeout=0.05, element_timeout=0.05)
 LOGIN_FORM = {'input[name="user"]', 'input[name="password"]', "button.login"}
-MAIL_SESSION = CookieScheme("sid", name="mail-session")
 
 
 class SessionExpiredError(PageError):
     """Почта увела на вход."""
 
 
-def sid(value: str, *, lifetime: timedelta = timedelta(days=1)) -> BrowserCookie:
-    return BrowserCookie(name="sid", value=value, domain=".mail.example", expires_at=NOW + lifetime)
+def sid(value: str, *, lifetime: timedelta = timedelta(days=1)) -> StoredCookie:
+    return StoredCookie(
+        name="sid", value=value, domain="mail.example", host_only=False, expires_at=NOW + lifetime
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,48 +278,57 @@ def test_auth_retries_cannot_be_negative() -> None:
 
 @dataclass(frozen=True, slots=True)
 class Folders(HttpOperation[bytes]):
-    __http__ = Http.get("/api/folders", security=MAIL_SESSION)
+    __http__ = Http.get("/api/folders")
 
 
 class MailApi(AsyncApi):
+    cookies = Cookies()
+
     folders = op(Folders)
 
 
-def test_bridge_picks_the_cookie_by_name_and_then_by_domain() -> None:
-    state = BrowserState(
-        cookies=(BrowserCookie(name="sid", value="sso", domain=".id.example"), sid("mail"))
-    )
-
-    anywhere = BrowserCookieBridge("sid").convert(state)
-    on_mail = BrowserCookieBridge("sid", domain="mail.example").convert(state)
-
-    assert anywhere.value == "sso"
-    assert (on_mail.value, on_mail.domain, on_mail.expires_at) == (
-        "mail",
-        ".mail.example",
-        NOW + timedelta(days=1),
-    )
-    with pytest.raises(BrowserSessionError, match="'token'"):
-        BrowserCookieBridge("token").convert(state)
-
-
-async def test_http_router_sends_the_cookie_of_the_browser_session() -> None:
-    """Вход — браузером, запрос — HTTP-клиентом с той же кукой."""
+async def test_http_router_sends_the_cookies_of_the_browser_session() -> None:
+    """Вход — браузером, запрос — HTTP-клиентом с теми же куками, целиком и по своим хостам."""
     mail = login_of(EntranceLogin()).session(Credentials("ada", "secret"))
     client = AsyncBrowserClient(mail_driver(), base_url=BASE, session=mail)
     handler = AsyncRecordingHandler(status=200, content=b"[]")
 
-    auth = await browser_cookie_auth(
-        await mail.state(client), MAIL_SESSION, "sid", clock=lambda: NOW
-    )
+    state = await mail.state(client)
+    identity = Identity(cookies=CookieState(state.cookies))
     async with AsyncClient(base_url=BASE, handler=handler) as http:
-        await MailApi(http, identity=Identity(auth=(auth,))).folders()
+        await MailApi(http, identity=identity).folders()
 
     assert handler.last_request.headers.get("cookie") == "sid=s1"
 
 
-async def test_expired_browser_cookie_is_not_handed_to_http() -> None:
-    state = BrowserState(cookies=(sid("s1", lifetime=-timedelta(minutes=1)),))
+async def test_a_cookie_of_another_site_stays_out_of_the_request() -> None:
+    state = BrowserState(
+        cookies=(
+            StoredCookie(name="sid", value="sso", domain="id.example", host_only=False),
+            sid("mail"),
+        )
+    )
+    handler = AsyncRecordingHandler(status=200, content=b"[]")
 
-    with pytest.raises(BrowserSessionError, match="expired"):
-        await browser_cookie_auth(state, MAIL_SESSION, "sid", clock=lambda: NOW)
+    async with AsyncClient(base_url=BASE, handler=handler) as http:
+        await MailApi(http, identity=Identity(cookies=CookieState(state.cookies))).folders()
+
+    assert handler.last_request.headers.get("cookie") == "sid=mail"
+
+
+async def test_expired_browser_cookie_is_not_handed_to_http() -> None:
+    # The jar reads the real clock, so the cookie expires against it, not against the test's.
+    gone = StoredCookie(
+        name="sid",
+        value="s1",
+        domain="mail.example",
+        host_only=False,
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    state = BrowserState(cookies=(gone,))
+    handler = AsyncRecordingHandler(status=200, content=b"[]")
+
+    async with AsyncClient(base_url=BASE, handler=handler) as http:
+        await MailApi(http, identity=Identity(cookies=CookieState(state.cookies))).folders()
+
+    assert handler.last_request.headers.get("cookie") is None

@@ -32,8 +32,7 @@ from eazy_sdk import (
     RetryPolicy,
     api,
 )
-from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_cookie
-from eazy_sdk.auth.cookies import HttpCookieSession, parse_session_cookie
+from eazy_sdk.auth import AuthContext, Bearer, Cookies, ExpiresAt, RefreshToken, session_scheme
 from eazy_sdk.auth.session import MemorySessionStore, SessionKey, SessionLifecycleConfig
 from eazy_sdk.clients import UnsafeReplayError
 from eazy_sdk.request import SigningKey, SigningKeyRequirement, header_output, hmac_sha256, method
@@ -149,6 +148,25 @@ class RegistrationSdk:
         self.registration = RegistrationApi(client, identity=identity)
 
 
+class CookieAccount(BaseModel):
+    """The session of a site that keeps everything in cookies: nothing to place."""
+
+    user_id: str
+
+
+COOKIE_ACCOUNT = session_scheme(CookieAccount, name="cookie-account")
+SESSION_COOKIES = Cookies(required=("session_id",))
+
+
+class CookieRegistrationApi(RegistrationApi):
+    cookies = SESSION_COOKIES
+
+
+class CookieRegistrationSdk:
+    def __init__(self, client: Any, identity: Identity | None = None) -> None:
+        self.registration = CookieRegistrationApi(client, identity=identity)
+
+
 class CredentialsCodec:
     def encode(self, value: SignupCredentials) -> object:
         return {"email": value.email, "password": "encrypted-by-application"}
@@ -189,38 +207,31 @@ class RegistrationService:
 
 
 class CookieRegistrationService:
-    def __init__(self, now: datetime) -> None:
-        self._now = now
-
     async def create(
         self,
         draft: AccountDraft[SignupCredentials, AccountProfile, SignupDetails],
-        context: HttpRegistrationContext[RegistrationSdk],
-    ) -> AccountCreated[HttpCookieSession]:
-        result = context.capture(
-            await context.sdk.registration.create_cookie_account.with_response(
-                body=RegisterRequest(
-                    email=draft.credentials.email,
-                    password=draft.credentials.password.get_secret_value(),
-                    first_name=draft.profile.first_name,
-                    accepted_terms=draft.details.accepted_terms,
-                )
+        context: HttpRegistrationContext[CookieRegistrationSdk],
+    ) -> AccountCreated[CookieAccount]:
+        # The cookie the site sets is nobody's to pass along: the identity's jar keeps it.
+        result = await context.sdk.registration.create_cookie_account(
+            body=RegisterRequest(
+                email=draft.credentials.email,
+                password=draft.credentials.password.get_secret_value(),
+                first_name=draft.profile.first_name,
+                accepted_terms=draft.details.accepted_terms,
             )
         )
-        cookie = parse_session_cookie(
-            context.responses,
-            "session_id",
-            now=self._now,
+        return AccountCreated(
+            remote_id=result.user_id, session=CookieAccount(user_id=result.user_id)
         )
-        return AccountCreated(remote_id=result.user_id, session=cookie)
 
     async def verify(
         self,
-        _account: StoredAccount[AccountProfile, HttpCookieSession],
+        _account: StoredAccount[AccountProfile, CookieAccount],
         _challenge: VerificationChallenge,
         _proof: object,
-        _context: HttpRegistrationContext[RegistrationSdk],
-    ) -> VerificationAccepted[HttpCookieSession]:
+        _context: HttpRegistrationContext[CookieRegistrationSdk],
+    ) -> VerificationAccepted[CookieAccount]:
         raise AssertionError("this flow has no verification step")
 
 
@@ -341,7 +352,6 @@ async def test_http_registration_uses_existing_executor_signing_and_session_life
 
 
 async def test_registration_cookie_session_is_adopted_without_cookie_annotations() -> None:
-    now = datetime(2026, 8, 15, tzinfo=UTC)
     fallback_login_calls = 0
     protected_cookies: list[str] = []
 
@@ -349,25 +359,25 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
         async def acquire(
             self,
             _credentials: SignupCredentials,
-            _context: object,
-        ) -> object:
+            _context: AuthContext[Any],
+        ) -> CookieAccount:
             nonlocal fallback_login_calls
             fallback_login_calls += 1
             raise AssertionError("registration session should skip fallback login")
 
-    auth = session_cookie(
-        "session_id",
+    auth = COOKIE_ACCOUNT.configure(
         credentials=signup_credentials(),
         service=FallbackCookieLogin(),
-        clock=lambda: now,
     )
 
     class ProtectedApi(AsyncApi):
+        cookies = SESSION_COOKIES
+
         @api.get(
             "/protected",
             operation_id="protectedAfterRegistration",
             success=(Success(200, Json(CookieRegisterResponse)),),
-            security=auth.scheme,
+            security=COOKIE_ACCOUNT,
         )
         async def protected(self) -> CookieRegisterResponse:
             raise NotImplementedError
@@ -395,13 +405,15 @@ async def test_registration_cookie_session_is_adopted_without_cookie_annotations
         SignupCredentials,
         AccountProfile,
         SignupDetails,
-        HttpCookieSession,
+        CookieAccount,
     ] = MemoryRegistrationStore(CredentialsCodec())
     flow = account_registration(
         SignupCredentials,
-        service=CookieRegistrationService(now),
+        service=CookieRegistrationService(),
         store=store,
-        context_factory=lambda: HttpRegistrationContext(RegistrationSdk(client, cookie_identity)),
+        context_factory=lambda: HttpRegistrationContext(
+            CookieRegistrationSdk(client, cookie_identity)
+        ),
         session_lifecycle=auth,
     )
 

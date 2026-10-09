@@ -13,7 +13,6 @@ import pytest
 from eazy_sdk_browser import (
     AsyncBrowserClient,
     BrowserCallOptions,
-    BrowserCookie,
     BrowserState,
     Elements,
     Origin,
@@ -37,6 +36,7 @@ from eazy_sdk_browser.profile import Capability
 from playwright.async_api import BrowserContext, Page, Route, async_playwright
 
 from eazy_sdk import AsyncClient, bind
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityMismatchError, TransportError
 from examples.browser_portal import (
     CREATE_BUTTON,
@@ -656,7 +656,7 @@ async def test_cookies_go_into_the_context_shared_by_its_tabs() -> None:
         neighbour = PlaywrightDriver(await portal_in(context), capture=None)
         stranger = PlaywrightDriver(await portal_in(await browser.new_context()), capture=None)
 
-        await writer.add_cookies((BrowserCookie(name="sid", value="s1", domain=PORTAL_HOST),))
+        await writer.add_cookies((StoredCookie(name="sid", value="s1", domain=PORTAL_HOST),))
 
         assert writer.context_key() is neighbour.context_key()
         assert writer.context_key() is not stranger.context_key()
@@ -669,17 +669,18 @@ def test_storage_state_round_trip_keeps_every_cookie_attribute() -> None:
     """Перевод в `storage_state` и обратно ничего не теряет — ни атрибутов, ни сессионности."""
     state = BrowserState(
         cookies=(
-            BrowserCookie(
+            StoredCookie(
                 name="sid",
                 value="abc",
-                domain=".portal.example.test",
+                domain="portal.example.test",
+                host_only=False,
                 path="/app",
                 expires_at=datetime(2030, 1, 1, tzinfo=UTC),
                 secure=True,
                 http_only=True,
                 same_site="Strict",
             ),
-            BrowserCookie(name="consent", value="1", domain=PORTAL_HOST, same_site="Lax"),
+            StoredCookie(name="consent", value="1", domain=PORTAL_HOST, same_site="Lax"),
         ),
         origins=(Origin(origin=PORTAL_ORIGIN, items=(("theme", "dark"), ("token", "t"))),),
     )

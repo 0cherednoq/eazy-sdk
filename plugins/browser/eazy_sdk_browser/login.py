@@ -24,9 +24,9 @@
 `MAIL_LOGIN.session(credentials, store=...)`), и слой выше, у которого свой жизненный
 цикл (пул контекстов).
 
-HTTP-клиенту та же сессия отдаётся мостом ядра: `BridgedSessionAdopter` с
-`BrowserCookieBridge` выбирает куку, `CookieAuthAdopter` строит из неё `Auth` —
-`browser_cookie_auth(state, scheme, "sid")` делает оба шага.
+HTTP-клиенту та же сессия отдаётся целиком, без выбора одной куки: SDK сайта объявляет
+`Cookies(...)`, а его identity начинает с кук браузера —
+`Identity(cookies=CookieState(state.cookies))`.
 """
 
 from __future__ import annotations
@@ -36,16 +36,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
-from eazy_sdk.auth import Auth
-from eazy_sdk.auth.cookies import HttpCookieSession
-from eazy_sdk.auth.session import BridgedSessionAdopter
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk_browser.errors import BrowserDeclarationError, BrowserError
-from eazy_sdk_browser.state import BrowserCookie, BrowserState, require_state
+from eazy_sdk_browser.state import BrowserState, require_state
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from eazy_sdk.auth import AuthScheme
     from eazy_sdk.auth.session import SessionStore
     from eazy_sdk_browser.client import AsyncBrowserClient
     from eazy_sdk_browser.session import BrowserSession
@@ -171,95 +168,16 @@ class BrowserLogin[TCredentials]:
         return state
 
 
-def _alive(cookies: tuple[BrowserCookie, ...], name: str, horizon: datetime) -> bool:
+def _alive(cookies: tuple[StoredCookie, ...], name: str, horizon: datetime) -> bool:
     return any(
         cookie.name == name and (cookie.expires_at is None or cookie.expires_at > horizon)
         for cookie in cookies
     )
 
 
-# --- мост в HTTP -------------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserCookieBridge:
-    """`SessionBridge[BrowserState, HttpCookieSession]`: кука входа из браузера — HTTP-клиенту.
-
-    Выбор по имени, а если одноимённых несколько (кука сервиса и кука его SSO) — по домену.
-    Атрибуты переносятся все: HTTP-стороне важен срок, чтобы не слать мёртвую куку.
-    """
-
-    cookie_name: str
-    domain: str | None = None
-
-    def convert(self, value: BrowserState) -> HttpCookieSession:
-        for cookie in value.cookies:
-            if cookie.name == self.cookie_name and self._on_domain(cookie):
-                return HttpCookieSession(
-                    cookie.value,
-                    domain=cookie.domain,
-                    path=cookie.path,
-                    secure=cookie.secure,
-                    http_only=cookie.http_only,
-                    same_site=cookie.same_site,
-                    expires_at=cookie.expires_at,
-                )
-        where = "" if self.domain is None else f" on {self.domain}"
-        msg = f"browser session has no cookie {self.cookie_name!r}{where}"
-        raise BrowserSessionError(msg)
-
-    def _on_domain(self, cookie: BrowserCookie) -> bool:
-        return self.domain is None or cookie.domain.lstrip(".") == self.domain.lstrip(".")
-
-
-@dataclass(frozen=True, slots=True)
-class CookieAuthAdopter:
-    """`SessionAdopter[HttpCookieSession]`: кука — в `Auth` схемы HTTP-операций.
-
-    `Auth` получается статическим: у ядра нет cookie-привязки, которая приняла бы сессию со
-    стороны без собственного HTTP-входа. Поэтому после повторного входа в браузере мост
-    проходят заново. Истёкшую куку адаптер не отдаёт вовсе.
-    """
-
-    scheme: AuthScheme[str]
-    clock: Callable[[], datetime] = field(default=_now, repr=False)
-
-    async def adopt(self, value: HttpCookieSession) -> Auth:
-        if not value.is_active(self.clock()):
-            msg = "browser cookie has expired; sign in again before handing it to HTTP"
-            raise BrowserSessionError(msg)
-        return self.scheme.static(value.value)
-
-
-async def browser_cookie_auth(
-    state: BrowserState,
-    scheme: AuthScheme[str],
-    cookie_name: str,
-    *,
-    domain: str | None = None,
-    clock: Callable[[], datetime] = _now,
-) -> Auth:
-    """Браузерная сессия — в `Auth` HTTP-клиента мостом ядра (`BridgedSessionAdopter`).
-
-    auth = await browser_cookie_auth(await mail.state(client), MAIL_SESSION, "sid")
-    folders = await MailApi(http, identity=Identity(auth=(auth,))).folders()
-    """
-    bridge = BridgedSessionAdopter(
-        BrowserCookieBridge(cookie_name, domain), CookieAuthAdopter(scheme, clock)
-    )
-    adopted = await bridge.adopt(state)
-    if not isinstance(adopted, Auth):
-        msg = f"cookie adopter returned {type(adopted).__name__}, not Auth"
-        raise TypeError(msg)
-    return adopted
-
-
 __all__ = [
-    "BrowserCookieBridge",
     "BrowserLogin",
     "BrowserLoginContext",
     "BrowserLoginService",
     "BrowserSessionError",
-    "CookieAuthAdopter",
-    "browser_cookie_auth",
 ]

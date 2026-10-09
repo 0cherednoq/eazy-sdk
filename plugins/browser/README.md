@@ -81,7 +81,7 @@ async with async_playwright() as playwright:
 | **Возможности драйвера** | профиль по осям `CapabilityLevel`; нужное операции (`requires=`, признаки, маркеры карты) сверяется до первого действия |
 | **Вход** | `BrowserLogin` на `SessionLifecycle` ядра: сессия из хранилища, повторный вход после объявленного отказа |
 | **Хранилище** | `BrowserSessions.store(account)` — сессия за аккаунтом `eazy_sdk_accounts` |
-| **Мост в HTTP** | `browser_cookie_auth(state, scheme, "sid")` отдаёт браузерную куку `Auth` HTTP-клиенту |
+| **Мост в HTTP** | `Identity(cookies=CookieState(state.cookies))` отдаёт куки браузерной сессии HTTP-клиенту |
 | **Браузер как транспорт** | `BrowserHandler`: объявленная HTTP-операция уходит запросом из страницы |
 
 ## Установка
@@ -142,11 +142,12 @@ b = AsyncBrowserClient(PlaywrightDriver(page2), base_url=BASE, session=mail)  # 
 ```
 
 Сколько контекстов и вкладок открыть и с каким `storage_state`, решает код вызывающего или
-пул браузеров, а не SDK (`docs/LAYERS.md`). HTTP-клиенту та же сессия отдаётся мостом ядра:
+пул браузеров, а не SDK (`docs/LAYERS.md`). HTTP-клиенту та же сессия отдаётся целиком, если его
+SDK объявил `Cookies(...)`:
 
 ```python
-auth = await browser_cookie_auth(await mail.state(a), MAIL_SESSION, "sid")
-folders = await MailApi(http, identity=Identity(auth=(auth,))).folders()
+state = await mail.state(a)
+folders = await MailApi(http, identity=Identity(cookies=CookieState(state.cookies))).folders()
 ```
 
 ## Браузер как транспорт

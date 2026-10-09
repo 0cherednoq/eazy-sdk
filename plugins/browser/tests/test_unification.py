@@ -10,7 +10,6 @@ import re
 import eazy_sdk_browser
 import pytest
 from eazy_sdk_browser import (
-    BrowserCookie,
     BrowserDeclarationError,
     BrowserError,
     BrowserProfile,
@@ -32,6 +31,7 @@ from eazy_sdk_browser.network import ResponseMissingError
 from eazy_sdk_browser.testing import FakeDriver
 
 import eazy_sdk
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.core.errors import EazySdkError, PlanError
 from eazy_sdk.handlers import CapabilityLevel, CapabilityMismatchError
 
@@ -48,7 +48,7 @@ def test_public_names_do_not_collide_with_the_core() -> None:
 
 def test_renamed_types_carry_the_browser_in_their_name() -> None:
     assert Locator(("button",)).selectors == ("button",)
-    assert BrowserCookie(name="sid", value="x").is_session()
+    assert StoredCookie(name="sid", value="x", domain="mail.example").is_session()
 
 
 # --- B3.1: иерархия ошибок ---------------------------------------------------------------

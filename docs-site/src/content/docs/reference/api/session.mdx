@@ -3,7 +3,7 @@ title: Session
 description: Публичный API login session.
 sources:
   - eazy_sdk.auth
-api_fingerprint: "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae"
+api_fingerprint: "sha256:1ce95a2ba327e0d664143429d31e644e9cb926a39f56981cb2b5f0c4f801b058"
 ---
 
 ## Session из модели
@@ -24,24 +24,25 @@ session_auth(
 
 Передайте `credentials=` для login или `session=` для готовой session.
 
-## Session из cookie
+## Сессия на куках
 
 ```python
-session_cookie(
-    "session_id",
-    *,
-    credentials,
-    service,
-    store=None,
-    identity=None,
-    name="session-cookie",
-    clock=...,
-) -> Auth
+Cookies(required=(), leeway=timedelta(seconds=30), public_suffixes=None)
+
+Identity(auth=(...), cookies=CookieState(...))
+
+StoredCookie(name, value, domain, path="/", host_only=True, expires_at=None,
+             secure=False, http_only=False, same_site="")
+CookieState(cookies=())
 ```
 
-`clock` принимает callable без аргументов, возвращающий timezone-aware `datetime`; по умолчанию
-`datetime.now(UTC)`. По нему вычисляется `expires_at` cookie из `Max-Age`/`Expires` и
-проверяется активность сохранённой session.
+`Cookies` объявляется на корне или роутере и наследуется как `security`. Каждый `Identity`
+получает свой набор кук; `cookies=` задаёт начальное состояние. `required` перечисляет куки, без
+живого экземпляра которых сессия непригодна, `leeway` задаёт запас до истечения.
+
+`StoredCookie.domain` пишется без ведущей точки: область действия задаёт `host_only`.
+`CookieState.to_primitive()` и `CookieState.from_primitive(...)` переводят снимок в
+JSON-совместимый вид и обратно.
 
 ## Аннотации модели
 
@@ -57,12 +58,10 @@ ExpiresAt(leeway=...)
 |---|---|
 | `Placed.query(name, secret=True)` | параметр query |
 | `Placed.header(name, prefix="", secret=True)` | заголовок |
-| `Placed.cookie(name, secret=True)` | одна кука |
-| `Placed.cookies()` | каждая пара поля `Mapping[str, str]` отдельной кукой |
 
-`Bearer()` равен `Placed.header("Authorization", prefix="Bearer ")`. Модель обязана нести хотя бы
-одно размещение и не больше одного `Bearer`. Сессия с пустым размещаемым значением считается
-непригодной.
+`Bearer()` равен `Placed.header("Authorization", prefix="Bearer ")`. Модель несёт не больше
+одного `Bearer`. Модель без размещений допустима только на сервисе с `Cookies(...)`. Сессия с
+пустым размещаемым значением считается непригодной.
 
 ## Store
 
@@ -80,15 +79,11 @@ login или refresh.
 `session=` для готового значения. Session model должна иметь ровно один `Bearer()` field, не более
 одного `RefreshToken()` и не более одного `ExpiresAt()`.
 
-`session_cookie(...)` всегда получает credentials и извлекает named cookie из `Set-Cookie`
-успешного login response. Service должен вызвать `.with_response(...)` и передать envelope через
-`context.capture(...)`, чтобы runtime увидел response headers.
-
 Store protocol:
 
 ```python
 await store.load(key) -> StoredSession | None
-await store.save(key, value, revision)
+await store.save(key, value, revision, cookies=None)
 await store.invalidate(key, expected=None)
 ```
 

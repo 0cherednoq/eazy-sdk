@@ -29,8 +29,8 @@
 мало браузеру — тот не примет куку без `domain`, `path` и срока. Поэтому полное
 состояние кладётся в `SessionData.params`, а плоский словарь остаётся **проекцией**
 для тех, кому хватает пары. Это обходной путь, а не замысел: правильным решением было
-бы дать `SessionData` настоящую модель куки — в `eazy_sdk.auth.cookies.HttpCookieSession`
-она уже есть, с `domain`, `path`, `secure`, `http_only`, `same_site` и сроком.
+бы дать `SessionData` настоящую модель куки — `eazy_sdk.cookies.StoredCookie`, с областью
+действия, путём, флагами и сроком.
 
 Зависимость необязательная: ядро о хранилище не знает, ставится экстрой
 `eazy-browser[accounts]`.
@@ -50,7 +50,8 @@ from eazy_sdk_accounts.storage import (
 )
 from eazy_sdk_accounts.storage.entities import Account
 
-from eazy_sdk_browser.state import BrowserCookie, BrowserState, Origin
+from eazy_sdk.cookies import StoredCookie
+from eazy_sdk_browser.state import BrowserState, Origin
 
 if TYPE_CHECKING:
     from eazy_sdk.auth.session import SessionStore
@@ -100,9 +101,11 @@ def from_session_data(data: SessionData, *, domain: str | None = None) -> Browse
         return _load(stored)
     if domain is None:
         return BrowserState()
+    # Плоская кука не знает своей области: домен сайта значит «он и его поддомены».
+    site = domain.lstrip(".").lower()
     return BrowserState(
         cookies=tuple(
-            BrowserCookie(name=name, value=value, domain=domain)
+            StoredCookie(name=name, value=value, domain=site, host_only=False)
             for name, value in data.cookies.items()
         )
     )
@@ -214,19 +217,7 @@ class _AccountSessionData[AccountT: Account[Any]]:
 def _dump(state: BrowserState) -> dict[str, Any]:
     """Состояние в JSON-совместимый вид: хранилище кладёт `params` в колонку JSON."""
     return {
-        "cookies": [
-            {
-                "name": cookie.name,
-                "value": cookie.value,
-                "domain": cookie.domain,
-                "path": cookie.path,
-                "expires_at": cookie.expires_at.isoformat() if cookie.expires_at else None,
-                "secure": cookie.secure,
-                "http_only": cookie.http_only,
-                "same_site": cookie.same_site,
-            }
-            for cookie in state.cookies
-        ],
+        "cookies": [cookie.to_primitive() for cookie in state.cookies],
         "origins": [
             {"origin": origin.origin, "items": [list(pair) for pair in origin.items]}
             for origin in state.origins
@@ -235,8 +226,18 @@ def _dump(state: BrowserState) -> dict[str, Any]:
 
 
 def _load(stored: dict[str, Any]) -> BrowserState:
+    """Состояние из записи. Запись другого формата — это отсутствие сессии, а не ошибка.
+
+    Раньше область действия куки кодировалась точкой в домене. Угадывать её при чтении
+    значило бы держать два формата, поэтому такая запись читается как пустое состояние,
+    и владелец сессии просто входит заново.
+    """
+    try:
+        cookies = tuple(StoredCookie.from_primitive(raw) for raw in stored.get("cookies", ()))
+    except (ValueError, TypeError, AttributeError):
+        return BrowserState()
     return BrowserState(
-        cookies=tuple(_cookie(raw) for raw in stored.get("cookies", ())),
+        cookies=cookies,
         origins=tuple(
             Origin(
                 origin=raw.get("origin", ""),
@@ -244,20 +245,6 @@ def _load(stored: dict[str, Any]) -> BrowserState:
             )
             for raw in stored.get("origins", ())
         ),
-    )
-
-
-def _cookie(raw: dict[str, Any]) -> BrowserCookie:
-    expires_at = raw.get("expires_at")
-    return BrowserCookie(
-        name=raw.get("name", ""),
-        value=raw.get("value", ""),
-        domain=raw.get("domain", ""),
-        path=raw.get("path", "/"),
-        expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
-        secure=bool(raw.get("secure", False)),
-        http_only=bool(raw.get("http_only", False)),
-        same_site=str(raw.get("same_site", "") or ""),
     )
 
 

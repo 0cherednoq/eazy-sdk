@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from eazy_sdk.auth.session import LifecycleGraph, SessionKey, SessionRevision
 from eazy_sdk.cookies import CookieJar, Cookies
 from eazy_sdk.core.errors import PlanError
-from eazy_sdk.core.http import auth_cookie_set_name
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import (
     Set,
@@ -78,33 +77,12 @@ class AuthPlacement[TSession, TValue]:
     select: SessionSelector[TSession, TValue]
     prefix: str = ""
     secret: bool = True
-    many: bool = False
-    """The selected value is a mapping and every pair of it is placed: a set of cookies."""
-
     def value(self, session: TSession) -> str:
         selected = self.select.select(session)
         reveal = getattr(selected, "get_secret_value", None)
         if callable(reveal):
             selected = reveal()
         return self.prefix + str(selected)
-
-    def pairs(self, session: TSession) -> tuple[tuple[str, str], ...]:
-        """Every name and value of a placed set, secrets revealed, in the mapping's order."""
-
-        selected = self.select.select(session)
-        if not isinstance(selected, Mapping):
-            raise PlanError(
-                f"session field placed as a set must hold a mapping, not {type(selected).__name__}"
-            )
-        output: list[tuple[str, str]] = []
-        for name, item in selected.items():
-            reveal = getattr(item, "get_secret_value", None)
-            if callable(reveal):
-                item = reveal()
-            if not isinstance(name, str) or not isinstance(item, str):
-                raise PlanError("a placed set holds string names and string values")
-            output.append((name, item))
-        return tuple(output)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -233,7 +211,7 @@ class Auth:
     _providers: AuthProviders = field(repr=False)
 
     def __init__(self) -> None:
-        raise TypeError("use scheme.static(), session_auth() or session_cookie()")
+        raise TypeError("use scheme.static(), session_auth() or session_scheme(...).configure()")
 
     @classmethod
     def _bind(cls, scheme: AuthScheme[Any], providers: AuthProviders) -> Auth:
@@ -330,13 +308,6 @@ def _binding_operations(
     output: list[Set[Any]] = []
     for placement in scheme.placements:
         slots: Any
-        if placement.many:
-            set_name = auth_cookie_set_name(scheme.diagnostic_name)
-            set_slot: ValueSlot[Any] | None = compiled.cookie_slots.get(set_name)
-            if set_slot is None:
-                raise PlanError(f"auth target is not declared: cookie set of {set_name}")
-            output.append(Set(set_slot, placement.pairs(value)))
-            continue
         if placement.location is AuthLocation.HEADER:
             slots = compiled.header_slots
         elif placement.location is AuthLocation.QUERY:

@@ -22,7 +22,9 @@ from eazy_sdk_browser.locators import any_of, css, last
 from eazy_sdk_browser.navigation import NavigationAware
 from eazy_sdk_browser.network import NetworkAware
 from eazy_sdk_browser.rich_text import RichTextAware
-from eazy_sdk_browser.state import BrowserCookie, StateAware
+from eazy_sdk_browser.state import StateAware
+
+from eazy_sdk.cookies import StoredCookie
 
 pytestmark = [pytest.mark.integration, pytest.mark.contract, pytest.mark.timeout(120)]
 
@@ -278,7 +280,7 @@ async def test_live_driver_contract(backend: str) -> None:
             expires = datetime.now(UTC) + timedelta(hours=1)
             await driver.add_cookies(
                 (
-                    BrowserCookie(
+                    StoredCookie(
                         "contract",
                         "yes",
                         domain="127.0.0.1",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from eazy_sdk import AsyncClient, Identity, bind
-from eazy_sdk_browser import BrowserLogin, browser_cookie_auth
+from eazy_sdk_browser import BrowserLogin
 
 from examples.mail.browser.session import (
     OPTIONS,
@@ -38,12 +38,9 @@ async def use_browser_sdk() -> tuple[int, str, list[int]]:
         browser = runtime.session_client(session)
         try:
             await MailboxApi(browser).inbox(options=OPTIONS)
-            auth = await browser_cookie_auth(
-                await session.state(browser),
-                MAIL_BEARER,
-                "mail_session",
-                domain="mail.example",
-            )
+            state = await session.state(browser)
+            token = next(cookie.value for cookie in state.cookies if cookie.name == "mail_session")
+            auth = MAIL_BEARER.static(token)
             async with mail_origin(runtime.site) as origin, AsyncClient.curl_cffi(
                 base_url=origin,
                 impersonate="chrome124",

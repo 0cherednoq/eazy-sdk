@@ -33,7 +33,7 @@ from eazy_sdk_accounts import (
 )
 from pydantic import BaseModel, SecretStr
 
-from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_auth, session_cookie
+from eazy_sdk.auth import Bearer, ExpiresAt, RefreshToken, session_auth
 from eazy_sdk.auth.session import (
     MemorySessionStore,
     SessionKey,
@@ -246,21 +246,11 @@ def registration(
 
 def test_documented_http_session_api_fingerprint_is_frozen_before_extraction() -> None:
     auth_parameters = inspect.signature(session_auth).parameters
-    cookie_parameters = inspect.signature(session_cookie).parameters
 
     assert tuple(auth_parameters) == (
         "session_model",
         "credentials",
         "session",
-        "service",
-        "store",
-        "identity",
-        "name",
-        "clock",
-    )
-    assert tuple(cookie_parameters) == (
-        "cookie_name",
-        "credentials",
         "service",
         "store",
         "identity",

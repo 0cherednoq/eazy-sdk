@@ -43,8 +43,9 @@ class FromCookie:
     """Use the value of one cookie this response sets as a model field's input.
 
     When the response sets the cookie more than once the last value wins, as it does in a
-    browser. Expiry, domain and the other attributes are not read here; a session that depends
-    on them goes through ``parse_session_cookie``.
+    browser. Expiry, domain and the other attributes are not read here: a cookie that has to
+    travel on is the business of ``Cookies(...)``, and this marker only reads a value the SDK
+    needs as data, such as a CSRF token to put into a form.
     """
 
     name: str

@@ -8,12 +8,12 @@
     }
   },
   "architecture/browser.mdx": {
-    "fingerprint": "sha256:63369c2924053739a15f966d3a4db6fbd57b03afb71dcd576169d3334399a6c6",
+    "fingerprint": "sha256:a6975ced5d40e406fbb355d09f5523d6172167f817ecf0ea7969b90032f125a5",
     "symbols": {
       "eazy_sdk_browser.AsyncBrowserClient": "sha256:ec7384ee5f60d84237ef9d943b069cba93b755e8c690d872edaf4bc7b0978373",
       "eazy_sdk_browser.BrowserOperation": "sha256:a4dcb935925ab21afa3f02bda5c81bc8024ebb2d794eb179e1c89c17f1da6400",
       "eazy_sdk_browser.BrowserProfile": "sha256:61f766edbea3a5fe68ad0b2584992ba5dd165ada0cfd24a81386133dd7bd1059",
-      "eazy_sdk_browser.BrowserState": "sha256:771edfb12459e5324d54e6855e1c0cdc9b3bb5abcd3ff5cfc233e822f3ae4c77"
+      "eazy_sdk_browser.BrowserState": "sha256:6e8f3702adce47894f9c2b1d2bcc99e02203c501500b37f051da5374b66f9b94"
     }
   },
   "architecture/extension-points.mdx": {
@@ -26,19 +26,19 @@
     }
   },
   "architecture/identity.mdx": {
-    "fingerprint": "sha256:771e520f024ee23a81fbdf38680f8740d97fb8f66ef350e0b60dfdf078ab2bab",
+    "fingerprint": "sha256:2e785feac5e2e97976d828215073ce255cf5dbd403dd2abca1c29ace497864f6",
     "symbols": {
       "eazy_sdk.AsyncRoot": "sha256:44cf586d971afbb639b46e6f4187bd465775c52a85468c4d00b74044062f65e7",
-      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.Identity": "sha256:4072058dbadf651d21b31fa2cddbc75d772f5543db854933a81b79d7e30cce48",
       "eazy_sdk.auth.session_auth": "sha256:303c50f1bf36c34d6b3ebbc8b901f2a64f155f2e7b576ebd53f8e862af02d0fc"
     }
   },
   "architecture/index.mdx": {
-    "fingerprint": "sha256:fd7c9194d3fc92f80736bc7044759a7c3a925ced36330d26784664acdcd2bef6",
+    "fingerprint": "sha256:c2f7b1033e941b5412f89dddeed3032fca90d4d18a63c2e8cc6af27df25f14c3",
     "symbols": {
       "eazy_sdk.AsyncRoot": "sha256:44cf586d971afbb639b46e6f4187bd465775c52a85468c4d00b74044062f65e7",
       "eazy_sdk.ClientConfig": "sha256:3186e8116acfa6c4b39f87f6a4811d6ed70002433bf46832d30caf58d45c890c",
-      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.Identity": "sha256:4072058dbadf651d21b31fa2cddbc75d772f5543db854933a81b79d7e30cce48",
       "eazy_sdk.Serialization": "sha256:a477e233bb1a2a600192f72c40d9cfe276e820102cc1847e8bb6c7e6e0c33b3a"
     }
   },
@@ -89,6 +89,16 @@
       "eazy_sdk.auth.CookieScheme": "sha256:6e1f700d741ea20847e0ee521d6460b3c83d003cc851f654a2d9a8bc2baff07f"
     }
   },
+  "guide/auth/cookies-session.mdx": {
+    "fingerprint": "sha256:9bd88bfe3cfdd65bc956a74024813db3ebd3476598837539957de805570d8878",
+    "symbols": {
+      "eazy_sdk.auth.Cookies": "sha256:874f2d82158dc9a2df20d6f73ec33206ef0ab470def273c81add420f4f84aa6e",
+      "eazy_sdk.cookies.CookieJar": "sha256:db26ba3ab2dec8c929de1c854449a8c443be7fa1b3f35499a05daf99602ab20b",
+      "eazy_sdk.cookies.CookieState": "sha256:5a98149d44962214bd72213d2d586ff47838b80aaa5fbbe05939558140f4921e",
+      "eazy_sdk.cookies.StoredCookie": "sha256:23331721ae54d21f971066387cd3da5fc03d2ecf06cc474c09c4b3646dde039b",
+      "eazy_sdk.identity.Identity": "sha256:4072058dbadf651d21b31fa2cddbc75d772f5543db854933a81b79d7e30cce48"
+    }
+  },
   "guide/auth/jwt.mdx": {
     "fingerprint": "sha256:e2fff75c3b7db2776393cf39d440eb20d820453e27b30febe997a2f938a562af",
     "symbols": {
@@ -104,10 +114,10 @@
     }
   },
   "guide/auth/placed.mdx": {
-    "fingerprint": "sha256:b781bd2376b3864711027021b2c00f6e24cbe82fe0c1782ce63171dbef2e6d88",
+    "fingerprint": "sha256:f2491c7e649811c0a3405651776e811e40c99fc508d6d4fce812f144c564f39e",
     "symbols": {
       "eazy_sdk.auth.Bearer": "sha256:6254d1e9553802ba25175c5b1e3ea104181a11e19b1f85046d78b547f14244cc",
-      "eazy_sdk.auth.Placed": "sha256:fec706579bc1944661086b7690cb5e2a899165dbe59b7e14f1ac6036bdaceff6",
+      "eazy_sdk.auth.Placed": "sha256:765ae29bd78a55620e87c4a4b5f95210e15c880380870bd0808c7cd4283d2b93",
       "eazy_sdk.auth.session_scheme": "sha256:8ff44c0bb3cca08deddc666775d19e013aae829d31368df0f45d9d2f763f36c2"
     }
   },
@@ -347,39 +357,39 @@
     }
   },
   "integrations/browser/browser-pool.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/browser/index.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/browser/login.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/browser/outcomes.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/browser/playwright.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/browser/pydoll.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "integrations/generators/openapi.mdx": {
@@ -442,15 +452,15 @@
     }
   },
   "reference/api/auth.mdx": {
-    "fingerprint": "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae",
+    "fingerprint": "sha256:1ce95a2ba327e0d664143429d31e644e9cb926a39f56981cb2b5f0c4f801b058",
     "symbols": {
-      "eazy_sdk.auth": "sha256:b48963b10b5fe4071f7a58b9b3c538c740e4aaae86b7edb69e4fc72199c01e05"
+      "eazy_sdk.auth": "sha256:f68fdc18b9ff13b75fb7691b71c58d88ec7f3ba20b79bc4ff61164bb70311d20"
     }
   },
   "reference/api/browser.mdx": {
-    "fingerprint": "sha256:aa410f13961d2079bd279edc38ab31518170961b492748534f1718e9dd004c46",
+    "fingerprint": "sha256:14265759c1e44b971e88726cdf78005b3dc2f750ac179c28c4abe11432d6dd35",
     "symbols": {
-      "eazy_sdk_browser": "sha256:749d1c0f175c8c6ec349ae417f40a287e441d13856b68a91e385439f10dbff12"
+      "eazy_sdk_browser": "sha256:89d1f6d73f18b963f05608248b01a7d692711995c66ee97c78a2a08fbde1ab7b"
     }
   },
   "reference/api/clients.mdx": {
@@ -529,9 +539,9 @@
     }
   },
   "reference/api/session.mdx": {
-    "fingerprint": "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae",
+    "fingerprint": "sha256:1ce95a2ba327e0d664143429d31e644e9cb926a39f56981cb2b5f0c4f801b058",
     "symbols": {
-      "eazy_sdk.auth": "sha256:b48963b10b5fe4071f7a58b9b3c538c740e4aaae86b7edb69e4fc72199c01e05"
+      "eazy_sdk.auth": "sha256:f68fdc18b9ff13b75fb7691b71c58d88ec7f3ba20b79bc4ff61164bb70311d20"
     }
   },
   "reference/api/signing.mdx": {
@@ -560,10 +570,10 @@
     }
   },
   "start/concepts.mdx": {
-    "fingerprint": "sha256:f0cc4b8392a733223058020faf2df208a90ecd1efbfe1258a2bf4e8ad75bf922",
+    "fingerprint": "sha256:337b9d5ffc11fb455e743f9695ff536419b08f94bbf0d6e0c5e67b6c965b9c89",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
-      "eazy_sdk.Identity": "sha256:4fba9b9a3a6eb9e2662f7c16c88b8edc3c12dcb21632864ab1d8795c7166c19c",
+      "eazy_sdk.Identity": "sha256:4072058dbadf651d21b31fa2cddbc75d772f5543db854933a81b79d7e30cce48",
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.root": "sha256:afd5e3a108e2a7a1549e191eb1f731070fb813cb9338e7a51c93594d2337a167"
     }

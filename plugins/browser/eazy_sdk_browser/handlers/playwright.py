@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Literal, Self
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityLevel, TransportError
 from eazy_sdk_browser.fetch import PageFetchError, PageReply, PageRequest
 from eazy_sdk_browser.handlers._page_fetch import FETCH_SCRIPT, parse_reply, request_spec
@@ -37,7 +38,7 @@ from eazy_sdk_browser.handlers.capture import DEFAULT_CAPTURE, CapturePolicy
 from eazy_sdk_browser.locators import Locator, Pick
 from eazy_sdk_browser.network import ResponseView
 from eazy_sdk_browser.profile import BrowserProfile
-from eazy_sdk_browser.state import BrowserCookie, BrowserState, Origin
+from eazy_sdk_browser.state import BrowserState, Origin
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -278,7 +279,7 @@ class PlaywrightDriver:
         """Куки и localStorage контекста целиком — то, что делает вход «уже бывшим»."""
         return from_storage_state(await self._page.context.storage_state())
 
-    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None:
+    async def add_cookies(self, cookies: tuple[StoredCookie, ...]) -> None:
         """Положить куки в контекст страницы — сразу и один раз.
 
         localStorage сюда не входит: в живой контекст его можно положить только
@@ -405,7 +406,7 @@ def to_storage_state(state: BrowserState) -> StorageState:
         raw: StorageStateCookie = {
             "name": cookie.name,
             "value": cookie.value,
-            "domain": cookie.domain,
+            "domain": _scope_out(cookie),
             "path": cookie.path or "/",
             # -1 — сессионная кука: так её отдаёт и принимает playwright.
             "expires": cookie.expires_at.timestamp() if cookie.expires_at else -1,
@@ -434,13 +435,25 @@ def from_storage_state(raw: Mapping[str, Any]) -> BrowserState:
     )
 
 
-def _cookie_in(raw: Mapping[str, Any]) -> BrowserCookie:
+def _scope_in(domain: str) -> tuple[str, bool]:
+    """Домен браузера в терминах библиотеки: точка впереди значит «и поддомены»."""
+    return domain.lstrip(".").lower(), not domain.startswith(".")
+
+
+def _scope_out(cookie: StoredCookie) -> str:
+    """Обратно: без точки браузер отдаст куку только этому хосту."""
+    return cookie.domain if cookie.host_only else f".{cookie.domain}"
+
+
+def _cookie_in(raw: Mapping[str, Any]) -> StoredCookie:
     """Кука playwright в терминах библиотеки. `expires == -1` — сессионная."""
     expires = raw.get("expires", -1)
-    return BrowserCookie(
+    domain, host_only = _scope_in(raw.get("domain", ""))
+    return StoredCookie(
         name=raw.get("name", ""),
         value=raw.get("value", ""),
-        domain=raw.get("domain", ""),
+        domain=domain,
+        host_only=host_only,
         path=raw.get("path", "/"),
         expires_at=datetime.fromtimestamp(expires, tz=UTC) if expires and expires > 0 else None,
         secure=bool(raw.get("secure", False)),
@@ -449,15 +462,12 @@ def _cookie_in(raw: Mapping[str, Any]) -> BrowserCookie:
     )
 
 
-def _cookie_out(cookie: BrowserCookie) -> SetCookieParam:
-    """Кука в терминах playwright. Без домена браузер её не примет — это отказ."""
-    if not cookie.domain:
-        msg = f"кука {cookie.name!r} без домена: браузеру некуда её положить"
-        raise ValueError(msg)
+def _cookie_out(cookie: StoredCookie) -> SetCookieParam:
+    """Кука в терминах playwright."""
     raw: SetCookieParam = {
         "name": cookie.name,
         "value": cookie.value,
-        "domain": cookie.domain,
+        "domain": _scope_out(cookie),
         "path": cookie.path or "/",
         "secure": cookie.secure,
         "httpOnly": cookie.http_only,

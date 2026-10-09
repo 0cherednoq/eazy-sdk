@@ -20,10 +20,11 @@ from eazy_sdk_browser.integrations.accounts import (
     from_session_data,
     to_session_data,
 )
-from eazy_sdk_browser.state import BrowserCookie, BrowserState, Origin, require_state
+from eazy_sdk_browser.state import BrowserState, Origin, require_state
 from eazy_sdk_browser.testing import FakeDriver, StatefulFakeDriver, StatelessLiar
 
 from eazy_sdk.auth.session import SessionKey, SessionRevision, StoredSession
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityMismatchError
 
 pytestmark = pytest.mark.unit
@@ -32,17 +33,18 @@ EXPIRES = datetime(2030, 1, 1, tzinfo=UTC)
 
 SAVED = BrowserState(
     cookies=(
-        BrowserCookie(
+        StoredCookie(
             name="sid",
             value="abc123",
-            domain=".mail.example",
+            domain="mail.example",
+            host_only=False,
             path="/",
             expires_at=EXPIRES,
             secure=True,
             http_only=True,
             same_site="Lax",
         ),
-        BrowserCookie(name="consent", value="1", domain=".mail.example"),
+        StoredCookie(name="consent", value="1", domain="mail.example", host_only=False),
     ),
     origins=(Origin(origin="https://mail.example", items=(("theme", "dark"),)),),
 )
@@ -92,8 +94,10 @@ def test_http_session_needs_domain_to_reach_browser() -> None:
 
     assert from_session_data(http_written).is_empty()
 
-    restored = from_session_data(http_written, domain=".mail.example")
-    assert restored.cookies == (BrowserCookie(name="sid", value="abc123", domain=".mail.example"),)
+    restored = from_session_data(http_written, domain="mail.example")
+    assert restored.cookies == (
+        StoredCookie(name="sid", value="abc123", domain="mail.example", host_only=False),
+    )
 
 
 # --- работа через хранилище -----------------------------------------------------------------

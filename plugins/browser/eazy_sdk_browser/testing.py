@@ -15,13 +15,14 @@ import asyncio
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityLevel
 from eazy_sdk_browser.driver import Element
 from eazy_sdk_browser.fetch import PageFetchError, PageReply, PageRequest
 from eazy_sdk_browser.locators import Locator
 from eazy_sdk_browser.network import ResponseView
 from eazy_sdk_browser.profile import BrowserProfile
-from eazy_sdk_browser.state import BrowserCookie, BrowserState
+from eazy_sdk_browser.state import BrowserState
 
 if TYPE_CHECKING:
     from eazy_sdk_browser.driver import LoadState
@@ -295,9 +296,9 @@ class FakeContext:
     """
 
     state: BrowserState = field(default_factory=BrowserState)
-    cookie_writes: list[tuple[BrowserCookie, ...]] = field(default_factory=list)
+    cookie_writes: list[tuple[StoredCookie, ...]] = field(default_factory=list)
 
-    def put_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None:
+    def put_cookies(self, cookies: tuple[StoredCookie, ...]) -> None:
         """Кука с тем же именем, доменом и путём заменяется, новая — дописывается."""
         fresh = {(cookie.name, cookie.domain, cookie.path): cookie for cookie in cookies}
         kept = tuple(
@@ -331,7 +332,7 @@ class StatefulFakeDriver(FakeDriver):
         await asyncio.sleep(0)
         return self.context.state
 
-    async def add_cookies(self, cookies: tuple[BrowserCookie, ...]) -> None:
+    async def add_cookies(self, cookies: tuple[StoredCookie, ...]) -> None:
         await asyncio.sleep(0)
         self.context.put_cookies(cookies)
         self.context.cookie_writes.append(cookies)

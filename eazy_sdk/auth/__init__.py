@@ -1,5 +1,7 @@
 """Public auth schemes, providers and typed session lifecycle."""
 
+from eazy_sdk.cookies import Cookies
+
 from .core import (
     ApiKeyScheme,
     Auth,
@@ -22,7 +24,6 @@ from .session_runtime import (
     ResolutionCycleError,
     SessionScheme,
     session_auth,
-    session_cookie,
     session_scheme,
 )
 
@@ -37,6 +38,7 @@ __all__ = [
     "Bearer",
     "BearerScheme",
     "CookieScheme",
+    "Cookies",
     "ExpiresAt",
     "Placed",
     "RefreshToken",
@@ -48,6 +50,5 @@ __all__ = [
     "all_of",
     "any_of",
     "session_auth",
-    "session_cookie",
     "session_scheme",
 ]

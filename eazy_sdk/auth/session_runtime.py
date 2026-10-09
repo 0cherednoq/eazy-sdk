@@ -37,7 +37,6 @@ from eazy_sdk.models import default_model_adapters
 from eazy_sdk.models.adapters import unroll_alias, unwrap_annotated
 from eazy_sdk.response import ResponseEnvelope
 
-from .cookies import HttpCookieSession, parse_session_cookie
 from .core import (
     AttributeSessionSelector,
     Auth,
@@ -59,7 +58,7 @@ class Bearer:
     prefix: str = "Bearer "
 
 
-type _PlacedLocation = Literal["query", "header", "cookie", "cookies"]
+type _PlacedLocation = Literal["query", "header"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,11 +70,13 @@ class Placed:
         class MailSession(BaseModel):
             token: Annotated[str, Placed.query("token")]
             email: Annotated[str, Placed.query("email", secret=False)]
-            cookies: Annotated[dict[str, str], Placed.cookies()]
 
     ``Bearer()`` is the same statement as ``Placed.header("Authorization", prefix="Bearer ")``.
     A session whose placed value is empty is not a session: it is acquired again rather than
     sent.
+
+    Cookies are not placed. A cookie the site sets travels by itself once the SDK declares
+    ``Cookies(...)``; a cookie the caller chooses is a ``Cookie[...]`` field of the operation.
     """
 
     location: _PlacedLocation
@@ -84,7 +85,7 @@ class Placed:
     secret: bool = True
 
     def __post_init__(self) -> None:
-        if self.location != "cookies" and not self.name:
+        if not self.name:
             raise ValueError(f"Placed.{self.location}(...) requires a name")
 
     @staticmethod
@@ -99,24 +100,10 @@ class Placed:
 
         return Placed("header", name, prefix, secret)
 
-    @staticmethod
-    def cookie(name: str, *, secret: bool = True) -> Placed:
-        """One cookie with a known name."""
-
-        return Placed("cookie", name, secret=secret)
-
-    @staticmethod
-    def cookies() -> Placed:
-        """Every pair of a ``Mapping[str, str]`` field, each as a cookie of its own."""
-
-        return Placed("cookies")
-
     @property
     def destination(self) -> tuple[str, str]:
         """Where the value lands, as two placements must not land in the same place."""
 
-        if self.location == "cookies":
-            return ("cookies", "")
         return (self.location, self.name.casefold() if self.location == "header" else self.name)
 
 
@@ -221,9 +208,26 @@ class SessionProvider[TCredentials, TSession, TSdk]:
     def can_refresh(self) -> bool:
         return self.lifecycle.can_refresh
 
+    def _require_carrier(self) -> None:
+        """A session has to reach the request somehow: through a placement or through cookies.
+
+        A model that places nothing is the session of a site that keeps everything in cookies,
+        which is known only once the service is bound. Anywhere else it is a model whose
+        markers were forgotten, and it would send nothing at all.
+        """
+
+        if self.config.scheme.placements or self.lifecycle.carries_cookies:
+            return
+        raise SessionConfigurationError(
+            f"session {self.config.scheme.diagnostic_name!r} places nothing into the request: "
+            "mark the fields a request carries with Bearer() or Placed.query/header, or declare "
+            "Cookies(...) on the service when the site keeps the session in cookies"
+        )
+
     async def resolve(
         self, graph: ResolutionGraph | None = None, operation_id: str = "operation"
     ) -> ResolvedAuth[TSession]:
+        self._require_carrier()
         return self._resolved_from_record(
             await self._lifecycle_call(self.lifecycle.resolve(graph, operation_id))
         )
@@ -245,6 +249,7 @@ class SessionProvider[TCredentials, TSession, TSdk]:
         )
 
     async def adopt(self, value: TSession) -> ResolvedAuth[TSession]:
+        self._require_carrier()
         return self._resolved_from_record(await self._lifecycle_call(self.lifecycle.adopt(value)))
 
     async def refresh_execution(
@@ -342,11 +347,6 @@ class _SessionModel:
                     expires.append((model_field.name, marker))
         if len(bearer) > 1:
             raise SessionConfigurationError("session model must declare exactly one Bearer field")
-        if not placements:
-            raise SessionConfigurationError(
-                "session model places nothing into the request: declare exactly one Bearer "
-                "field, or Placed.query/header/cookie/cookies on the fields a request carries"
-            )
         _refuse_colliding_placements(model, placements)
         if len(refresh) > 1:
             raise SessionConfigurationError(
@@ -420,14 +420,11 @@ class _SessionModel:
             cast(ValueValidator[T], self.parse),
             tuple(
                 AuthPlacement(
-                    AuthLocation.COOKIE
-                    if placed.location == "cookies"
-                    else AuthLocation(placed.location),
+                    AuthLocation(placed.location),
                     placed.name,
                     AttributeSessionSelector(name),
                     placed.prefix,
                     placed.secret,
-                    placed.location == "cookies",
                 )
                 for name, placed in self.placements
             ),
@@ -449,19 +446,16 @@ def _refuse_colliding_placements(model: type[object], placements: list[tuple[str
         other = taken.setdefault(placed.destination, name)
         if other == name:
             continue
-        where = (
-            "a cookie set" if placed.location == "cookies" else f"{placed.location} {placed.name!r}"
-        )
         raise SessionConfigurationError(
-            f"{model.__name__}.{other} and {model.__name__}.{name} are both placed as {where}; "
-            "one place in the request takes one field"
+            f"{model.__name__}.{other} and {model.__name__}.{name} are both placed as "
+            f"{placed.location} {placed.name!r}; one place in the request takes one field"
         )
 
 
 def _refuse_impossible_placement(
     model: type[object], name: str, annotation: object, placed: Placed
 ) -> None:
-    """A set is a mapping and a single value is not: the other way round can never be sent."""
+    """One place in the request takes one value: a collection can never be sent there."""
 
     annotation, _ = unwrap_annotated(unroll_alias(annotation))
     members = (
@@ -470,19 +464,11 @@ def _refuse_impossible_placement(
         else (annotation,)
     )
     origins = {get_origin(member) or member for member in members if member is not type(None)}
-    is_mapping = bool(origins) and all(
-        isinstance(origin, type) and issubclass(origin, Mapping) for origin in origins
-    )
     is_collection = any(
         isinstance(origin, type) and issubclass(origin, Mapping | list | tuple | set | frozenset)
         for origin in origins
     )
-    if placed.location == "cookies" and not is_mapping:
-        raise SessionConfigurationError(
-            f"Placed.cookies() on {model.__name__}.{name}: the field must be a "
-            "Mapping[str, str], every pair of which becomes a cookie"
-        )
-    if placed.location != "cookies" and is_collection:
+    if is_collection:
         raise SessionConfigurationError(
             f"Placed.{placed.location}({placed.name!r}) on {model.__name__}.{name}: one place "
             "in the request takes one value, not a collection"
@@ -721,83 +707,3 @@ def _validate_async_service_method(
             f"auth service {service_name}.{method_name} must accept "
             f"({arguments}) as positional arguments"
         ) from None
-
-
-@dataclass(slots=True)
-class _CookieService[TCredentials, TResult]:
-    cookie_name: str
-    credentials: TCredentials = field(repr=False)
-    service: AuthService[TCredentials, TResult]
-    clock: Callable[[], datetime]
-
-    async def acquire(
-        self,
-        credentials: TCredentials,
-        context: AuthFlowContext[None],
-    ) -> HttpCookieSession:
-        await self.service.acquire(credentials, context)
-        return self._parse(context)
-
-    async def refresh(
-        self,
-        _session: HttpCookieSession,
-        context: AuthFlowContext[None],
-    ) -> HttpCookieSession:
-        await self.service.acquire(self.credentials, context)
-        return self._parse(context)
-
-    def _parse(self, context: AuthFlowContext[None]) -> HttpCookieSession:
-        try:
-            return parse_session_cookie(
-                context.responses,
-                self.cookie_name,
-                now=self.clock(),
-            )
-        except PlanError as exc:
-            raise SessionConfigurationError(str(exc)) from exc
-
-
-def session_cookie[TCredentials, TResult](
-    cookie_name: str,
-    *,
-    credentials: TCredentials,
-    service: AuthService[TCredentials, TResult],
-    store: SessionStore[HttpCookieSession] | None = None,
-    identity: str | None = None,
-    name: str = "session-cookie",
-    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-) -> Auth:
-    """Configure a transport-owned cookie session from staged Set-Cookie responses."""
-
-    if not cookie_name:
-        raise ValueError("cookie_name cannot be empty")
-    scheme: AuthScheme[HttpCookieSession] = AuthScheme(
-        name,
-        lambda value: (
-            value
-            if isinstance(value, HttpCookieSession)
-            else (_ for _ in ()).throw(TypeError("invalid cookie session"))
-        ),
-        (
-            AuthPlacement(
-                AuthLocation.COOKIE,
-                cookie_name,
-                AttributeSessionSelector("value"),
-            ),
-        ),
-    )
-    wrapped = _CookieService(cookie_name, credentials, service, clock)
-    config = SessionAuth(
-        scheme=scheme,
-        key=SessionKey(f"cookie:{identity or 'client'}"),
-        sdk_factory=unbound_sdk,
-        store=store or MemorySessionStore[HttpCookieSession](),
-        validate=lambda value: value.is_active(clock()),
-        credentials=credentials,
-        acquire=wrapped,
-        refresh=wrapped,
-        identity=AuthProviderIdentity(f"cookie:{identity or name}"),
-    )
-    providers = AuthProviders()
-    providers.register(scheme, SessionProvider(config))
-    return Auth._bind(scheme, providers)

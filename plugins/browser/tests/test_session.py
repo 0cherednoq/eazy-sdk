@@ -18,7 +18,6 @@ from eazy_sdk_browser import (
     Browser,
     BrowserCallOptions,
     BrowserClientConfig,
-    BrowserCookie,
     BrowserDeclarationError,
     BrowserLogin,
     BrowserLoginContext,
@@ -42,6 +41,7 @@ from eazy_sdk.auth.session import (
     SessionRevision,
     StoredSession,
 )
+from eazy_sdk.cookies import StoredCookie
 from eazy_sdk.handlers import CapabilityMismatchError
 
 pytestmark = pytest.mark.unit
@@ -59,11 +59,13 @@ class SessionExpiredError(PageError):
     """Почта увела на вход."""
 
 
-def sid(value: str, *, lifetime: timedelta = timedelta(days=1)) -> BrowserCookie:
-    return BrowserCookie(name="sid", value=value, domain=".mail.example", expires_at=NOW + lifetime)
+def sid(value: str, *, lifetime: timedelta = timedelta(days=1)) -> StoredCookie:
+    return StoredCookie(
+        name="sid", value=value, domain="mail.example", host_only=False, expires_at=NOW + lifetime
+    )
 
 
-def holding(*cookies: BrowserCookie) -> FakeContext:
+def holding(*cookies: StoredCookie) -> FakeContext:
     return FakeContext(BrowserState(cookies=cookies))
 
 
@@ -193,7 +195,9 @@ class ForgedLogin:
     async def acquire(self, credentials: Credentials, context: BrowserLoginContext) -> BrowserState:
         _ = credentials
         self.calls += 1
-        state = BrowserState(cookies=(BrowserCookie(self.cookie, "forged", ".mail.example"),))
+        state = BrowserState(
+            cookies=(StoredCookie(self.cookie, "forged", "mail.example", host_only=False),)
+        )
         cast("StatefulFakeDriver", context.client.driver).context.put_cookies(state.cookies)
         return state
 
@@ -293,7 +297,7 @@ async def test_ensure_skips_the_write_when_the_context_already_holds_a_valid_ses
     ids=["no-cookie", "expired-cookie"],
 )
 async def test_ensure_writes_when_the_context_session_is_not_valid(
-    present: tuple[BrowserCookie, ...],
+    present: tuple[StoredCookie, ...],
 ) -> None:
     context = holding(*present)
     mail = session_of(EntranceLogin(), await stored("s7"))
