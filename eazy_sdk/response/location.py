@@ -42,7 +42,7 @@ from eazy_sdk.response.match import Predicate, _label_of
 if TYPE_CHECKING:
     from eazy_sdk.response.cases import ResponseContext
 
-__all__ = ["Location", "ResolvedLocation", "resolved_location"]
+__all__ = ["Location", "LocationQuery", "ResolvedLocation", "resolved_location"]
 
 type LocationPart = str | re.Pattern[str]
 type LocationQueryValue = str | re.Pattern[str] | EllipsisType
@@ -142,8 +142,33 @@ def _part_text(value: LocationPart) -> str:
     return f"matches {value.pattern!r}" if isinstance(value, re.Pattern) else repr(value)
 
 
+@dataclass(frozen=True, slots=True)
+class LocationQuery:
+    """One query parameter of the target, as the source of a model field.
+
+    Written ``Location.query("fail")``. A field that cannot be ``None`` makes the parameter a
+    criterion: a target without it is another case. What the parameter must equal is said by
+    ``Const(...)`` beside it, the way any other field states its constant.
+    """
+
+    name: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise PlanError(f"Location.query(...) names a parameter with {self.name!r}")
+
+    @property
+    def label(self) -> str:
+        return f"location query {self.name!r} is present"
+
+
 class Location:
-    """The parts of the ``Location`` header a case expects; every one of them is optional."""
+    """The parts of the ``Location`` header a case expects; every one of them is optional.
+
+    On a model field, ``Annotated[str, Location(path="/inbox*")]`` is both the criterion and the
+    source: the case claims a response that points there, and the field receives the absolute
+    address.
+    """
 
     __slots__ = ("_contains", "_host", "_host_test", "_path", "_path_test", "_query")
 
@@ -167,6 +192,12 @@ class Location:
         self._path_test = (
             _glob(self._path, ignore_case=False) if isinstance(self._path, str) else self._path
         )
+
+    @staticmethod
+    def query(name: str) -> LocationQuery:
+        """The value of one query parameter of the target, as the source of a model field."""
+
+        return LocationQuery(name)
 
     @property
     def label(self) -> str:

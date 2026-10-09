@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from eazy_sdk.exceptions import HeaderValidationError
-from eazy_sdk.models import ModelAdapterRegistry, UnsupportedModelTypeError
 
 if TYPE_CHECKING:
     from eazy_sdk.response.normalized import NormalizedResponse
@@ -65,60 +64,6 @@ class FromHeader:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("response header name cannot be empty")
-
-
-def _apply_header_sources(
-    model: type[object],
-    value: object,
-    headers: Headers,
-    models: ModelAdapterRegistry,
-) -> object:
-    """Merge declared exact header sources into a Pydantic model input mapping."""
-
-    try:
-        fields = models.fields(model)
-    except UnsupportedModelTypeError:
-        return value
-
-    declared: list[tuple[str, str, bool, FromHeader]] = []
-    for field in fields:
-        sources = tuple(item for item in field.metadata if isinstance(item, FromHeader))
-        if len(sources) > 1:
-            raise HeaderValidationError(
-                f"Response field {field.name!r} declares multiple FromHeader sources"
-            )
-        if sources:
-            declared.append(
-                (
-                    field.name,
-                    field.validation_name or field.name,
-                    field.required,
-                    sources[0],
-                )
-            )
-    if not declared:
-        return value
-    if not isinstance(value, Mapping):
-        raise HeaderValidationError(
-            "A response model with FromHeader fields requires a JSON object body"
-        )
-
-    merged = dict(value)
-    for field_name, input_name, required, source in declared:
-        merged.pop(field_name, None)
-        if input_name != field_name:
-            merged.pop(input_name, None)
-
-        values = headers.getall(source.name)
-        if len(values) > 1:
-            raise HeaderValidationError(f"Response header {source.name!r} occurs more than once")
-        if values:
-            merged[input_name] = values[0]
-            continue
-
-        if required:
-            raise HeaderValidationError(f"Required response header {source.name!r} is missing")
-    return merged
 
 
 @dataclass(frozen=True)

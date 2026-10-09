@@ -34,9 +34,10 @@ from eazy_sdk.core.kernel import (
 from eazy_sdk.models import ModelAdapterRegistry
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
-from .headers import Headers, _apply_header_sources
-from .markers import declaration_of, payload_of, tags_of
+from .headers import Headers
+from .markers import criteria_of, declaration_of, payload_of
 from .normalized import NormalizedResponse, cast_headers
+from .sources import apply_response_sources
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,6 +371,21 @@ class Html[T]:
 
 
 @dataclass(frozen=True, slots=True)
+class HeaderModel[T]:
+    """A model every field of which is read from around the body; the body itself is not read.
+
+    The shape of a response that says everything in its headers: a redirect whose target is the
+    outcome, a ``201`` that only names what it created. A model whose fields all carry
+    ``Location``, ``FromHeader`` or ``FromCookie`` is read this way without being told to.
+    """
+
+    model: type[T]
+    media_type: str | None = None
+    when: ResponseCondition | None = None
+    accept: Callable[[T], bool] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Extracted[T]:
     model: type[T]
     using: ResponseExtractor
@@ -413,7 +429,9 @@ class Empty:
     when: ResponseCondition | None = None
 
 
-type ResponseRepresentation[T] = Json[T] | Html[T] | Extracted[T] | Parsed[T] | Text | Bytes | Empty
+type ResponseRepresentation[T] = (
+    Json[T] | Html[T] | HeaderModel[T] | Extracted[T] | Parsed[T] | Text | Bytes | Empty
+)
 type ResponseCondition = Callable[[ResponseContext[object]], bool]
 
 
@@ -776,28 +794,35 @@ class _CaseReading:
             return
         self.attempted.append(model.__name__)
         self.attempted_types.append(model)
-        decoder: ResponseParser | ResponseExtractor
-        if isinstance(representation, Json | Html | Extracted):
-            extractor = representation.extractor
-            extractor_session = self.extractor_sessions.get(id(extractor))
-            if extractor_session is None:
-                extractor_session = extractor.bind(context)
-                self.extractor_sessions[id(extractor)] = extractor_session
-            primitive = extractor_session.extract(model)
+        decoder: ResponseParser | ResponseExtractor | None
+        result: ParseAttempt[object]
+        if isinstance(representation, Json | Html | Extracted | HeaderModel):
+            primitive: ParseAttempt[object]
+            if isinstance(representation, HeaderModel):
+                # Nothing of the body is read: every field comes from around it.
+                primitive = ParsedValue({})
+                decoder = None
+            else:
+                extractor = representation.extractor
+                extractor_session = self.extractor_sessions.get(id(extractor))
+                if extractor_session is None:
+                    extractor_session = extractor.bind(context)
+                    self.extractor_sessions[id(extractor)] = extractor_session
+                primitive = extractor_session.extract(model)
+                decoder = extractor
             if isinstance(primitive, ParsedValue):
                 try:
-                    sourced = _apply_header_sources(
-                        model,
-                        primitive.value,
-                        context.headers,
-                        context.models,
+                    sourced = apply_response_sources(
+                        model, primitive.value, context, context.models
                     )
-                    result: ParseAttempt[object] = ParsedValue(context.models.load(model, sourced))
+                    if isinstance(sourced, NoMatch):
+                        # A source that states which response this is said it is another one.
+                        return
+                    result = ParsedValue(context.models.load(model, sourced))
                 except Exception as exc:
                     result = Malformed(exc)
             else:
                 result = primitive
-            decoder = extractor
         else:
             parser = representation.parser
             parser_session = self.parser_sessions.get(id(parser))
@@ -929,9 +954,9 @@ def _specificity(case: ResponseCase[object]) -> tuple[int, int, int, int]:
 def _criterion_of(case: ResponseCase[object]) -> object | None:
     """What the case states beyond status and media, or ``None`` when it states nothing.
 
-    Three spellings reach here, and they rank the same because they answer the same question:
-    ``when=`` on the case, decided before parsing, and ``accept=`` or the tags the model
-    declares, decided after it.
+    Four spellings reach here, and they rank the same because they answer the same question:
+    ``when=`` on the case, decided before parsing, and ``accept=``, the tags the model declares
+    or the ``Location`` its fields are read from, decided after it.
     """
 
     if case.condition is not None:
@@ -939,8 +964,8 @@ def _criterion_of(case: ResponseCase[object]) -> object | None:
     accept: object | None = getattr(case.response, "accept", None)
     if accept is not None:
         return accept
-    tags = tags_of(getattr(case.response, "model", None))
-    return tags or None
+    criteria = criteria_of(getattr(case.response, "model", None))
+    return criteria or None
 
 
 def _status_rank(selector: StatusSelector) -> int:

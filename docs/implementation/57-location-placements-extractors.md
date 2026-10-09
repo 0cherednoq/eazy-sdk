@@ -1,7 +1,7 @@
 # Фаза 57. `Location`, размещения на модели сессии, экстракторы не-JSON
 
 Статус: план утверждён 2026-10-09 (владелец: «обязательность на 3xx оставляем, начинай с
-57.1»); 57.1 сделан, см. §9. Gates — в
+57.1»); 57.1 и 57.2 сделаны, см. §9. Gates — в
 `STATUS.md`. Зависит от фазы 53 (кейсы ответа, `when=`, арбитраж), фазы 54 (`Const`/`Payload`,
 проверки при импорте) и фазы 50 (маркеры-`Annotated`). Один релиз: `0.2.0a10`.
 
@@ -105,8 +105,8 @@ object body»), а у `302` тело — HTML-заглушка или пусто
 | Модуль | Что меняется |
 |---|---|
 | `eazy_sdk/response/location.py` (новый) | `Location` (шаблон, предикат, маркер поля), `Location.query(name)`, разбор и разрешение адреса, глоб |
-| `eazy_sdk/response/sources.py` (новый) | общее семейство «источник поля из ответа»: `FromHeader` переезжает сюда, `+FromCookie`; `apply_response_sources` вместо `_apply_header_sources` |
-| `eazy_sdk/response/headers.py` | остаются `Headers`, `ResponseHeader`; `FromHeader` реэкспортируется без изменения поведения |
+| `eazy_sdk/response/sources.py` (новый) | общее семейство «источник поля из ответа»: `+FromCookie`, `apply_response_sources` вместо `_apply_header_sources`, `is_header_model` |
+| `eazy_sdk/response/headers.py` | `Headers`, `ResponseHeader`, `FromHeader` остаются на месте; `_apply_header_sources` удалён |
 | `eazy_sdk/response/cases.py` | представление `HeaderModel[T]`; ветка в `_CaseReading.read`; `_criterion_of` видит `Location` |
 | `eazy_sdk/response/markers.py` | `ModelDeclaration` дополняется источниками и критериями `Location` |
 | `eazy_sdk/response/_mapping.py` | вывод `HeaderModel` в `representation()`; D-57-01…04 в `validate_responses`; `has_criterion` |
@@ -198,8 +198,9 @@ Location.query(name: str)      # источник: значение одного
 
 1. **Маркер поля.** `Annotated[str, Location(...)]` — поле получает абсолютный адрес, шаблон
    служит критерием. `Annotated[str, Location.query("x")]` — поле получает первое значение
-   параметра; `list[str]` — все значения. Обязательное поле без значения — `NoMatch`;
-   необязательное (`str | None` или с умолчанием) критерием не является.
+   параметра; `list[str]` — все значения. Поле, тип которого не допускает `None`, — критерий:
+   без значения это `NoMatch`. Поле с типом `... | None` критерием не является: оно заполняется,
+   когда цель подходит, и остаётся пустым, когда нет. Умолчание поля на это не влияет.
 2. **Предикат.** `Location(...)` вызывается как `ResponseCondition`, годится в `when=` любого
    представления и сочетается с `Predicate` через `&`, `|`, `~`.
 3. **Проверка значения.** Равенство параметра константе пишется существующим `Const`, как в
@@ -488,6 +489,10 @@ class MailPage(BaseModel):
 | 2026-10-09 | 57.1 | **Отклонение от исходной редакции.** План утверждал, что `302` доходит до операции как обычный ответ. Это неверно: редиректы ведёт ядро (`decide_response`), и при бюджете 0 ответ с `Location` заканчивался `RedirectLimitError` до просмотра кейсов. Добавлено правило §3.4a; §0.7, §1.1, §3.1, §11 исправлены. |
 | 2026-10-09 | 57.1 | **Отклонение.** `Location` экспортирован только из `eazy_sdk.response`: в корне `eazy_sdk` ровно 40 имён, а `test_phase14_public_api` и `test_phase52_pagination` держат бюджет `<= 40`. Поднимать бюджет — решение владельца (§10). |
 | 2026-10-09 | 57.1 | В блоках §3.7 и §3.8 убраны строки импорта ещё не существующих `Placed` и `Regex`: `test_documented_eazy_sdk_imports_resolve_to_real_symbols` проверяет python-блоки планов. Вернуть в 57.3 и 57.4. |
+| 2026-10-09 | 57.2 | **Отклонение.** Критерием считается поле, тип которого не допускает `None`; умолчание не учитывается (§3.4 исправлен). Причина: `declaration_of` читает модель по аннотациям без реестра адаптеров и умолчаний не видит, а правило должно быть одним и для ранга, и для чтения. |
+| 2026-10-09 | 57.2 | **Отклонение.** `FromHeader` не переезжал: остался в `headers.py`, `sources.py` его импортирует. Перенос дал бы только лишний диф. |
+| 2026-10-09 | 57.2 | Кейсов на 3xx без критерия в существующих тестах не нашлось: до 57.1 объявить такой кейс было нельзя, так что D-57-01 ничего не ломает. |
+| 2026-10-09 | 57.2 | done. `sources.py`, `HeaderModel`, `LocationQuery`, `criteria_of`, D-57-01…04; `tests/unit/test_phase57_header_model.py` (31 тест, четыре бэкенда). `uv run pytest -q` — 1831 passed, 11 skipped; `uv run mypy` — 507 файлов без замечаний; `uv run ruff check` — чисто. |
 | 2026-10-09 | 57.1 | done. `eazy_sdk/response/location.py`, `Responses.declares`, `redirect_declared`; `tests/unit/test_phase57_location.py` (47 тестов). Гейты — в `STATUS.md`. `Location.query(...)` как источник поля отложен в 57.2, где он начинает читаться. |
 
 ---

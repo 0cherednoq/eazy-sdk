@@ -42,7 +42,19 @@ from typing import Any, Literal, Union, get_args, get_origin
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.models.adapters import unroll_alias, unwrap_annotated
 
-__all__ = ["Const", "ModelDeclaration", "Payload", "PayloadField", "Tag", "payload_of", "tags_of"]
+from .location import Location, LocationQuery
+
+__all__ = [
+    "Const",
+    "LocationField",
+    "ModelDeclaration",
+    "Payload",
+    "PayloadField",
+    "Tag",
+    "criteria_of",
+    "payload_of",
+    "tags_of",
+]
 
 type TagValue = str | int | float | bool | None
 
@@ -121,11 +133,27 @@ class PayloadField:
 
 
 @dataclass(frozen=True, slots=True)
+class LocationField:
+    """One field that states where the response points, and so which response it is.
+
+    Only a field that cannot be ``None`` is recorded here: one that can is filled when the target
+    fits and left empty when it does not, which tells no response from another.
+    """
+
+    name: str
+    source: Location | LocationQuery
+
+    def __repr__(self) -> str:
+        return f"<{self.name}: {self.source.label}>"
+
+
+@dataclass(frozen=True, slots=True)
 class ModelDeclaration:
     """Everything one model class says about itself, read once."""
 
     tags: tuple[Tag, ...] = ()
     payload: PayloadField | None = None
+    locations: tuple[LocationField, ...] = ()
 
 
 _EMPTY = ModelDeclaration()
@@ -159,6 +187,13 @@ def tags_of(model: object) -> tuple[Tag, ...]:
     return declaration_of(model).tags
 
 
+def criteria_of(model: object) -> tuple[Tag | LocationField, ...]:
+    """Everything a model states that narrows the responses its case claims, or ``()``."""
+
+    declaration = declaration_of(model)
+    return (*declaration.tags, *declaration.locations)
+
+
 def payload_of(model: object) -> PayloadField | None:
     """The field a model marks as the operation's result, or ``None`` when it marks none."""
 
@@ -169,10 +204,20 @@ def _read_declaration(model: type) -> ModelDeclaration:
     hints = typing.get_type_hints(model, include_extras=True)
     tags: list[Tag] = []
     payloads: list[PayloadField] = []
+    locations: list[LocationField] = []
+    patterns: list[str] = []
     for name, hint in hints.items():
         declared, metadata = unwrap_annotated(unroll_alias(hint))
         if any(isinstance(item, Payload) for item in metadata):
             payloads.append(PayloadField(name, declared))
+        for item in metadata:
+            if not isinstance(item, Location | LocationQuery):
+                continue
+            _refuse_impossible_location_field(model, name, declared, item)
+            if isinstance(item, Location):
+                patterns.append(name)
+            if not _admits_none(declared):
+                locations.append(LocationField(name, item))
         constants = [item for item in metadata if isinstance(item, Const)]
         if len(constants) > 1:
             raise PlanError(
@@ -192,7 +237,44 @@ def _read_declaration(model: type) -> ModelDeclaration:
             f"{model.__name__} declares Payload on {len(payloads)} fields: {names}; "
             "an operation returns one of them"
         )
-    return ModelDeclaration(tuple(tags), payloads[0] if payloads else None)
+    if len(patterns) > 1:
+        raise PlanError(
+            f"{model.__name__} declares a Location pattern on {len(patterns)} fields: "
+            f"{', '.join(patterns)}; a model states one, and reads the other parts of the target "
+            "with Location.query(...)"
+        )
+    return ModelDeclaration(tuple(tags), payloads[0] if payloads else None, tuple(locations))
+
+
+def _admits_none(annotation: object) -> bool:
+    if annotation is None or annotation is type(None):
+        return True
+    if get_origin(annotation) is Union or get_origin(annotation) is UnionType:
+        return any(_admits_none(unroll_alias(member)) for member in get_args(annotation))
+    return False
+
+
+def _refuse_impossible_location_field(
+    model: type, name: str, annotation: object, source: Location | LocationQuery
+) -> None:
+    """A target is text: a field of another type could never be filled from it."""
+
+    members = (
+        get_args(annotation)
+        if get_origin(annotation) is Union or get_origin(annotation) is UnionType
+        else (annotation,)
+    )
+    accepted: tuple[object, ...] = (str, type(None), None, Any)
+    if isinstance(source, LocationQuery):
+        accepted = (*accepted, list[str])
+    if all(member in accepted for member in members):
+        return
+    takes = "str or list[str]" if isinstance(source, LocationQuery) else "str"
+    marker = "Location.query(...)" if isinstance(source, LocationQuery) else "Location(...)"
+    raise PlanError(
+        f"{marker} on {model.__name__}.{name}: the field takes {takes}, optionally None, "
+        f"not {_annotation_text(annotation)}"
+    )
 
 
 class _Nothing:

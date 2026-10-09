@@ -23,6 +23,7 @@ from .cases import (
     Empty,
     Error,
     Extracted,
+    HeaderModel,
     Html,
     Json,
     Parsed,
@@ -33,9 +34,10 @@ from .cases import (
     Success,
     Text,
 )
-from .markers import payload_of, tags_of
+from .markers import criteria_of, payload_of
+from .sources import is_header_model
 
-_REPRESENTATIONS = (Json, Html, Extracted, Parsed, Text, Bytes, Empty)
+_REPRESENTATIONS = (Json, Html, HeaderModel, Extracted, Parsed, Text, Bytes, Empty)
 _ERROR_BODIES = (type, *_REPRESENTATIONS)
 """What may stand as the body half of an ``(body, factory)`` error entry."""
 
@@ -83,8 +85,9 @@ def representation(
     """The representation a bare value stands for; explicit representations pass through.
 
     ``None`` is an empty body, ``bytes`` and ``str`` the raw body, a model with selector
-    metadata is a document, any other model is JSON. Which of the last two applies is decided
-    by the model, never declared at the operation.
+    metadata is a document, a model every field of which is read from around the body is read
+    without it, any other model is JSON. Which of the last three applies is decided by the
+    model, never declared at the operation.
     """
 
     if spec is None:
@@ -99,6 +102,8 @@ def representation(
 
     if is_document_model(spec, models):
         return Html(cast(type[Any], spec))
+    if is_header_model(spec, models):
+        return HeaderModel(cast(type[Any], spec))
     # Anything else the model registry can load: a model class, ``list[Model]``, a union.
     return Json(cast(type[Any], spec), unwrap=None if error else unwrap)
 
@@ -322,6 +327,14 @@ def validate_responses(
     cases = (*responses.cases, *((fallback,) if fallback is not None else ()))
     for case in cases:
         model = getattr(case.response, "model", None)
+        # Asking for the criterion reads the model, so a Location field that can never be filled
+        # is reported here too, and a redirect case is judged on everything its model states.
+        if not has_criterion(case) and _only_redirects(case.status):
+            raise PlanError(
+                f"operation {operation_id!r}: the case on {_status_text(case.status)} states no "
+                "criterion, so it would claim every redirect whatever it points to; put "
+                "Location(...) on a field of its model, or when=Location() to mean any target"
+            )
         if model is None:
             continue
         _refuse_leftover_envelope(model)
@@ -386,7 +399,17 @@ def has_criterion(case: Success[Any] | Error[Any]) -> bool:
 
     if case.condition is not None or getattr(case.response, "accept", None) is not None:
         return True
-    return bool(tags_of(getattr(case.response, "model", None)))
+    return bool(criteria_of(getattr(case.response, "model", None)))
+
+
+def _only_redirects(selector: StatusSelector) -> bool:
+    """Whether a status selector names redirects and nothing else."""
+
+    if isinstance(selector, DefaultStatus):
+        return False
+    if isinstance(selector, int):
+        return 300 <= selector <= 399
+    return selector.start >= 300 and selector.end <= 399
 
 
 def _agrees(payload: object, result: object | None) -> bool:

@@ -10,6 +10,7 @@ from .cases import (
     Error,
     ErrorSummary,
     Extracted,
+    HeaderModel,
     Html,
     Json,
     MalformedResponseError,
@@ -29,6 +30,7 @@ from .location import Location
 from .markers import Const
 from .normalized import NormalizedResponse, RedirectInfo
 from .short import Payload
+from .sources import FromCookie
 
 __all__ = [
     "DEFAULT",
@@ -41,7 +43,9 @@ __all__ = [
     "Error",
     "ErrorSummary",
     "Extracted",
+    "FromCookie",
     "FromHeader",
+    "HeaderModel",
     "Headers",
     "Html",
     "Json",
