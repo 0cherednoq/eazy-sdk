@@ -31,7 +31,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
-__all__ = ["CookieJar", "CookieState", "StoredCookie"]
+__all__ = ["CookieJar", "CookieState", "Cookies", "StoredCookie"]
 
 MAX_COOKIES_PER_DOMAIN = 50
 MAX_COOKIES = 3000
@@ -45,6 +45,38 @@ type PublicSuffixes = Callable[[str], bool]
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class Cookies:
+    """Declare that a site keeps its session in cookies, so the SDK carries them like a browser.
+
+    Written once, on the SDK root or on a router, beside ``security``::
+
+        class MailSdk(AsyncRoot):
+            cookies = Cookies(required=("sid",))
+
+    From then on every cookie the site sets is sent back where it belongs: to the next
+    operation, to the next hop of a redirect, to another host of the same site. Nobody names
+    them. ``required`` is the one exception: the cookies without which a session is no session.
+    """
+
+    required: tuple[str, ...] = ()
+    """Cookies that must be alive for a session to be valid."""
+    leeway: timedelta = timedelta(seconds=30)
+    """A required cookie that expires sooner than this no longer counts as alive."""
+    public_suffixes: PublicSuffixes | None = None
+    """Answers whether a domain is a public suffix; without it only one-label domains are."""
+
+    def __post_init__(self) -> None:
+        if isinstance(self.required, str) or not isinstance(self.required, tuple):
+            raise TypeError("Cookies(required=...) is a tuple of cookie names")
+        if any(not isinstance(name, str) or not name for name in self.required):
+            raise ValueError("Cookies(required=...) names a cookie with an empty string")
+        if len(set(self.required)) != len(self.required):
+            raise ValueError("Cookies(required=...) names a cookie twice")
+        if self.leeway < timedelta(0):
+            raise ValueError("Cookies(leeway=...) cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +314,22 @@ def _parse(line: str) -> tuple[str, str, dict[str, str]] | None:
     return name, value, attributes
 
 
+def _scope(
+    host: str, attribute: str, public_suffixes: PublicSuffixes | None
+) -> tuple[str, bool] | None:
+    """Where a cookie belongs, or ``None`` when the server may not set it there."""
+
+    domain = attribute.strip().lstrip(".").lower().rstrip(".")
+    if not domain or domain == host:
+        return host, not domain
+    # Without a suffix list the one certain case is refused: a single label is never a site's
+    # own domain, so ``Domain=com`` cannot be honoured.
+    is_suffix = public_suffixes(domain) if public_suffixes is not None else "." not in domain
+    if is_suffix or not _domain_matches(host, domain):
+        return None
+    return domain, False
+
+
 class CookieJar:
     """The cookies of one user: stored as a server sets them, selected for each address.
 
@@ -293,10 +341,8 @@ class CookieJar:
         self,
         state: CookieState | None = None,
         *,
-        public_suffixes: PublicSuffixes | None = None,
         clock: Callable[[], datetime] = _now,
     ) -> None:
-        self._public_suffixes = public_suffixes
         self._clock = clock
         self._lock = threading.Lock()
         # Insertion order is creation order: replacing a cookie keeps its place (RFC 6265,
@@ -311,8 +357,18 @@ class CookieJar:
         with self._lock:
             return len(self._cookies)
 
-    def store(self, url: str, set_cookie_lines: Iterable[str]) -> None:
-        """Take the ``Set-Cookie`` lines of a response that came from ``url``."""
+    def store(
+        self,
+        url: str,
+        set_cookie_lines: Iterable[str],
+        *,
+        public_suffixes: PublicSuffixes | None = None,
+    ) -> None:
+        """Take the ``Set-Cookie`` lines of a response that came from ``url``.
+
+        The suffix list is what the site's declaration knows, and the jar belongs to a user who
+        may talk to several sites, so it arrives with the response rather than with the jar.
+        """
 
         target = _target(url)
         if target is None:
@@ -320,7 +376,7 @@ class CookieJar:
         now = self._clock()
         with self._lock:
             for line in set_cookie_lines:
-                self._store_line(target, line, now)
+                self._store_line(target, line, now, public_suffixes)
             self._evict(now)
 
     def select(self, url: str) -> tuple[StoredCookie, ...]:
@@ -376,12 +432,14 @@ class CookieJar:
 
     # --- under the lock ---------------------------------------------------------------------
 
-    def _store_line(self, target: _Target, line: str, now: datetime) -> None:
+    def _store_line(
+        self, target: _Target, line: str, now: datetime, public_suffixes: PublicSuffixes | None
+    ) -> None:
         parsed = _parse(line)
         if parsed is None:
             return
         name, value, attributes = parsed
-        scope = self._scope(target.host, attributes.get("domain", ""))
+        scope = _scope(target.host, attributes.get("domain", ""), public_suffixes)
         if scope is None:
             return
         domain, host_only = scope
@@ -406,25 +464,6 @@ class CookieJar:
             same_site=_SAME_SITE.get(attributes.get("samesite", "").lower(), ""),
         )
         self._touch(key)
-
-    def _scope(self, host: str, attribute: str) -> tuple[str, bool] | None:
-        """Where a cookie belongs, or ``None`` when the server may not set it there."""
-
-        domain = attribute.strip().lstrip(".").lower().rstrip(".")
-        if not domain or domain == host:
-            return host, not domain
-        if self._is_public_suffix(domain):
-            return None
-        if not _domain_matches(host, domain):
-            return None
-        return domain, False
-
-    def _is_public_suffix(self, domain: str) -> bool:
-        if self._public_suffixes is not None:
-            return bool(self._public_suffixes(domain))
-        # Without a suffix list the one certain case is refused: a single label is never a
-        # site's own domain, so ``Domain=com`` cannot be honoured.
-        return "." not in domain
 
     def _belongs(self, cookie: StoredCookie, target: _Target) -> bool:
         if cookie.host_only:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import gzip
 import zlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
@@ -258,6 +258,7 @@ class RequestPreparer:
         method_override: str | None = None,
         omit_body: bool = False,
         body_document_override: object = _NO_BODY_DOCUMENT_OVERRIDE,
+        cookies_for: Callable[[str], Iterable[tuple[str, str]]] | None = None,
     ) -> UnsignedPreparedRequest:
         layout = compile_layout(compiled)
         contract = compiled.contract
@@ -305,6 +306,9 @@ class RequestPreparer:
             compiled.wire_names,
             operation_id=contract.operation_id,
         )
+        if cookies_for is not None:
+            # The address is final only here: path parameters are in, or this is a redirect hop.
+            cookies = _with_jar(cookies, cookies_for(f"{split.scheme}://{split.netloc}{path}"))
         body: BufferedBody | ReplayableBodyStream
         if omit_body:
             body = BufferedBody(b"", None)
@@ -659,6 +663,31 @@ def _cookies(
                 output.append(
                     PreparedCookie(encoded_name, _header_value(b"Cookie", rendered), slot)
                 )
+    return tuple(output)
+
+
+def _with_jar(
+    declared: tuple[PreparedCookie, ...], stored: Iterable[tuple[str, str]]
+) -> tuple[PreparedCookie, ...]:
+    """The declared cookies, then the session's own for this address.
+
+    A name the operation declares wins for this request: the caller chose that value, and it is
+    not written back into the jar. A stored cookie the wire cannot carry is left out rather
+    than failing the call, because the server that set it is not the SDK author's to fix.
+    """
+
+    output = list(declared)
+    taken = {cookie.name for cookie in declared}
+    for name, value in stored:
+        try:
+            encoded = _header_name(name)
+            rendered = _header_value(b"Cookie", value)
+        except PlanError:
+            continue
+        if encoded in taken:
+            continue
+        taken.add(encoded)
+        output.append(PreparedCookie(encoded, rendered))
     return tuple(output)
 
 

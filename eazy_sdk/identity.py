@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from eazy_sdk.auth.core import Auth, AuthProviders
+from eazy_sdk.cookies import CookieJar, CookieState
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.request.signatures import SigningKey, SigningKeyRequirement
@@ -33,8 +34,15 @@ class Identity:
     key_provider: KeyProvider | None = None
     dependencies: DependencyRegistry | None = None
     observer: Observer | None = None
+    cookies: CookieState | None = None
+    """The cookies this user starts with: a saved browser session, for one."""
+    _jar: CookieJar = field(init=False, repr=False, compare=False)
+    """One jar per identity, however many roots and clients it serves."""
 
     def __post_init__(self) -> None:
+        if self.cookies is not None and not isinstance(self.cookies, CookieState):
+            raise TypeError("Identity.cookies is a CookieState")
+        object.__setattr__(self, "_jar", CookieJar(self.cookies))
         if isinstance(self.auth, Auth) or not isinstance(self.auth, tuple):
             raise TypeError("Identity.auth is a tuple of configured Auth bindings")
         if any(not isinstance(item, Auth) for item in self.auth):
@@ -51,6 +59,10 @@ class _IdentityScope:
     key_provider: KeyProvider | None = None
     dependencies: DependencyRegistry = field(default_factory=DependencyRegistry)
     observer: Observer | None = None
+    jar: CookieJar = field(default_factory=CookieJar)
+    """The identity's own jar; a scope without an identity keeps one of its own."""
+    seeded: bool = False
+    """Whether the identity was given cookies to start with, which only a cookie site can use."""
 
 
 def _identity_scope(identity: Identity | None) -> _IdentityScope:
@@ -69,6 +81,8 @@ def _identity_scope(identity: Identity | None) -> _IdentityScope:
         identity.key_provider,
         identity.dependencies or DependencyRegistry(),
         identity.observer,
+        identity._jar,
+        identity.cookies is not None,
     )
 
 

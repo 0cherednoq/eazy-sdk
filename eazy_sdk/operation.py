@@ -96,6 +96,8 @@ class _HttpSpec:
     inherit_errors: bool = True
     idempotent: bool | None = None
     raw_response: bool = False
+    cookies: bool = True
+    """``False`` keeps this operation out of the service's cookie jar, both ways."""
 
     # Names, read by tooling rather than by the runtime.
     operation_id: str | None = None
@@ -144,6 +146,7 @@ class _HttpOptions(TypedDict, total=False):
     inherit_errors: bool
     idempotent: bool | None
     raw_response: bool
+    cookies: bool
 
     # Names, read by tooling rather than by the runtime.
     operation_id: str | None

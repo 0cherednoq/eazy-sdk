@@ -23,6 +23,7 @@ from eazy_sdk.compile import (
     compile_endpoint,
 )
 from eazy_sdk.compile.http_operation import _OperationCall, _OperationDeclaration
+from eazy_sdk.cookies import CookieJar, Cookies
 from eazy_sdk.core import (
     Bind,
     BindingError,
@@ -159,6 +160,7 @@ from eazy_sdk.response.cases import (
     PreparedResponseExtractor,
     Success,
 )
+from eazy_sdk.response.normalized import cast_headers
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from ._decisions import (
@@ -276,6 +278,8 @@ class _RuntimeFetch:
     options: EmitOptions
     identity: TransportIdentity
     serialization: Serialization
+    cookies: tuple[CookieJar, Cookies] | None = None
+    """The caller's jar, when the guarded operation belongs to a cookie site."""
 
     async def __call__(
         self,
@@ -288,7 +292,7 @@ class _RuntimeFetch:
         prepared = _raw_prepared_request(
             url,
             method,
-            headers,
+            self._with_cookies(url, headers),
             body,
             user_agent=self.identity.user_agent,
             protocol=HttpProtocol.HTTP_1_1,
@@ -296,7 +300,27 @@ class _RuntimeFetch:
         response = await _maybe_await(self.runtime.send(prepared, options=self.options))
         if not isinstance(response, NormalizedResponse):
             raise TypeError("transport returned a non-normalized response to a solver fetch")
+        if self.cookies is not None:
+            jar, declared = self.cookies
+            jar.store(
+                url,
+                cast_headers(response.headers).getall("set-cookie"),
+                public_suffixes=declared.public_suffixes,
+            )
         return cast(NormalizedResponse[object], response)
+
+    def _with_cookies(
+        self, url: str, headers: Mapping[str, str] | None
+    ) -> Mapping[str, str] | None:
+        """The solver's headers plus the session's cookies, unless it wrote its own."""
+
+        if self.cookies is None or any(name.lower() == "cookie" for name in headers or ()):
+            return headers
+        pairs = self.cookies[0].header_pairs(url)
+        if not pairs:
+            return headers
+        cookie = "; ".join(f"{name}={value}" for name, value in pairs)
+        return {**(headers or {}), "Cookie": cookie}
 
 
 def _raw_prepared_request(
@@ -383,6 +407,22 @@ def _slot_headers(compiled: Any, values: OperationValues) -> Mapping[str, str]:
     return MappingProxyType(output)
 
 
+def _fetch_cookies(scope: _IdentityScope, compiled: Any) -> tuple[CookieJar, Cookies] | None:
+    """The jar a solver's own requests share with the operation it is solving for."""
+
+    declared = compiled.contract.cookies
+    return (scope.jar, declared) if declared is not None else None
+
+
+def _request_url(prepared: PreparedRequest) -> str:
+    """The address a prepared request goes to, which is where its response's cookies belong."""
+
+    return (
+        f"{prepared.scheme.decode('ascii')}://{prepared.authority.decode('ascii')}"
+        f"{prepared.target.decode('ascii')}"
+    )
+
+
 def _prepared_headers(prepared: PreparedRequest) -> Mapping[str, str]:
     return MappingProxyType(
         {
@@ -408,9 +448,10 @@ def _solve_context(
     identity: TransportIdentity,
     headers: Mapping[str, str],
     serialization: Serialization,
+    cookies: tuple[CookieJar, Cookies] | None = None,
 ) -> SolveContext:
     emit_options = options.emit_options()
-    fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity, serialization)
+    fetch: ProtectedFetch = _RuntimeFetch(runtime, emit_options, identity, serialization, cookies)
     return SolveContext(
         operation,
         response,
@@ -801,6 +842,7 @@ class ExecutionCore:
         validate_profile(compiled.plan.requirements, self.runtime.handler_profile)
         _validate_serialization(contract, self.serialization)
         _validate_response_declarations(contract)
+        _validate_cookie_declarations(contract, compiled)
         mandatory = _validate_mandatory_protections(
             contract,
             compiled,
@@ -962,6 +1004,7 @@ class ExecutionCore:
                         identity,
                         _slot_headers(compiled, values),
                         self.serialization,
+                        _fetch_cookies(self.identity, compiled),
                     ),
                 )
             except Exception as exc:
@@ -1003,6 +1046,7 @@ class ExecutionCore:
             identity,
             request_headers,
             self.serialization,
+            _fetch_cookies(self.identity, compiled),
         )
         fingerprint = identity.fingerprint()
 
@@ -1099,6 +1143,7 @@ class ExecutionCore:
                             _transport_identity(self.runtime, headers),
                             headers,
                             self.serialization,
+                            _fetch_cookies(self.identity, compiled),
                         ),
                     )
                 except Exception as exc:
@@ -1586,6 +1631,15 @@ class _AttemptRun[T]:
                     outer_content_type=response.content_type,
                 ),
             )
+        cookies = self.compiled.contract.cookies
+        if cookies is not None:
+            # Before anything decides what the response means: a redirect, a refused login and
+            # an error all set cookies the next request has to carry.
+            self.core.identity.jar.store(
+                _request_url(attempt.request),
+                cast_headers(response.headers).getall("set-cookie"),
+                public_suffixes=cookies.public_suffixes,
+            )
         context = self._response_context(state, attempt, response)
         response, context, proposed = await self._after_response(state, attempt, response, context)
         signal = self._signal(state, context, attempt.scope)
@@ -1875,6 +1929,11 @@ class _RequestBuild:
                 method_override=state.method,
                 omit_body=state.omit_body,
                 body_document_override=self.document,
+                cookies_for=(
+                    run.core.identity.jar.header_pairs
+                    if run.compiled.contract.cookies is not None
+                    else None
+                ),
             )
         except BindingError:
             raise OperationBindingError(
@@ -2199,6 +2258,24 @@ def _another_case_can_claim(responses: object, case: object) -> bool:
         and statuses_overlap(cast(Any, other).status, cast(Any, case).status)
         for other in others
     )
+
+
+def _validate_cookie_declarations(contract: _OperationDeclaration[Any], compiled: Any) -> None:
+    """An operation of a cookie site does not write the ``Cookie`` header by hand.
+
+    The library builds that header from the session's cookies for every attempt and every hop,
+    so a second writer would either be overwritten or fight it. A cookie the caller chooses is
+    declared as a ``Cookie[...]`` field and joins the same header.
+    """
+
+    if contract.cookies is None:
+        return
+    if any(name.lower() == "cookie" for name in compiled.header_slots):
+        raise PlanError(
+            f"operation {contract.operation_id!r} writes the Cookie header itself, and its "
+            "service declares Cookies(...): the library builds that header; declare a cookie "
+            "the caller chooses as a Cookie[...] field"
+        )
 
 
 def _validate_response_declarations(contract: _OperationDeclaration[Any]) -> None:

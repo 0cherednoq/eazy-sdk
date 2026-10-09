@@ -25,6 +25,7 @@ from eazy_sdk.api import (
     _SyncClient,
     validate_base_url,
 )
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.handlers import HandlerProfile
 from eazy_sdk.identity import (
     Identity,
@@ -152,6 +153,13 @@ class _RootBase:
         self._closed = False
         self._instances: dict[str, SyncApi | AsyncApi] = {}
         self._plan = _resolve_plan(type(self), client, bindings)
+        if self._scope.seeded and not any(
+            group.defaults.cookies is not None for group in self._plan.values()
+        ):
+            raise PlanError(
+                f"{type(self).__name__} was given an Identity with cookies, and none of its "
+                "routers declares Cookies(...): the cookies have nowhere to go"
+            )
         if scope is None:
             self._register_lifecycle()
 

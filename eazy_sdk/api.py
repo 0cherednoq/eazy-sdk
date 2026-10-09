@@ -31,6 +31,7 @@ from urllib.parse import urljoin, urlsplit
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
 from eazy_sdk.compile.http_operation import _OperationDeclaration
 from eazy_sdk.compile.input import MethodInputSchema, inspect_operation_input
+from eazy_sdk.cookies import Cookies
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.core.http import RequestLocation
 from eazy_sdk.core.http_plan import RequestScope
@@ -98,6 +99,7 @@ SERVICE_ATTRIBUTES = (
     "protocol",
     "unwrap",
     "allow",
+    "cookies",
 )
 """Class attributes a router (or a service mixin in its MRO) may declare."""
 
@@ -123,6 +125,8 @@ class _ServiceDefaults:
     allow: tuple[object, ...] | None = None
     signed: bool = False
     """Every operation of this service must carry a signature; unsigned is a declaration error."""
+    cookies: Cookies | None = None
+    """The site keeps its session in cookies; the SDK carries them between requests."""
 
     def extend(self, other: _ServiceDefaults) -> _ServiceDefaults:
         """Merge a more specific declaration over this one (root → router MRO)."""
@@ -138,6 +142,7 @@ class _ServiceDefaults:
             unwrap=self.unwrap if other.unwrap is None else other.unwrap,
             allow=self.allow if other.allow is None else other.allow,
             signed=self.signed or other.signed,
+            cookies=self.cookies if other.cookies is None else other.cookies,
         )
 
 
@@ -788,6 +793,7 @@ class _OperationDescriptor[**P, T]:
                 fallback=responses.fallback,
             )
         _validate_allowed(defaults.allow, declaration.operation_id, security, signing)
+        cookies = _operation_cookies(spec.cookies, defaults.cookies, security, declaration)
         if defaults.signed and not signing:
             raise TypeError(
                 f"operation {declaration.operation_id!r} carries no signature, and its "
@@ -816,6 +822,7 @@ class _OperationDescriptor[**P, T]:
             crypto=cast(PayloadCrypto | None, crypto),
             wire=declaration.wire.over(defaults.wire),
             crypto_inherit=spec.crypto is _INHERIT and defaults.crypto is None,
+            cookies=cookies,
         )
 
     def resolve_for(self, api: _ApiBase) -> _OperationDeclaration[T]:
@@ -994,6 +1001,11 @@ class _ApiBase:
         self._client = cast(Any, client)
         self._defaults = type(self)._service_defaults if defaults is None else defaults
         self._scope = scope if scope is not None else _identity_scope(identity)
+        if scope is None and self._scope.seeded and self._defaults.cookies is None:
+            raise PlanError(
+                f"{type(self).__name__} was given an Identity with cookies, and it declares "
+                "no Cookies(...): the cookies have nowhere to go"
+            )
         self._serialization = serialization if serialization is not None else Serialization()
         self._resolved: dict[object, _OperationDeclaration[Any]] = {}
         if scope is None and identity is not None:
@@ -1203,7 +1215,39 @@ def _normalize_service_attribute(cls: type[object], name: str, value: object) ->
         return value if isinstance(value, tuple) else (value,)
     if name in {"signing", "allow"}:
         return value if isinstance(value, tuple) else (value,)
+    if name == "cookies" and not isinstance(value, Cookies):
+        raise TypeError(f"{cls.__name__}.cookies must be a Cookies(...) declaration")
     return value
+
+
+def _operation_cookies(
+    wanted: bool,
+    declared: Cookies | None,
+    security: object,
+    declaration: _OperationDeclaration[Any],
+) -> Cookies | None:
+    """The cookie declaration that applies to one operation, refused where it cannot be right."""
+
+    operation_id = declaration.operation_id
+    if not wanted:
+        if declared is None:
+            raise PlanError(
+                f"operation {operation_id!r} declares cookies=False, and its service declares "
+                "no Cookies(...): there is nothing to opt out of"
+            )
+        return None
+    if declared is None:
+        return None
+    for scheme in _security_schemes(security):
+        for placement in getattr(scheme, "placements", ()):
+            if getattr(getattr(placement, "location", None), "value", None) == "cookie":
+                raise PlanError(
+                    f"operation {operation_id!r}: security scheme "
+                    f"{getattr(scheme, 'diagnostic_name', 'scheme')!r} places a credential in a "
+                    "cookie, and the service keeps its session in cookies by itself; a site "
+                    "is one or the other"
+                )
+    return declared
 
 
 def validate_base_url(value: str, origin: str) -> str:

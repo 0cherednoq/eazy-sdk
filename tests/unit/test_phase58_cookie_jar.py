@@ -37,9 +37,9 @@ class Clock:
         self.now += timedelta(**delta)
 
 
-def _jar(**options: object) -> tuple[CookieJar, Clock]:
+def _jar() -> tuple[CookieJar, Clock]:
     clock = Clock()
-    return CookieJar(clock=clock, **options), clock  # type: ignore[arg-type]
+    return CookieJar(clock=clock), clock
 
 
 def _names(jar: CookieJar, url: str) -> list[str]:
@@ -143,13 +143,14 @@ def test_a_domain_equal_to_the_host_is_a_domain_cookie_even_on_one_label() -> No
 
 def test_a_public_suffix_list_refuses_what_the_default_rule_cannot_see() -> None:
     suffixes = {"co.uk", "uk"}
-    jar, _ = _jar(public_suffixes=lambda domain: domain in suffixes)
-    jar.store("https://shop.co.uk/", ["wide=1; Domain=co.uk", "own=1; Domain=shop.co.uk"])
+    lines = ["wide=1; Domain=co.uk", "own=1; Domain=shop.co.uk"]
+    jar, _ = _jar()
+    jar.store("https://shop.co.uk/", lines, public_suffixes=lambda domain: domain in suffixes)
     assert [cookie.name for cookie in jar.snapshot()] == ["own"]
 
     lenient, _ = _jar()
-    lenient.store("https://shop.co.uk/", ["wide=1; Domain=co.uk"])
-    assert len(lenient) == 1
+    lenient.store("https://shop.co.uk/", lines)
+    assert len(lenient) == 2
 
 
 def test_an_ip_address_takes_only_host_cookies() -> None:

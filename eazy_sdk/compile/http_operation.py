@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from eazy_sdk.auth import AuthScheme, SecurityAlternative, SecurityPolicy
+from eazy_sdk.cookies import Cookies
 from eazy_sdk.core.http_plan import RequestScope
 from eazy_sdk.core.kernel import BoundArguments
 from eazy_sdk.dependencies import DependencySpec, Inject
@@ -62,6 +63,8 @@ class _OperationDeclaration[T]:
     raw_response: bool = False
     crypto: CryptoProfile | None = None
     crypto_inherit: bool = True
+    cookies: Cookies | None = None
+    """The service's cookie declaration when it applies to this operation, else ``None``."""
 
     @property
     def declaration(self) -> _OperationDeclaration[T]:
