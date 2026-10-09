@@ -1,7 +1,7 @@
 # Фаза 57. `Location`, размещения на модели сессии, экстракторы не-JSON
 
 Статус: план утверждён 2026-10-09 (владелец: «обязательность на 3xx оставляем, начинай с
-57.1»); 57.1–57.3 сделаны, см. §9. Gates — в
+57.1»); 57.1–57.4 сделаны, см. §9. Gates — в
 `STATUS.md`. Зависит от фазы 53 (кейсы ответа, `when=`, арбитраж), фазы 54 (`Const`/`Payload`,
 проверки при импорте) и фазы 50 (маркеры-`Annotated`). Один релиз: `0.2.0a10`.
 
@@ -294,9 +294,9 @@ prefix)` переводится в то же размещение, что `Place
 
 ### 3.8. `Regex` и источники ответа в документе
 
-`Regex` экспортируется из `eazy_sdk_html` рядом с `CSS` и `XPath`.
-
 ```python
+from eazy_sdk_html import CSS, Regex
+
 class MailPage(BaseModel):
     title: Annotated[str, CSS("title::text")]
     token: Annotated[str, Regex(r'/api/v1/user/short.*?"token":"([^"]+)"', flags=re.S)]
@@ -304,13 +304,16 @@ class MailPage(BaseModel):
     act: Annotated[str | None, FromCookie("act")] = None
 ```
 
-`Regex(pattern, *, flags=0)` — третий язык селекторов, `language = "regex"`. Шаблон компилируется
+`Regex(pattern, flags=0)` — третий язык селекторов, `language = "regex"`. Шаблон компилируется
 в `__post_init__`; ноль групп — берётся всё совпадение, одна — группа, больше одной — ошибка
-объявления. `ParselBackend.selector_languages` получает `"regex"`, `ParselNode.values` исполняет
-его через `selector.re(pattern, replace_entities=False)`: сущности не раскрываются, JS-блоб
-читается как пришёл. `ParselNode.nodes` для `Regex` — ошибка: область (`Scope`) регулярным
-выражением не задаётся. Бэкенд, не знающий `regex`, отклоняет модель уже существующей проверкой
-`_check_selector_languages`.
+объявления. Скалярное поле получает **первое** совпадение, поле-список — все: текст, в отличие от
+разметки, повторяется, и требование «ровно одно совпадение» сделало бы селектор бесполезным.
+
+`ParselBackend.selector_languages` получает `"regex"`. Поиск идёт по тексту документа **как он
+пришёл**, а не по разметке, пересобранной парсером: корневой `ParselNode` хранит исходный текст.
+Сущности не раскрываются, скрипты не разбираются. Под `Scope` поиск идёт по разметке своего
+узла. Сам `Scope` регулярным выражением не задаётся. Бэкенд, не знающий `regex`, отклоняет
+модель уже существующей проверкой `_check_selector_languages`.
 
 `_compile_model` перестаёт требовать селектор у поля, несущего источник из ответа: такое поле в
 схему извлечения не попадает, его заполняет общий `apply_response_sources` после извлечения
@@ -489,6 +492,8 @@ class MailPage(BaseModel):
 | 2026-10-09 | 57.1 | **Отклонение от исходной редакции.** План утверждал, что `302` доходит до операции как обычный ответ. Это неверно: редиректы ведёт ядро (`decide_response`), и при бюджете 0 ответ с `Location` заканчивался `RedirectLimitError` до просмотра кейсов. Добавлено правило §3.4a; §0.7, §1.1, §3.1, §11 исправлены. |
 | 2026-10-09 | 57.1 | **Отклонение.** `Location` экспортирован только из `eazy_sdk.response`: в корне `eazy_sdk` ровно 40 имён, а `test_phase14_public_api` и `test_phase52_pagination` держат бюджет `<= 40`. Поднимать бюджет — решение владельца (§10). |
 | 2026-10-09 | 57.1 | В блоках §3.7 и §3.8 убраны строки импорта ещё не существующих `Placed` и `Regex`: `test_documented_eazy_sdk_imports_resolve_to_real_symbols` проверяет python-блоки планов. Вернуть в 57.3 и 57.4. |
+| 2026-10-09 | 57.4 | **Отклонение.** `Regex` ищет своим `re.finditer` по исходному тексту, а не через `selector.re(...)` parsel: тот работает по разметке, пересобранной lxml, и раскрывает сущности. Скалярное поле берёт первое совпадение (§3.8 переписан). |
+| 2026-10-09 | 57.4 | done. `Regex`, источники ответа в документе, D-57-07; `plugins/html/tests/test_phase57_regex.py` (19 тестов). `uv run mypy` — 509 файлов без замечаний; `uv run ruff check` — чисто. `uv run pytest -q`: первый прогон — 1866 passed, 11 skipped, 3 failed (`test_appending_query_preserves_existing_and_new_pair_order`, `test_live_driver_contract[pydoll]`, `test_driver_detaches_itself_when_the_page_closes`); все три проходят отдельно, пример, найденный hypothesis, при прямом воспроизведении проходит за 0,7 мс; повторный полный прогон — 1869 passed, 11 skipped. Код этих тестов фаза не трогает. Импорт `Regex` в блок §3.8 возвращён. |
 | 2026-10-09 | 57.3 | Проба `Placed.cookies()` прошла без второго пути: слоты размещений схемы заводит `http_compiler` (цикл по `scheme.placements`), для набора там же заводится cookie-слот с `ManagedCookieSetDescriptor`, дальше работает существующий `_cookies`. Имя слота — `auth_cookie_set_name(<имя схемы>)` в `core/http.py`; у `AuthPlacement` появилось поле `many`. |
 | 2026-10-09 | 57.3 | **Попутное изменение.** Слот размещения теперь берёт `secret` из `AuthPlacement.secret`; раньше компилятор ставил `secret=True` всегда, и поле `secret=False` у сырого `AuthPlacement` ни на что не влияло. Полный прогон это не задело. |
 | 2026-10-09 | 57.3 | Сообщение об отсутствии размещений изменено: «session model places nothing into the request: declare exactly one Bearer field, or Placed...». Для двух `Bearer` текст прежний. |

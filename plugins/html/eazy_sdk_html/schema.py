@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import types
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Annotated, Any, ClassVar, Union, cast, get_args, get_origin
 
 from eazy_sdk.models import (
@@ -12,6 +14,7 @@ from eazy_sdk.models import (
     UnsupportedModelTypeError,
     default_model_adapters,
 )
+from eazy_sdk.response.sources import source_of
 from eazy_sdk.serialization import DocumentBackend, DocumentNode, SelectorMarker
 
 
@@ -35,6 +38,51 @@ class XPath:
     def __post_init__(self) -> None:
         if not self.expression:
             raise ValueError("XPath expression must not be empty")
+
+
+@lru_cache(maxsize=512)
+def _pattern(expression: str, flags: int) -> re.Pattern[str]:
+    return re.compile(expression, flags)
+
+
+@dataclass(frozen=True, slots=True)
+class Regex:
+    """Select by a regular expression over the text of the document as it was received.
+
+    For what no markup addresses: a token inside a script, a value in an inline JSON blob. With
+    one group the field receives the group, with none the whole match. A single-value field
+    takes the first match, a list field every match.
+
+    The text is searched as received: entities are not decoded and scripts are not parsed, so
+    the pattern sees an ``&amp;`` or an escaped character exactly as the service wrote it.
+    """
+
+    expression: str
+    flags: int = 0
+
+    language: ClassVar[str] = "regex"
+
+    def __post_init__(self) -> None:
+        if not self.expression:
+            raise ValueError("Regex expression must not be empty")
+        try:
+            compiled = _pattern(self.expression, self.flags)
+        except re.error as exc:
+            raise ExtractionCompileError(
+                f"Regex({self.expression!r}) does not compile: {exc}"
+            ) from exc
+        if compiled.groups > 1:
+            raise ExtractionCompileError(
+                f"Regex({self.expression!r}) has {compiled.groups} groups; a field takes one "
+                "value, so the pattern keeps one group or none"
+            )
+
+    def search(self, text: str) -> tuple[str, ...]:
+        """Every match in order: the group when the pattern has one, the whole match otherwise."""
+
+        compiled = _pattern(self.expression, self.flags)
+        index = 1 if compiled.groups else 0
+        return tuple(match.group(index) or "" for match in compiled.finditer(text))
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +148,7 @@ class ParselBackend:
 
     @property
     def selector_languages(self) -> frozenset[str]:
-        return frozenset({"css", "xpath"})
+        return frozenset({"css", "xpath", "regex"})
 
     @property
     def media_types(self) -> frozenset[str]:
@@ -110,7 +158,7 @@ class ParselBackend:
         from parsel import Selector
 
         text = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else data
-        return ParselNode(Selector(text=text, type="html"))
+        return ParselNode(Selector(text=text, type="html"), text)
 
 
 DEFAULT_HTML_BACKEND: DocumentBackend = ParselBackend()
@@ -182,8 +230,14 @@ def _check_selector_languages(
 @dataclass(frozen=True, slots=True)
 class ParselNode:
     selector: Any
+    source: str | None = None
+    """The text the document was parsed from; only the root has it, a nested node is markup."""
 
     def values(self, marker: SelectorMarker) -> tuple[str, ...]:
+        if isinstance(marker, Regex):
+            # The root is searched as received; a node under a scope has only its own markup.
+            text = self.source if self.source is not None else str(self.selector.get())
+            return marker.search(text)
         return tuple(str(value) for value in self._select(marker).getall())
 
     def nodes(self, marker: SelectorMarker) -> tuple[ParselNode, ...]:
@@ -211,12 +265,14 @@ def _compile_model(
     for field in fields:
         annotation, annotation_metadata = _unwrap(field.annotation)
         metadata = (*field.metadata, *annotation_metadata)
-        selectors = tuple(item for item in metadata if isinstance(item, CSS | XPath))
+        selectors = tuple(item for item in metadata if isinstance(item, CSS | XPath | Regex))
         scopes = tuple(item for item in metadata if isinstance(item, Scope))
         if len(selectors) > 1 or len(scopes) > 1 or (selectors and scopes):
             raise ExtractionCompileError(
                 f"{model.__name__}.{field.name} has conflicting HTML selector metadata"
             )
+        if _read_around_the_body(model, field, selectors, scopes):
+            continue
         item_type, many, optional = _field_shape(annotation)
         nested = _nested_schema(item_type, models, stack=(*stack, model))
         selector = selectors[0] if selectors else None
@@ -235,6 +291,33 @@ def _compile_model(
             )
         output.append(ExtractionField(field, annotation, selector, scope, nested, many, optional))
     return ExtractionSchema(model, tuple(output))
+
+
+def _read_around_the_body(
+    model: type[object],
+    field: ModelField,
+    selectors: tuple[object, ...],
+    scopes: tuple[Scope, ...],
+) -> bool:
+    """Whether the document says nothing about this field; refuses the two impossible mixes.
+
+    A field read from a header, a cookie or the redirect target is merged in after extraction,
+    so it takes no part in the schema.
+    """
+
+    if source_of(field) is not None:
+        if selectors or scopes:
+            raise ExtractionCompileError(
+                f"{model.__name__}.{field.name} is read from the response around the body "
+                "and from the document at once; a field has one source"
+            )
+        return True
+    if scopes and isinstance(scopes[0].selector, Regex):
+        raise ExtractionCompileError(
+            f"{model.__name__}.{field.name}: a Scope selects nodes, and a Regex selects "
+            "text; scope by CSS or XPath and read the text inside with Regex"
+        )
+    return False
 
 
 def _nested_schema(
@@ -280,6 +363,9 @@ def _extract_model(
         if field.many:
             output[field.model_field.wire_name] = list(values)
             continue
+        if isinstance(field.selector, Regex):
+            # Text repeats where markup does not: a single-value field takes the first match.
+            values = values[:1]
         scalar_selected = _one_or_missing(field, values, field_path)
         if scalar_selected is not None:
             output[field.model_field.wire_name] = scalar_selected
@@ -339,6 +425,7 @@ __all__ = [
     "HtmlDocument",
     "ParselBackend",
     "ParselNode",
+    "Regex",
     "Scope",
     "XPath",
     "compile_extraction_schema",
