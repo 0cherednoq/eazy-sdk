@@ -66,8 +66,10 @@ class Predicate:
 
 
 def _label_of(other: object) -> str:
-    if isinstance(other, Predicate):
-        return other.label
+    # Anything that names itself reads by that name: a ``Predicate``, or a ``Location`` pattern.
+    label = getattr(other, "label", None)
+    if isinstance(label, str):
+        return label
     return getattr(other, "__name__", type(other).__name__)
 
 

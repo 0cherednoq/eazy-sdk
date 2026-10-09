@@ -25,6 +25,7 @@ from .cases import (
     callable_parser,
 )
 from .headers import FromHeader, Headers, ResponseHeader
+from .location import Location
 from .markers import Const
 from .normalized import NormalizedResponse, RedirectInfo
 from .short import Payload
@@ -44,6 +45,7 @@ __all__ = [
     "Headers",
     "Html",
     "Json",
+    "Location",
     "MalformedResponseError",
     "NormalizedResponse",
     "Parsed",

@@ -83,6 +83,8 @@ class ResponseDecisionInput[T]:
     current_url: str
     effective_method: str
     raw_response: bool
+    redirect_declared: bool = False
+    """The operation declares a case on this redirect status, so the response is its to read."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +120,10 @@ class TerminalResponse[T]:
 @dataclass(frozen=True, slots=True)
 class RejectedResponse:
     outcome: ResponseOutcome[object]
+
+
+REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+"""The statuses the client follows on its own, unless the operation declares a case on one."""
 
 
 type ResponseDecision[T] = (
@@ -158,7 +164,11 @@ def decide_response[T](stage: ResponseDecisionInput[T]) -> ResponseDecision[T]:
         _require_idempotent(stage.idempotent, "auth refresh")
         return AuthRefreshTransition()
     location = cast_headers(stage.response.headers).get("location")
-    if stage.response.status_code in {301, 302, 303, 307, 308} and location is not None:
+    if (
+        stage.response.status_code in REDIRECT_STATUSES
+        and location is not None
+        and not stage.redirect_declared
+    ):
         _require_redirect_budget(stage.redirect_remaining)
         method: str | None = None
         omit_body = False

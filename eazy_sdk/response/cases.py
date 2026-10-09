@@ -659,6 +659,19 @@ class Responses[T]:
     def cases(self) -> tuple[ResponseCase[object], ...]:
         return (*self.success, *self.errors)
 
+    def declares(self, status: int) -> bool:
+        """Whether a case names this status, exactly or by a range; the fallback names none.
+
+        A redirect the operation declares a case on is a response the operation reads, so the
+        client does not follow it. ``DEFAULT`` does not count: it describes what nothing else
+        claimed, and a redirect the client can still follow has not reached that point.
+        """
+
+        return any(
+            not isinstance(case.status, DefaultStatus) and _status_matches(case.status, status)
+            for case in self.cases
+        )
+
     def inspect(self, context: ResponseContext[object]) -> ResponseOutcome[T]:
         candidates = [
             case

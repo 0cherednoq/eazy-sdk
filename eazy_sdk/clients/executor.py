@@ -162,6 +162,7 @@ from eazy_sdk.response.cases import (
 from eazy_sdk.serialization import BackendCapabilityError, Serialization
 
 from ._decisions import (
+    REDIRECT_STATUSES,
     AuthRefreshTransition,
     ReactionTransition,
     RedirectTransition,
@@ -1588,16 +1589,13 @@ class _AttemptRun[T]:
         context = self._response_context(state, attempt, response)
         response, context, proposed = await self._after_response(state, attempt, response, context)
         signal = self._signal(state, context, attempt.scope)
+        responses = self.compiled.contract.responses
         decision = decide_response(
             ResponseDecisionInput(
                 response=cast(NormalizedResponse[object], response),
                 proposed=proposed,
                 signal=signal,
-                outcome=(
-                    self.compiled.contract.responses.inspect(context)
-                    if isinstance(self.compiled.contract.responses, Responses)
-                    else None
-                ),
+                outcome=(responses.inspect(context) if isinstance(responses, Responses) else None),
                 idempotent=self.compiled.contract.is_idempotent,
                 attempt=state.number,
                 hard_attempt_limit=state.budgets.hard_limit,
@@ -1611,6 +1609,11 @@ class _AttemptRun[T]:
                 current_url=state.url,
                 effective_method=state.effective_method(self.compiled.contract.method),
                 raw_response=self.compiled.contract.raw_response,
+                redirect_declared=(
+                    response.status_code in REDIRECT_STATUSES
+                    and isinstance(responses, Responses)
+                    and responses.declares(response.status_code)
+                ),
             )
         )
         return self._route(state, attempt, decision, context)
