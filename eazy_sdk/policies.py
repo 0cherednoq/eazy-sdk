@@ -86,12 +86,19 @@ class CallOptions:
     max_redirects: int = 0
     middleware: tuple[MiddlewareRegistration, ...] = ()
     retry: RetryPolicy = dataclass_field(default_factory=RetryPolicy.none)
+    client_redirects: bool = False
+    """Also follow a page that redirects by ``<meta http-equiv="refresh">``, on the same budget."""
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:
             raise ValueError("max_attempts must be at least one")
         if self.transport_retries < 0 or self.auth_retries < 0 or self.max_redirects < 0:
             raise ValueError("retry budgets must not be negative")
+        if self.client_redirects and self.max_redirects == 0:
+            raise ValueError(
+                "client_redirects=True follows nothing with max_redirects=0: a redirect "
+                "written into a page spends the same budget as a 3xx"
+            )
 
     def emit_options(self) -> EmitOptions:
         return EmitOptions(timeout=self.timeout)

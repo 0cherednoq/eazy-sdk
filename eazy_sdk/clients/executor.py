@@ -1668,6 +1668,7 @@ class _AttemptRun[T]:
                     and isinstance(responses, Responses)
                     and responses.declares(response.status_code)
                 ),
+                client_redirects=self.options.client_redirects,
             )
         )
         return self._route(state, attempt, decision, context)

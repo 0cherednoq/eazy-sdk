@@ -24,8 +24,14 @@ from eazy_sdk.protection.advanced import SignalMatch, SignalOutcome
 from eazy_sdk.request.descriptors import MultipartBody
 from eazy_sdk.request.prepared import _NO_BODY_DOCUMENT_OVERRIDE
 from eazy_sdk.response import NormalizedResponse
-from eazy_sdk.response.cases import ResponseOutcome, SuccessOutcome
+from eazy_sdk.response.cases import (
+    MalformedOutcome,
+    ResponseOutcome,
+    SuccessOutcome,
+    UnexpectedOutcome,
+)
 from eazy_sdk.response.normalized import cast_headers
+from eazy_sdk.response.refresh import meta_refresh_target
 
 _NO_INJECTIONS: Mapping[RequestDependency[Any], object] = MappingProxyType({})
 """No dependency values: an immutable default, never a shared mutable one."""
@@ -85,6 +91,8 @@ class ResponseDecisionInput[T]:
     raw_response: bool
     redirect_declared: bool = False
     """The operation declares a case on this redirect status, so the response is its to read."""
+    client_redirects: bool = False
+    """A page that redirects by ``<meta http-equiv="refresh">`` is followed like a ``3xx``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +190,19 @@ def decide_response[T](stage: ResponseDecisionInput[T]) -> ResponseDecision[T]:
             method,
             omit_body,
         )
+    if (
+        stage.client_redirects
+        and not stage.raw_response
+        and stage.response.status_code == 200
+        and isinstance(stage.outcome, UnexpectedOutcome | MalformedOutcome)
+    ):
+        # A page the operation described is its result. Only a page no declared case could read
+        # is asked whether it is a stub that sends the client somewhere else: either nothing
+        # claimed it, or a document model found none of its required fields in it.
+        target = meta_refresh_target(stage.response)
+        if target is not None and target != stage.current_url:
+            _require_redirect_budget(stage.redirect_remaining)
+            return RedirectTransition(target, "GET", True)
     if stage.raw_response:
         return TerminalResponse(cast(T, stage.response), stage.response)
     outcome = stage.outcome

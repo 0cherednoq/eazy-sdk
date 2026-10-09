@@ -36,12 +36,19 @@ class Resilience:
     retry: RetryPolicy = field(default_factory=RetryPolicy.none)
     auth_retries: int = 1
     max_redirects: int = 0
+    client_redirects: bool = False
+    """Also follow a page that redirects by ``<meta http-equiv="refresh">``, on the same budget."""
     timeout: float | None = None
     rate_limiter: RateLimiter | None = None
 
     def __post_init__(self) -> None:
         if self.auth_retries < 0 or self.max_redirects < 0:
             raise ValueError("client retry budgets cannot be negative")
+        if self.client_redirects and self.max_redirects == 0:
+            raise ValueError(
+                "client_redirects=True follows nothing with max_redirects=0: a redirect "
+                "written into a page spends the same budget as a 3xx"
+            )
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("timeout must be positive")
 
@@ -53,6 +60,7 @@ class Resilience:
             transport_retries=retry_replays,
             auth_retries=self.auth_retries,
             max_redirects=self.max_redirects,
+            client_redirects=self.client_redirects,
             retry=self.retry,
         )
 

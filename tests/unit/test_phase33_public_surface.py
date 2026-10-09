@@ -228,7 +228,14 @@ def test_client_config_groups_protection_into_one_bundle() -> None:
     ):
         assert removed not in parameters
     resilience = inspect.signature(Resilience).parameters
-    assert {"retry", "auth_retries", "max_redirects", "timeout", "rate_limiter"} == set(resilience)
+    assert {
+        "retry",
+        "auth_retries",
+        "max_redirects",
+        "client_redirects",  # phase 58: a redirect written into a page spends the same budget
+        "timeout",
+        "rate_limiter",
+    } == set(resilience)
     with pytest.raises(TypeError, match="ProtectionBundle"):
         ClientConfig(security=Security(object()))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="duplicate"):
