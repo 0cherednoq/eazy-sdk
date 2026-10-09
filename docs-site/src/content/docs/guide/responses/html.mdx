@@ -6,8 +6,9 @@ sources:
   - eazy_sdk_html.CSS
   - eazy_sdk_html.XPath
   - eazy_sdk_html.Scope
+  - eazy_sdk_html.Regex
   - eazy_sdk.response.Html
-api_fingerprint: "sha256:c57faa2bd240d86143fc47ba62961e3070340a222628269444686ef1140fa1b8"
+api_fingerprint: "sha256:0a86107a779617966c851f0572c8cf4717361b5f0ea95a41de51bf4d1bfa5f62"
 ---
 
 Поля документной модели несут CSS- или XPath-селекторы. SDK сначала строит дерево HTML, затем
@@ -74,6 +75,47 @@ next: page-2.html
 каждого селектора.
 Для отдельного HTML-фрагмента без HTTP используйте `parse_html(data, Model)`. Он применяет ту же
 модель, селекторы и адаптеры.
+
+## Достать значение из встроенного скрипта
+
+Токен страницы часто лежит внутри `<script>`, и разметкой к нему не подойти. Селектор `Regex`
+ищет по тексту документа и стоит на поле рядом с `CSS` и `XPath`.
+
+```{literalinclude} ../../../../../../examples/docs/response_regex.py
+:language: python
+:start-after: "# docs:example:start"
+:end-before: "# docs:example:end"
+```
+
+Шаблон с одной группой отдаёт в поле эту группу, шаблон без групп отдаёт всё совпадение. Две
+группы и больше считаются ошибкой объявления. Поле с одним значением получает первое совпадение,
+поле-список получает все.
+
+На странице примера ключ `token` встречается дважды, и первым идёт чужой. Поле `token` привязано
+к ключу `account`, поэтому получает нужное значение, а `every_token` показывает оба.
+
+Поиск идёт по тексту в том виде, в каком его прислал сервис. Сущности вида `&amp;` не
+раскрываются, содержимое скрипта не разбирается. Второй аргумент принимает флаги модуля `re`.
+
+`title` с `Const("Mail")` отличает страницу почты от страницы входа, которую сайт отдаёт с тем же
+статусом `200`. Поле из куки или заголовка того же ответа добавляется в эту же модель маркерами
+`FromCookie` и `FromHeader`.
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/response_regex.py
+:language: python
+```
+:::
+
+Запуск: `uv run python examples/docs/response_regex.py`.
+
+<!-- example-output: examples.docs.response_regex -->
+```text
+title: Mail
+token: page-token-42
+email: ada@mail.example
+every token: ads-token, page-token-42
+```
 
 ## Дальше
 

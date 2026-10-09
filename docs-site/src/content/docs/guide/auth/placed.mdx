@@ -1,0 +1,117 @@
+---
+title: Разложить сессию по запросу
+description: Отметьте на модели сессии, какие поля уходят в query, заголовки и набор кук, и получите вход и обновление без ручной сборки.
+sources:
+  - eazy_sdk.auth.Placed
+  - eazy_sdk.auth.session_scheme
+  - eazy_sdk.auth.Bearer
+api_fingerprint: "sha256:b781bd2376b3864711027021b2c00f6e24cbe82fe0c1782ce63171dbef2e6d88"
+---
+
+Не каждая сессия помещается в один заголовок `Authorization`. Веб-почта передаёт токен страницы
+и адрес ящика в query каждого вызова, а рядом отправляет весь набор кук входа. Все три значения
+принадлежат одной сессии и появляются после одного входа.
+
+Отметьте поля модели сессии маркером `Placed`. Схема, вход на первом защищённом вызове и
+обновление после `401` строятся из этой модели.
+
+```{literalinclude} ../../../../../../examples/docs/auth_placed.py
+:language: python
+:start-after: "# region docs: auth-placed-model"
+:end-before: "# endregion docs: auth-placed-model"
+```
+
+`session_scheme(MailSession)` читает маркеры и возвращает схему. Роутер получает её через
+`security`, а корень SDK связывает схему с учётными данными и сервисом входа одной строкой:
+`MAIL_SESSION.configure(credentials=..., service=...)`. Вместо `credentials=` можно передать
+готовую `session=`, тогда вход не выполняется.
+
+| Маркер | Куда уходит значение | Тип поля |
+|---|---|---|
+| `Placed.query("token")` | параметр query | строка или `SecretStr` |
+| `Placed.header("X-Device", prefix="")` | заголовок | строка или `SecretStr` |
+| `Placed.cookie("sid")` | одна кука с известным именем | строка или `SecretStr` |
+| `Placed.cookies()` | каждая пара отображения отдельной кукой | `dict[str, str]` |
+
+`secret=False` снимает скрытие значения в диагностике. Оставьте его только для несекретных
+полей, таких как адрес ящика.
+
+`Bearer()` остаётся коротким написанием для `Placed.header("Authorization", prefix="Bearer ")`.
+Оба маркера живут на одной модели, если сервису нужны и токен в заголовке, и что-то ещё.
+
+:::{dropdown} Запускаемый файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_placed.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.auth_placed -->
+```text
+folders: Inbox, Sent
+request: token=page-token-42&email=ada%40mail.example | Cookie: sid=sid-42
+```
+
+## Когда сессия считается пригодной
+
+Сессия с пустым размещаемым значением в запрос не уходит. Пустая строка, пустой набор кук или
+`None` в отмеченном поле означают, что отправлять нечего, и SDK выполняет вход заново. Поля без
+маркера на пригодность не влияют. Срок действия по-прежнему задаёт `ExpiresAt`.
+
+## Что проверяется при объявлении
+
+`session_scheme(...)` отклоняет модель сразу, без запроса:
+
+| Объявление | Причина отказа |
+|---|---|
+| ни одного `Placed` и ни одного `Bearer` | модель ничего не кладёт в запрос |
+| два поля с `Placed.query("token")` | одно место запроса принимает одно поле |
+| `Placed.cookies()` на строке | набор кук должен быть отображением |
+| `Placed.query(...)` на словаре или списке | одно место принимает одно значение |
+
+## Вход, который отвечает переходом
+
+Сервис входа получает корень SDK без сессии и вызывает через него обычные операции. Первый шаг
+читает исход из адреса перехода и забирает куку из того же ответа. Второй открывает страницу
+почты с этой кукой и достаёт токен из встроенного скрипта.
+
+```{literalinclude} ../../../../../../examples/docs/auth_redirect_login.py
+:language: python
+:start-after: "# region docs: redirect-login-steps"
+:end-before: "# endregion docs: redirect-login-steps"
+```
+
+Куки между шагами передаются явно: `SignedIn.sid` читает куку из ответа, `OpenInbox.sid`
+отправляет её в следующем запросе. Сервис входа собирает из результатов двух шагов одну сессию.
+
+```{literalinclude} ../../../../../../examples/docs/auth_redirect_login.py
+:language: python
+:start-after: "# region docs: redirect-login-session"
+:end-before: "# endregion docs: redirect-login-session"
+```
+
+Отказ входа доходит до вызывающего тем же типом, каким его объявила операция. Неверный пароль
+даёт `InvalidCredentials` на первом защищённом вызове.
+
+:::{dropdown} Запускаемый файл целиком
+```{literalinclude} ../../../../../../examples/docs/auth_redirect_login.py
+:language: python
+```
+:::
+
+<!-- example-output: examples.docs.auth_redirect_login -->
+```text
+folders: Inbox, Sent
+POST /cgi-bin/auth
+GET /inbox/
+GET /api/folders
+GET /api/folders
+wrong password: fail 1
+```
+
+Вход выполнен один раз: второй вызов `folders()` использует ту же сессию.
+
+## Дальше
+
+- {doc}`Опишите исходы перехода подробнее </guide/responses/redirects>`.
+- {doc}`Передайте сохранённую сессию и пропустите вход </guide/auth/session>`.
+- {doc}`Обновите сессию после отказа </guide/auth/refresh>`.

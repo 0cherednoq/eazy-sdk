@@ -3,7 +3,7 @@ title: Session
 description: Публичный API login session.
 sources:
   - eazy_sdk.auth
-api_fingerprint: "sha256:e05d52d8d3c2c46ca125bd892844f43414d5a3fe6fd055df4bb0f477fc006ba8"
+api_fingerprint: "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae"
 ---
 
 ## Session из модели
@@ -50,6 +50,19 @@ Bearer()
 RefreshToken()
 ExpiresAt(leeway=...)
 ```
+
+## Несколько мест запроса
+
+| Маркер | Размещение |
+|---|---|
+| `Placed.query(name, secret=True)` | параметр query |
+| `Placed.header(name, prefix="", secret=True)` | заголовок |
+| `Placed.cookie(name, secret=True)` | одна кука |
+| `Placed.cookies()` | каждая пара поля `Mapping[str, str]` отдельной кукой |
+
+`Bearer()` равен `Placed.header("Authorization", prefix="Bearer ")`. Модель обязана нести хотя бы
+одно размещение и не больше одного `Bearer`. Сессия с пустым размещаемым значением считается
+непригодной.
 
 ## Store
 

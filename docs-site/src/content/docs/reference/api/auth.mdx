@@ -3,7 +3,7 @@ title: Auth
 description: Публичные схемы статической авторизации.
 sources:
   - eazy_sdk.auth
-api_fingerprint: "sha256:e05d52d8d3c2c46ca125bd892844f43414d5a3fe6fd055df4bb0f477fc006ba8"
+api_fingerprint: "sha256:d7b827699bce76e84718d22d8f2d93895dfa9cc2cb6a255d70857b1f4a3520ae"
 ---
 
 ## Схемы
@@ -38,6 +38,7 @@ any_of(all_of(USER_AUTH, DEVICE_AUTH), BASIC)
 | `ApiKeyScheme.header(header, name=...)` | `str` | Заголовок запроса |
 | `ApiKeyScheme.query(parameter, name=...)` | `str` | Параметр query |
 | `CookieScheme(cookie, name=...)` | `str` | Cookie |
+| `session_scheme(Model)` с `Placed` | модель сессии | Несколько мест запроса сразу |
 
 `scheme.static(credential)` создаёт привязку авторизации клиента. `all_of(...)` возвращает одну
 AND-альтернативу, а `any_of(...)` создаёт OR-политику. Runtime выбирает только полностью

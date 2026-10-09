@@ -1,7 +1,7 @@
 # Фаза 57. `Location`, размещения на модели сессии, экстракторы не-JSON
 
 Статус: план утверждён 2026-10-09 (владелец: «обязательность на 3xx оставляем, начинай с
-57.1»); 57.1–57.4 сделаны, см. §9. Gates — в
+57.1»); 57.1–57.5 сделаны, кроме выпуска `0.2.0a10`: он ждёт команды владельца, см. §9. Gates — в
 `STATUS.md`. Зависит от фазы 53 (кейсы ответа, `when=`, арбитраж), фазы 54 (`Const`/`Payload`,
 проверки при импорте) и фазы 50 (маркеры-`Annotated`). Один релиз: `0.2.0a10`.
 
@@ -492,6 +492,10 @@ class MailPage(BaseModel):
 | 2026-10-09 | 57.1 | **Отклонение от исходной редакции.** План утверждал, что `302` доходит до операции как обычный ответ. Это неверно: редиректы ведёт ядро (`decide_response`), и при бюджете 0 ответ с `Location` заканчивался `RedirectLimitError` до просмотра кейсов. Добавлено правило §3.4a; §0.7, §1.1, §3.1, §11 исправлены. |
 | 2026-10-09 | 57.1 | **Отклонение.** `Location` экспортирован только из `eazy_sdk.response`: в корне `eazy_sdk` ровно 40 имён, а `test_phase14_public_api` и `test_phase52_pagination` держат бюджет `<= 40`. Поднимать бюджет — решение владельца (§10). |
 | 2026-10-09 | 57.1 | В блоках §3.7 и §3.8 убраны строки импорта ещё не существующих `Placed` и `Regex`: `test_documented_eazy_sdk_imports_resolve_to_real_symbols` проверяет python-блоки планов. Вернуть в 57.3 и 57.4. |
+| 2026-10-09 | 57.5 | **Отклонение.** Сквозной пример лежит в `examples/docs/auth_redirect_login.py`, а не в `examples/redirect_login.py`: так его вывод сверяет существующий `test_phase56_docs_examples` (блок `example-output` на странице), и отдельный тест не нужен. Рецепт вошёл разделом в `guide/auth/placed.mdx`, а не отдельной страницей. |
+| 2026-10-09 | 57.5 | Документация: новые страницы `guide/responses/redirects.mdx` и `guide/auth/placed.mdx`, раздел о `Regex` в `guide/responses/html.mdx`, дополнены `guide/reliability/redirect.mdx`, `guide/responses/index.mdx`, `architecture/response-cases.mdx`, `architecture/request-path.mdx`, `reference/api/response.mdx`, `session.mdx`, `auth.mdx`, `reference/changelog.mdx`; `CHANGELOG.md` (раздел Unreleased), `sdk-authoring-reference.md`. У `guide/responses/success.mdx` и `start/quickstart.mdx` обновлён только отпечаток: утверждений, затронутых фазой, в них нет. |
+| 2026-10-09 | 57.5 | Гейты: `uv run pytest -q` — 1873 passed, 11 skipped; `uv run mypy` — 514 файлов без замечаний; `uv run ruff check` — чисто; `scripts/docs_freshness.py check` — 82 страницы свежие; `docs-site/scripts/validate_docs.py` — 115 страниц; `sphinx-build -W` — без предупреждений; `lint-imports` — 5 контрактов соблюдены; `uv build` — колесо и sdist собраны, новые модули в колесе есть. Изолированная установка колеса с extras `html` не выполнялась. |
+| 2026-10-09 | 57.5 | Не сделано: выпуск `0.2.0a10` (версия в файлах, тег, публикация) — по команде владельца. Приёмка §7.1 на `armgs-sdk` — в его репозитории, после выпуска. |
 | 2026-10-09 | 57.4 | **Отклонение.** `Regex` ищет своим `re.finditer` по исходному тексту, а не через `selector.re(...)` parsel: тот работает по разметке, пересобранной lxml, и раскрывает сущности. Скалярное поле берёт первое совпадение (§3.8 переписан). |
 | 2026-10-09 | 57.4 | done. `Regex`, источники ответа в документе, D-57-07; `plugins/html/tests/test_phase57_regex.py` (19 тестов). `uv run mypy` — 509 файлов без замечаний; `uv run ruff check` — чисто. `uv run pytest -q`: первый прогон — 1866 passed, 11 skipped, 3 failed (`test_appending_query_preserves_existing_and_new_pair_order`, `test_live_driver_contract[pydoll]`, `test_driver_detaches_itself_when_the_page_closes`); все три проходят отдельно, пример, найденный hypothesis, при прямом воспроизведении проходит за 0,7 мс; повторный полный прогон — 1869 passed, 11 skipped. Код этих тестов фаза не трогает. Импорт `Regex` в блок §3.8 возвращён. |
 | 2026-10-09 | 57.3 | Проба `Placed.cookies()` прошла без второго пути: слоты размещений схемы заводит `http_compiler` (цикл по `scheme.placements`), для набора там же заводится cookie-слот с `ManagedCookieSetDescriptor`, дальше работает существующий `_cookies`. Имя слота — `auth_cookie_set_name(<имя схемы>)` в `core/http.py`; у `AuthPlacement` появилось поле `many`. |
@@ -536,9 +540,8 @@ class MailPage(BaseModel):
 
 - обязательность критерия на 3xx (I5, D-57-01) остаётся (2026-10-09).
 
-**Открыто, решает владелец до 57.5:** экспорт `Location` из корня `eazy_sdk`. Бюджет корня — 40
-имён, занят полностью. Либо бюджет поднимается до 41 в двух тестах, либо `Location` остаётся в
-`eazy_sdk.response` рядом с `Const`, `ApiError` и представлениями.
+- `Location` остаётся в `eazy_sdk.response` рядом с `Const`, `ApiError` и представлениями; бюджет
+  корня в 40 имён не поднимается (2026-10-09).
 
 ---
 

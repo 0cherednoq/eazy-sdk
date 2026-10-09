@@ -5,7 +5,7 @@ sources:
   - eazy_sdk.request.pipeline.REQUEST_PIPELINE
   - eazy_sdk.PreparedCall
   - eazy_sdk.response.Responses
-api_fingerprint: "sha256:666cbf279bb9d24ac35c0ff6862af6de697068dec22f058e0f984e651cb67951"
+api_fingerprint: "sha256:74d869497ef9ae2f5ec210491813ed698161eaa348fe9bc805cdb9491dab4814"
 ---
 
 Что происходит после вызова метода?
@@ -48,7 +48,8 @@ flowchart TD
 Обработчик получает уже подготовленный запрос и возвращает нормализованный ответ
 ([`eazy_sdk.clients.executor`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/clients/executor.py)).
 
-После транспорта `Responses.inspect(...)` сопоставляет ответ с декларациями операции. Обычный
+После транспорта `Responses.inspect(...)` сопоставляет ответ с декларациями операции. Ответ
+со статусом перехода исполнитель ведёт сам, если операция не объявила на этот статус вариант. Обычный
 вызов разворачивает результат, а `.with_response(...)` добавляет исходный нормализованный ответ
 без второго сетевого пути
 ([`eazy_sdk.response.cases`](https://github.com/0cherednoq/eazy-sdk/blob/master/eazy_sdk/response/cases.py)).

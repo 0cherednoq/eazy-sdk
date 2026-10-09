@@ -5,6 +5,43 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Added:
+
+- `Location` in `eazy_sdk.response` compares the redirect target part by part: `host`, `path`,
+  `query` and `contains`, every one optional, with `*` as the only wildcard in a string and a
+  compiled pattern for the rest. A relative header is resolved against the request address
+  first. On a model field, `Annotated[str, Location(path="/inbox*")]` is the criterion of the
+  case and the source of the field at once; `Location.query("fail")` reads one query parameter,
+  and `Const(...)` beside it states the value. The same object is a `when=` condition and
+  combines with `eazy_sdk.response.match` predicates.
+- `HeaderModel`: a model every field of which is read from around the body (`Location`,
+  `FromHeader`, `FromCookie`) is read without the body, and is recognized without being told.
+- `FromCookie("sid")` reads the value of a cookie the response sets into a model field.
+- `Placed.query`, `Placed.header`, `Placed.cookie` and `Placed.cookies` in `eazy_sdk.auth` mark
+  the fields of a session model that go into every protected request, so
+  `session_scheme(Model).configure(...)` gives the whole acquire and refresh lifecycle to a
+  session that is more than one Bearer header. `Bearer()` compiles through the same placements.
+- `Regex` in `eazy_sdk_html` is a third selector language beside `CSS` and `XPath`. It searches
+  the document text as received; a single-value field takes the first match, a list field every
+  match. A document model may also carry `FromCookie`, `FromHeader` and `Location` fields.
+
+Changed:
+
+- A redirect whose status the operation declares a case on is read by the operation: the client
+  no longer follows it and no longer raises `RedirectLimitError` for it, whatever
+  `max_redirects` is. Before this, a response with a `Location` header on `301`, `302`, `303`,
+  `307` or `308` never reached the declared cases. `fallback=` does not declare a status, and an
+  operation with no case on a redirect status behaves as before.
+- A case on a status inside `3xx` must state a criterion: `Location(...)` on a field of its
+  model, `when=`, `accept=` or a `Const(...)` tag. A case that would claim every redirect is
+  refused when the operation is first compiled; `when=Location()` says "any target" out loud.
+- A session with an empty placed value is not valid: an empty Bearer token, an empty string or
+  an empty cookie set is acquired again instead of being sent.
+- The slot of an auth placement takes `secret` from `AuthPlacement.secret`. It was always
+  secret before, so `secret=False` on a hand-built placement had no effect.
+- A session model that places nothing is refused with a message naming `Placed` beside
+  `Bearer`; two `Bearer` fields keep the previous message.
+
 ## 0.2.0a9 - 2026-10-07
 
 Fixed:

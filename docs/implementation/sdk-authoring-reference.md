@@ -588,3 +588,16 @@ Retry, redirect, reaction и auth refresh создают новую attempt и �
 | signer сериализует body повторно | Zapros request snapshot или exact codec bytes |
 | provider добавляет новый неизвестный slot | compiled `Inject`/dependency patch |
 | `tag=a&tag=b` | single-value `ScalarCodec` |
+
+## Phase 57: redirect targets, session placements, non-JSON extractors
+
+- `eazy_sdk.response.Location(host=, path=, query=, contains=)`: a `when=` condition and a model
+  field marker. `Location.query(name)` reads one query parameter into a field.
+- `eazy_sdk.response.HeaderModel(Model)`: a model read from around the body; inferred when every
+  field carries `Location`, `FromHeader` or `FromCookie`.
+- `eazy_sdk.response.FromCookie(name)`: a cookie the response sets, as a field source.
+- `eazy_sdk.auth.Placed.query / header / cookie / cookies`: session model fields placed into
+  every protected request; `session_scheme(Model)` builds the scheme and its lifecycle.
+- `eazy_sdk_html.Regex(pattern, flags=0)`: a selector over the document text as received.
+- A redirect status an operation declares a case on is read by the operation, not followed.
+

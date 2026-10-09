@@ -3,7 +3,7 @@ title: Response API
 description: Singular responses, advanced cases, typed parsers и envelopes.
 sources:
   - eazy_sdk.response
-api_fingerprint: "sha256:3d36f79f5c5212cb20c9899604ad7f4beea96bd74181106599bdd78d23562c44"
+api_fingerprint: "sha256:e44fda6f07fbb65add2731a2c9916a82d14b6fed7d347d8be2b6f31965d523a8"
 ---
 
 ## Одна успешная case
@@ -30,9 +30,10 @@ class UsersApi(AsyncApi):
     get_user = op(GetUser)
 ```
 
-Семья читается из модели: модель с CSS/XPath-селекторами означает документ, любая другая модель
-означает JSON, `str` означает текст, `bytes` означает байты, а `None` означает пустое тело. Явные
-`Json(status=201)`, `Html(...)`, `Text()`
+Семья читается из модели: модель с селекторами `CSS`, `XPath` или `Regex` означает документ,
+модель, у которой каждое поле читается из заголовков ответа, читается без тела, любая другая
+модель означает JSON, `str` означает текст, `bytes` означает байты, а `None` означает пустое тело.
+Явные `Json(status=201)`, `Html(...)`, `HeaderModel(...)`, `Text()`
 нужны, когда важны статус, медиа-тип или условие `when=`/`accept=`.
 
 ## Несколько случаев
@@ -57,6 +58,7 @@ __http__ = Http.get(
 |---|---|
 | `Json(Model, media_type=...)` | dataclass, Pydantic, msgspec или custom model adapter |
 | `Html(Model, media_type=...)` | CSS/XPath extraction с последующим model adapter |
+| `HeaderModel(Model)` | Модель из `Location`, `FromHeader` и `FromCookie`; тело не читается |
 | `Extracted(Model, using=...)` | Custom primitive extractor с последующим model adapter |
 | `Parsed(Model, using=...)` | Custom response parser |
 | `Text(media_type=...)` | `str` |
@@ -64,6 +66,21 @@ __http__ = Http.get(
 | `Empty(media_type=...)` | `None`, только для пустого body |
 
 Status selector может быть `int`, `StatusRange(start, end)` или `DEFAULT`.
+
+## Источники поля вне тела
+
+| Маркер поля | Откуда значение | Пропуск обязательного поля |
+|---|---|---|
+| `FromHeader("X-Request-Id")` | одна строка заголовка ответа | `MalformedResponseError` |
+| `FromCookie("sid")` | кука из `Set-Cookie` этого ответа, последняя из одноимённых | `MalformedResponseError` |
+| `Location(host=..., path=..., query=..., contains=...)` | полный адрес из `Location` | случай не выбран |
+| `Location.query("fail")` | значение параметра адреса | случай не выбран |
+
+`Location` на поле, тип которого не допускает `None`, считается критерием случая наравне с
+`when=`, `accept=` и `Const(...)`. Тот же объект передаётся в `when=` как условие. Случай на
+статусе `3xx` без критерия отклоняется при объявлении операции.
+
+Редирект, на статус которого операция объявила случай, читает операция: клиент ему не следует.
 
 ## Typed callable parser
 
