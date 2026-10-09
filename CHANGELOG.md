@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a11 - 2026-10-10
+
 Breaking:
 
 - A cookie the server set is sent one way only: through the cookie jar of the caller's

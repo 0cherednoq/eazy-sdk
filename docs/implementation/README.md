@@ -85,7 +85,7 @@ included from a runnable file in `examples/`. It changes no core or plugin code.
 the `Location` header (`Location(...)` on a model field and in `when=`), places one session in
 several request slots through `Placed` markers on the session model, and adds `Regex` and
 `FromCookie` extractors for non-JSON responses.
-[Phase 58](58-identity-cookie-jar.md) (planned) gives each `Identity` a cookie jar switched on by
+[Phase 58](58-identity-cookie-jar.md) gives each `Identity` a cookie jar switched on by
 `Cookies(...)` on the SDK root, so a server-set cookie travels between operations and redirect
 hops without being named, and removes every other way to send one.
 
