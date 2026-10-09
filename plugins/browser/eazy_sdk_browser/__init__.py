@@ -138,7 +138,7 @@ from eazy_sdk_browser.session import BrowserSession  # isort: skip
 
 from eazy_sdk_browser.api import AsyncBrowserApi, BrowserServiceDefaults  # isort: skip
 
-__version__ = "0.2.0a9"
+__version__ = "0.2.0a10"
 
 __all__ = [
     "FETCH_TIMEOUT",

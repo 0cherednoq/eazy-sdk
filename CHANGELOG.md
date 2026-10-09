@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a10 - 2026-10-09
+
 Added:
 
 - `Location` in `eazy_sdk.response` compares the redirect target part by part: `host`, `path`,

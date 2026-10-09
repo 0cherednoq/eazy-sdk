@@ -81,7 +81,7 @@ an external orchestration layer such as `browser_pool`.
 [Phase 56](56-documentation-overhaul.md) rebuilds the documentation site: four top tabs, one mail
 SDK tutorial shown for both HTTP and browser on a shared teaching site, and every page snippet
 included from a runnable file in `examples/`. It changes no core or plugin code.
-[Phase 57](57-location-placements-extractors.md) (planned) lets a response state its outcome in
+[Phase 57](57-location-placements-extractors.md) lets a response state its outcome in
 the `Location` header (`Location(...)` on a model field and in `when=`), places one session in
 several request slots through `Placed` markers on the session model, and adds `Regex` and
 `FromCookie` extractors for non-JSON responses.

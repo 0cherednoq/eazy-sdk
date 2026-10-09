@@ -1,6 +1,6 @@
 [project]
 name = "eazy-sdk-core"
-version = "0.2.0a9"
+version = "0.2.0a10"
 description = "Transport-independent runtime for typed HTTP and async WebSocket SDKs."
 readme = "README.md"
 requires-python = ">=3.13"

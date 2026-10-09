@@ -57,8 +57,8 @@ the same files to a GitHub release.
 3. Create an annotated tag whose body is the release notes, and push it:
 
    ```bash
-   git tag -a v0.2.0a9 -m "Eazy SDK 0.2.0a9" -m "Release notes go here."
-   git push origin v0.2.0a9
+   git tag -a v0.2.0a10 -m "Eazy SDK 0.2.0a10" -m "Release notes go here."
+   git push origin v0.2.0a10
    ```
 
 The tag must equal `v` plus the project version, otherwise the build job stops.
