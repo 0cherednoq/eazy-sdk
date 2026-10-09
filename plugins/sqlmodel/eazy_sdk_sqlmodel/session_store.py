@@ -20,9 +20,25 @@ from eazy_sdk.auth.session import (
     SessionRevisionError,
     StoredSession,
 )
+from eazy_sdk.cookies import CookieState
 from eazy_sdk_sqlmodel.codecs import PlainPydanticCodec, SqlValueCodec
 from eazy_sdk_sqlmodel.factory import DEFAULT_MODELS, SqlStorageModels
 from eazy_sdk_sqlmodel.models import utcnow
+
+
+def _cookies_of(stored: object) -> CookieState | None:
+    """Read the saved snapshot; ``None`` when there is none or its format is not the current one.
+
+    A snapshot written by another version is not repaired: without it the session simply has
+    no cookies, the lifecycle finds it invalid and signs in again.
+    """
+
+    if stored is None:
+        return None
+    try:
+        return CookieState.from_primitive(stored)
+    except ValueError:
+        return None
 
 
 class SqlSessionStore[TSession: BaseModel]:
@@ -51,6 +67,7 @@ class SqlSessionStore[TSession: BaseModel]:
         return StoredSession(
             self._codec.decode(cast(Mapping[str, object], row.payload)),
             SessionRevision(row.revision),
+            _cookies_of(row.cookie_state),
         )
 
     async def save(
@@ -58,8 +75,10 @@ class SqlSessionStore[TSession: BaseModel]:
         key: SessionKey,
         value: TSession,
         revision: SessionRevision,
+        cookies: CookieState | None = None,
     ) -> None:
         payload = self._codec.encode(value)
+        snapshot = None if cookies is None else cookies.to_primitive()
         transaction = self._transaction()
         async with transaction:
             row = await self._row(key)
@@ -70,6 +89,7 @@ class SqlSessionStore[TSession: BaseModel]:
                     revision=revision.value,
                     kind=self._kind,
                     payload=dict(payload),
+                    cookie_state=snapshot,
                     expires_at=getattr(value, "expires_at", None),
                     is_active=True,
                 )
@@ -88,6 +108,7 @@ class SqlSessionStore[TSession: BaseModel]:
                         .where(table.c.id == row.id, table.c.revision == expected)
                         .values(
                             payload=dict(payload),
+                            cookie_state=snapshot,
                             revision=revision.value,
                             expires_at=getattr(value, "expires_at", None),
                             is_active=True,

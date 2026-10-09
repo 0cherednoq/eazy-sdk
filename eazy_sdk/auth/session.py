@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 
 from eazy_sdk.auth.lifecycle import LifecycleCycleError, LifecycleGraph, LifecycleNode
+from eazy_sdk.cookies import CookieJar, Cookies, CookieState
 from eazy_sdk.core.errors import ConfigurationError, EazySdkError, PlanError
 from eazy_sdk.models import default_model_adapters
 
@@ -59,6 +60,8 @@ class SessionRevision:
 class StoredSession[TSession]:
     value: TSession = field(repr=False)
     revision: SessionRevision
+    cookies: CookieState | None = field(default=None, repr=False)
+    """The cookies the user held when this revision was saved; ``None`` for a token session."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +81,7 @@ class SessionStore[TSession](Protocol):
         key: SessionKey,
         value: TSession,
         revision: SessionRevision,
+        cookies: CookieState | None = None,
     ) -> None: ...
 
     async def invalidate(
@@ -167,6 +171,60 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
         self.config = config
         self._lock = asyncio.Lock()
         self._revision = 0
+        self._cookies: tuple[CookieJar, Cookies] | None = None
+        self._seeded = False
+
+    def bind_cookies(self, jar: CookieJar, declared: Cookies) -> None:
+        """Tie the session to the user's jar on a site that keeps its session in cookies."""
+
+        self._cookies = (jar, declared)
+
+    def _seed(self, stored: StoredSession[TSession]) -> None:
+        """Pour a saved snapshot into the jar, once.
+
+        Once, because the store is read on every call: pouring it in again would put cookies
+        the server has replaced since back over their replacements. And whether or not the
+        saved session is still valid: a browser keeps its cookies after a session dies, and a
+        site tells a known device from a new one by them.
+        """
+
+        if self._cookies is None or self._seeded:
+            return
+        self._seeded = True
+        if stored.cookies is not None:
+            self._cookies[0].load(stored.cookies)
+
+    def _missing_cookie(self) -> str | None:
+        """The first required cookie that is not alive, or ``None`` when all of them are."""
+
+        if self._cookies is None:
+            return None
+        jar, declared = self._cookies
+        return next(
+            (name for name in declared.required if not jar.has_live(name, leeway=declared.leeway)),
+            None,
+        )
+
+    def _valid(self, value: TSession) -> bool:
+        return bool(self.config.validate(value)) and self._missing_cookie() is None
+
+    def _refuse_incomplete(self, value: TSession, what: str) -> None:
+        if not self.config.validate(value):
+            raise SessionValidationError(f"{what} session failed validation")
+        missing = self._missing_cookie()
+        if missing is not None:
+            raise SessionValidationError(
+                f"{what} session failed validation: the exchange finished, and the site did "
+                f"not set a live cookie {missing!r}"
+            )
+
+    async def _save(self, value: TSession, revision: SessionRevision) -> None:
+        if self._cookies is None:
+            await self.config.store.save(self.config.key, value, revision)
+            return
+        await self.config.store.save(
+            self.config.key, value, revision, cookies=self._cookies[0].snapshot()
+        )
 
     @property
     def can_refresh(self) -> bool:
@@ -189,7 +247,8 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
             stored = await self.config.store.load(self.config.key)
             if stored is not None:
                 self._revision = max(self._revision, stored.revision.value)
-                if self.config.validate(stored.value):
+                self._seed(stored)
+                if self._valid(stored.value):
                     return self._record(stored.value, stored.revision)
                 if self.config.refresh is not None:
                     return await self._refresh_locked(stored, parent)
@@ -197,7 +256,7 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
             initial = self.config.initial_session
             if initial is not None:
                 parsed = self.config.parse(initial)
-                if self.config.validate(parsed):
+                if self._valid(parsed):
                     return await self._save_next(parsed)
 
             if self.config.credentials is None or self.config.acquire is None:
@@ -210,8 +269,7 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
                 self.config.context_factory(child),
             )
             parsed = self.config.parse(value)
-            if not self.config.validate(parsed):
-                raise SessionValidationError("acquired session failed validation")
+            self._refuse_incomplete(parsed, "acquired")
             return await self._save_next(parsed)
 
     async def adopt(self, value: TSession) -> SessionRecord[TSession]:
@@ -219,8 +277,7 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
 
         async with self._lock:
             parsed = self.config.parse(value)
-            if not self.config.validate(parsed):
-                raise SessionValidationError("adopted session failed validation")
+            self._refuse_incomplete(parsed, "adopted")
             stored = await self.config.store.load(self.config.key)
             if stored is not None:
                 self._revision = max(self._revision, stored.revision.value)
@@ -248,7 +305,8 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
                     f"stored session required to refresh {self.config.diagnostic_name}"
                 )
             self._revision = max(self._revision, current.revision.value)
-            if current.revision.value > expected.value and self.config.validate(current.value):
+            self._seed(current)
+            if current.revision.value > expected.value and self._valid(current.value):
                 return self._record(current.value, current.revision)
             if current.revision.value < expected.value:
                 raise SessionRevisionError(
@@ -276,17 +334,16 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
             self.config.context_factory(child),
         )
         parsed = self.config.parse(value)
-        if not self.config.validate(parsed):
-            raise SessionValidationError("refreshed session failed validation")
+        self._refuse_incomplete(parsed, "refreshed")
         revision = SessionRevision(current.revision.value + 1)
         self._revision = max(self._revision, revision.value)
-        await self.config.store.save(self.config.key, parsed, revision)
+        await self._save(parsed, revision)
         return self._record(parsed, revision)
 
     async def _save_next(self, value: TSession) -> SessionRecord[TSession]:
         self._revision += 1
         revision = SessionRevision(self._revision)
-        await self.config.store.save(self.config.key, value, revision)
+        await self._save(value, revision)
         return self._record(value, revision)
 
     def _record(self, value: TSession, revision: SessionRevision) -> SessionRecord[TSession]:
@@ -307,11 +364,12 @@ class MemorySessionStore[TSession]:
         key: SessionKey,
         value: TSession,
         revision: SessionRevision,
+        cookies: CookieState | None = None,
     ) -> None:
         current = self._values.get(key.value)
         if current is not None and revision.value < current.revision.value:
             raise SessionRevisionError("session revision moved backwards")
-        self._values[key.value] = StoredSession(value, revision)
+        self._values[key.value] = StoredSession(value, revision, cookies)
 
     async def invalidate(
         self,

@@ -686,6 +686,71 @@ def test_custom_model_bundle_is_validated_before_first_write(session: AsyncSessi
         build_sqlmodel_storage(session, models=SqlStorageModels(account=SQLModel))
 
 
+@pytest.mark.asyncio
+async def test_session_store_keeps_the_cookie_snapshot_in_its_own_column(
+    session: AsyncSession,
+) -> None:
+    from eazy_sdk.cookies import CookieState, StoredCookie
+
+    account = Account(identifier="cookie-owner")
+    session.add(account)
+    await session.flush()
+    store = SqlSessionStore(session, account.id, session_model=TokenSession, kind="cookie")
+    key = SessionKey("primary")
+    value = TokenSession(
+        access_token=SecretStr("access-v1"),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    snapshot = CookieState(
+        (
+            StoredCookie("sid", "cookie-secret", "mail.example", host_only=False),
+            StoredCookie(
+                "device",
+                "d1",
+                "auth.mail.example",
+                path="/cgi-bin",
+                expires_at=datetime(2030, 1, 1, tzinfo=UTC),
+                secure=True,
+                http_only=True,
+                same_site="Lax",
+            ),
+        )
+    )
+
+    await store.save(key, value, SessionRevision(1), cookies=snapshot)
+    loaded = await store.load(key)
+    assert loaded is not None and loaded.value == value and loaded.cookies == snapshot
+
+    row = (await session.execute(select(Session))).scalars().one()
+    assert "cookies" not in row.payload
+    assert "cookie-secret" not in repr(row)
+
+    await store.save(key, value, SessionRevision(2))
+    without = await store.load(key)
+    assert without is not None and without.cookies is None
+
+
+@pytest.mark.asyncio
+async def test_a_snapshot_in_another_format_reads_as_no_cookies(session: AsyncSession) -> None:
+    account = Account(identifier="old-cookie-owner")
+    session.add(account)
+    await session.flush()
+    store = SqlSessionStore(session, account.id, session_model=TokenSession, kind="cookie")
+    key = SessionKey("primary")
+    value = TokenSession(
+        access_token=SecretStr("access-v1"),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    await store.save(key, value, SessionRevision(1))
+    row = (await session.execute(select(Session))).scalars().one()
+    row.cookie_state = [{"name": "sid", "value": "1", "domain": ".mail.example", "path": "/"}]
+    session.add(row)
+    await session.flush()
+
+    loaded = await store.load(key)
+    assert loaded is not None and loaded.value == value and loaded.cookies is None
+
+
 def test_postgresql_schema_snapshot() -> None:
     snapshot = Path(__file__).with_name("snapshots") / "account_storage_v2.postgresql.sql"
     assert schema_ddl("postgresql") == snapshot.read_text(encoding="utf-8")

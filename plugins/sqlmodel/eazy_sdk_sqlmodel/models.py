@@ -92,6 +92,8 @@ class BaseSession(SQLModel):
     revision: int = Field(default=1, nullable=False)
     kind: str = Field(default="custom", nullable=False)
     payload: dict[str, Any] = Field(default_factory=dict, sa_type=JSON, nullable=False)
+    cookie_state: list[dict[str, Any]] | None = Field(default=None, sa_type=JSON)
+    """The user's cookie snapshot of this revision; its own column, the payload is the codec's."""
     expires_at: datetime | None = Field(default=None, sa_type=UtcDateTime)
     is_active: bool = Field(default=True, nullable=False)
     created_at: datetime = Field(default_factory=utcnow, sa_type=UtcDateTime, nullable=False)

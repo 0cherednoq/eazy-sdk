@@ -182,6 +182,14 @@ class _RootBase:
             self._scope,
             self._default_client,
             _scoped_factory(type(self), self._bindings, self._serialization, self._scope),
+            next(
+                (
+                    group.defaults.cookies
+                    for group in self._plan.values()
+                    if group.defaults.cookies is not None
+                ),
+                None,
+            ),
         )
 
     def _build_group(self, group: _ApiGroup[Any]) -> SyncApi | AsyncApi:

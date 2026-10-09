@@ -9,6 +9,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from eazy_sdk.auth.session import LifecycleGraph, SessionKey, SessionRevision
+from eazy_sdk.cookies import CookieJar, Cookies
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.core.http import auth_cookie_set_name
 from eazy_sdk.core.http_plan import RequestScope
@@ -205,6 +206,14 @@ class AuthProviders:
             bind = getattr(provider, "bind_sdk_factory", None)
             if callable(bind):
                 bind(factory)
+
+    def bind_cookies(self, jar: CookieJar, declared: Cookies) -> None:
+        """Hand the user's jar to every session that can keep it with its own state."""
+
+        for provider in self._providers.values():
+            bind = getattr(provider, "bind_cookies", None)
+            if callable(bind):
+                bind(jar, declared)
 
     async def adopt[T](self, scheme: AuthScheme[T], value: T) -> object:
         provider = self.get(scheme)

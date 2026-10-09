@@ -1018,6 +1018,7 @@ class _ApiBase:
                     defaults=self._defaults,
                     scope=self._scope,
                 ),
+                self._defaults.cookies,
             )
 
 

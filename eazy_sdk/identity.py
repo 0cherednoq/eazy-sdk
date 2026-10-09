@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from eazy_sdk.auth.core import Auth, AuthProviders
-from eazy_sdk.cookies import CookieJar, CookieState
+from eazy_sdk.cookies import CookieJar, Cookies, CookieState
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.dependencies import DependencyRegistry
 from eazy_sdk.request.signatures import SigningKey, SigningKeyRequirement
@@ -90,6 +90,7 @@ def bind_session_lifecycle(
     scope: _IdentityScope,
     client: object,
     factory: Callable[[object], object],
+    cookies: Cookies | None = None,
 ) -> None:
     """Register the scoped SDK an auth service calls to acquire or refresh a session.
 
@@ -100,6 +101,9 @@ def bind_session_lifecycle(
 
     if not scope.auth:
         return
+    if cookies is not None:
+        # A cookie site: the session is saved with the user's cookies and needs them to be valid.
+        scope.auth.bind_cookies(scope.jar, cookies)
     if not getattr(client, "_can_bind_sdk", False):
         return
     scoped = getattr(client, "_scoped", None)

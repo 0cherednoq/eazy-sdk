@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 from eazy_sdk.auth.session import SessionKey, SessionRevision, StoredSession
+from eazy_sdk.cookies import CookieState
+
+_FORMAT = "$eazy"
+_WITH_COOKIES = "session+cookies"
 
 
 class SessionDataRepository(Protocol):
@@ -32,10 +37,31 @@ class RepositorySessionStore[T]:
         if stored is None:
             return None
         value, revision = stored
+        if isinstance(value, Mapping) and value.get(_FORMAT) == _WITH_COOKIES:
+            return StoredSession(
+                self.codec.decode(value["session"]),
+                SessionRevision(revision),
+                CookieState.from_primitive(value["cookies"]),
+            )
         return StoredSession(self.codec.decode(value), SessionRevision(revision))
 
-    async def save(self, key: SessionKey, value: T, revision: SessionRevision) -> None:
-        await self.repository.save_session_data(key.value, self.codec.encode(value), revision.value)
+    async def save(
+        self,
+        key: SessionKey,
+        value: T,
+        revision: SessionRevision,
+        cookies: CookieState | None = None,
+    ) -> None:
+        encoded = self.codec.encode(value)
+        if cookies is not None:
+            # A repository stores one value per key, so the snapshot rides beside the session.
+            # A session saved without cookies keeps the plain form it always had.
+            encoded = {
+                _FORMAT: _WITH_COOKIES,
+                "session": encoded,
+                "cookies": cookies.to_primitive(),
+            }
+        await self.repository.save_session_data(key.value, encoded, revision.value)
 
     async def invalidate(self, key: SessionKey, expected: SessionRevision | None = None) -> None:
         await self.repository.invalidate_session_data(

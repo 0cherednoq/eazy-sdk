@@ -26,6 +26,7 @@ CREATE TABLE sessions (
 	revision INTEGER NOT NULL,
 	kind VARCHAR NOT NULL,
 	payload JSON NOT NULL,
+	cookie_state JSON,
 	expires_at TIMESTAMP WITHOUT TIME ZONE,
 	is_active BOOLEAN NOT NULL,
 	created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,

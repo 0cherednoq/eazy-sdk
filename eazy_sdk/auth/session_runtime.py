@@ -30,6 +30,7 @@ from eazy_sdk.auth.session import (
     SessionValidator,
     StoredSession,
 )
+from eazy_sdk.cookies import CookieJar, Cookies
 from eazy_sdk.core.errors import GraphError, PlanError
 from eazy_sdk.core.kernel import ValueValidator
 from eazy_sdk.models import default_model_adapters
@@ -210,6 +211,11 @@ class SessionProvider[TCredentials, TSession, TSdk]:
         if self.config.sdk_factory is not unbound_sdk:
             return
         self._sdk_factory = cast(Callable[[ResolutionGraph], TSdk], factory)
+
+    def bind_cookies(self, jar: CookieJar, declared: Cookies) -> None:
+        """Keep the user's cookies with this session: saved beside it, required for it."""
+
+        self.lifecycle.bind_cookies(jar, declared)
 
     @property
     def can_refresh(self) -> bool:
