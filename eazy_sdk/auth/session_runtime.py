@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable, Callable
+import types
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, Union, cast, get_args, get_origin
 
 from eazy_sdk.auth.lifecycle import LifecycleCycleError
 from eazy_sdk.auth.lifecycle import LifecycleGraph as ResolutionGraph
@@ -32,6 +33,7 @@ from eazy_sdk.auth.session import (
 from eazy_sdk.core.errors import GraphError, PlanError
 from eazy_sdk.core.kernel import ValueValidator
 from eazy_sdk.models import default_model_adapters
+from eazy_sdk.models.adapters import unroll_alias, unwrap_annotated
 from eazy_sdk.response import ResponseEnvelope
 
 from .cookies import HttpCookieSession, parse_session_cookie
@@ -54,6 +56,67 @@ class Bearer:
 
     header: str = "Authorization"
     prefix: str = "Bearer "
+
+
+type _PlacedLocation = Literal["query", "header", "cookie", "cookies"]
+
+
+@dataclass(frozen=True, slots=True)
+class Placed:
+    """Mark a session field placed into every protected request; one session may carry several.
+
+    Written through its four spellings, on the field that holds the value::
+
+        class MailSession(BaseModel):
+            token: Annotated[str, Placed.query("token")]
+            email: Annotated[str, Placed.query("email", secret=False)]
+            cookies: Annotated[dict[str, str], Placed.cookies()]
+
+    ``Bearer()`` is the same statement as ``Placed.header("Authorization", prefix="Bearer ")``.
+    A session whose placed value is empty is not a session: it is acquired again rather than
+    sent.
+    """
+
+    location: _PlacedLocation
+    name: str = ""
+    prefix: str = ""
+    secret: bool = True
+
+    def __post_init__(self) -> None:
+        if self.location != "cookies" and not self.name:
+            raise ValueError(f"Placed.{self.location}(...) requires a name")
+
+    @staticmethod
+    def query(name: str, *, secret: bool = True) -> Placed:
+        """One query parameter."""
+
+        return Placed("query", name, secret=secret)
+
+    @staticmethod
+    def header(name: str, *, prefix: str = "", secret: bool = True) -> Placed:
+        """One header, with an optional scheme prefix such as ``"Bearer "``."""
+
+        return Placed("header", name, prefix, secret)
+
+    @staticmethod
+    def cookie(name: str, *, secret: bool = True) -> Placed:
+        """One cookie with a known name."""
+
+        return Placed("cookie", name, secret=secret)
+
+    @staticmethod
+    def cookies() -> Placed:
+        """Every pair of a ``Mapping[str, str]`` field, each as a cookie of its own."""
+
+        return Placed("cookies")
+
+    @property
+    def destination(self) -> tuple[str, str]:
+        """Where the value lands, as two placements must not land in the same place."""
+
+        if self.location == "cookies":
+            return ("cookies", "")
+        return (self.location, self.name.casefold() if self.location == "header" else self.name)
 
 
 class SessionCodec[T](Protocol):
@@ -237,8 +300,7 @@ class AuthCredentialsRequiredError(PlanError):
 @dataclass(frozen=True, slots=True)
 class _SessionModel:
     model: type[object]
-    bearer_field: str
-    bearer: Bearer
+    placements: tuple[tuple[str, Placed], ...]
     refresh_field: str | None
     expires_field: str | None
     expires: ExpiresAt | None
@@ -252,19 +314,34 @@ class _SessionModel:
     ) -> _SessionModel:
         fields = default_model_adapters().fields(model)
 
-        bearer: list[tuple[str, Bearer]] = []
+        bearer: list[str] = []
+        placements: list[tuple[str, Placed]] = []
         refresh: list[str] = []
         expires: list[tuple[str, ExpiresAt]] = []
         for model_field in fields:
             for marker in model_field.metadata:
                 if isinstance(marker, Bearer):
-                    bearer.append((model_field.name, marker))
+                    bearer.append(model_field.name)
+                    placements.append(
+                        (model_field.name, Placed.header(marker.header, prefix=marker.prefix))
+                    )
+                elif isinstance(marker, Placed):
+                    _refuse_impossible_placement(
+                        model, model_field.name, model_field.annotation, marker
+                    )
+                    placements.append((model_field.name, marker))
                 elif isinstance(marker, RefreshToken):
                     refresh.append(model_field.name)
                 elif isinstance(marker, ExpiresAt):
                     expires.append((model_field.name, marker))
-        if len(bearer) != 1:
+        if len(bearer) > 1:
             raise SessionConfigurationError("session model must declare exactly one Bearer field")
+        if not placements:
+            raise SessionConfigurationError(
+                "session model places nothing into the request: declare exactly one Bearer "
+                "field, or Placed.query/header/cookie/cookies on the fields a request carries"
+            )
+        _refuse_colliding_placements(model, placements)
         if len(refresh) > 1:
             raise SessionConfigurationError(
                 "session model cannot declare multiple RefreshToken fields"
@@ -275,8 +352,7 @@ class _SessionModel:
             )
         return cls(
             model,
-            bearer[0][0],
-            bearer[0][1],
+            tuple(placements),
             refresh[0] if refresh else None,
             expires[0][0] if expires else None,
             expires[0][1] if expires else None,
@@ -308,8 +384,7 @@ class _SessionModel:
                 )
         return cls(
             model,
-            bearer_field,
-            Bearer(),
+            ((bearer_field, Placed.header(Bearer().header, prefix=Bearer().prefix)),),
             refresh_field,
             expires_field,
             ExpiresAt(expires_leeway) if expires_field is not None else None,
@@ -320,6 +395,9 @@ class _SessionModel:
         return default_model_adapters().load(self.model, value)
 
     def is_valid(self, value: object) -> bool:
+        # A session with nothing to place is not a session, whatever its expiry says.
+        if any(_is_empty(getattr(value, name, None)) for name, _ in self.placements):
+            return False
         if self.expires_field is None or self.expires is None:
             return True
         expires_at = getattr(value, self.expires_field, None)
@@ -334,14 +412,74 @@ class _SessionModel:
         return AuthScheme(
             diagnostic_name,
             cast(ValueValidator[T], self.parse),
-            (
+            tuple(
                 AuthPlacement(
-                    AuthLocation.HEADER,
-                    self.bearer.header,
-                    AttributeSessionSelector(self.bearer_field),
-                    self.bearer.prefix,
-                ),
+                    AuthLocation.COOKIE
+                    if placed.location == "cookies"
+                    else AuthLocation(placed.location),
+                    placed.name,
+                    AttributeSessionSelector(name),
+                    placed.prefix,
+                    placed.secret,
+                    placed.location == "cookies",
+                )
+                for name, placed in self.placements
             ),
+        )
+
+
+def _is_empty(value: object) -> bool:
+    """Whether a placed value is nothing to send: absent, an empty string or an empty set."""
+
+    reveal = getattr(value, "get_secret_value", None)
+    if callable(reveal):
+        value = reveal()
+    return value is None or value == "" or (isinstance(value, Mapping) and not value)
+
+
+def _refuse_colliding_placements(model: type[object], placements: list[tuple[str, Placed]]) -> None:
+    taken: dict[tuple[str, str], str] = {}
+    for name, placed in placements:
+        other = taken.setdefault(placed.destination, name)
+        if other == name:
+            continue
+        where = (
+            "a cookie set" if placed.location == "cookies" else f"{placed.location} {placed.name!r}"
+        )
+        raise SessionConfigurationError(
+            f"{model.__name__}.{other} and {model.__name__}.{name} are both placed as {where}; "
+            "one place in the request takes one field"
+        )
+
+
+def _refuse_impossible_placement(
+    model: type[object], name: str, annotation: object, placed: Placed
+) -> None:
+    """A set is a mapping and a single value is not: the other way round can never be sent."""
+
+    annotation, _ = unwrap_annotated(unroll_alias(annotation))
+    members = (
+        get_args(annotation)
+        if get_origin(annotation) in {Union, types.UnionType}
+        else (annotation,)
+    )
+    origins = {get_origin(member) or member for member in members if member is not type(None)}
+    is_mapping = bool(origins) and all(
+        isinstance(origin, type) and issubclass(origin, Mapping) for origin in origins
+    )
+    is_collection = any(
+        isinstance(origin, type) and issubclass(origin, Mapping | list | tuple | set | frozenset)
+        for origin in origins
+    )
+    if placed.location == "cookies" and not is_mapping:
+        raise SessionConfigurationError(
+            f"Placed.cookies() on {model.__name__}.{name}: the field must be a "
+            "Mapping[str, str], every pair of which becomes a cookie"
+        )
+    if placed.location != "cookies" and is_collection:
+        raise SessionConfigurationError(
+            f"Placed.{placed.location}({placed.name!r}) on {model.__name__}.{name}: one place "
+            "in the request takes one value, not a collection"
         )
 
 

@@ -15,7 +15,11 @@ from eazy_sdk.core.errors import (
     SlotBindingError,
     SlotValueError,
 )
-from eazy_sdk.core.http import ManagedCookieSetDescriptor, RequestLocation
+from eazy_sdk.core.http import (
+    ManagedCookieSetDescriptor,
+    RequestLocation,
+    auth_cookie_set_name,
+)
 from eazy_sdk.core.http_plan import (
     CompiledReplayPolicy,
     ExecutionPlan,
@@ -498,7 +502,11 @@ def _compile_input_layout(
                 location = RequestLocation(location_name)
             except ValueError as exc:
                 raise PlanError(f"unsupported auth placement: {location_name!r}") from exc
-            name = getattr(placement, "name", None)
+            scheme_name = getattr(scheme, "diagnostic_name", "scheme")
+            many = bool(getattr(placement, "many", False))
+            if many and location is not RequestLocation.COOKIE:
+                raise PlanError(f"only cookies are placed as a set, not {location.value}")
+            name = auth_cookie_set_name(scheme_name) if many else getattr(placement, "name", None)
             if not isinstance(name, str) or not name:
                 raise PlanError("auth placement requires a wire name")
             group = slot_groups[location]
@@ -507,15 +515,16 @@ def _compile_input_layout(
             auth_slot = cast(
                 ValueSlot[object],
                 ValueSlot(
-                    diagnostic_name=f"auth.{getattr(scheme, 'diagnostic_name', 'scheme')}.{name}",
-                    validator=PythonTypeValidator(str),
+                    diagnostic_name=f"auth.{scheme_name}.{name}",
+                    validator=PythonTypeValidator(object if many else str),
                     required=False,
-                    secret=True,
+                    secret=bool(getattr(placement, "secret", True)),
                 ),
             )
             group[name] = auth_slot
             slots.append(auth_slot)
-            descriptors[auth_slot] = placement
+            # A set goes down the path a managed cookie set already takes: one slot, many cookies.
+            descriptors[auth_slot] = ManagedCookieSetDescriptor() if many else placement
             wire_names[auth_slot] = name
             slot_locations[auth_slot] = location
     body_slot: ValueSlot[object] | None = next(
