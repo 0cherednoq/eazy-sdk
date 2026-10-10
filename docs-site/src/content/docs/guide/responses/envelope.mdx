@@ -1,0 +1,80 @@
+---
+title: Разобрать ответ, где исход лежит в теле
+description: Отличите результат, устаревший токен и отказ у сервиса, который на всё отвечает 200, и обновите сессию без кода в SDK.
+sources:
+  - eazy_sdk.response.Const
+  - eazy_sdk.response.OneOf
+  - eazy_sdk.response.Not
+  - eazy_sdk.response.Payload
+  - eazy_sdk.response.ApiError
+draft: false
+api_fingerprint: "sha256:de0e57fe825dc499e369f1368137b2600aa7cee6f9b526a96fc128dbde3d27a9"
+---
+
+Часть сервисов отвечает `200` на любой вызов, а исход кладёт в поле тела: `status`, `ok`, `code`.
+Статус HTTP такие ответы не различает. Различает их модель: тег на поле говорит, какому значению
+поле равно, и случай забирает только свой ответ.
+
+```{literalinclude} ../../../../../../examples/docs/response_envelope_status.py
+:language: python
+:start-after: "# region docs: response-envelope-status"
+:end-before: "# endregion docs: response-envelope-status"
+```
+
+`Ok[T]` принимает ответ со `status == 200` и возвращает поле, помеченное `Payload`: операция
+`ListFolders` получает `Folders`, а не конверт. Параметр обязателен: `Ok` без него отклоняется при
+объявлении.
+
+`TokenRefused` принимает `401` и `403`, `Refused` принимает всё, кроме `200`, `401` и `403`. Три
+модели не пересекаются, поэтому на любой ответ претендует ровно один случай. Если бы `Refused`
+объявил `Not(200)`, ответ со статусом `401` подошёл бы двум случаям и вызов закончился бы
+`AmbiguousResponseError`.
+
+## Выбрать тег
+
+| Тег | Что утверждает |
+|---|---|
+| `Const(200)` | поле равно значению |
+| `OneOf(401, 403)` | поле равно одному из значений |
+| `Not(200)` | поле есть и не равно значению |
+| `Not(200, 401, 403)` | поле есть и не равно ни одному из значений |
+
+Значения сравниваются вместе с типом: `1` не равно `True`. Ответ без поля не подходит ни под один
+тег. Поле объявляет один тег.
+
+## Обновить сессию по отказу
+
+`reauth = True` на классе ошибки означает, что такой ответ говорит об устаревшей сессии. Библиотека
+поступает с ним как с HTTP `401`: один раз обновляет сессию и повторяет запрос. Исключение
+поднимается, только если повтор тоже получил отказ или обновлять нечем.
+
+Повтор расходует бюджет `Resilience(auth_retries=...)` и разрешён идемпотентной операции. Случай с
+`reauth` на операции без `security` отклоняется при объявлении: сессии, которую можно обновить,
+там нет.
+
+Ошибки объявлены один раз, на роутере, и относятся ко всем его операциям.
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/response_envelope_status.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.docs.response_envelope_status`.
+
+<!-- example-output: examples.docs.response_envelope_status -->
+```text
+folders: Inbox, Sent
+after the token expired: Inbox, Sent
+refused: status 400, details {'sort': 'invalid'}
+calls: /api/folders t1; /api/folders t1; /api/folders t3; /api/folders t3
+```
+
+Второй вызов ушёл со старым токеном `t1`, получил отказ и был повторён с новым. Вызывающий код
+увидел только результат.
+
+## Дальше
+
+- {doc}`Разберите ожидаемую ошибку по статусу HTTP </guide/responses/errors>`.
+- {doc}`Настройте жизненный цикл сессии </guide/auth/session>`.
+- {doc}`Проверьте контракт ответа </reference/api/response>`.

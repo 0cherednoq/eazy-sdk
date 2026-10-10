@@ -200,6 +200,14 @@
       "eazy_sdk.clients.CallOptions": "sha256:c67ae9be7849c01ab4081b6a1b3b52056fa17adb37bf2921009211eebdc8efae"
     }
   },
+  "guide/requests/addresses.mdx": {
+    "fingerprint": "sha256:c9c9c578217dfbafad19a71d119dbb333185485f1804d8f370de5b70a21a1c03",
+    "symbols": {
+      "eazy_sdk.cookies": "sha256:0be70d6488d8e088e17c9c035b7bf371119c03ad4725cbdfd6f0eb04426a1a55",
+      "eazy_sdk.dependencies": "sha256:72b55ac5c24c6980073668dd09acd3cb4a850682774c7407738a265e72e40158",
+      "eazy_sdk.request": "sha256:0ea9ae50a3b92fe66b5fa7e47c2b2d132f0a424ad20f79d9c509a1183bc785f6"
+    }
+  },
   "guide/requests/bytes.mdx": {
     "fingerprint": "sha256:435570d4e766c05a3a7098d3afed40f5ab6dd855e4df4774a184148f34579bae",
     "symbols": {
@@ -275,6 +283,16 @@
     "symbols": {
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
       "eazy_sdk.models": "sha256:09807aaca77730f5c586faef4ac34326dc86996ebd827381ef0c5b72294386f8"
+    }
+  },
+  "guide/responses/envelope.mdx": {
+    "fingerprint": "sha256:de0e57fe825dc499e369f1368137b2600aa7cee6f9b526a96fc128dbde3d27a9",
+    "symbols": {
+      "eazy_sdk.response.ApiError": "sha256:2b0ce76d4c6553152273a3c7a13cfb9bf215c9c20ab13482046aa6604338802b",
+      "eazy_sdk.response.Const": "sha256:cca6800abe08c04f394550a4b20cc5f1acd2765b042588dd56b5da546f00008e",
+      "eazy_sdk.response.Not": "sha256:dfc6644a8ff108c55a69cbd77a9c161af88a8fd317715f7b3d425c29c836c502",
+      "eazy_sdk.response.OneOf": "sha256:a0376eb81741f9c9181a056e38a860aa90e13b2d877f94584d3d46dd097adeee",
+      "eazy_sdk.response.Payload": "sha256:44472e56c310792b2c6cb561a466d0e874c5b18212d192992f41ef565c88ba9d"
     }
   },
   "guide/responses/errors.mdx": {

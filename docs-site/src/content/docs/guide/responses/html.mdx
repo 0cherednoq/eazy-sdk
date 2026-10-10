@@ -117,6 +117,31 @@ email: ada@mail.example
 every token: ads-token, page-token-42
 ```
 
+## Значение, которое лежит то в странице, то в куке
+
+Сайт не всегда держит значение в одном месте: токен формы у одного клиента стоит в странице, у
+другого в куке. Поле называет оба источника через `|`, в том порядке, в каком их пробовать.
+
+```{literalinclude} ../../../../../../examples/docs/response_first_of.py
+:language: python
+:start-after: "# region docs: response-first-of"
+:end-before: "# endregion docs: response-first-of"
+```
+
+Поле получает первое найденное значение. В цепочку входят селекторы `CSS`, `XPath`, `Regex` и
+источники вне тела: `FromHeader`, `FromCookie`, `Location.query(...)`. Обязательное поле, которого
+нет ни в одном источнике, даёт `MalformedResponseError`. Такое поле делает модель различимой:
+страница без токена под неё не подходит, и условие `when=` для этого не нужно.
+
+Запуск: `uv run python -m examples.docs.response_first_of`.
+
+<!-- example-output: examples.docs.response_first_of -->
+```text
+page has it: from-page
+only the cookie has it: from-cookie
+nowhere: MalformedResponseError
+```
+
 ## Дальше
 
 - {doc}`Проверьте контракт документного ответа </reference/api/response>`.

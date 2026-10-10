@@ -1,0 +1,70 @@
+---
+title: Назвать адрес сервиса и запросить ссылку из ответа
+description: Подставьте в запрос адрес соседнего сервиса того же SDK и отправьте запрос по адресу, который прислал сервер.
+sources:
+  - eazy_sdk.dependencies
+  - eazy_sdk.request
+  - eazy_sdk.cookies
+draft: false
+api_fingerprint: "sha256:c9c9c578217dfbafad19a71d119dbb333185485f1804d8f370de5b70a21a1c03"
+---
+
+У запроса бывает два адреса, которых нет в пути операции. Первый называет соседний сервис: форма
+входа уходит на один хост с `Origin` и `Referer` страницы на другом. Второй приходит в ответе:
+письмо называет, где лежит вложение.
+
+```{literalinclude} ../../../../../../examples/docs/request_addresses.py
+:language: python
+:start-after: "# region docs: request-addresses"
+:end-before: "# endregion docs: request-addresses"
+```
+
+## Адрес соседнего сервиса
+
+`service_url(PagesApi)` отдаёт адрес, к которому роутер привязан в корне SDK: `bind(PagesApi,
+base_url=...)`, собственный `base_url` роутера или адрес клиента. Значение читается при подготовке
+запроса, поэтому перенос сервиса на другой хост меняет и заголовки, которые его называют.
+
+Второй аргумент дописывает путь. Без роутера `service_url()` называет сервис самой операции.
+Базовый класс называет все роутеры, которые его наследуют, и у них должен быть один адрес.
+Роутер, которого нет в корне, останавливает вызов до сети.
+
+## Адрес из ответа
+
+`Http.get(markers.Url(hosts=...))` объявляет операцию без собственного пути. Адрес приходит
+аргументом в поле `url: Url[str]`. Запрос несёт куки, которые сайт поставил для этого адреса,
+идёт через тот же клиент, с его прокси и таймаутом.
+
+`hosts` обязателен. Ссылка на хост вне списка отклоняется до подготовки запроса: куки, сессия и
+подпись сервиса не предназначены для хоста, который сервер только назвал. Относительная ссылка
+резолвится против адреса сервиса и в списке не нуждается.
+
+У такой операции нет `Path`-полей. Объявленное `Query`-поле добавляется к ссылке.
+
+## Куки пользователя
+
+`cookies_of(sdk)` отдаёт снимок кук, которые держит пользователь SDK. Его можно сохранить до
+следующего запуска и передать в `Identity(cookies=...)`.
+
+:::{dropdown} Файл примера целиком
+```{literalinclude} ../../../../../../examples/docs/request_addresses.py
+:language: python
+```
+:::
+
+Запуск: `uv run python -m examples.docs.request_addresses`.
+
+<!-- example-output: examples.docs.request_addresses -->
+```text
+downloaded: %PDF-1.7
+cookies kept: sid
+refused: the address points to 'elsewhere.example', and Url(hosts=...) lists only *.mail.example
+POST e.mail.example/login origin=https://account.mail.example referer=https://account.mail.example/login
+GET files.mail.example/get cookie=sid=s1
+```
+
+## Дальше
+
+- {doc}`Передайте значение приложения в запрос </guide/dependencies>`.
+- {doc}`Несите куки сайта между запросами </guide/auth/cookies-session>`.
+- {doc}`Справочник зависимостей </reference/api/dependencies>`.
