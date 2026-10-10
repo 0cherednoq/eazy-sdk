@@ -182,11 +182,81 @@ class _RequestRequirement[T]:
     """A provider the declaration owns (``Inject``); it never enters the shared registry."""
 
 
+_NO_SERVICES: Mapping[type, str] = {}
+
+
 @dataclass(frozen=True, slots=True)
 class DependencyContext:
     operation_id: str
     attempt: int
     resolved: Mapping[RequestDependency[Any], object]
+    base_url: str = ""
+    """The address of the service the operation belongs to, as this SDK was assembled."""
+    services: Mapping[type, str] = dataclass_field(default_factory=lambda: _NO_SERVICES)
+    """The address of every router of the SDK root, by router class."""
+
+    def service_url(self, router: type | None = None, path: str = "") -> str:
+        """The address a router of this SDK is bound to, with ``path`` appended.
+
+        Without a router it is the operation's own service. A base class names every router
+        that inherits it, and they have to share one address for the answer to be one.
+        """
+
+        if router is None:
+            address = self.base_url
+        else:
+            found = {
+                bound for service, bound in self.services.items() if router in service.__mro__
+            }
+            if len(found) != 1:
+                problem = (
+                    "is not a router of this SDK root"
+                    if not found
+                    else f"names routers at several addresses: {', '.join(sorted(found))}"
+                )
+                raise PlanError(
+                    f"operation {self.operation_id!r}: service_url({router.__name__}) {problem}"
+                )
+            address = next(iter(found))
+        if not address:
+            raise PlanError(
+                f"operation {self.operation_id!r}: service_url() found no address: neither the "
+                "router nor its client declares a base_url"
+            )
+        return address.rstrip("/") + path
+
+
+@dataclass(frozen=True, slots=True)
+class _ServiceUrl:
+    """The provider behind :func:`service_url`."""
+
+    router: type | None
+    path: str
+
+    def resolve(self, context: DependencyContext) -> str:
+        return context.service_url(self.router, self.path)
+
+
+def service_url(router: type | None = None, path: str = "") -> _ServiceUrl:
+    """A source for ``Inject`` and ``dependency(provide=...)``: the address of a service.
+
+    ::
+
+        inject=(
+            Inject(markers.Header("Origin"), service_url(LoginPagesApi)),
+            Inject(markers.Header("Referer"), service_url(LoginPagesApi, "/")),
+        )
+
+    The address is the one the router is bound to in the SDK root (``bind(Router,
+    base_url=...)``, the router's own ``base_url``, or the client's), read when the request is
+    prepared. Without a router it is the service of the operation itself.
+    """
+
+    if router is not None and not isinstance(router, type):
+        raise PlanError("service_url() takes a router class or one of its base classes")
+    if not isinstance(path, str) or (path and not path.startswith("/")):
+        raise PlanError(f"service_url(path=...) starts with '/', got {path!r}")
+    return _ServiceUrl(router, path)
 
 
 class DependencyProvider[T](Protocol):
@@ -286,6 +356,8 @@ async def _resolve_requirements(
     attempt: int,
     caches: _DependencyCaches | None = None,
     resolved: dict[RequestDependency[Any], object] | None = None,
+    base_url: str = "",
+    services: Mapping[type, str] | None = None,
 ) -> ValuePatch:
     caches = caches or _DependencyCaches()
     if resolved is None:
@@ -307,7 +379,11 @@ async def _resolve_requirements(
             method = getattr(provider, "resolve", None)
             if method is None:
                 raise PlanError(f"provider has no resolve method: {dependency.diagnostic_name}")
-            value = method(DependencyContext(operation_id, attempt, resolved))
+            value = method(
+                DependencyContext(
+                    operation_id, attempt, resolved, base_url, services or _NO_SERVICES
+                )
+            )
             if inspect.isawaitable(value):
                 value = await cast(Awaitable[object], value)
             if isinstance(value, ProviderUnavailable):
@@ -458,5 +534,6 @@ __all__ = [
     "RequestDependency",
     "dependency",
     "field",
+    "service_url",
     "value",
 ]

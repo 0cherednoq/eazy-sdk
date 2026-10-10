@@ -200,7 +200,7 @@ class LoginPage(BaseModel):
 
 ### 3.5. Адрес сервиса как источник `Inject` (пробел 6, шаг 59.5)
 
-```python
+```python target
 from eazy_sdk import Inject
 from eazy_sdk.dependencies import service_url
 
@@ -242,7 +242,7 @@ class DownloadAttachment(HttpOperation[bytes]):
 
 ### 3.7. Текущая сессия и cookies пользователя (пробел 8, шаг 59.7)
 
-```python
+```python target
 from eazy_sdk.auth import current_session, ensure_session
 from eazy_sdk.cookies import cookies_of
 
@@ -480,12 +480,12 @@ SDK лежит в `C:\Users\user\Desktop\armgs-sdk` (без контроля в�
 
 | Шаг | Статус | Коммит | Доказательства | Что осталось |
 |---|---|---|---|---|
-| 59.0 пробы | pending | — | — | шесть проб |
-| 59.1 `OneOf`, `Not` | pending | — | — | всё |
-| 59.2 `Payload[T]` в обобщённой модели | pending | — | — | всё |
-| 59.3 `reauth` | pending | — | — | всё |
-| 59.4 запасной источник поля | pending | — | — | всё |
-| 59.5 `service_url` | pending | — | — | всё |
+| 59.0 пробы | done | см. `git log` | шесть проб, итоги в §9.2; пробы 4 и 5 выполнены в начале шагов 59.6 и 59.8 | — |
+| 59.1 `OneOf`, `Not` | done | см. `git log`, один коммит с 59.2–59.5 | `tests/unit/test_phase59_tags_and_generic_payload.py` — 17 passed (вместе с 59.2); полный `uv run pytest -q` на состоянии после 59.2 — 2030 passed, 11 skipped; `mypy` и `ruff check` — чисто | — |
+| 59.2 `Payload[T]` в обобщённой модели | done | см. `git log`, один коммит с 59.1, 59.3–59.5 | тот же файл тестов; pydantic `Ok[Account]` и `Ok[list[Account]]` работают | dataclass и msgspec: реестр моделей не загружает параметризованный псевдоним вовсе (`UnsupportedModelTypeError`), это вне шага, см. §9.3 |
+| 59.3 `reauth` | done | см. `git log`, один коммит с 59.1–59.2, 59.4–59.5 | `tests/unit/test_phase59_reauth.py` — 7 passed; `mypy` и `ruff check` — чисто | — |
+| 59.4 запасной источник поля | done | см. `git log`, один коммит с 59.1–59.3, 59.5 | `tests/unit/test_phase59_first_of.py` — 10 passed; `plugins/html/tests` — зелёные; `mypy` и `ruff check` — чисто | — |
+| 59.5 `service_url` | done | см. `git log`, один коммит с 59.1–59.4 | `tests/unit/test_phase59_service_url.py` — 5 passed; `mypy` и `ruff check` — чисто | полный `pytest` после 59.3–59.5 — в строке 59.6 |
 | 59.6 `Url` | pending | — | — | всё |
 | 59.7 доступ к сессии и cookies | pending | — | — | всё |
 | 59.8 `Failure(reads=...)` | pending | — | — | всё |
@@ -498,10 +498,27 @@ SDK лежит в `C:\Users\user\Desktop\armgs-sdk` (без контроля в�
 | 2026-10-10 | — | План написан. Код библиотеки не менялся. Ветка `feat/phase59` не создана. |
 | 2026-10-10 | — | Проверено до написания плана, на `0.2.0a11`: `Ok[Account]` (pydantic) падает с `PlanError: Payload is T, the operation returns Account`; обновление сессии в `decide_response` условлено `status_code == 401`; два случая ошибки на одном статусе, оба подошедшие, дают `AmbiguousResponseError`. |
 | 2026-10-10 | — | Допущения, не проверенные при написании плана: загрузка параметризованных dataclass/msgspec (§3.2), доступность выбранного случая в месте решения (§3.3), значения `Inject` в проекции тела (§3.5), поведение `_at_url` с размещениями сессии (§3.6), читающие маркеры карты страницы (§3.8). Все — пробы 59.0. |
+| 2026-10-10 | 59.0 | Проба 1. pydantic `Ok[Account]` — отдельный класс, аннотации по-прежнему `T`, аргументы в `__pydantic_generic_metadata__`; подстановка через `hint[args]` работает и для `list[T]`, `T | None`. dataclass и msgspec: `Ok[Account]` — `_GenericAlias`, реестр моделей его не загружает (`UnsupportedModelTypeError: no model adapter supports _GenericAlias`). |
+| 2026-10-10 | 59.0 | Проба 2. `ResponseDecisionInput.outcome` — результат `responses.inspect(context)`; у `ErrorOutcome` есть `case`, признак случая доступен в `decide_response` без изменений исполнителя. |
+| 2026-10-10 | 59.0 | Проба 3. Проекция тела получает разрешённые `requires=` вторым аргументом (`using(source, injected)`), значения `Inject` — нет. Для поля формы хватает `dependency(str, provide=service_url(...))` в `requires=`: новая механика не нужна. |
+| 2026-10-10 | 59.0 | Проба 6. `_one_or_missing` в `eazy_sdk_html/schema.py` возвращает `None` для отсутствующего значения только у необязательного поля; для цепочки добавлен признак `elsewhere`. |
+| 2026-10-10 | 59.1 | done. `OneOf`, `Not` в `eazy_sdk/response/markers.py`, экспорт из `eazy_sdk.response`. Генератор OpenAPI тег `Const` не выпускает, поэтому `enum`/`not` в нём не трогались. |
+| 2026-10-10 | 59.2 | done для pydantic. Модель без параметра с `Payload[T]` — `PlanError` с подсказкой `Ok[Result]`. |
+| 2026-10-10 | 59.3 | done. `Error.reauth`, атрибут класса `ApiError.reauth`; ветка в `decide_response` общая с 401. D-59-04 проверяется в `validate_responses(secured=...)`. Схема без `refresh` не обновляется: поднимается объявленное исключение. |
+| 2026-10-10 | 59.4 | done. Новый модуль `eazy_sdk/response/alternatives.py` (`Alternative`, `FirstOf`); `FirstOf` экспортирован из `eazy_sdk.response`. Селекторы одной цепочки пробуются в своём порядке внутри документа; место документа в цепочке — место первого селектора. |
+| 2026-10-10 | 59.5 | done. `service_url` в `eazy_sdk.dependencies`; адреса роутеров корень кладёт в `_IdentityScope.services`. D-59-06 поднимается при подготовке первого запроса, до отправки, а не при компиляции: адреса известны только собранному корню. |
 
 ### 9.3. Отклонения от плана
 
-Пока нет.
+- **59.1: многозначный `Literal` не читается как `OneOf`.** План (§3.1) это обещал. Существующий
+  тест `test_a_one_value_literal_counts_as_the_same_statement` фиксирует обратное, и причина
+  верная: обычное поле-перечисление стало бы критерием и изменило бы ранжирование объявлений,
+  написанных под `0.2.0a11` (инвариант I1). Тег на несколько значений пишется только явно.
+- **59.2: только pydantic.** Параметризованные dataclass и msgspec реестр моделей не загружает
+  независимо от `Payload` (проба 1). Поддержка обобщённых моделей в адаптерах — отдельная работа.
+- **59.1–59.5 одним коммитом.** Шаги писались подряд и делят `eazy_sdk/response/__init__.py`;
+  правило «шаг — коммит» нарушено, прогресс по шагам записан раздельно.
+- **59.5: D-59-06 — при подготовке запроса**, не при компиляции операции (см. журнал).
 
 ---
 

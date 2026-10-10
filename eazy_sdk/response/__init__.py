@@ -27,10 +27,10 @@ from .cases import (
 )
 from .headers import FromHeader, Headers, ResponseHeader
 from .location import Location
-from .markers import Const
+from .markers import Const, Not, OneOf
 from .normalized import NormalizedResponse, RedirectInfo
 from .short import Payload
-from .sources import FromCookie
+from .sources import FirstOf, FromCookie
 
 __all__ = [
     "DEFAULT",
@@ -43,6 +43,7 @@ __all__ = [
     "Error",
     "ErrorSummary",
     "Extracted",
+    "FirstOf",
     "FromCookie",
     "FromHeader",
     "HeaderModel",
@@ -52,6 +53,8 @@ __all__ = [
     "Location",
     "MalformedResponseError",
     "NormalizedResponse",
+    "Not",
+    "OneOf",
     "Parsed",
     "Payload",
     "RedirectInfo",

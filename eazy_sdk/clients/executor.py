@@ -1381,6 +1381,8 @@ class _AttemptRun[T]:
             attempt=state.number,
             caches=self.dependencies,
             resolved=self.injected,
+            base_url=_service_base_url(contract, self.core.runtime),
+            services=self.core.identity.services,
         )
         crypto_values = CryptoValues()
         crypto_aad: tuple[tuple[str, FrozenValue], ...] = ()
@@ -2293,6 +2295,7 @@ def _validate_response_declarations(contract: _OperationDeclaration[Any]) -> Non
             responses,
             result_type=contract.result_type,
             operation_id=contract.operation_id,
+            secured=contract.security is not None,
         )
 
 

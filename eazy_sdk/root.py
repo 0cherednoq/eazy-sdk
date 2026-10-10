@@ -153,6 +153,15 @@ class _RootBase:
         self._closed = False
         self._instances: dict[str, SyncApi | AsyncApi] = {}
         self._plan = _resolve_plan(type(self), client, bindings)
+        own = getattr(getattr(client, "_runtime", None), "base_url", "")
+        for name, group in type(self)._root_groups.items():
+            planned = self._plan[name]
+            bound = getattr(getattr(planned.client, "_runtime", None), "base_url", "") or own
+            address = planned.defaults.base_url or bound
+            if address or group.api_type not in self._scope.services:
+                # A scoped copy built for the auth lifecycle shares this scope and must not
+                # blank an address the root already resolved.
+                self._scope.services[group.api_type] = address
         if self._scope.seeded and not any(
             group.defaults.cookies is not None for group in self._plan.values()
         ):

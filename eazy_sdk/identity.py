@@ -64,6 +64,8 @@ class _IdentityScope:
     """The identity's own jar; a scope without an identity keeps one of its own."""
     seeded: bool = False
     """Whether the identity was given cookies to start with, which only a cookie site can use."""
+    services: dict[type, str] = field(default_factory=dict)
+    """The address of every router of the root this scope serves, filled when it is assembled."""
 
 
 def _identity_scope(identity: Identity | None) -> _IdentityScope:

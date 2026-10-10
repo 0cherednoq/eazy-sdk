@@ -182,7 +182,13 @@ def error_case(
             )
         model, factory = spec
         shape = representation(model, models=models, error=True)
-        return Error(status, shape, exception=factory, condition=getattr(shape, "when", None))
+        return Error(
+            status,
+            shape,
+            exception=factory,
+            condition=getattr(shape, "when", None),
+            reauth=_asks_reauth(factory),
+        )
     if isinstance(spec, type) and issubclass(spec, ApiError):
         problem = problem_model(spec)
         if problem is None:
@@ -191,7 +197,13 @@ def error_case(
                 f"class {spec.__name__}(ApiError[Model]) or use (Model, factory)"
             )
         shape = representation(problem, models=models, error=True)
-        return Error(status, shape, exception=spec, condition=getattr(shape, "when", None))
+        return Error(
+            status,
+            shape,
+            exception=spec,
+            condition=getattr(shape, "when", None),
+            reauth=_asks_reauth(spec),
+        )
     if isinstance(spec, type) and issubclass(spec, BaseException):
         raise PlanError(
             f"{spec.__name__} is not an ApiError; declare class {spec.__name__}(ApiError[Model]) "
@@ -199,6 +211,16 @@ def error_case(
         )
     shape = representation(spec, models=models, error=True)
     return Error(status, shape, condition=getattr(shape, "when", None))
+
+
+def _asks_reauth(factory: object) -> bool:
+    """Whether an exception class states that its error means a stale session."""
+
+    return (
+        isinstance(factory, type)
+        and issubclass(factory, ApiError)
+        and bool(getattr(factory, "reauth", False))
+    )
 
 
 def error_cases(
@@ -314,6 +336,7 @@ def validate_responses(
     *,
     result_type: object | None,
     operation_id: str,
+    secured: bool = True,
 ) -> None:
     """What the declaration alone already proves wrong, before a body can arrive.
 
@@ -325,6 +348,14 @@ def validate_responses(
 
     fallback = responses.fallback
     cases = (*responses.cases, *((fallback,) if fallback is not None else ()))
+    if not secured:
+        for case in cases:
+            if isinstance(case, Error) and case.reauth:
+                raise PlanError(
+                    f"operation {operation_id!r}: the error on {_status_text(case.status)} asks "
+                    "for a session refresh (reauth), and the operation carries no security: "
+                    "there is no session to refresh"
+                )
     for case in cases:
         model = getattr(case.response, "model", None)
         # Asking for the criterion reads the model, so a Location field that can never be filled

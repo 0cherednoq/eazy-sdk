@@ -33,10 +33,11 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import SplitResult, parse_qs, urljoin, urlsplit
 
 from eazy_sdk.core.errors import PlanError
+from eazy_sdk.response.alternatives import Alternative
 from eazy_sdk.response.match import Predicate, _label_of
 
 if TYPE_CHECKING:
@@ -143,7 +144,7 @@ def _part_text(value: LocationPart) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class LocationQuery:
+class LocationQuery(Alternative):
     """One query parameter of the target, as the source of a model field.
 
     Written ``Location.query("fail")``. A field that cannot be ``None`` makes the parameter a
@@ -152,6 +153,8 @@ class LocationQuery:
     """
 
     name: str
+
+    states_the_response: ClassVar[bool] = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name:

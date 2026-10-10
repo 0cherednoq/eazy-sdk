@@ -28,18 +28,26 @@ from eazy_sdk.core.kernel import NoMatch
 from eazy_sdk.exceptions import HeaderValidationError
 from eazy_sdk.models import ModelAdapterRegistry, ModelField, UnsupportedModelTypeError
 from eazy_sdk.models.adapters import unroll_alias, unwrap_annotated
+from eazy_sdk.serialization import SelectorMarker
 
+from .alternatives import Alternative, FirstOf
 from .headers import FromHeader
 from .location import Location, LocationQuery, resolved_location
 
 if TYPE_CHECKING:
     from .cases import ResponseContext
 
-__all__ = ["FromCookie", "ResponseSource", "apply_response_sources", "is_header_model"]
+__all__ = [
+    "FirstOf",
+    "FromCookie",
+    "ResponseSource",
+    "apply_response_sources",
+    "is_header_model",
+]
 
 
 @dataclass(frozen=True, slots=True)
-class FromCookie:
+class FromCookie(Alternative):
     """Use the value of one cookie this response sets as a model field's input.
 
     When the response sets the cookie more than once the last value wins, as it does in a
@@ -55,9 +63,9 @@ class FromCookie:
             raise ValueError("response cookie name cannot be empty")
 
 
-type ResponseSource = FromHeader | FromCookie | Location | LocationQuery
+type ResponseSource = FromHeader | FromCookie | Location | LocationQuery | FirstOf
 
-_SOURCES = (FromHeader, FromCookie, Location, LocationQuery)
+_SOURCES = (FromHeader, FromCookie, Location, LocationQuery, FirstOf)
 
 
 def source_of(field: ModelField) -> ResponseSource | None:
@@ -108,7 +116,15 @@ def is_header_model(model: object, registry: ModelAdapterRegistry) -> bool:
         fields = registry.fields(model)
     except UnsupportedModelTypeError:
         return False
-    return bool(fields) and all(source_of(field) is not None for field in fields)
+    return bool(fields) and all(_around_the_body(source_of(field)) for field in fields)
+
+
+def _around_the_body(source: ResponseSource | None) -> bool:
+    """Whether a source reads nothing of the body; a chain with a selector in it reads it."""
+
+    if isinstance(source, FirstOf):
+        return not any(isinstance(item, SelectorMarker) for item in source.sources)
+    return source is not None
 
 
 def apply_response_sources(
@@ -135,6 +151,22 @@ def apply_response_sources(
     merged = dict(value)
     for field, source in declared:
         input_name = field.validation_name or field.name
+        if isinstance(source, FirstOf):
+            found = _first_found(source, field, merged, context)
+            for key in {field.name, input_name, field.wire_name}:
+                merged.pop(key, None)
+            if found is not _MISSING:
+                merged[input_name] = found
+            elif admits_none(field.annotation):
+                if field.required:
+                    merged[input_name] = None
+            elif source.states_the_response:
+                return NoMatch()
+            elif field.required:
+                raise HeaderValidationError(
+                    f"Response field {field.name!r} was found in none of its sources: {source!r}"
+                )
+            continue
         merged.pop(field.name, None)
         if input_name != field.name:
             merged.pop(input_name, None)
@@ -175,6 +207,45 @@ class _Missing:
 
 
 _MISSING = _Missing()
+
+
+def _first_found(
+    chain: FirstOf,
+    field: ModelField,
+    extracted: Mapping[str, object],
+    context: ResponseContext[object],
+) -> object:
+    """The value of the first source that has one, or ``_MISSING`` when none does.
+
+    A selector is answered by what the document extractor already read for this field: the
+    selectors of one chain are tried there, in their own order, and the first hit is the
+    document's answer.
+    """
+
+    for source in chain.sources:
+        found: object = _MISSING
+        if isinstance(source, FromHeader):
+            lines = context.headers.getall(source.name)
+            if len(lines) > 1:
+                raise HeaderValidationError(
+                    f"Response header {source.name!r} occurs more than once"
+                )
+            if lines:
+                found = lines[0]
+        elif isinstance(source, FromCookie):
+            cookies = [value for name, value in context.cookies.values if name == source.name]
+            if cookies:
+                found = cookies[-1]
+        elif isinstance(source, LocationQuery):
+            found = _located(source, field, context)
+        else:
+            for key in (field.wire_name, field.validation_name or field.name, field.name):
+                if key in extracted and extracted[key] is not None:
+                    found = extracted[key]
+                    break
+        if found is not _MISSING:
+            return found
+    return _MISSING
 
 
 def _located(

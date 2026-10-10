@@ -25,6 +25,7 @@ from eazy_sdk.request.descriptors import MultipartBody
 from eazy_sdk.request.prepared import _NO_BODY_DOCUMENT_OVERRIDE
 from eazy_sdk.response import NormalizedResponse
 from eazy_sdk.response.cases import (
+    ErrorOutcome,
     MalformedOutcome,
     ResponseOutcome,
     SuccessOutcome,
@@ -163,8 +164,13 @@ def decide_response[T](stage: ResponseDecisionInput[T]) -> ResponseDecision[T]:
         return RetryTransition("response-retry", consumes_transport=True)
     if isinstance(stage.signal, SignalMatch):
         return ReactionTransition(stage.signal)
+    stale_session = stage.response.status_code == 401 or (
+        # A declared error that says so: the service reports a rejected session its own way,
+        # inside a 200 for one, and the case that claimed the response is marked ``reauth``.
+        isinstance(stage.outcome, ErrorOutcome) and stage.outcome.case.reauth
+    )
     if (
-        stage.response.status_code == 401
+        stale_session
         and stage.auth_remaining > 0
         and stage.attempt < stage.hard_attempt_limit
         and stage.auth_refreshable

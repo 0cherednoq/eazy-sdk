@@ -37,7 +37,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from types import UnionType
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Literal, TypeVar, Union, get_args, get_origin
 
 from eazy_sdk.core.errors import PlanError
 from eazy_sdk.models.adapters import unroll_alias, unwrap_annotated
@@ -48,6 +48,8 @@ __all__ = [
     "Const",
     "LocationField",
     "ModelDeclaration",
+    "Not",
+    "OneOf",
     "Payload",
     "PayloadField",
     "Tag",
@@ -78,6 +80,61 @@ class Const:
         return f"Const({self.value!r})"
 
 
+class OneOf:
+    """The constants a field may equal for its case to claim the response: a schema's ``enum``.
+
+    ``Annotated[int, OneOf(401, 403)]`` reads "the status is one of these". A ``Literal`` of
+    several values is not read as this statement: it is an ordinary enum field.
+    """
+
+    __slots__ = ("values",)
+
+    values: tuple[TagValue, ...]
+
+    def __init__(self, *values: TagValue) -> None:
+        if not values:
+            raise PlanError("OneOf() names no constant; a tag states at least one")
+        for value in values:
+            if not isinstance(value, _CONSTANT_TYPES):
+                raise PlanError(
+                    f"OneOf({value!r}) is not a constant a schema states: a tag holds a string, "
+                    "a number, a boolean or None"
+                )
+        object.__setattr__(self, "values", tuple(values))
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("OneOf is immutable")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, OneOf) and self.values == other.values
+
+    def __hash__(self) -> int:
+        return hash((OneOf, self.values))
+
+    def __repr__(self) -> str:
+        return f"OneOf({', '.join(repr(value) for value in self.values)})"
+
+
+@dataclass(frozen=True, slots=True)
+class Not:
+    """The constant a field must differ from for its case to claim the response.
+
+    The field still has to be there: a body without it is another case, not a match.
+    """
+
+    value: TagValue
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, _CONSTANT_TYPES):
+            raise PlanError(
+                f"Not({self.value!r}) is not a constant a schema states: a tag holds a string, "
+                "a number, a boolean or None"
+            )
+
+    def __repr__(self) -> str:
+        return f"Not({self.value!r})"
+
+
 @dataclass(frozen=True, slots=True)
 class Payload:
     """Marks the field an operation returns. Write it as the short ``Payload[T]``."""
@@ -89,12 +146,22 @@ def _read(value: object, name: str) -> object:
     return value[name] if isinstance(value, Mapping) else getattr(value, name)
 
 
+def _same(actual: object, expected: TagValue) -> bool:
+    return type(actual) is type(expected) and actual == expected
+
+
 @dataclass(frozen=True, slots=True)
 class Tag:
-    """One field of a parsed value that must equal a constant."""
+    """One field of a parsed value and the constant it is compared with.
+
+    ``relation`` is how: ``"=="`` equals ``value``, ``"in"`` equals one of ``values``, ``"!="``
+    differs from ``value``.
+    """
 
     name: str
     value: TagValue
+    relation: Literal["==", "in", "!="] = "=="
+    values: tuple[TagValue, ...] = ()
 
     def holds(self, value: object) -> bool:
         """Whether the parsed value carries this tag.
@@ -109,10 +176,16 @@ class Tag:
             actual = _read(value, self.name)
         except (KeyError, AttributeError, TypeError):
             return False
-        return type(actual) is type(self.value) and actual == self.value
+        if self.relation == "in":
+            return any(_same(actual, expected) for expected in self.values)
+        if self.relation == "!=":
+            return not _same(actual, self.value)
+        return _same(actual, self.value)
 
     def __repr__(self) -> str:
-        return f"<{self.name} == {self.value!r}>"
+        if self.relation == "in":
+            return f"<{self.name} in ({', '.join(repr(item) for item in self.values)})>"
+        return f"<{self.name} {self.relation} {self.value!r}>"
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,8 +273,42 @@ def payload_of(model: object) -> PayloadField | None:
     return declaration_of(model).payload
 
 
+def _generic_hints(model: type) -> dict[str, Any]:
+    """The annotations of a model, with the parameters of a generic one filled in.
+
+    ``Ok[Account]`` on pydantic is a class of its own whose annotations still say ``T``: the
+    arguments live beside it, so they are substituted here and ``Payload[T]`` reads as
+    ``Payload[Account]``.
+    """
+
+    metadata = getattr(model, "__pydantic_generic_metadata__", None)
+    origin = metadata.get("origin") if isinstance(metadata, Mapping) else None
+    if not isinstance(metadata, Mapping) or not isinstance(origin, type):
+        return typing.get_type_hints(model, include_extras=True)
+    parameters = getattr(origin, "__parameters__", ())
+    arguments = dict(zip(parameters, metadata.get("args", ()), strict=False))
+    hints = typing.get_type_hints(origin, include_extras=True)
+    return {name: _substituted(hint, arguments) for name, hint in hints.items()}
+
+
+def _substituted(hint: Any, arguments: Mapping[Any, Any]) -> Any:
+    if isinstance(hint, TypeVar):
+        return arguments.get(hint, hint)
+    parameters = getattr(hint, "__parameters__", ())
+    if not parameters:
+        return hint
+    try:
+        return hint[tuple(arguments.get(parameter, parameter) for parameter in parameters)]
+    except TypeError:
+        return hint
+
+
+def _is_unbound(annotation: object) -> bool:
+    return isinstance(annotation, TypeVar) or bool(getattr(annotation, "__parameters__", ()))
+
+
 def _read_declaration(model: type) -> ModelDeclaration:
-    hints = typing.get_type_hints(model, include_extras=True)
+    hints = _generic_hints(model)
     tags: list[Tag] = []
     payloads: list[PayloadField] = []
     locations: list[LocationField] = []
@@ -209,6 +316,12 @@ def _read_declaration(model: type) -> ModelDeclaration:
     for name, hint in hints.items():
         declared, metadata = unwrap_annotated(unroll_alias(hint))
         if any(isinstance(item, Payload) for item in metadata):
+            if _is_unbound(declared):
+                raise PlanError(
+                    f"{model.__name__}.{name} is Payload[{_annotation_text(declared)}] and "
+                    f"{model.__name__} is used without a parameter; write "
+                    f"{model.__name__}[Result] where the case is declared"
+                )
             payloads.append(PayloadField(name, declared))
         for item in metadata:
             if not isinstance(item, Location | LocationQuery):
@@ -218,19 +331,26 @@ def _read_declaration(model: type) -> ModelDeclaration:
                 patterns.append(name)
             if not _admits_none(declared):
                 locations.append(LocationField(name, item))
-        constants = [item for item in metadata if isinstance(item, Const)]
+        constants = [item for item in metadata if isinstance(item, Const | OneOf | Not)]
         if len(constants) > 1:
             raise PlanError(
                 f"{model.__name__}.{name} declares {len(constants)} constants; a field states one"
             )
         if constants:
-            value = constants[0].value
-            _refuse_impossible_constant(model, name, declared, value)
-            tags.append(Tag(name, value))
+            stated = constants[0]
+            if isinstance(stated, OneOf):
+                for value in stated.values:
+                    _refuse_impossible_constant(model, name, declared, value, stated)
+                tags.append(Tag(name, stated.values[0], "in", stated.values))
+            else:
+                _refuse_impossible_constant(model, name, declared, stated.value, stated)
+                tags.append(Tag(name, stated.value, "!=" if isinstance(stated, Not) else "=="))
             continue
-        literal = _one_value_literal(declared)
-        if literal is not _NOTHING:
-            tags.append(Tag(name, typing.cast(TagValue, literal)))
+        literal = _literal_values(declared)
+        if len(literal) == 1:
+            # Several values stay a plain type: an ordinary enum field is not a criterion, and
+            # reading it as one would re-rank declarations that never meant to state it.
+            tags.append(Tag(name, literal[0]))
     if len(payloads) > 1:
         names = ", ".join(field.name for field in payloads)
         raise PlanError(
@@ -277,32 +397,28 @@ def _refuse_impossible_location_field(
     )
 
 
-class _Nothing:
-    """A distinct absence, because ``None`` is itself a constant a field can be tagged with."""
+def _literal_values(annotation: object) -> tuple[TagValue, ...]:
+    """The constants a ``Literal`` lists, or ``()`` when it is not one a tag can state."""
 
-
-_NOTHING = _Nothing()
-
-
-def _one_value_literal(annotation: object) -> object:
     if get_origin(annotation) is not Literal:
-        return _NOTHING
+        return ()
     values = get_args(annotation)
-    if len(values) != 1 or not isinstance(values[0], _CONSTANT_TYPES):
-        return _NOTHING
-    return values[0]
+    if not values or not all(isinstance(value, _CONSTANT_TYPES) for value in values):
+        return ()
+    return typing.cast(tuple[TagValue, ...], values)
 
 
 def _refuse_impossible_constant(
-    model: type, name: str, annotation: object, value: TagValue
+    model: type, name: str, annotation: object, value: TagValue, stated: object | None = None
 ) -> None:
     """A constant the declared field can never hold is a typo, and it is one at import."""
 
     accepted = _accepted_types(annotation)
     if accepted is None or type(value) in accepted:
         return
+    marker = repr(stated) if stated is not None else f"Const({value!r})"
     raise PlanError(
-        f"Const({value!r}) on {model.__name__}.{name}: "
+        f"{marker} on {model.__name__}.{name}: "
         f"a {type(value).__name__} is not a {_annotation_text(annotation)}"
     )
 

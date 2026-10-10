@@ -472,6 +472,14 @@ class ErrorSummary:
 
 
 class ApiError[T](EazySdkError):
+    reauth: typing.ClassVar[bool] = False
+    """``True`` on a subclass: this error means the session is stale, so refresh it and replay.
+
+    The service that reports a rejected token inside a ``200`` gets what a ``401`` gets: one
+    refresh on the same budget (``Resilience.auth_retries``), then the request again. The
+    error is raised only when there is nothing left to refresh with.
+    """
+
     def __init__(self, error: T, context: ResponseContext[object] | ErrorSummary) -> None:
         self.error = error
         self.context = context
@@ -527,6 +535,8 @@ class Error[T]:
     exception: ApiErrorFactory[T] = ApiError
     condition: ResponseCondition | None = None
     precedence: int = 0
+    reauth: bool = False
+    """The response this case claims means a stale session: refresh it and replay the request."""
 
 
 type ResponseCase[T] = Success[T] | Error[T]

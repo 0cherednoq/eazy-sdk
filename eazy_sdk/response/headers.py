@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from eazy_sdk.exceptions import HeaderValidationError
+from eazy_sdk.response.alternatives import Alternative
 
 if TYPE_CHECKING:
     from eazy_sdk.response.normalized import NormalizedResponse
@@ -56,7 +57,7 @@ def _text(value: object) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class FromHeader:
+class FromHeader(Alternative):
     """Use one exact response-header field line as a model field's input."""
 
     name: str

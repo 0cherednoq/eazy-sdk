@@ -14,12 +14,13 @@ from eazy_sdk.models import (
     UnsupportedModelTypeError,
     default_model_adapters,
 )
+from eazy_sdk.response.alternatives import Alternative, FirstOf
 from eazy_sdk.response.sources import source_of
 from eazy_sdk.serialization import DocumentBackend, DocumentNode, SelectorMarker
 
 
 @dataclass(frozen=True, slots=True)
-class CSS:
+class CSS(Alternative):
     expression: str
 
     language: ClassVar[str] = "css"
@@ -30,7 +31,7 @@ class CSS:
 
 
 @dataclass(frozen=True, slots=True)
-class XPath:
+class XPath(Alternative):
     expression: str
 
     language: ClassVar[str] = "xpath"
@@ -46,7 +47,7 @@ def _pattern(expression: str, flags: int) -> re.Pattern[str]:
 
 
 @dataclass(frozen=True, slots=True)
-class Regex:
+class Regex(Alternative):
     """Select by a regular expression over the text of the document as it was received.
 
     For what no markup addresses: a token inside a script, a value in an inline JSON blob. With
@@ -116,6 +117,10 @@ class ExtractionField:
     nested: ExtractionSchema | None
     many: bool
     optional: bool
+    alternatives: tuple[SelectorMarker, ...] = ()
+    """``A | B``: the selectors after the first, tried in order when the one before finds nothing."""
+    elsewhere: bool = False
+    """``A | B`` with a source around the body: the document may lack the value and not fail."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,7 +219,11 @@ def _check_selector_languages(
         return
     seen.add(schema.model)
     for field in schema.fields:
-        for marker in (field.selector, field.scope.selector if field.scope else None):
+        for marker in (
+            field.selector,
+            field.scope.selector if field.scope else None,
+            *field.alternatives,
+        ):
             if marker is None or marker.language in backend.selector_languages:
                 continue
             spoken = ", ".join(sorted(backend.selector_languages)) or "no selector language"
@@ -267,30 +276,63 @@ def _compile_model(
         metadata = (*field.metadata, *annotation_metadata)
         selectors = tuple(item for item in metadata if isinstance(item, CSS | XPath | Regex))
         scopes = tuple(item for item in metadata if isinstance(item, Scope))
-        if len(selectors) > 1 or len(scopes) > 1 or (selectors and scopes):
+        chains = tuple(item for item in metadata if isinstance(item, FirstOf))
+        if len(selectors) > 1 or len(scopes) > 1 or (selectors and scopes) or len(chains) > 1:
             raise ExtractionCompileError(
                 f"{model.__name__}.{field.name} has conflicting HTML selector metadata"
             )
-        if _read_around_the_body(model, field, selectors, scopes):
+        elsewhere = False
+        if chains:
+            selectors = _chain_selectors(model, field, chains[0], selectors, scopes)
+            if not selectors:
+                continue  # every source is around the body: nothing for the document to read
+            elsewhere = len(selectors) < len(chains[0].sources)
+        elif _read_around_the_body(model, field, selectors, scopes):
             continue
         item_type, many, optional = _field_shape(annotation)
         nested = _nested_schema(item_type, models, stack=(*stack, model))
         selector = selectors[0] if selectors else None
         scope = scopes[0] if scopes else None
-        if nested is None and selector is None:
-            raise ExtractionCompileError(
-                f"{model.__name__}.{field.name} requires CSS or XPath metadata"
-            )
-        if nested is None and scope is not None:
-            raise ExtractionCompileError(
-                f"{model.__name__}.{field.name} cannot apply Scope to a scalar"
-            )
+        where = f"{model.__name__}.{field.name}"
+        _check_field_shape(where, nested=nested is not None, selector=selector, scope=scope)
         if nested is not None and many and scope is None:
+            raise ExtractionCompileError(f"{where} list of nested models requires Scope")
+        if chains and (nested is not None or many):
             raise ExtractionCompileError(
-                f"{model.__name__}.{field.name} list of nested models requires Scope"
+                f"{where}: A | B fills one scalar value; a list or a nested model has one source"
             )
-        output.append(ExtractionField(field, annotation, selector, scope, nested, many, optional))
+        output.append(
+            ExtractionField(
+                field, annotation, selector, scope, nested, many, optional, selectors[1:], elsewhere
+            )
+        )
     return ExtractionSchema(model, tuple(output))
+
+
+def _check_field_shape(
+    where: str, *, nested: bool, selector: object | None, scope: Scope | None
+) -> None:
+    if not nested and selector is None:
+        raise ExtractionCompileError(f"{where} requires CSS or XPath metadata")
+    if not nested and scope is not None:
+        raise ExtractionCompileError(f"{where} cannot apply Scope to a scalar")
+
+
+def _chain_selectors(
+    model: type[object],
+    field: ModelField,
+    chain: FirstOf,
+    selectors: tuple[object, ...],
+    scopes: tuple[Scope, ...],
+) -> tuple[CSS | XPath | Regex, ...]:
+    """Return the selectors of ``A | B`` in their order; the chain is the field's only source."""
+
+    if selectors or scopes:
+        raise ExtractionCompileError(
+            f"{model.__name__}.{field.name} names its sources twice: once as A | B "
+            "and once beside it; keep the sources in one chain"
+        )
+    return tuple(item for item in chain.sources if isinstance(item, CSS | XPath | Regex))
 
 
 def _read_around_the_body(
@@ -359,11 +401,17 @@ def _extract_model(
                 )
             continue
         assert field.selector is not None
-        values = node.values(field.selector)
+        used = field.selector
+        values = node.values(used)
+        for alternative in field.alternatives:
+            if values:
+                break
+            used = alternative
+            values = node.values(used)
         if field.many:
             output[field.model_field.wire_name] = list(values)
             continue
-        if isinstance(field.selector, Regex):
+        if isinstance(used, Regex):
             # Text repeats where markup does not: a single-value field takes the first match.
             values = values[:1]
         scalar_selected = _one_or_missing(field, values, field_path)
@@ -379,7 +427,7 @@ def _one_or_missing[T](
 ) -> T | None:
     if len(values) == 1:
         return values[0]
-    if not values and (field.optional or not field.model_field.required):
+    if not values and (field.optional or not field.model_field.required or field.elsewhere):
         return None
     expectation = "one value" if not values else "at most one value"
     raise ExtractionError(

@@ -43,7 +43,10 @@ def _is_selector(item: Any) -> bool:
     if isinstance(item, SelectorMarker):
         return True
     selector = getattr(item, "selector", None)
-    return selector is not None and isinstance(selector, SelectorMarker)
+    if selector is not None and isinstance(selector, SelectorMarker):
+        return True
+    # ``A | B``: a field with several sources reads the document when one of them is a selector.
+    return any(isinstance(source, SelectorMarker) for source in getattr(item, "sources", ()))
 
 
 __all__ = ["is_document_model"]
