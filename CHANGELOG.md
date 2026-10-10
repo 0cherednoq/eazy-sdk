@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a12 - 2026-10-11
+
 Added (phase 59, nothing existing changes):
 
 - `eazy_sdk.response.OneOf(...)` and `Not(...)`: tags beside `Const`. `OneOf(401, 403)` reads

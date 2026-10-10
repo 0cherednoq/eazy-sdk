@@ -39,7 +39,7 @@ from eazy_sdk.root import AsyncRoot, Binding, SyncRoot, bind
 from eazy_sdk.sentinels import UNSET, Omittable
 from eazy_sdk.serialization import Serialization
 
-__version__ = "0.2.0a11"
+__version__ = "0.2.0a12"
 
 if TYPE_CHECKING:
     from eazy_sdk.clients import AsyncClient, Client
