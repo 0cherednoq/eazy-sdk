@@ -88,6 +88,10 @@ several request slots through `Placed` markers on the session model, and adds `R
 [Phase 58](58-identity-cookie-jar.md) gives each `Identity` a cookie jar switched on by
 `Cookies(...)` on the SDK root, so a server-set cookie travels between operations and redirect
 hops without being named, and removes every other way to send one.
+[Phase 59](59-declarative-gaps.md) closes eight declarative gaps found on `armgs-sdk`: `OneOf`/`Not`
+tags, `Payload[T]` in a generic model, session refresh on a declared error, fallback field sources,
+the service address as an `Inject` source, an absolute URL as a call argument, public access to the
+current session and cookies, and a page map for a browser `Failure`. Planned, not started.
 
 ## Цель
 
