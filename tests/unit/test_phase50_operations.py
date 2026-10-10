@@ -123,6 +123,7 @@ def test_markers_module_reexports_every_descriptor() -> None:
         "Path": params.Path,
         "Query": params.Query,
         "QueryString": params.QueryString,
+        "Url": params.Url,
         "Header": params.Header,
         "Cookie": params.Cookie,
         "JsonField": descriptors.JsonField,

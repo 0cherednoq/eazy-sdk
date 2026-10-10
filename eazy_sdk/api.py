@@ -63,6 +63,7 @@ from eazy_sdk.policies import CallOptions
 from eazy_sdk.preparation import PreparedCall, PrepareOptions
 from eazy_sdk.protocols import Envelope
 from eazy_sdk.protocols.operation import Rpc, RpcOperation, rpc_responses
+from eazy_sdk.request.params import Url
 from eazy_sdk.request.signatures import RequestSignature
 from eazy_sdk.request.wire import Wire
 from eazy_sdk.response import Error, ResponseEnvelope, Responses, Success
@@ -306,6 +307,38 @@ class _BoundOperation[**P, T]:
         )
         return readdressed, kept
 
+    def _addressed(
+        self, values: dict[str, object]
+    ) -> tuple[_OperationDeclaration[T], dict[str, object]]:
+        """The declaration and values the executor takes; a ``Url`` operation is re-addressed.
+
+        An operation declared with ``Http.get(markers.Url(hosts=...))`` has no address of its
+        own: the caller's ``url`` becomes the path and leaves the fields, and a link to a host
+        the declaration does not list is refused here, before anything is prepared or signed.
+        """
+
+        declaration = self._descriptor.resolve_for(self._api)
+        address = self._descriptor.spec.address
+        if address is None:
+            return declaration, values
+        url = values.get("url")
+        if not isinstance(url, str) or not url:
+            raise PlanError(f"operation {declaration.operation_id!r}: url is a non-empty string")
+        if not address.allows(url):
+            raise PlanError(
+                f"operation {declaration.operation_id!r}: the address points to "
+                f"{urlsplit(url).netloc or url!r}, and Url(hosts=...) lists only "
+                f"{', '.join(address.hosts)}"
+            )
+        fields = tuple(field for field in declaration.input_fields if field.python_name != "url")
+        readdressed = replace(
+            declaration,
+            path=url,
+            input_fields=fields,
+            input_schema=replace(declaration.input_schema, fields=fields),
+        )
+        return readdressed, {name: value for name, value in values.items() if name != "url"}
+
     def _bind(self, *args: Any, **kwargs: Any) -> tuple[dict[str, object], CallOptions | None]:
         return self._descriptor._bind_arguments(self._api, *args, **kwargs)
 
@@ -337,8 +370,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
     ) -> PreparedCall:
         values, _ = self._bind(*args, **kwargs)
         return await self._api._client._prepare_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options or PrepareOptions(),
             identity=self._api._scope,
             serialization=self._api._serialization,
@@ -441,8 +473,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
 
     async def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = await self._api._client._execute_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options,
             with_response=False,
             identity=self._api._scope,
@@ -454,8 +485,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         self, values: dict[str, object], options: CallOptions | None
     ) -> ResponseEnvelope[T, Any]:
         result = await self._api._client._execute_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options,
             with_response=True,
             identity=self._api._scope,
@@ -487,8 +517,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
     ) -> PreparedCall:
         values, _ = self._bind(*args, **kwargs)
         return self._api._client._prepare_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options or PrepareOptions(),
             identity=self._api._scope,
             serialization=self._api._serialization,
@@ -584,8 +613,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
 
     def _execute(self, values: dict[str, object], options: CallOptions | None) -> T:
         result = self._api._client._execute_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options,
             with_response=False,
             identity=self._api._scope,
@@ -597,8 +625,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         self, values: dict[str, object], options: CallOptions | None
     ) -> ResponseEnvelope[T, Any]:
         result = self._api._client._execute_operation(
-            self._descriptor.resolve_for(self._api),
-            values,
+            *self._addressed(values),
             options=options,
             with_response=True,
             identity=self._api._scope,
@@ -690,6 +717,7 @@ class _OperationDescriptor[**P, T]:
             models=models,
             projection=spec.projection,
         )
+        _validate_url_address(input_schema, spec.address, operation_id)
         if spec.envelope_cases:
             _validate_envelope_placements(input_schema, operation_id)
         if spec.envelope_cases and spec.success is None:
@@ -896,6 +924,31 @@ class _OperationDescriptor[**P, T]:
         if isinstance(instance, SyncApi):
             return _BoundSyncOperation(self, instance)
         raise TypeError("an operation is bound through a SyncApi or AsyncApi router")
+
+
+def _validate_url_address(
+    schema: MethodInputSchema, address: object | None, operation_id: str
+) -> None:
+    """An operation is addressed by ``Url`` in both places or in neither."""
+
+    marked = [field.python_name for field in schema.fields if isinstance(field.placement, Url)]
+    paths = [
+        field.python_name
+        for field in schema.fields
+        if field.location is RequestLocation.PATH and not isinstance(field.placement, Url)
+    ]
+    if address is None:
+        if marked:
+            raise PlanError(
+                f"operation {operation_id!r}: {marked[0]!r} is a Url field, and the operation "
+                "declares a path of its own; write Http.get(markers.Url(hosts=...))"
+            )
+        return
+    if marked != ["url"] or paths:
+        raise PlanError(
+            f"operation {operation_id!r} is addressed by Url(...): it declares exactly one "
+            "field for the address, `url: Url[str]`, and no Path fields"
+        )
 
 
 def _validate_envelope_placements(schema: MethodInputSchema, operation_id: str) -> None:

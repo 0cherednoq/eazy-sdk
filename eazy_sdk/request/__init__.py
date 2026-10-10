@@ -30,6 +30,7 @@ from .short import (
     Path,
     Query,
     ReplayableStreamBody,
+    Url,
 )
 from .signatures import (
     DeclarativeSignature,
@@ -91,6 +92,7 @@ __all__ = [
     "ScalarEncodeContext",
     "SigningKey",
     "SigningKeyRequirement",
+    "Url",
     "Wire",
     "body_digest",
     "body_output",

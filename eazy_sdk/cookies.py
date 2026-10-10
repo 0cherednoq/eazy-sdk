@@ -330,6 +330,20 @@ def _scope(
     return domain, False
 
 
+def cookies_of(sdk: object) -> CookieState:
+    """The cookies the user of an SDK holds right now, as a snapshot.
+
+    Takes the SDK root or a router, the object the calls are made on. What comes back is what a
+    browser would have in its jar for this user: give it to ``Identity(cookies=...)`` on the
+    next run, or to a browser tab.
+    """
+
+    jar = getattr(getattr(sdk, "_scope", None), "jar", None)
+    if not isinstance(jar, CookieJar):
+        raise TypeError("an SDK root or a router is expected, the object the calls are made on")
+    return jar.snapshot()
+
+
 class CookieJar:
     """The cookies of one user: stored as a server sets them, selected for each address.
 

@@ -7,7 +7,7 @@ import types
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Protocol, Union, cast, get_args, get_origin
+from typing import Any, Literal, Protocol, Union, cast, get_args, get_origin, overload
 
 from eazy_sdk.auth.lifecycle import LifecycleCycleError
 from eazy_sdk.auth.lifecycle import LifecycleGraph as ResolutionGraph
@@ -302,6 +302,63 @@ class SessionProvider[TCredentials, TSession, TSdk]:
                 -1,
             ),
         )
+
+
+def _session_provider(
+    sdk: object, scheme: AuthScheme[Any] | None
+) -> SessionProvider[Any, Any, Any]:
+    """The one session of an SDK the caller means: the named scheme, or the only one there is."""
+
+    scope = getattr(sdk, "_scope", None)
+    providers = getattr(scope, "auth", None)
+    if providers is None:
+        raise TypeError("an SDK root or a router is expected, the object the calls are made on")
+    sessions = [
+        (declared, provider)
+        for declared, provider in providers._entries()
+        if isinstance(provider, SessionProvider)
+    ]
+    if scheme is not None:
+        for declared, provider in sessions:
+            if declared is scheme:
+                return provider
+        raise PlanError(f"{scheme.diagnostic_name!r} is not a session this SDK was given")
+    if len(sessions) == 1:
+        return sessions[0][1]
+    if not sessions:
+        raise PlanError("this SDK was given no session: its Identity configures none")
+    names = ", ".join(sorted(repr(declared.diagnostic_name) for declared, _ in sessions))
+    raise PlanError(f"this SDK keeps several sessions ({names}); name one with scheme=")
+
+
+@overload
+async def ensure_session(sdk: object) -> Any: ...
+@overload
+async def ensure_session[TSession](sdk: object, *, scheme: AuthScheme[TSession]) -> TSession: ...
+async def ensure_session(sdk: object, *, scheme: AuthScheme[Any] | None = None) -> Any:
+    """Sign in unless already signed in, and return the session.
+
+    The same path the first protected call takes: one acquisition however many callers wait,
+    the session saved, its cookies beside it. No request of the caller's own is sent.
+    """
+
+    provider = _session_provider(sdk, scheme)
+    resolved = await provider.resolve(None, "ensure_session")
+    return resolved.value
+
+
+@overload
+async def current_session(sdk: object) -> Any: ...
+@overload
+async def current_session[TSession](
+    sdk: object, *, scheme: AuthScheme[TSession]
+) -> TSession | None: ...
+async def current_session(sdk: object, *, scheme: AuthScheme[Any] | None = None) -> Any:
+    """The session as it is kept now, without signing in; ``None`` when there is none yet."""
+
+    provider = _session_provider(sdk, scheme)
+    stored = await provider.config.store.load(provider.config.key)
+    return None if stored is None else stored.value
 
 
 class AuthCredentialsRequiredError(PlanError):

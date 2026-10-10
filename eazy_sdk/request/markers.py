@@ -17,7 +17,7 @@ from eazy_sdk.request.descriptors import (
     Part,
     ReplayableStreamBody,
 )
-from eazy_sdk.request.params import Cookie, Header, Path, Query, QueryString
+from eazy_sdk.request.params import Cookie, Header, Path, Query, QueryString, Url
 
 __all__ = [
     "BodyProjection",
@@ -34,4 +34,5 @@ __all__ = [
     "Query",
     "QueryString",
     "ReplayableStreamBody",
+    "Url",
 ]

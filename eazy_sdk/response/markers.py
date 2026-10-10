@@ -115,24 +115,40 @@ class OneOf:
         return f"OneOf({', '.join(repr(value) for value in self.values)})"
 
 
-@dataclass(frozen=True, slots=True)
 class Not:
-    """The constant a field must differ from for its case to claim the response.
+    """The constants a field must differ from for its case to claim the response.
 
-    The field still has to be there: a body without it is another case, not a match.
+    ``Not(200)`` reads "anything but 200"; ``Not(200, 401, 403)`` leaves room for the cases
+    that claim 401 and 403 themselves, so the three never compete for one response. The field
+    still has to be there: a body without it is another case, not a match.
     """
 
-    value: TagValue
+    __slots__ = ("values",)
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.value, _CONSTANT_TYPES):
-            raise PlanError(
-                f"Not({self.value!r}) is not a constant a schema states: a tag holds a string, "
-                "a number, a boolean or None"
-            )
+    values: tuple[TagValue, ...]
+
+    def __init__(self, *values: TagValue) -> None:
+        if not values:
+            raise PlanError("Not() names no constant; a tag states at least one")
+        for value in values:
+            if not isinstance(value, _CONSTANT_TYPES):
+                raise PlanError(
+                    f"Not({value!r}) is not a constant a schema states: a tag holds a string, "
+                    "a number, a boolean or None"
+                )
+        object.__setattr__(self, "values", tuple(values))
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Not is immutable")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Not) and self.values == other.values
+
+    def __hash__(self) -> int:
+        return hash((Not, self.values))
 
     def __repr__(self) -> str:
-        return f"Not({self.value!r})"
+        return f"Not({', '.join(repr(value) for value in self.values)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +171,7 @@ class Tag:
     """One field of a parsed value and the constant it is compared with.
 
     ``relation`` is how: ``"=="`` equals ``value``, ``"in"`` equals one of ``values``, ``"!="``
-    differs from ``value``.
+    differs from ``value`` -- and from every one of ``values`` when several are excluded.
     """
 
     name: str
@@ -179,12 +195,13 @@ class Tag:
         if self.relation == "in":
             return any(_same(actual, expected) for expected in self.values)
         if self.relation == "!=":
-            return not _same(actual, self.value)
+            return not any(_same(actual, excluded) for excluded in self.values or (self.value,))
         return _same(actual, self.value)
 
     def __repr__(self) -> str:
-        if self.relation == "in":
-            return f"<{self.name} in ({', '.join(repr(item) for item in self.values)})>"
+        if self.values:
+            listed = ", ".join(repr(item) for item in self.values)
+            return f"<{self.name} {'in' if self.relation == 'in' else 'not in'} ({listed})>"
         return f"<{self.name} {self.relation} {self.value!r}>"
 
 
@@ -338,13 +355,17 @@ def _read_declaration(model: type) -> ModelDeclaration:
             )
         if constants:
             stated = constants[0]
+            if isinstance(stated, Const):
+                _refuse_impossible_constant(model, name, declared, stated.value, stated)
+                tags.append(Tag(name, stated.value))
+                continue
+            for value in stated.values:
+                _refuse_impossible_constant(model, name, declared, value, stated)
             if isinstance(stated, OneOf):
-                for value in stated.values:
-                    _refuse_impossible_constant(model, name, declared, value, stated)
                 tags.append(Tag(name, stated.values[0], "in", stated.values))
             else:
-                _refuse_impossible_constant(model, name, declared, stated.value, stated)
-                tags.append(Tag(name, stated.value, "!=" if isinstance(stated, Not) else "=="))
+                several = stated.values if len(stated.values) > 1 else ()
+                tags.append(Tag(name, stated.values[0], "!=", several))
             continue
         literal = _literal_values(declared)
         if len(literal) == 1:

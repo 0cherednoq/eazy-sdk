@@ -23,6 +23,8 @@ from .session_runtime import (
     Placed,
     ResolutionCycleError,
     SessionScheme,
+    current_session,
+    ensure_session,
     session_auth,
     session_scheme,
 )
@@ -49,6 +51,8 @@ __all__ = [
     "SessionScheme",
     "all_of",
     "any_of",
+    "current_session",
+    "ensure_session",
     "session_auth",
     "session_scheme",
 ]

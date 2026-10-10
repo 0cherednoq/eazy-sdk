@@ -26,7 +26,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, Unpack, cast, get_ar
 
 # Imported at runtime, not under TYPE_CHECKING: ``get_type_hints`` on an operation class
 # resolves the ``__pages__`` annotation below, and a name it cannot find is a NameError.
+from eazy_sdk.core.errors import PlanError
 from eazy_sdk.pagination import Pagination
+from eazy_sdk.request.params import Url
 from eazy_sdk.request.wire import EMPTY_WIRE, Wire
 
 if TYPE_CHECKING:
@@ -68,6 +70,10 @@ class HttpOperation[T]:
     """Optional: how the operation pages, read by ``pages()``/``items()`` on the router."""
 
 
+URL_FIELD_PATH = "{url}"
+"""What an operation addressed by ``Url`` has for a path: its one field, named ``url``."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _HttpSpec:
     """Everything an HTTP operation declares besides its fields — one record for both forms."""
@@ -103,6 +109,9 @@ class _HttpSpec:
     operation_id: str | None = None
     tags: tuple[str, ...] = ()
 
+    address: Url | None = None
+    """``Http.get(markers.Url(hosts=...))``: the caller gives the address in the ``url`` field."""
+
     # Filled by ``Rpc.method``, never written by an author; absent from ``_HttpOptions``.
     discriminator: str | None = None
     """What the service envelope calls this operation; only ``Rpc`` fills it."""
@@ -113,6 +122,14 @@ class _HttpSpec:
         if _METHOD_TOKEN.fullmatch(self.method) is None:
             raise ValueError(f"invalid HTTP method token: {self.method!r}")
         object.__setattr__(self, "method", self.method.upper())
+        if isinstance(self.path, Url):
+            if not self.path.hosts:
+                raise PlanError(
+                    "Http." + self.method.lower() + "(Url()) lists no hosts; write "
+                    "Url(hosts=('*.example',)) so a link cannot lead the request anywhere"
+                )
+            object.__setattr__(self, "address", self.path)
+            object.__setattr__(self, "path", URL_FIELD_PATH)
         if not isinstance(self.path, str):
             raise TypeError("operation path must be a string")
 
@@ -163,40 +180,40 @@ class Http:
     __slots__ = ()
 
     @staticmethod
-    def request(method: str, path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method=method, path=path, **options)
+    def request(method: str, path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method=method, path=cast(str, path), **options)
 
     @staticmethod
-    def delete(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="DELETE", path=path, **options)
+    def delete(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="DELETE", path=cast(str, path), **options)
 
     @staticmethod
-    def get(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="GET", path=path, **options)
+    def get(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="GET", path=cast(str, path), **options)
 
     @staticmethod
-    def head(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="HEAD", path=path, **options)
+    def head(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="HEAD", path=cast(str, path), **options)
 
     @staticmethod
-    def options(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="OPTIONS", path=path, **options)
+    def options(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="OPTIONS", path=cast(str, path), **options)
 
     @staticmethod
-    def patch(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="PATCH", path=path, **options)
+    def patch(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="PATCH", path=cast(str, path), **options)
 
     @staticmethod
-    def post(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="POST", path=path, **options)
+    def post(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="POST", path=cast(str, path), **options)
 
     @staticmethod
-    def put(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="PUT", path=path, **options)
+    def put(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="PUT", path=cast(str, path), **options)
 
     @staticmethod
-    def trace(path: str, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
-        return _HttpSpec(method="TRACE", path=path, **options)
+    def trace(path: str | Url, /, **options: Unpack[_HttpOptions]) -> _HttpSpec:
+        return _HttpSpec(method="TRACE", path=cast(str, path), **options)
 
 
 def generic_argument(operation_type: type[object], base: type[object]) -> object | None:

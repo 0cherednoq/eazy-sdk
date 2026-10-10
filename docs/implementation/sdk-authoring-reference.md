@@ -601,6 +601,26 @@ Retry, redirect, reaction и auth refresh создают новую attempt и �
 - `eazy_sdk_html.Regex(pattern, flags=0)`: a selector over the document text as received.
 - A redirect status an operation declares a case on is read by the operation, not followed.
 
+## Phase 59: eight declarative gaps
+
+- `eazy_sdk.response.OneOf(*values)`, `Not(*values)`: tags beside `Const`; a field states one
+  of the three. `Not(200, 401, 403)` excludes every listed value, so a general refusal does not
+  compete with the case that claims 401 and 403.
+- `Payload[T]` in a generic pydantic model: `success={200: Ok[Account]}`.
+- `ApiError.reauth = True` on a subclass, `Error(..., reauth=True)`: the claimed response means
+  a stale session; refresh and replay as for a `401`. Refused on an operation with no security.
+- `Annotated[str, Regex(...) | FromCookie("act")]`: sources tried left to right (`FirstOf`).
+  A required field found nowhere is a malformed response; with `Location.query` in the chain
+  it is another case. A `Location(...)` pattern cannot be part of a chain.
+- `eazy_sdk.dependencies.service_url(Router | None = None, path="")`: the bound address of a
+  router of the same root, for `Inject(...)` and for `dependency(str, provide=...)` read by a
+  body projection.
+- `Http.get(markers.Url(hosts=(...)))` with one field `url: Url[str]`: the caller gives the
+  address. No `Path` fields; a declared `Query` field makes the operation own the query.
+- `await ensure_session(sdk)`, `await current_session(sdk)`, `cookies_of(sdk)`: functions, not
+  root methods; `scheme=` names the session when an SDK keeps several.
+- `Failure(when=..., reads=PageMap, exception=factory)` in `eazy_sdk_browser`.
+
 ## Phase 58: a session's cookies travel like in a browser
 
 - `eazy_sdk.auth.Cookies(required=(), leeway=..., public_suffixes=None)`: declared on a root or

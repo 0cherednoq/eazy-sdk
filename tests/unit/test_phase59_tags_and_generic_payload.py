@@ -118,6 +118,47 @@ def test_tags_compare_values_together_with_their_types(
     assert tags_of(Refused)[0].holds(body) is not_
 
 
+def test_not_excludes_every_value_it_lists() -> None:
+    class Other(pydantic.BaseModel):
+        status: Annotated[int, Not(200, 401, 403)]
+
+    tag = tags_of(Other)[0]
+    assert tag == Tag("status", 200, "!=", (200, 401, 403))
+    assert repr(tag) == "<status not in (200, 401, 403)>"
+    assert [tag.holds({"status": code}) for code in (200, 401, 403, 400)] == [
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert not tag.holds({})
+
+
+def test_the_token_case_and_the_general_refusal_do_not_compete() -> None:
+    class OtherRefused(pydantic.BaseModel):
+        status: Annotated[int, Not(200, 401, 403)]
+        body: Any = None
+
+    class OtherError(ApiError[OtherRefused]):
+        pass
+
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class Split(HttpOperation[Account]):
+        __http__ = Http.get(
+            "/split", success={200: Ok[Account]}, errors={200: [TokenRejected, OtherError]}
+        )
+
+    class Api(SyncApi):
+        split = op(Split)
+
+    with _serve({"status": 401}) as client, pytest.raises(TokenRejected):
+        Api(client).split()
+    with _serve({"status": 500}) as client, pytest.raises(OtherError):
+        Api(client).split()
+    with _serve({"status": 200, "body": {"email": "u@x"}}) as client:
+        assert Api(client).split().email == "u@x"
+
+
 def test_true_is_not_one() -> None:
     tag = Tag("ok", 1, "in", (1, 2))
     assert tag.holds({"ok": 1})
@@ -176,6 +217,11 @@ def test_a_marker_that_is_not_a_constant_is_refused() -> None:
         OneOf(401, [403])  # type: ignore[arg-type]
     with pytest.raises(PlanError, match="not a constant"):
         Not({})  # type: ignore[arg-type]
+    with pytest.raises(PlanError, match="names no constant"):
+        Not()
+    assert Not(1, 2) == Not(1, 2)
+    assert Not(1, 2) != Not(1)
+    assert len({Not(1), Not(1)}) == 1
 
 
 def test_a_field_states_one_tag() -> None:

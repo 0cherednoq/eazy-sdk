@@ -3,7 +3,7 @@ title: Dependencies
 description: Публичный API вычисляемых значений запроса.
 sources:
   - eazy_sdk.dependencies
-api_fingerprint: "sha256:2ac8cc949d12120c8b00ac9aaba682aaf59fd2a1ac37ee1b9e59235e068d1fd3"
+api_fingerprint: "sha256:d16f02296e2945f13e1a01992fb71aab78a13b112aa90eb978b39ddfa83cd3b2"
 ---
 
 ```python
@@ -68,6 +68,21 @@ Identity(dependencies=registry)
 callable без `resolve` оборачивается автоматически, когда передан через `provide=` или как
 `Inject.source`. `provide=` задаёт reusable provider identity, но реализация всегда живёт в
 `DependencyRegistry`, а не в операции.
+
+## Адрес сервиса
+
+`service_url(Router, path="")` служит источником для `Inject` и для `dependency(provide=...)`: это
+адрес, к которому роутер привязан в корне SDK.
+
+```python
+Inject(markers.Header("Origin"), service_url(LoginPagesApi))
+Inject(markers.Header("Referer"), service_url(LoginPagesApi, "/"))
+```
+
+Без роутера это адрес сервиса самой операции. Базовый класс называет все роутеры, которые его
+наследуют; у них должен быть один адрес. Роутер, которого нет в корне, даёт `PlanError` до
+отправки запроса. Те же значения доступны поставщику: `context.base_url`, `context.services`,
+`context.service_url(...)`.
 
 ## Проекция
 

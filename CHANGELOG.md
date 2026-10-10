@@ -5,6 +5,33 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Added (phase 59, nothing existing changes):
+
+- `eazy_sdk.response.OneOf(...)` and `Not(...)`: tags beside `Const`. `OneOf(401, 403)` reads
+  "the field is one of these", `Not(200)` "anything but this", `Not(200, 401, 403)` leaves
+  room for the cases that claim the listed values. Read the same on `success=` and `errors=`.
+- `Payload[T]` in a generic pydantic model: `Ok[Account]` returns `Account`. A generic
+  envelope used without a parameter is a declaration error. Generic dataclass and msgspec
+  models are not loadable by the model registry and stay unsupported.
+- `reauth`: an error that means a stale session. `class TokenRejected(ApiError[Model]):
+  reauth = True`, or `Error(..., reauth=True)`. The response refreshes the session and replays
+  the request on the budget and under the idempotency rule of an HTTP `401`; the error is
+  raised when there is nothing left to refresh with.
+- `A | B` on field sources (`eazy_sdk.response.FirstOf`): `Regex(...) | FromCookie("act")`
+  fills one field from the first source that has the value. Works across document selectors
+  (`CSS`, `XPath`, `Regex`), `FromHeader`, `FromCookie` and `Location.query`.
+- `eazy_sdk.dependencies.service_url(Router, path)`: the address a router is bound to in the
+  SDK root, as a source for `Inject` and `dependency(provide=...)`. `DependencyContext` gains
+  `base_url`, `services` and `service_url()`.
+- `markers.Url(hosts=...)` and the short `Url[str]`: an operation addressed by its caller,
+  `Http.get(markers.Url(hosts=("*.example",)))` with a field `url: Url[str]`. A link to a host
+  not listed is refused before the request is prepared.
+- `eazy_sdk.auth.ensure_session(sdk)`, `current_session(sdk)` and
+  `eazy_sdk.cookies.cookies_of(sdk)`: the session and the user's cookies read from the SDK
+  root or a router, with no store and no session key in the caller's hands.
+- `eazy_sdk_browser.Failure(reads=PageMap)`: the exception factory of a page failure receives
+  a built page map instead of the raw observation, and may be a plain function.
+
 ## 0.2.0a11 - 2026-10-10
 
 Breaking:

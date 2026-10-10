@@ -14,16 +14,31 @@
 в `Error(..., exception=)` ядра: фабрика читает подробности со снимка страницы —
 `text_of(locator)` помогает взять их из элемента.
 
+Подробности, которые на странице лежат несколькими элементами, объявляются картой, как
+у исходов, а не ищутся в фабрике руками:
+
+    class RejectedDialog:
+        reasons: Annotated[Elements, each(css("p.error b"))]
+
+    async def _rejected(dialog: RejectedDialog) -> Exception:
+        return RecipientRejected(await dialog.reasons.texts())
+
+    Failure(when=text.contains("Невозможно"), reads=RejectedDialog, exception=_rejected)
+
+С `reads=` фабрика получает собранную карту, а не снимок страницы.
+
 Отказ, приходящий **ответом API** (`409`, `403`), объявляется не здесь, а разбором
 ответа: статус и модель — дело `eazy_sdk_browser.network` и его декодера.
 """
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from eazy_sdk_browser.errors import BrowserError
+from eazy_sdk_browser.content import build_content
+from eazy_sdk_browser.errors import BrowserDeclarationError, BrowserError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -46,6 +61,8 @@ class PageError(BrowserError):
 
 type DetailReader = Callable[[Observation], Awaitable[str]]
 type ExceptionFactory = Callable[[Observation], Awaitable[Exception]]
+type ContentFactory = Callable[[Any], Awaitable[Exception] | Exception]
+"""Фабрика правила с `reads=`: получает собранную карту, может быть синхронной."""
 
 
 def text_of(locator: Locator) -> DetailReader:
@@ -68,7 +85,23 @@ class Failure:
     """Признак → исключение. Единица контракта отказов."""
 
     when: Sign
-    exception: type[Exception] | ExceptionFactory
+    exception: type[Exception] | ExceptionFactory | ContentFactory
+    reads: type[object] | None = None
+    """Карта элементов с подробностями отказа: фабрика получает её, а не снимок страницы.
+
+    Собирается без ожидания готовности: отказ уже наблюдается. Элементы ищутся по всей
+    странице — правило не знает ни корня, ни фреймов операции."""
+
+    def __post_init__(self) -> None:
+        if self.reads is None:
+            return
+        if isinstance(self.exception, type):
+            msg = (
+                f"Failure(reads={self.reads.__name__}) с классом {self.exception.__name__}: "
+                "карту читает фабрика, а класс исключения ничего не читает"
+            )
+            raise BrowserDeclarationError(msg)
+        build_content(self.reads, cast("Any", None))  # карта без маркера видна при объявлении
 
     async def check(self, page: Observation) -> None:
         """Бросить объявленное исключение, если признак наблюдается."""
@@ -76,7 +109,10 @@ class Failure:
             return
         if isinstance(self.exception, type):
             raise self.exception
-        raise await self.exception(page)
+        if self.reads is None:
+            raise await cast("ExceptionFactory", self.exception)(page)
+        built = cast("ContentFactory", self.exception)(build_content(self.reads, page.driver))
+        raise (await built) if inspect.isawaitable(built) else built
 
 
 type FailureRules = tuple[Failure, ...]
@@ -93,6 +129,7 @@ async def enforce(rules: FailureRules, page: Observation) -> None:
 
 
 __all__ = [
+    "ContentFactory",
     "DetailReader",
     "ExceptionFactory",
     "Failure",

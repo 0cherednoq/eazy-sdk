@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from fnmatch import fnmatchcase
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
@@ -196,6 +197,45 @@ class Path:
     def __post_init__(self) -> None:
         if self.style not in {"simple", "label", "matrix"}:
             raise ValueError(f"unsupported path parameter style: {self.style!r}")
+
+
+@dataclass(frozen=True)
+class Url(Path):
+    """The whole address of a request, given by the caller: a link a response carried.
+
+    ::
+
+        class Download(HttpOperation[bytes]):
+            __http__ = Http.get(markers.Url(hosts=("*.mail.example",)), success={200: Bytes()})
+
+            url: Url[str]
+
+    In place of the path it declares that the operation has no address of its own, and which
+    hosts a link may point to. On the field (always named ``url``) it marks where the address
+    comes from. A link to any other host is refused before the request is sent: the session,
+    the signature and the cookies of this service are not for a host the server merely named.
+    A relative link is resolved against the service's own address and needs no host listed.
+    """
+
+    hosts: tuple[str, ...] = field(default=(), kw_only=True)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if isinstance(self.hosts, str) or not all(
+            isinstance(host, str) and host for host in self.hosts
+        ):
+            raise ValueError("Url(hosts=...) takes a tuple of host patterns such as '*.example'")
+
+    def allows(self, url: str) -> bool:
+        """Whether a link may be requested: relative, or absolute to a listed host."""
+
+        split = urlsplit(url)
+        if not split.scheme and not split.netloc:
+            return True
+        if split.scheme not in {"http", "https"}:
+            return False
+        host = (split.hostname or "").lower()
+        return any(fnmatchcase(host, pattern.lower()) for pattern in self.hosts)
 
 
 @dataclass(frozen=True)

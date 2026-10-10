@@ -10,7 +10,16 @@ freshness: false
 
 ## Ещё не выпущено
 
-После `0.2.0a11` изменений пока нет.
+После `0.2.0a11` добавлено, без изменения существующих объявлений:
+
+- теги `OneOf(...)` и `Not(...)` рядом с `Const`;
+- `Payload[T]` в обобщённой pydantic-модели (`Ok[Account]`);
+- `reauth` на ошибке: обновление сессии и повтор запроса по объявленному отказу;
+- запасной источник поля: `Regex(...) | FromCookie("act")`;
+- `service_url(Router, path)` как источник `Inject`;
+- `markers.Url(hosts=...)` и поле `Url[str]`: адрес запроса аргументом вызова;
+- `ensure_session(sdk)`, `current_session(sdk)`, `cookies_of(sdk)`;
+- `Failure(reads=...)` в браузерной линии.
 
 ## Выпуски
 

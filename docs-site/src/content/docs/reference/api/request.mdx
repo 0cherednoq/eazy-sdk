@@ -4,7 +4,7 @@ description: Маркеры размещения, тела и представл
 sources:
   - eazy_sdk.request
   - eazy_sdk.core.errors.OperationBindingError
-api_fingerprint: "sha256:af671e932ca2a1c1ecddba9ff78379f311fd446770509647af6d70a42cec7565"
+api_fingerprint: "sha256:976dd7f1d935055112859d4512b538bb402f2618f62fd09f966ac0916c7efad3"
 ---
 
 Маркер размещает поле операции. `Path[T]` и `Annotated[T, markers.Path()]` являются двумя
@@ -61,6 +61,12 @@ form/multipart или custom `BodyCodec`) кодирует один semantic doc
 | `Query(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
 | `Header(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
 | `Cookie(name=None)` | имя поля | `style`, `explode`, `allow_reserved`, `codec` |
+| `Url(hosts=(...))` | адрес запроса целиком | `hosts`: шаблоны хостов, куда может вести ссылка |
+
+`Url` стоит и на месте пути, и на поле: `Http.get(markers.Url(hosts=("*.example",)))` вместе с
+`url: Url[str]`. Адрес приходит аргументом вызова; ссылка на хост вне списка отклоняется до
+подготовки запроса, относительная резолвится против адреса сервиса. `Path`-полей у такой
+операции нет, а объявленное `Query`-поле делает запрос владельцем query.
 
 ## Body markers
 
