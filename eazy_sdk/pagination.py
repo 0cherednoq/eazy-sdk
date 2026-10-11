@@ -364,3 +364,10 @@ def check_max_pages(max_pages: int | None) -> None:
         return
     if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 1:
         raise ValueError("max_pages must be None or >= 1")
+
+
+def check_max_items(max_items: int | None) -> None:
+    if max_items is None:
+        return
+    if isinstance(max_items, bool) or not isinstance(max_items, int) or max_items < 1:
+        raise ValueError("max_items must be None or >= 1")

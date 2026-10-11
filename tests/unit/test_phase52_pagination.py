@@ -261,6 +261,61 @@ def test_max_pages_bounds_iteration() -> None:
     assert _page_numbers(seen) == [1]
 
 
+def test_max_items_bounds_iteration() -> None:
+    """The third element ends the loop on page 2; page 3 is never asked for."""
+
+    api, seen = _sync([("a", "b"), ("c", "d"), ("e", "f")])
+    assert [d.id for d in api.documents.items(case_id="c", max_items=3)] == ["a", "b", "c"]
+    assert _page_numbers(seen) == [1, 2]
+    seen.clear()
+    # A whole page taken is the end too: the next page is not requested to find that out.
+    assert [d.id for d in api.documents.items(case_id="c", max_items=2)] == ["a", "b"]
+    assert _page_numbers(seen) == [1]
+    seen.clear()
+    assert [d.id for d in api.documents.items(case_id="c", max_items=9, max_pages=1)] == ["a", "b"]
+    assert _page_numbers(seen) == [1]
+
+
+def test_max_items_counts_elements_after_key() -> None:
+    api, seen = _sync([("a", "b"), ("b", "c"), ("d", "e")])
+    assert [d.id for d in api.plain.items(key=lambda d: d.id, max_items=3)] == ["a", "b", "c"]
+    assert _page_numbers(seen) == [1, 2]
+
+
+async def test_async_max_items_bounds_iteration() -> None:
+    api, seen = _async([("a", "b"), ("c", "d"), ("e", "f")])
+    assert [d.id async for d in api.plain.items(max_items=3)] == ["a", "b", "c"]
+    assert _page_numbers(seen) == [1, 2]
+
+
+def test_first_is_one_element_from_one_request() -> None:
+    api, seen = _sync([("a", "b"), ("c", "d")])
+    first = api.documents.first(case_id="c")
+    assert first is not None and first.id == "a"
+    assert _page_numbers(seen) == [1]
+    seen.clear()
+    # The first page is the request value here too: ``page=2`` starts from the second.
+    second = api.documents.first(case_id="c", page=2)
+    assert second is not None and second.id == "c"
+    assert _page_numbers(seen) == [2]
+
+
+def test_first_of_an_empty_page_is_none() -> None:
+    api, seen = _sync([()])
+    assert api.plain.first() is None
+    assert _page_numbers(seen) == [1]
+
+
+async def test_async_first() -> None:
+    api, seen = _async([("a", "b"), ("c", "d")])
+    first = await api.plain.first()
+    assert first is not None and first.id == "a"
+    assert _page_numbers(seen) == [1]
+    empty, seen = _async([()])
+    assert await empty.plain.first() is None
+    assert _page_numbers(seen) == [1]
+
+
 def test_first_page_is_the_request_value() -> None:
     api, seen = _sync([("a", "b"), ("c", "d"), ("e", "f")])
     pages = list(api.documents.pages(case_id="c", page=3))
@@ -386,6 +441,8 @@ def test_pages_without_declaration() -> None:
         next(api.one.pages())
     with pytest.raises(PlanError, match="pages\\(\\) requires __pages__ on GetOne"):
         next(api.one.items())
+    with pytest.raises(PlanError, match="pages\\(\\) requires __pages__ on GetOne"):
+        api.one.first()
 
 
 def test_max_pages_validation() -> None:
@@ -393,6 +450,14 @@ def test_max_pages_validation() -> None:
     for bad in (0, -1, True):
         with pytest.raises(ValueError, match="max_pages must be None or >= 1"):
             next(api.documents.pages(case_id="c", max_pages=bad))
+
+
+def test_max_items_validation() -> None:
+    api, seen = _sync([("a",)])
+    for bad in (0, -1, True):
+        with pytest.raises(ValueError, match="max_items must be None or >= 1"):
+            next(api.documents.items(case_id="c", max_items=bad))
+    assert seen == []
 
 
 def test_strategy_constructor_validation() -> None:

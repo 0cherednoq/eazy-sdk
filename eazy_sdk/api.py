@@ -55,6 +55,7 @@ from eazy_sdk.operation import (
 from eazy_sdk.pagination import (
     NextUrl,
     Pagination,
+    check_max_items,
     check_max_pages,
     next_changes,
     validate_declaration,
@@ -417,6 +418,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         self,
         *args: Any,
         max_pages: int | None = None,
+        max_items: int | None = None,
         options: CallOptions | None = None,
         key: Callable[[Any], Hashable] | None = None,
         **kwargs: Any,
@@ -424,12 +426,15 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         """The elements of successive pages, flattened; ``key=`` skips repeats across pages.
 
         A page that contributes nothing new ends the iteration, which also bounds a server that
-        answers the last page again for every number past it.
+        answers the last page again for every number past it. ``max_items=`` ends it after that
+        many elements, without asking for a page past the one that gave the last of them.
         """
 
         strategy = self._strategy(max_pages)
+        check_max_items(max_items)
         request = self.request(*args, **kwargs)
         seen: set[Hashable] = set()
+        given = 0
         url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
@@ -444,10 +449,22 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
                     seen.add(mark)
                 fresh += 1
                 yield item
+                given += 1
+                if given == max_items:
+                    return
             step = self._next_page(strategy, request, result, fresh=fresh, url=page_url)
             if step is None:
                 return
             request, url = step
+
+    async def first(
+        self, *args: Any, options: CallOptions | None = None, **kwargs: Any
+    ) -> Any | None:
+        """The first element, or ``None`` when the first page has none; always one request."""
+
+        async for item in self.items(*args, max_items=1, options=options, **kwargs):
+            return item
+        return None
 
     async def _send_page(
         self, request: HttpOperation[T], url: str | None, options: CallOptions | None
@@ -561,6 +578,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         self,
         *args: Any,
         max_pages: int | None = None,
+        max_items: int | None = None,
         options: CallOptions | None = None,
         key: Callable[[Any], Hashable] | None = None,
         **kwargs: Any,
@@ -568,8 +586,10 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         """The elements of successive pages, flattened; ``key=`` skips repeats across pages."""
 
         strategy = self._strategy(max_pages)
+        check_max_items(max_items)
         request = self.request(*args, **kwargs)
         seen: set[Hashable] = set()
+        given = 0
         url: str | None = None
         sent = 0
         while max_pages is None or sent < max_pages:
@@ -584,10 +604,20 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
                     seen.add(mark)
                 fresh += 1
                 yield item
+                given += 1
+                if given == max_items:
+                    return
             step = self._next_page(strategy, request, result, fresh=fresh, url=page_url)
             if step is None:
                 return
             request, url = step
+
+    def first(self, *args: Any, options: CallOptions | None = None, **kwargs: Any) -> Any | None:
+        """The first element, or ``None`` when the first page has none; always one request."""
+
+        for item in self.items(*args, max_items=1, options=options, **kwargs):
+            return item
+        return None
 
     def _send_page(
         self, request: HttpOperation[T], url: str | None, options: CallOptions | None
