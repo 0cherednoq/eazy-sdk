@@ -5,7 +5,9 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
-Added:
+## 0.2.0a13 - 2026-10-11
+
+Added (nothing existing changes):
 
 - `items(..., max_items=N)`, sync and async: the iteration ends after `N` elements, counted
   after `key=`, and no page past the one that gave the last of them is requested.
