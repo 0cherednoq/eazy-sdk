@@ -34,6 +34,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import refs_freshness
 import sdk_replay
 from capture_model import load
 
