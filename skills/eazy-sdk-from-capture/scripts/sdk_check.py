@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import refs_freshness
 import sdk_replay
 from capture_model import load
+from capture_redact import occurrence
 
 REPORT_FORMAT = "eazy-check/1"
 PASS, FAIL, SKIP = "pass", "fail", "skipped"
@@ -122,16 +123,18 @@ def check_secrets(root: Path, secrets: Mapping[str, str], skip: Sequence[Path]) 
     """Look for any secret value of the capture in the project's files."""
     if not secrets:
         return gate(SKIP, ["no secrets.json in the work directory: the capture was not redacted"])
+    # The same notion of an occurrence as the redaction has: a short value counts only as a
+    # whole word, so `support` is not found inside `supported_fields`.
     wanted = {
-        value.encode("utf-8"): name for name, value in secrets.items() if len(value) >= _MIN_SECRET
+        name: occurrence(value) for name, value in secrets.items() if len(value) >= _MIN_SECRET
     }
     found: list[str] = []
     for path in project_files(root, skip):
         data = path.read_bytes()
-        for value, name in wanted.items():
-            position = data.find(value)
-            if position >= 0:
-                line = data.count(b"\n", 0, position) + 1
+        for name, pattern in wanted.items():
+            match = pattern.search(data)
+            if match is not None:
+                line = data.count(b"\n", 0, match.start()) + 1
                 found.append(f"{path.relative_to(root).as_posix()}:{line}: {name}")
     return gate(FAIL if found else PASS, found or [f"{len(wanted)} secret values, none found"])
 

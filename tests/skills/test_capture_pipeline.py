@@ -436,3 +436,41 @@ def test_markdown_page_names_every_operation(burp_base64: Path) -> None:
         assert f"### {operation['id']}" in page
     assert "comes from cookie `act` set by #1" in page
     assert "## Out of scope signals" in page
+
+
+def test_a_short_secret_never_eats_part_of_a_longer_word(burp_base64: Path) -> None:
+    capture = _normalized(burp_base64)
+    # The account's local part is a plain word that also starts an API parameter name.
+    body = capture.exchanges[2].request_body.replace(b"alice.reader", b"support")
+    capture.exchanges[2].request_body = body
+    capture.exchanges[4].url += "&supported_fields=1&owner=support"
+    vault = capture_redact.collect(capture)
+    assert vault.by_value["support"].kind == "emaillocal"
+    redacted = capture_redact.redact(capture, vault)
+    assert "supported_fields=1" in redacted.exchanges[4].url
+    assert "owner=support" not in redacted.exchanges[4].url
+    assert capture_redact.leaks(redacted, vault) == []
+
+
+def test_only_the_address_sent_with_a_password_is_split_into_halves(burp_base64: Path) -> None:
+    capture = _normalized(burp_base64)
+    capture.exchanges[4].url += "&to=contact%40partner.example"
+    vault = capture_redact.collect(capture)
+    assert "contact@partner.example" in vault.by_value
+    assert "contact" not in vault.by_value
+    assert "partner.example" not in vault.by_value
+    assert vault.identities == {"alice.reader@mailbox.example"}
+
+
+def test_an_envelope_survives_one_endpoint_that_does_not_use_it() -> None:
+    def variant(keys: list[str]) -> dict[str, Any]:
+        schema = {"type": ["object"], "properties": {key: {"type": ["integer"]} for key in keys}}
+        return {"json_schema": schema, "body_marks": {"status": 200} if "status" in keys else {}}
+
+    operations = [
+        {"id": f"GET h/api/{n}", "host": "h", "responses": [variant(["status", "body"])]}
+        for n in range(5)
+    ]
+    operations.append({"id": "GET h/srv.json", "host": "h", "responses": [variant(["up"])]})
+    (found,) = capture_inventory.envelopes(operations)
+    assert found["keys"] == ["body", "status"]

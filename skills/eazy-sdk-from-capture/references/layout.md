@@ -66,7 +66,8 @@ address.
 ## Config
 
 A frozen dataclass: one base URL per host, the transport settings, nothing else. Take every
-value from the recording; write no address anywhere else in the package.
+value from the recording; write no address anywhere else in the package. The one exception
+is the host pattern of `markers.Url(hosts=...)`, which has to be a literal.
 
 ```python
 from dataclasses import dataclass

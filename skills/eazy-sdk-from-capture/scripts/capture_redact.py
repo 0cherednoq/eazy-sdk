@@ -55,6 +55,8 @@ _ASSIGNMENT = re.compile(
     r"""["']?([A-Za-z_][\w-]{2,40})["']?\s*[:=]\s*["']([^"'\\\s<>]{6,512})["']"""
 )
 _OPAQUE = re.compile(r"^(?=.*\d)(?=.*[A-Za-z])[^\s/]{16,}$")
+_PASSWORD_NAME = re.compile(r"pass|pwd", re.IGNORECASE)
+_WHOLE_WORD_BELOW = 16
 _MIN_LENGTH = 6
 _MIN_TYPED_LENGTH = 4
 _MIN_LOCAL_PART = 5
@@ -114,8 +116,6 @@ def _pairs(vault: Vault, pairs: Iterable[tuple[str, str]], origin: str) -> None:
         kind = _kind_of(name, value)
         if kind is not None:
             vault.add(value, kind, f"{origin} {name}")
-            if kind == "email":
-                vault.identities.add(value.strip())
 
 
 def _served_pairs(vault: Vault, pairs: Iterable[tuple[str, str]], origin: str) -> None:
@@ -190,7 +190,12 @@ def _collect_exchange(vault: Vault, exchange: Exchange) -> None:
             _authorization(vault, value, f"{origin} {name}")
         elif _SECRET_NAME.search(name):
             vault.add(value, name, f"{origin} header {name}")
-    _pairs(vault, _body_pairs(exchange.request_headers, exchange.request_body), f"{origin} body")
+    sent = list(_body_pairs(exchange.request_headers, exchange.request_body))
+    _pairs(vault, sent, f"{origin} body")
+    if any(_PASSWORD_NAME.search(name) for name, _ in sent):
+        # The address sent next to a password is the account; any other address in the
+        # traffic is somebody's mail and is replaced whole, never by its halves.
+        vault.identities.update(v.strip() for _, v in sent if _EMAIL.match(v.strip()))
     origin = f"#{exchange.seq} response"
     for value in headers_named(exchange.response_headers, "set-cookie"):
         cookie, _, rest = value.partition("=")
@@ -259,7 +264,25 @@ def build_pattern(vault: Vault) -> tuple[re.Pattern[bytes], dict[bytes, bytes]] 
     if not table:
         return None
     ordered = sorted(table, key=len, reverse=True)
-    return re.compile(b"|".join(re.escape(item) for item in ordered)), table
+    return re.compile(b"|".join(_alternative(item) for item in ordered)), table
+
+
+def occurrence(value: str) -> re.Pattern[bytes]:
+    """Compile the pattern that finds one secret the way the redaction replaces it."""
+    return re.compile(_alternative(value.encode("utf-8")))
+
+
+def _alternative(value: bytes) -> bytes:
+    """Spell one secret for the pattern.
+
+    A short value is matched as a whole word only. The local part of an address is often a
+    plain word, and replaced inside a longer one it would both break an API name such as
+    ``supported_fields`` and give the word away to whoever reads the rest of it.
+    """
+    escaped = re.escape(value)
+    if len(value) >= _WHOLE_WORD_BELOW:
+        return escaped
+    return rb"(?<![A-Za-z0-9_])" + escaped + rb"(?![A-Za-z0-9_])"
 
 
 def redact(capture: Capture, vault: Vault) -> Capture:
@@ -330,7 +353,7 @@ def leaks(capture: Capture, vault: Vault) -> list[str]:
         found += [
             f"#{exchange.seq}: {secret.placeholder}"
             for secret in vault.by_value.values()
-            if secret.value.encode() in blob
+            if occurrence(secret.value).search(blob)
         ]
     return found
 

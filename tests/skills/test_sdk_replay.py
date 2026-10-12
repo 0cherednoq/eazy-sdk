@@ -251,3 +251,48 @@ def test_a_cookie_from_before_the_scenario_is_a_note_not_a_difference() -> None:
     assert notes == ["cookies ['old'] were set before this scenario began"]
     findings, _ = sdk_replay.compare(sent, recorded, shield)
     assert findings == ["cookies: recorded ['fresh', 'old'], not sent by the SDK"]
+
+
+def test_a_name_sent_once_does_not_match_a_name_recorded_three_times() -> None:
+    from capture_model import Exchange
+
+    recorded = Exchange(1, "GET", "https://a.example/x?from=login&from=web&from=web&id=7")
+    shield = sdk_replay.Shield({})
+    once = sdk_replay.Sent("GET", "https://a.example/x?from=login&id=7", (), b"")
+    findings, _ = sdk_replay.compare(once, recorded, shield)
+    assert findings == ["query 'from': the SDK sends it 1 times, recorded 3 times"]
+    same = sdk_replay.Sent("GET", recorded.url, (), b"")
+    assert sdk_replay.compare(same, recorded, shield) == ([], [])
+    other = sdk_replay.Sent("GET", "https://a.example/x?from=login&from=web&from=app&id=7", (), b"")
+    findings, _ = sdk_replay.compare(other, recorded, shield)
+    assert findings == ["query 'from': the SDK sends 'app', recorded 'web'"]
+
+
+def test_the_referer_of_a_get_is_a_note_and_of_a_form_a_difference() -> None:
+    from capture_model import Exchange
+
+    headers = [("Referer", "https://a.example/page")]
+    shield = sdk_replay.Shield({})
+    get = Exchange(1, "GET", "https://a.example/api", request_headers=headers)
+    findings, notes = sdk_replay.compare(sdk_replay.Sent("GET", get.url, (), b""), get, shield)
+    assert findings == []
+    assert notes == ["header Referer: recorded, not sent by the SDK"]
+    post = Exchange(2, "POST", "https://a.example/auth", request_headers=headers)
+    findings, _ = sdk_replay.compare(sdk_replay.Sent("POST", post.url, (), b""), post, shield)
+    assert findings == ["header Referer: recorded, not sent by the SDK"]
+
+
+def test_long_values_are_shown_where_they_differ() -> None:
+    left = "https://a.example/inbox/?" + "x" * 80 + "&from=login"
+    right = "https://a.example/inbox/?" + "x" * 80 + "&from=other"
+    shown, wanted = sdk_replay._around_difference(left, right)
+    assert shown.endswith("from=login")
+    assert wanted.endswith("from=other")
+    assert shown.startswith("…")
+
+
+def test_none_can_be_written_in_a_scenario() -> None:
+    assert sdk_replay.resolve({"cursor": "@none", "ids": ["a"]}, {}) == {
+        "cursor": None,
+        "ids": ["a"],
+    }

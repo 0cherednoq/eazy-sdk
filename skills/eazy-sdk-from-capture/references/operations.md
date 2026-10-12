@@ -64,7 +64,8 @@ as technical on the strength of a single sample; the user decides the doubtful o
 
 A header the browser sets by itself (`User-Agent`, `Accept-Encoding`, `sec-*`) belongs to the
 transport: `impersonate` sends it. Declare only what the site's own code adds: `Origin`,
-`Referer`, `X-Requested-With`, headers with the site's prefix.
+`X-Requested-With`, headers with the site's prefix, and the `Referer` of a form the site
+checks. The `Referer` of a GET is where the person happened to be; do not declare it.
 
 ## Placements
 

@@ -143,6 +143,9 @@ class JsonApi(MailHost):
 When the recording shows the envelope but no refusal, declare `unwrap` alone and no `errors`:
 a refusal that was never observed has no shape to declare.
 
+A case that has to read the whole envelope under a router `unwrap` (an "unchanged" answer
+told by `status`) says so itself: `Json(Unchanged, unwrap="")` from `eazy_sdk.response`.
+
 Declare an envelope only when the inventory shows it. With `one operation` confidence, say so
 in the plan.
 

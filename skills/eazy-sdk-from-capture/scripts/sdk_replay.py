@@ -146,7 +146,12 @@ def load_plan(path: Path) -> Plan:
 
 
 def resolve(value: Any, secrets: Mapping[str, str]) -> Any:
-    """Replace placeholders inside a TOML value with the real secrets."""
+    """Replace placeholders inside a TOML value with the real secrets.
+
+    TOML has no null: the string ``@none`` stands for ``None``.
+    """
+    if value == "@none":
+        return None
     if isinstance(value, str):
         return _PLACEHOLDER.sub(lambda match: secrets.get(match.group(0), match.group(0)), value)
     if isinstance(value, list):
@@ -223,16 +228,40 @@ def _compare_pairs(
         findings.append(f"{place}: the SDK sends {extra}, the capture has none")
     if ordered and not missing and not extra and sent_names != recorded_names:
         findings.append(f"{place}: field order is {sent_names}, recorded {recorded_names}")
-    recorded_values = dict(recorded)
-    for name, value in sent:
-        expected = recorded_values.get(name)
-        if expected is None or expected == value or _volatile(expected):
+    for name in dict.fromkeys(sent_names):
+        mine = [value for key, value in sent if key == name]
+        theirs = [value for key, value in recorded if key == name]
+        if not theirs or mine == theirs:
             continue
-        findings.append(
-            f"{place} {name!r}: the SDK sends {shield.show(value)!r}, "
-            f"recorded {shield.show(expected)!r}"
-        )
+        if len(mine) != len(theirs):
+            # A name may repeat: one value where the capture has three is a difference.
+            findings.append(
+                f"{place} {name!r}: the SDK sends it {len(mine)} times, "
+                f"recorded {len(theirs)} times"
+            )
+            continue
+        for value, expected in zip(mine, theirs, strict=True):
+            if expected == value or _volatile(expected):
+                continue
+            shown, wanted = _around_difference(value, expected)
+            findings.append(
+                f"{place} {name!r}: the SDK sends {shield.show(shown)!r}, "
+                f"recorded {shield.show(wanted)!r}"
+            )
     return findings
+
+
+def _around_difference(left: str, right: str, width: int = 60) -> tuple[str, str]:
+    """Cut two long values to the place where they start to differ."""
+    if max(len(left), len(right)) <= width:
+        return left, right
+    same = next(
+        (i for i, (a, b) in enumerate(zip(left, right, strict=False)) if a != b),
+        min(len(left), len(right)),
+    )
+    start = max(0, same - 20)
+    lead = "…" if start else ""
+    return lead + left[start : start + width], lead + right[start : start + width]
 
 
 def _flatten(value: Any, prefix: str = "") -> list[tuple[str, str]]:
@@ -284,6 +313,10 @@ def _compare_headers(
         if low in _TRANSPORT or low.startswith("sec-") or low.startswith(":"):
             continue
         own = low in _MUST_MATCH or low.startswith("x-")
+        if low == "referer" and recorded.method.upper() == "GET":
+            # On a GET the browser's Referer is where the person happened to be: the page
+            # a script ran on, or the page before a navigation. A form names its origin.
+            own = False
         if low not in sent_names:
             (findings if own else notes).append(f"header {name}: recorded, not sent by the SDK")
         elif low in {"origin", "referer"} and sent.header(name) != value:

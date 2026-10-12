@@ -62,6 +62,12 @@ reason = "background polling of the unread counter"
   A protected operation signs in first, so a wrong-password scenario may call any protected
   operation and expect the refusal. To replay the sign-in alone, call a root helper such as
   `signed_in` (`layout.md`).
+- Every scenario opens a fresh SDK through the factory: nothing carries over from the
+  scenario before it. A scenario of a protected call therefore lists the sign-in exchanges
+  too. When the sign-in itself cannot be replayed, the factory may open the SDK on a ready
+  session (`SESSION.configure(session=..., service=...)`) built from placeholders; say in
+  the report that such a scenario proves the call, not that the call signs in first.
+- TOML has no null: write `"@none"` for `None`. An array arrives as a list.
 - One scenario per mark of the recording, or per call the SDK offers. A scenario lists every
   exchange its call makes, including the sign-in chain when the call triggers it.
 - `raises` / `returns` name a class anywhere in the MRO. `fields` compares a value at a

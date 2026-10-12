@@ -862,7 +862,12 @@ def envelopes(operations: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
                 by_host[operation["host"]].append((operation["id"], variant))
     found = []
     for host, members in by_host.items():
-        shared = set.intersection(*(set(v["json_schema"]["properties"]) for _, v in members))
+        # One odd endpoint (a status file) must not hide the envelope of all the others.
+        counts: dict[str, int] = defaultdict(int)
+        for _, variant in members:
+            for key in variant["json_schema"]["properties"]:
+                counts[key] += 1
+        shared = {key for key, count in counts.items() if count >= 0.8 * len(members)}
         if not shared:
             continue
         marks: dict[str, list[Any]] = defaultdict(list)
