@@ -48,7 +48,7 @@ directory.
 ### 1. Normalise
 
 ```
-python -I scripts/capture_normalize.py <recording dir | file.har | burp export> --out .sdk-work
+python -I -X utf8 scripts/capture_normalize.py <recording dir | file.har | burp export> --out .sdk-work
 ```
 
 Exit: `capture.json` is written. Read every WARNING. A lossy source (Burp export without
@@ -60,7 +60,7 @@ which text fields the replay therefore does not prove.
 ### 2. Redact
 
 ```
-python -I scripts/capture_redact.py .sdk-work
+python -I -X utf8 scripts/capture_redact.py .sdk-work
 ```
 
 Exit: exit code 0. A non-zero code means a secret survived; stop and report it.
@@ -68,7 +68,7 @@ Exit: exit code 0. A non-zero code means a secret survived; stop and report it.
 ### 3. Inventory
 
 ```
-python -I scripts/capture_inventory.py .sdk-work
+python -I -X utf8 scripts/capture_inventory.py .sdk-work
 ```
 
 Exit: you have read `.sdk-work/inventory.md` in full. It lists hosts, scenarios, operations

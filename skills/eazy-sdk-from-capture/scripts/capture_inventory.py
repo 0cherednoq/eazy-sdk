@@ -88,6 +88,7 @@ _ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _MIN_TRACED = 6
 _MAX_LABEL = 32
 _MAX_MESSAGE_LINES = 5
+_SPINNER = re.compile(r"^[\w\s]{0,24}(\.\.\.|…)$")
 _CONTROL_TAGS = {"button", "input", "select", "textarea", "label", "summary"}
 _IDENTITY_KINDS = {"email", "emaillocal", "emaildomain", "login", "password", "typed"}
 _MERGE_THRESHOLD = 3
@@ -115,7 +116,10 @@ def noise_reason(exchange: Exchange) -> str | None:
     if kind.startswith(("image/", "font/", "video/", "audio/")):
         return "static resource"
     if exchange.status == 0:
-        return "no response was recorded"
+        failed = next(
+            (note for note in exchange.notes if note.startswith("the request failed")), ""
+        )
+        return f"no response was recorded ({failed})" if failed else "no response was recorded"
     return None
 
 
@@ -950,8 +954,10 @@ def page_facts(event: dict[str, Any]) -> dict[str, Any]:
     notices = [_shown(str(item), 200) for item in event.get("notices") or []][:5]
     if notices:
         facts["notices"] = notices
-    appeared = [str(item) for item in event.get("appeared") or []]
-    total = int(event.get("appeared_total") or len(appeared))
+    every = [str(item) for item in event.get("appeared") or []]
+    # A spinner ("Loading...") is not a message.
+    appeared = [line for line in every if not _SPINNER.match(line)]
+    total = int(event.get("appeared_total") or len(every)) - (len(every) - len(appeared))
     if 0 < total <= _MAX_MESSAGE_LINES:
         facts["appeared"] = [_shown(line, 200) for line in appeared]
     elif total:
@@ -962,18 +968,23 @@ def page_facts(event: dict[str, Any]) -> dict[str, Any]:
 def pages_after(capture: Capture, kept: set[int]) -> dict[int, dict[str, Any]]:
     """Tell, for an exchange an action caused, what the page showed afterwards."""
     shown: dict[int, dict[str, Any]] = {}
-    waiting: dict[str, list[int]] = defaultdict(list)
+    waiting: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for event in capture.timeline:
         kind, tab = event.get("kind"), str(event.get("tab", ""))
         if kind == "action":
             waiting[tab] = []
         elif kind == "request" and event.get("exchange") in kept:
-            waiting[tab].append(int(event["exchange"]))
+            waiting[tab].append((int(event["exchange"]), str(event.get("resource", ""))))
         elif kind == "page":
             facts = page_facts(event)
-            if any(key in facts for key in ("notices", "appeared")):
-                for seq in waiting[tab]:
-                    shown.setdefault(seq, facts)
+            if not any(key in facts for key in ("notices", "appeared")):
+                continue  # a look that saw nothing new says nothing; keep waiting
+            # The page is the answer to the navigation the action caused. Where the action
+            # navigated nowhere, it is the answer to the first request it made. Background
+            # requests that ran in between are not what the person was shown the result of.
+            documents = [seq for seq, resource in waiting[tab] if resource == "Document"]
+            for seq in documents or [seq for seq, _ in waiting[tab][:1]]:
+                shown.setdefault(seq, facts)
             waiting[tab] = []
     return shown
 

@@ -174,7 +174,10 @@ class MailPage(BaseModel):
 - Take the pattern from the inventory: a value origin `body of #N, regex ...` gives the
   regex and the context around the value. When the inventory reports several occurrences,
   anchor the pattern to the text that precedes the right one.
-- `A | B` tries sources left to right.
+- `A | B` tries sources left to right. Do not add a fallback source to a field that tells
+  two pages of one address apart: with `client_redirects` a redirect stub that sets the
+  cookie would satisfy `Regex(...) | FromCookie(...)` and the real page would never be
+  requested.
 - `FromCookie("act")` reads a cookie **this response sets**, not the cookie jar. The inventory
   line "comes from cookie `act` set by #1" means: the model of the operation behind exchange
   #1 gets a field `Annotated[str, FromCookie("act")]`, and the next step passes it on.
@@ -182,6 +185,40 @@ class MailPage(BaseModel):
   stub and the real page served from one address are told apart. Do not make a field required
   on text the recording lost (a `LOSSY TEXT` variant): match on a value that survived.
 - `Regex` reads the document text as received; `CSS` and `XPath` need the `html` extra.
+
+### A list on a page
+
+A repeated block is a list of sub-models; `Scope` names the block, the sub-model's selectors
+are relative to it:
+
+```python
+from typing import Annotated
+
+from eazy_sdk_html import CSS, Scope
+from pydantic import BaseModel
+
+
+class Quote(BaseModel):
+    text: Annotated[str, CSS("span.text::text")]
+    author: Annotated[str, CSS("small.author::text")]
+    link: Annotated[str, CSS("a::attr(href)")] = ""
+    tags: Annotated[list[str], CSS("a.tag::text")] = []
+
+
+class QuotesPage(BaseModel):
+    heading: Annotated[str, CSS("h1 a::text")]          # required: makes this page this page
+    quotes: Annotated[list[Quote], Scope(CSS("div.quote"))]
+    next_url: Annotated[str | None, CSS("li.next a::attr(href)")] = None
+```
+
+- `::text` reads text, `::attr(name)` an attribute; a `list[str]` field collects every match.
+- A page model needs at least one required scalar field of its own. A model made only of a
+  list and optional fields matches any document, and the library refuses it
+  (`BackendCapabilityError: ... matches any document`). Pick something the page always
+  has, or give the case a condition: `Html(Model, when=...)` from `eazy_sdk.response`.
+- The inventory gives a page's title and forms only. For the selectors read the page in
+  `capture.redacted.json` (bodies are base64): decode the one exchange you need with a small
+  script and look for the repeated block, the pager links and what differs signed in.
 
 ## Other bodies
 

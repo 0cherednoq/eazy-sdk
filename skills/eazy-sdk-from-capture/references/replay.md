@@ -67,7 +67,12 @@ reason = "background polling of the unread counter"
   too. When the sign-in itself cannot be replayed, the factory may open the SDK on a ready
   session (`SESSION.configure(session=..., service=...)`) built from placeholders; say in
   the report that such a scenario proves the call, not that the call signs in first.
-- TOML has no null: write `"@none"` for `None`. An array arrives as a list.
+- TOML has no null: write `"@none"` for `None`, in `args` and in `fields`. An array arrives
+  as a list and a table as a dict: a field typed as a model receives a dict, which a pydantic
+  model field accepts. A path may index a list: `fields = { "quotes.0.author" = "…" }`.
+- The replay cannot tell a protected operation from a public one: a request sent without a
+  cookie the browser had is a note, not a failure. Say in the report which operations are
+  declared protected on the strength of the recording alone.
 - One scenario per mark of the recording, or per call the SDK offers. A scenario lists every
   exchange its call makes, including the sign-in chain when the call triggers it.
 - `raises` / `returns` name a class anywhere in the MRO. `fields` compares a value at a

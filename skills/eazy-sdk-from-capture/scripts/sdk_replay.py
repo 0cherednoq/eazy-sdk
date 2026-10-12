@@ -422,7 +422,16 @@ class Play:
 def _walk(root: Any, path: str) -> Any:
     target = root
     for name in path.split("."):
-        target = target[name] if isinstance(target, Mapping) else getattr(target, name)
+        if isinstance(target, Mapping):
+            target = target[name]
+        elif (
+            isinstance(target, Sequence)
+            and not isinstance(target, str)
+            and name.lstrip("-").isdigit()
+        ):
+            target = target[int(name)]  # "quotes.0.author": an element by its index
+        else:
+            target = getattr(target, name)
     return target
 
 
@@ -451,6 +460,7 @@ def _judge(expect: Mapping[str, Any], result: Any, error: BaseException | None) 
         problems.append(f"expected {expect['returns']}, got {type(result).__name__}")
     for path, wanted in (expect.get("fields") or {}).items():
         actual = _walk(result, path)
+        wanted = None if wanted == "@none" else wanted
         if actual != wanted:
             problems.append(f"{path}: expected {wanted!r}, got {actual!r}")
     for path, wanted in (expect.get("lengths") or {}).items():

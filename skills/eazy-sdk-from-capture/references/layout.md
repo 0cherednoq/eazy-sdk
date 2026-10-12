@@ -141,7 +141,8 @@ class SiteSdk(AsyncRoot):
 
 - `handler=` is how the replay substitutes the transport: keep it in the signature.
 - `base_url` is the address of the routers that are not bound; every other host gets a
-  `bind(Host, base_url=...)`.
+  `bind(Host, base_url=...)`. `bind` needs a router of that host among the root's groups: a
+  host that is only named through `service_url` still gets one, even an empty one.
 - `Cookies()` on the root: declare it whenever the inventory lists cookies. The SDK never
   enumerates or forwards cookies by hand.
 - `max_redirects` and `client_redirects=True`: set them when the inventory shows a redirect

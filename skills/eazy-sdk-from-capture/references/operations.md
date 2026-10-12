@@ -97,10 +97,12 @@ from typing import Annotated, Literal
 
 from eazy_sdk.codecs import ScalarEncodeContext
 from eazy_sdk.request import markers
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Sort(BaseModel):
+    model_config = ConfigDict(frozen=True)   # a default of an operation field must be immutable
+
     type: Literal["date", "size"] = "date"
     order: Literal["asc", "desc"] = "desc"
 
@@ -119,14 +121,16 @@ class JsonCodec:
 
 JsonValue = markers.Query(codec=JsonCodec())
 
+NEWEST_FIRST = Sort()   # a module constant: a call in a default trips the linter
+
 # in the operation:
-#   sort: Annotated[Sort, JsonValue] = Sort()
+#   sort: Annotated[Sort, JsonValue] = NEWEST_FIRST
 ```
 
 - Model fields come from the keys the inventory shows in the recorded values. A key seen with
   one value only is a `Literal` of that value or a plain `str`: say in the plan which you chose.
-- Use a pydantic model or a dataclass. A `TypedDict` is refused by the library when the
-  operation is called; note it in `LIBRARY-GAPS.md` if the user asks for one.
+- Use a frozen pydantic model or a frozen dataclass. A `TypedDict` works for plain field
+  types, but one with `Literal[...]` fields is refused when the operation is called.
 - The library does not validate the value against the field's type at call time: the type is
   for the editor and for mypy.
 - The same codec serves a form field: `markers.Form(codec=JsonCodec())`.

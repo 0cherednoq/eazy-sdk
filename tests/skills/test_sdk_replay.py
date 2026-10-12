@@ -296,3 +296,18 @@ def test_none_can_be_written_in_a_scenario() -> None:
         "cursor": None,
         "ids": ["a"],
     }
+
+
+def test_an_expectation_can_index_a_list_and_expect_none() -> None:
+    result = {"quotes": [{"author": "A"}, {"author": "B"}], "next_url": None}
+    assert (
+        sdk_replay._judge(
+            {"returns": "dict", "fields": {"quotes.1.author": "B", "next_url": "@none"}},
+            result,
+            None,
+        )
+        == []
+    )
+    assert sdk_replay._judge(
+        {"returns": "dict", "fields": {"quotes.-1.author": "A"}}, result, None
+    ) == ["quotes.-1.author: expected 'A', got 'B'"]

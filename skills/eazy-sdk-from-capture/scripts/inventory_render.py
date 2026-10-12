@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+_MAX_STEPS = 400
 _PLACES = (("path_params", "Path"), ("query", "Query"), ("body", "Body"), ("header", "Headers"))
 
 
@@ -137,7 +138,12 @@ def render(inventory: dict[str, Any]) -> str:
     out.append("## Scenarios")
     for scenario in inventory["scenarios"]:
         out.append(f"- **{scenario['name']}**: exchanges {scenario['exchanges']}")
-        out += [f"  - {step}" for step in scenario.get("steps", scenario["actions"])[:120]]
+        steps = scenario.get("steps", scenario["actions"])
+        out += [f"  - {step}" for step in steps[:_MAX_STEPS]]
+        if len(steps) > _MAX_STEPS:
+            out.append(
+                f"  - … {len(steps) - _MAX_STEPS} more steps: see `scenarios` in inventory.json"
+            )
     out.append("")
     if inventory["redirect_chains"]:
         out.append("## Redirect chains")

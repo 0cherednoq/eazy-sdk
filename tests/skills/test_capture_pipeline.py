@@ -551,3 +551,45 @@ def test_pages_of_one_level_are_not_folded_into_one_template() -> None:
         "/logout",
         "/about",
     }
+
+
+def test_a_page_belongs_to_the_navigation_not_to_background_requests(burp_base64: Path) -> None:
+    capture = _normalized(burp_base64)
+    said = {"kind": "page", "tab": "t", "appeared": ["Wrong password"], "appeared_total": 1}
+    capture.timeline = [
+        {
+            "kind": "action",
+            "tab": "t",
+            "action": "click",
+            "target": {"tag": "button", "label": "Go"},
+        },
+        {"kind": "request", "tab": "t", "exchange": 5, "resource": "Fetch"},
+        {"kind": "request", "tab": "t", "exchange": 2, "resource": "Document"},
+        {"kind": "request", "tab": "t", "exchange": 6, "resource": "Fetch"},
+        # A look that saw nothing new must not end the wait for the one that does.
+        {"kind": "page", "tab": "t", "title": "Sign in", "appeared": [], "appeared_total": 0},
+        said,
+        {
+            "kind": "action",
+            "tab": "t",
+            "action": "click",
+            "target": {"tag": "button", "label": "More"},
+        },
+        {"kind": "request", "tab": "t", "exchange": 5, "resource": "Fetch"},
+        {"kind": "request", "tab": "t", "exchange": 6, "resource": "Fetch"},
+        {"kind": "page", "tab": "t", "appeared": ["Moved to Trash"], "appeared_total": 1},
+    ]
+    shown = capture_inventory.pages_after(capture, kept={2, 5, 6})
+    assert shown == {
+        2: {"appeared": ["Wrong password"]},
+        5: {"appeared": ["Moved to Trash"]},
+    }
+
+
+def test_a_spinner_is_not_a_message() -> None:
+    facts = capture_inventory.page_facts({"appeared": ["Loading..."], "appeared_total": 1})
+    assert facts == {}
+    facts = capture_inventory.page_facts(
+        {"appeared": ["Загрузка…", "Неверный пароль, попробуйте ещё раз"], "appeared_total": 2}
+    )
+    assert facts == {"appeared": ["Неверный пароль, попробуйте ещё раз"]}

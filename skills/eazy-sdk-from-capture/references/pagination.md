@@ -3,6 +3,9 @@
 The page loop belongs to the library. Declare the strategy on the operation with `__pages__`;
 routers get no generator methods.
 
+On an HTML site the evidence is an action, not a parameter name: "click Next →" followed by
+a request to the address the link held.
+
 Declare it only when the inventory gives evidence: a `pagination hint` on the operation, and
 ideally two samples with different page parameters. With one sample, say in the plan that
 the strategy is inferred from parameter names.
@@ -37,7 +40,8 @@ The result class is the first argument, so the lambdas are typed. `offset=`, `li
 | `offset` and `limit`, a total in the response | `Pages.offset(Model, offset=, limit=, items=, total=)` |
 | `page` and a page size, a page count | `Pages.numbered(Model, page=, size=, items=, total_pages=)` |
 | a token from the previous response | `Pages.cursor(Model, cursor=, items=, next_cursor=)` — stops on `None` |
-| a link to the next page in the response | `Pages.next_url(Model, items=, next_url=)` |
+| a link to the next page in the response | `Pages.next_url(Model, items=, next_url=)` — a relative link is resolved against the page's address |
+| a flag such as `has_next` and a page number | `Pages.cursor(...)` with `next_cursor=lambda page: page.page + 1 if page.has_next else None` |
 
 `total=` and `total_pages=` are optional: without them the loop stops on an empty page or a
 page shorter than the size.
