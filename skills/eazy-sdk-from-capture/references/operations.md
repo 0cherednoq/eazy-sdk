@@ -129,8 +129,9 @@ NEWEST_FIRST = Sort()   # a module constant: a call in a default trips the linte
 
 - Model fields come from the keys the inventory shows in the recorded values. A key seen with
   one value only is a `Literal` of that value or a plain `str`: say in the plan which you chose.
-- Use a frozen pydantic model or a frozen dataclass. A `TypedDict` works for plain field
-  types, but one with `Literal[...]` fields is refused when the operation is called.
+- Use a frozen pydantic model, a frozen dataclass or a `TypedDict`. A `TypedDict` value is
+  checked when the operation is called: an unknown key, a missing required key or a value
+  outside a `Literal[...]` is refused before the request.
 - The library does not validate the value against the field's type at call time: the type is
   for the editor and for mypy.
 - The same codec serves a form field: `markers.Form(codec=JsonCodec())`.

@@ -16,6 +16,10 @@ Added:
 
 Fixed:
 
+- `Literal[...]` in the type of an input value was refused for every value: as the type of a
+  field (`view: Query[Literal["list", "grid"]]`) and as a field of a `TypedDict` value. A value is
+  now accepted when it is one of the listed ones, compared with its type, and refused before the
+  request otherwise.
 - Following a redirect whose address repeats a query name (`?from=login&from=octavius`) ended
   in `PlanError: duplicate query wire name`. Names inside an address, whether a redirect target
   or the declared path, may now repeat and go out as written. Parameters an operation declares

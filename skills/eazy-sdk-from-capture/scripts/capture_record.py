@@ -827,6 +827,8 @@ def _browser_options(options: Options) -> Any:
 
     chromium = ChromiumOptions()  # type: ignore[no-untyped-call]
     chromium.headless = options.headless
+    # A cold Chrome on a busy machine takes longer than Pydoll's ten seconds.
+    chromium.start_timeout = 40
     if options.chrome:
         chromium.binary_location = options.chrome
     if options.profile is not None:

@@ -7,7 +7,17 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Any, Protocol, Self, Union, cast, get_args, get_origin, is_typeddict
+from typing import (
+    Any,
+    Literal,
+    Protocol,
+    Self,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    is_typeddict,
+)
 
 from .errors import (
     BindingError,
@@ -465,6 +475,12 @@ def _validate_annotation(value: object, annotation: object) -> None:
         if any(_matches(value, option) for option in args):
             return
         raise TypeError(f"expected {annotation!r}, got {type(value).__name__}")
+    if origin is Literal:
+        # ``Literal`` is not a class: a value is one of the listed ones, compared with its type
+        # so that ``True`` is not ``1``.
+        if any(type(value) is type(option) and value == option for option in args):
+            return
+        raise TypeError(f"expected one of {args!r}, got {value!r}")
     if origin is not None:
         if not isinstance(value, origin):
             raise TypeError(f"expected {annotation!r}, got {type(value).__name__}")
