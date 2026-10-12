@@ -97,6 +97,11 @@ def _responses(operation: dict[str, Any]) -> list[str]:
             lines.append(f"    - body marks: `{variant['body_marks']}`")
         if "sets_cookies" in variant:
             lines.append(f"    - sets cookies: {', '.join(variant['sets_cookies'])}")
+        for page in variant.get("page_showed", []):
+            told = page.get("notices") or page.get("appeared") or []
+            where = f" (title `{page['title']}`)" if page.get("title") else ""
+            quoted = " | ".join(f"«{text}»" for text in told)
+            lines.append(f"    - then the page showed{where}: {quoted}")
         html = variant.get("html")
         if html:
             if "title" in html:
@@ -132,7 +137,7 @@ def render(inventory: dict[str, Any]) -> str:
     out.append("## Scenarios")
     for scenario in inventory["scenarios"]:
         out.append(f"- **{scenario['name']}**: exchanges {scenario['exchanges']}")
-        out += [f"  - {action}" for action in scenario["actions"][:40]]
+        out += [f"  - {step}" for step in scenario.get("steps", scenario["actions"])[:120]]
     out.append("")
     if inventory["redirect_chains"]:
         out.append("## Redirect chains")

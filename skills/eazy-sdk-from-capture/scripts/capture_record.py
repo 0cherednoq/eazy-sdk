@@ -48,6 +48,7 @@ _ACTION_WINDOW = 2.0
 _NO_BODY_TYPES = {"Image", "Media", "Font"}
 _CONTROL_TAGS = {"button", "input", "select", "textarea", "label", "summary"}
 _MAX_LABEL = 32
+_MAX_APPEARED = 12
 _REDIRECT_LOW, _REDIRECT_HIGH = 300, 399
 _DROPPED_HEADERS = {"content-encoding", "transfer-encoding"}
 
@@ -128,6 +129,7 @@ _PAGE_SCRIPT = r"""
   on('focusout', flush);
   on('click', e => {
     flush();
+    soon();
     const raw = e.target;
     const el = raw && raw.closest
       ? raw.closest('a,button,input,select,textarea,label,summary,[role=button],[role=link],[role=tab],[role=menuitem]') || raw
@@ -136,6 +138,7 @@ _PAGE_SCRIPT = r"""
   });
   on('submit', e => {
     flush();
+    soon();
     const form = e.target;
     const fields = form && form.elements
       ? [...form.elements].filter(f => f.name).map(f => ({name: f.name, type: f.type || ''})) : [];
@@ -159,6 +162,30 @@ _PAGE_SCRIPT = r"""
     state.stored = text;
     return found;
   };
+  const NOTICE = '[role=alert],[role=status],[aria-live],[class*="error" i],' +
+    '[class*="alert" i],[class*="warning" i],[class*="notif" i],[class*="invalid" i]';
+  const shown = el => !!(el && el.getClientRects && el.getClientRects().length);
+  const look = () => {
+    if (window !== window.top || !document.body) return;
+    const notices = [];
+    try {
+      for (const el of document.querySelectorAll(NOTICE)) {
+        if (!shown(el) || el.id === HOST) continue;
+        const text = String(el.innerText || '').replace(/\s+/g, ' ').trim();
+        if (text.length >= 3 && text.length <= 300 && !notices.includes(text)) notices.push(text);
+        if (notices.length >= 8) break;
+      }
+    } catch (error) {}
+    const lines = String(document.body.innerText || '').split('\n')
+      .map(s => s.replace(/\s+/g, ' ').trim()).filter(s => s.length >= 3 && s.length <= 300);
+    const heading = document.querySelector('h1,h2');
+    push('page', {title: squash(document.title), notices, lines: lines.slice(0, 400),
+      heading: shown(heading) ? squash(heading.innerText) : ''});
+  };
+  // What the page shows once it has settled: after it loads and after each action.
+  const soon = () => { setTimeout(look, 700); setTimeout(look, 2500); };
+  addEventListener('load', soon, true);
+  soon();
   const report = () => {
     if (window !== window.top) return;
     const stored = storage();
@@ -364,6 +391,8 @@ class TabRecorder:
         self._request_extra: dict[str, list[Mapping[str, Any]]] = {}
         self._response_extra: dict[str, list[Mapping[str, Any]]] = {}
         self._actions: list[tuple[float, str]] = []
+        self._seen: dict[str, set[str]] = {}
+        self._last_page = ""
         self._recent: list[Hop] = []
         self._tasks: set[asyncio.Task[None]] = set()
         self.alive = True
@@ -638,6 +667,8 @@ class TabRecorder:
             self._stop.set()
         elif kind == "mark":
             self._journal.event("mark", wall, tab=self.id, label=str(event.get("label", "")))
+        elif kind == "page":
+            self._page(event, wall)
         elif kind == "storage":
             stored = event.get("stored") or {}
             origin = str(stored.get("origin", ""))
@@ -647,6 +678,34 @@ class TabRecorder:
         else:
             self._action(event, wall)
             self._associate()
+
+    def _page(self, event: dict[str, Any], wall: float) -> None:
+        """Journal what the page shows, as the lines that were not there before.
+
+        The whole text of a page is content of the person's account and never leaves this
+        process. What goes to the timeline is the title, the heading, the message elements
+        and the lines that appeared on this address since it was last looked at: after a
+        refused sign-in that is the refusal, in the site's own words.
+        """
+        parts = urlsplit(str(event.get("url", "")))
+        address = f"{parts.netloc}{parts.path}"
+        lines = [str(line) for line in event.get("lines") or []]
+        known = self._seen.get(address)
+        appeared = [line for line in lines if line not in known] if known is not None else []
+        self._seen[address] = set(lines)
+        shown = {
+            "title": str(event.get("title", "")),
+            "heading": str(event.get("heading", "")),
+            "notices": [str(item) for item in event.get("notices") or []],
+            "appeared": appeared[:_MAX_APPEARED],
+            "appeared_total": len(appeared),
+            "first_view": known is None,
+        }
+        key = json.dumps([address, shown["title"], shown["notices"], shown["appeared"]])
+        if key == self._last_page or (known is not None and not appeared and not shown["notices"]):
+            return
+        self._last_page = key
+        self._journal.event("page", wall, tab=self.id, url=str(event.get("url", "")), **shown)
 
     def _action(self, event: dict[str, Any], wall: float) -> None:
         target = event.get("target") or {}

@@ -40,6 +40,11 @@ Options:
 | `--no-actions` | nothing may be injected at all; the recording has traffic only, no actions and no marks |
 | `--screenshots` | a picture at every mark, for the report |
 
+After each action the recorder also notes what the page then showed: its title, message
+elements and the few lines of text that appeared. That is how a refusal gets the site's own
+name instead of a bare code. The page's whole text stays in the browser; a rendered list
+(many new lines) is counted, never quoted.
+
 What the recorder adds to the browser, so you can answer when asked: the Network, Page and
 Runtime domains of the debugger, a listener in an isolated world of each page that the page's
 own scripts cannot reach, and the overlay element. The browser itself is the user's installed

@@ -86,7 +86,8 @@ Read `references/layout.md` and `references/operations.md`. Write `.sdk-work/sdk
 - every operation: name, method and path, public parameters, what goes to `inject`, the
   result model, each response case with the exchange numbers that show it;
 - how the session is obtained and what it places into requests (`references/auth-session.md`);
-- the exception hierarchy, one class per **observed** refusal;
+- the exception hierarchy, one class per **observed** refusal, named after what the page
+  showed when the inventory has it (`references/responses.md`, "Naming an outcome");
 - scenarios for the replay, with the exchanges each one covers;
 - exchanges left out, each with a reason;
 - what was not observed and what you are assuming.

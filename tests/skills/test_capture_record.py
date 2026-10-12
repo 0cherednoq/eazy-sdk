@@ -87,7 +87,13 @@ class _Site(BaseHTTPRequestHandler):
             )
             self._send(200, "text/html; charset=utf-8", stub.encode())
         elif path == "/login":
-            self._send(200, "text/html; charset=utf-8", LOGIN_PAGE.encode())
+            page = LOGIN_PAGE
+            if "errno=25" in self.path:
+                # A plain paragraph, no "error" class: only its appearing tells it apart.
+                page = page.replace(
+                    "<form", "<p>This account is blocked by the administrator.</p><form"
+                )
+            self._send(200, "text/html; charset=utf-8", page.encode())
         elif path == "/inbox/":
             self._send(200, "text/html; charset=utf-8", INBOX_PAGE.encode())
         elif path == "/api/threads":
@@ -97,7 +103,10 @@ class _Site(BaseHTTPRequestHandler):
             self._send(404, "text/plain", b"no")
 
     def do_POST(self) -> None:
-        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        sent = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if b"password=Zx-locked-77" in sent:
+            self._send(302, "text/html", b"", (("Location", "/login?errno=25"),))
+            return
         cookies = (
             ("Set-Cookie", "sid=s9x8w7v6u5t4s3r2q1p0; Path=/; HttpOnly"),
             ("Set-Cookie", "seen=1; Path=/"),
@@ -325,3 +334,45 @@ def test_the_mark_panel_is_on_screen(site: str, tmp_path: Path) -> None:
     assert 0 <= seen["right"] <= 20
     assert seen["width"] > 100
     assert seen["height"] > 10
+
+
+def test_the_refusal_the_person_saw_is_tied_to_the_request(
+    site: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def visitor(tab: Any, mark: Callable[[str], Awaitable[None]]) -> None:
+        await mark("blocked account")
+        await tab.find(id="login", timeout=10)
+        await asyncio.sleep(1.0)  # the page settles: its first look is what "before" means
+        password = await tab.find(id="password")
+        await password.click()
+        await password.type_text("Zx-locked-77")
+        await (await tab.find(id="enter")).click()
+        await asyncio.sleep(1.5)
+        await tab.find(id="login", timeout=10)
+        await asyncio.sleep(1.2)
+
+    options = capture_record.Options(
+        url=f"{site}/login", out=tmp_path / "captures", chrome=CHROME, headless=True
+    )
+    directory = asyncio.run(capture_record.record(options, visitor))
+    pages = [event for event in _timeline(directory) if event["kind"] == "page"]
+    assert pages[0]["first_view"] is True
+    assert pages[0]["appeared"] == []
+    assert pages[-1]["appeared"] == ["This account is blocked by the administrator."]
+    # The page's whole text never reaches the timeline.
+    assert all("lines" not in event for event in pages)
+
+    work = tmp_path / "work"
+    assert capture_normalize.main([str(directory), "--out", str(work)]) == 0
+    assert capture_redact.main([str(work)]) == 0
+    assert capture_inventory.main([str(work)]) == 0
+    capsys.readouterr()
+    inventory = json.loads((work / "inventory.json").read_text(encoding="utf-8"))
+    auth = next(op for op in inventory["operations"] if op["path"] == "/auth")
+    (refused,) = auth["responses"]
+    assert refused["location"].endswith("/login ?errno")
+    assert refused["page_showed"][0]["appeared"] == [
+        "This account is blocked by the administrator."
+    ]
+    steps = inventory["scenarios"][-1]["steps"]
+    assert steps[-1] == "the page shows: This account is blocked by the administrator."

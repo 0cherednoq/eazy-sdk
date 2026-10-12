@@ -392,7 +392,7 @@ def test_identifier_segments_become_path_parameters() -> None:
         == "/doc/{uuid}"
     )
     merged = capture_inventory.merge_templates(
-        {("GET", "h", f"/folders/{name}/items") for name in ("inbox", "sent", "trash")}
+        {("GET", "h", f"/folders/{name}/items") for name in ("f10", "f22", "f35")}
     )
     assert set(merged.values()) == {"/folders/{param}/items"}
     kept = capture_inventory.merge_templates({("GET", "h", "/a/one"), ("GET", "h", "/a/two")})
@@ -424,8 +424,13 @@ def test_marks_cut_the_timeline_into_scenarios(burp_base64: Path) -> None:
     ]
     found = capture_inventory.scenarios(capture, kept={1, 2, 3, 4, 5, 6})
     assert found == [
-        {"name": "login", "actions": ["input password", "click Sign in"], "exchanges": [3]},
-        {"name": "inbox", "actions": [], "exchanges": [5]},
+        {
+            "name": "login",
+            "actions": ["input password", "click Sign in"],
+            "exchanges": [3],
+            "steps": ["input password", "click Sign in", "-> #3"],
+        },
+        {"name": "inbox", "actions": [], "exchanges": [5], "steps": ["-> #5"]},
     ]
 
 
@@ -474,3 +479,75 @@ def test_an_envelope_survives_one_endpoint_that_does_not_use_it() -> None:
     operations.append({"id": "GET h/srv.json", "host": "h", "responses": [variant(["up"])]})
     (found,) = capture_inventory.envelopes(operations)
     assert found["keys"] == ["body", "status"]
+
+
+def test_what_the_page_showed_names_the_outcome_of_an_exchange(burp_base64: Path) -> None:
+    capture = _normalized(burp_base64)
+    capture.timeline = [
+        {
+            "kind": "action",
+            "tab": "t",
+            "action": "click",
+            "target": {"tag": "button", "label": "Sign in"},
+        },
+        {"kind": "request", "tab": "t", "exchange": 2},
+        {
+            "kind": "page",
+            "tab": "t",
+            "title": "Sign in",
+            "appeared": ["This account is blocked."],
+            "appeared_total": 1,
+        },
+        {
+            "kind": "action",
+            "tab": "t",
+            "action": "click",
+            "target": {"tag": "button", "label": "Sign in"},
+        },
+        {"kind": "request", "tab": "t", "exchange": 3},
+        {"kind": "request", "tab": "t", "exchange": 4},
+        {
+            "kind": "page",
+            "tab": "t",
+            "title": "Inbox",
+            "appeared": [f"Subject {n}" for n in range(12)],
+            "appeared_total": 40,
+        },
+    ]
+    inventory = capture_inventory.build(
+        capture_redact.redact(capture, capture_redact.collect(capture))
+    )
+    auth = _operation(inventory, "POST id.site.example/auth")
+    refused, signed_in = auth["responses"]
+    assert refused["page_showed"] == [
+        {"title": "Sign in", "appeared": ["This account is blocked."]}
+    ]
+    # A rendered list is content of the account: it names nothing and is not quoted.
+    assert "page_showed" not in signed_in
+    assert "Subject" not in json.dumps(inventory, ensure_ascii=False)
+    assert inventory["scenarios"][0]["steps"] == [
+        "click Sign in",
+        "-> #2",
+        "the page shows: This account is blocked.",
+        "click Sign in",
+        "-> #3",
+        "-> #4",
+    ]
+    assert "then the page showed (title `Sign in`): «This account is blocked.»" in render(inventory)
+
+
+def test_a_notice_element_is_quoted_and_a_long_render_is_only_counted() -> None:
+    facts = capture_inventory.page_facts(
+        {"title": "T", "notices": ["Wrong code"], "appeared": ["a", "b"], "appeared_total": 30}
+    )
+    assert facts == {"title": "T", "notices": ["Wrong code"], "appeared_lines": 30}
+
+
+def test_pages_of_one_level_are_not_folded_into_one_template() -> None:
+    pages = {("GET", "h", f"/{name}") for name in ("login", "scroll", "logout", "about")}
+    assert set(capture_inventory.merge_templates(pages).values()) == {
+        "/login",
+        "/scroll",
+        "/logout",
+        "/about",
+    }

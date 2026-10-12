@@ -87,31 +87,54 @@ trace: Annotated[str, markers.Header("X-Trace")]
 
 ## A value that is itself JSON or a query string
 
-The inventory marks such a value `json` or `query-string`. Keep the field structured and
-encode it with a codec:
+The inventory marks such a value `json` or `query-string`. Give it a model, so the caller gets
+names and types instead of a bare dict, and encode it with a codec:
 
 ```python
 import json
 from dataclasses import dataclass
+from typing import Annotated, Literal
 
 from eazy_sdk.codecs import ScalarEncodeContext
+from eazy_sdk.request import markers
+from pydantic import BaseModel
+
+
+class Sort(BaseModel):
+    type: Literal["date", "size"] = "date"
+    order: Literal["asc", "desc"] = "desc"
 
 
 @dataclass(frozen=True, slots=True)
-class JsonQueryCodec:
+class JsonCodec:
+    """A model or a plain value sent as compact JSON in one parameter."""
+
     name: str = "json-compact"
 
     def encode(self, value: object, context: ScalarEncodeContext) -> str:
+        if isinstance(value, BaseModel):
+            value = value.model_dump(mode="json", exclude_none=True)
         return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
-JsonQuery = Annotated[dict[str, Any], markers.Query(codec=JsonQueryCodec())]
+JsonValue = markers.Query(codec=JsonCodec())
 
 # in the operation:
-#   sort: JsonQuery = field(default_factory=lambda: {"type": "date", "order": "desc"})
+#   sort: Annotated[Sort, JsonValue] = Sort()
 ```
 
-Repeated query keys (`tag=a&tag=b`) are not supported: one name, one value.
+- Model fields come from the keys the inventory shows in the recorded values. A key seen with
+  one value only is a `Literal` of that value or a plain `str`: say in the plan which you chose.
+- Use a pydantic model or a dataclass. A `TypedDict` is refused by the library when the
+  operation is called; note it in `LIBRARY-GAPS.md` if the user asks for one.
+- The library does not validate the value against the field's type at call time: the type is
+  for the editor and for mypy.
+- The same codec serves a form field: `markers.Form(codec=JsonCodec())`.
+- Keep `dict[str, Any]` only for a value whose keys are data (an id-to-id map), never for a
+  value with a fixed set of keys.
+
+Repeated query keys (`tag=a&tag=b`) are not supported for declared parameters: one name, one
+value.
 
 ## One value under several names
 

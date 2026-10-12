@@ -192,6 +192,22 @@ class MailPage(BaseModel):
 
 One base exception for the SDK; one class per observed refusal.
 
+### Naming an outcome
+
+A protocol often tells an outcome by a code that means nothing by itself (`errno=25`). A
+recording made with the skill's recorder also knows what the person saw: under a response
+variant the inventory says `then the page showed: «…»`, and a scenario lists it among its
+steps. That text is the site's own name for the outcome.
+
+- Name the class after what the page said (`AccountBlocked`), not after the code
+  (`SignInRefused25`). Keep the code as the criterion: the text is for people and may be
+  translated or reworded, the code is what the response carries.
+- Put the site's words into the docstring, quoted, with the exchange number.
+- Without such a line (a HAR, a Burp export, a page that showed nothing new) the meaning is
+  unknown: name the class after the fact (`SignInRefused` with the code in the docstring),
+  list it in the plan as unnamed and ask the user what it means.
+- A line the inventory only counts (`N lines appeared`) is a rendered list, not a message.
+
 ```python
 from typing import ClassVar
 

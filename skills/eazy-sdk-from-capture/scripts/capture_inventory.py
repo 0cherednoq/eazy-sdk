@@ -87,6 +87,7 @@ _QUERY_STRING = re.compile(r"^[\w.%-]+=[^&=]*(&[\w.%-]+=[^&=]*)+$")
 _ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _MIN_TRACED = 6
 _MAX_LABEL = 32
+_MAX_MESSAGE_LINES = 5
 _CONTROL_TAGS = {"button", "input", "select", "textarea", "label", "summary"}
 _IDENTITY_KINDS = {"email", "emaillocal", "emaildomain", "login", "password", "typed"}
 _MERGE_THRESHOLD = 3
@@ -156,6 +157,10 @@ def merge_templates(keys: Iterable[tuple[str, str, str]]) -> dict[tuple[str, str
             for indexes in groups.values():
                 values = {split[index][position] for index in indexes}
                 if len(values) < _MERGE_THRESHOLD or any(v.startswith("{") for v in values):
+                    continue
+                # `/login`, `/scroll`, `/logout` are three pages, not one page with a
+                # parameter: only values that look issued (they carry digits) are folded.
+                if sum(any(c.isdigit() for c in v) for v in values) * 2 < len(values):
                     continue
                 for index in indexes:
                     parts = list(split[index])
@@ -932,27 +937,84 @@ def _target_name(target: dict[str, Any]) -> str:
     return str(target.get("name") or target.get("selector") or target.get("tag") or "")
 
 
+def page_facts(event: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a page snapshot to what names an outcome.
+
+    A few lines that appeared after an action are a message. Many lines are a list that was
+    rendered, content of the account: they are counted, not quoted.
+    """
+    facts: dict[str, Any] = {}
+    for key in ("title", "heading"):
+        if event.get(key):
+            facts[key] = _shown(str(event[key]), 80)
+    notices = [_shown(str(item), 200) for item in event.get("notices") or []][:5]
+    if notices:
+        facts["notices"] = notices
+    appeared = [str(item) for item in event.get("appeared") or []]
+    total = int(event.get("appeared_total") or len(appeared))
+    if 0 < total <= _MAX_MESSAGE_LINES:
+        facts["appeared"] = [_shown(line, 200) for line in appeared]
+    elif total:
+        facts["appeared_lines"] = total
+    return facts
+
+
+def pages_after(capture: Capture, kept: set[int]) -> dict[int, dict[str, Any]]:
+    """Tell, for an exchange an action caused, what the page showed afterwards."""
+    shown: dict[int, dict[str, Any]] = {}
+    waiting: dict[str, list[int]] = defaultdict(list)
+    for event in capture.timeline:
+        kind, tab = event.get("kind"), str(event.get("tab", ""))
+        if kind == "action":
+            waiting[tab] = []
+        elif kind == "request" and event.get("exchange") in kept:
+            waiting[tab].append(int(event["exchange"]))
+        elif kind == "page":
+            facts = page_facts(event)
+            if any(key in facts for key in ("notices", "appeared")):
+                for seq in waiting[tab]:
+                    shown.setdefault(seq, facts)
+            waiting[tab] = []
+    return shown
+
+
+def _scenario(name: str) -> dict[str, Any]:
+    return {"name": name, "actions": [], "exchanges": [], "steps": []}
+
+
 def scenarios(capture: Capture, kept: set[int]) -> list[dict[str, Any]]:
-    """Cut the timeline into scenarios at the user's marks."""
+    """Cut the timeline into scenarios at the user's marks.
+
+    ``steps`` is the scenario in order: what the person did, which exchanges followed and what
+    the page then showed.
+    """
     result: list[dict[str, Any]] = []
-    current: dict[str, Any] = {"name": "(before the first mark)", "actions": [], "exchanges": []}
+    current = _scenario("(before the first mark)")
     marked = False
     for event in capture.timeline:
         kind = event.get("kind")
         if kind == "mark":
             if current["actions"] or current["exchanges"]:
                 result.append(current)
-            current = {"name": str(event.get("label", "")), "actions": [], "exchanges": []}
+            current = _scenario(str(event.get("label", "")))
             marked = True
         elif kind == "action":
             target = event.get("target") or {}
-            current["actions"].append(
-                f"{event.get('action', 'action')} {_target_name(target)}".strip()
-            )
+            did = f"{event.get('action', 'action')} {_target_name(target)}".strip()
+            current["actions"].append(did)
+            current["steps"].append(did)
         elif kind == "navigation":
-            current["actions"].append(f"navigate {_location_shape(str(event.get('url', '')))}")
+            went = f"navigate {_location_shape(str(event.get('url', '')))}"
+            current["actions"].append(went)
+            current["steps"].append(went)
         elif kind == "request" and event.get("exchange") in kept:
             current["exchanges"].append(event["exchange"])
+            current["steps"].append(f"-> #{event['exchange']}")
+        elif kind == "page":
+            facts = page_facts(event)
+            told = facts.get("notices") or facts.get("appeared")
+            if told:
+                current["steps"].append("the page shows: " + " | ".join(told))
     if current["actions"] or current["exchanges"]:
         result.append(current)
     if not marked and len(result) == 1:
@@ -979,10 +1041,18 @@ def build(
         key = (exchange.method, exchange.host, path_template(exchange.path))
         grouped[exchange.method, exchange.host, templates[key]].append(exchange)
     provenance = Provenance(capture, typed_kinds)
+    shown_after = pages_after(capture, {exchange.seq for exchange in api})
     operations = [
         describe_operation(method, host, template, samples, provenance)
         for (method, host, template), samples in grouped.items()
     ]
+    for operation in operations:
+        for variant in operation["responses"]:
+            pages = [shown_after[seq] for seq in variant["exchanges"] if seq in shown_after]
+            if pages:
+                # What the person saw after this outcome: the site's own name for it.
+                distinct = dict.fromkeys(json.dumps(page, sort_keys=True) for page in pages)
+                variant["page_showed"] = [json.loads(text) for text in distinct]
     hosts: dict[str, dict[str, Any]] = {}
     for exchange in api:
         entry = hosts.setdefault(exchange.host, {"host": exchange.host, "exchanges": 0})
