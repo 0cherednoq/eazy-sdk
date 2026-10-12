@@ -1013,8 +1013,10 @@ def scenarios(capture: Capture, kept: set[int]) -> list[dict[str, Any]]:
         elif kind == "page":
             facts = page_facts(event)
             told = facts.get("notices") or facts.get("appeared")
-            if told:
-                current["steps"].append("the page shows: " + " | ".join(told))
+            step = "the page shows: " + " | ".join(told or [])
+            # The page is looked at twice after an action: the same text is one step.
+            if told and step not in current["steps"][-2:]:
+                current["steps"].append(step)
     if current["actions"] or current["exchanges"]:
         result.append(current)
     if not marked and len(result) == 1:
