@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a15 - 2026-10-12
+
 Added:
 
 - `Placed.body(name)` and the chain `Placed.body("token") | Placed.query("token")` on a session
