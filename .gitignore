@@ -77,3 +77,6 @@ mutants/
 !plugins/*/docs/*.md
 /.claude/
 /docs/
+
+# Скилл — часть репозитория: его SKILL.md и справочники не локальные заметки.
+!skills/**/*.md

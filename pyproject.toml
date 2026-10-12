@@ -290,6 +290,7 @@ max-complexity = 10
 "eazy_sdk/**/*.py" = ["ANN401", "ASYNC109", "BLE001", "C401", "C409", "C901", "D100", "D101", "D103", "D104", "D202", "D401", "N801", "N802", "N818", "PERF401", "PERF402", "PERF403", "PLR0913", "PLR1702", "S101", "S311", "SLF001"]
 "tests/**/*.py" = ["ANN001", "ANN202", "ANN401", "BLE001", "C402", "C416", "C901", "D100", "D101", "D103", "D104", "D202", "D205", "D209", "D401", "DTZ001", "N801", "N805", "N818", "PERF401", "PLR0913", "PLR1702", "S101", "S102", "S105", "S106", "S107", "S301", "S324", "S603", "SLF001", "T201"]
 "scripts/**/*.py" = ["BLE001", "C901", "D103", "D202", "D401", "PERF401", "PLR1702", "S603", "S607", "T201"]
+"skills/**/*.py" = ["ANN401", "C901", "D102", "D105", "D107", "PLR0913", "PLR1702", "S603", "S607", "T201"]
 "examples/**/*.py" = ["D101", "D103", "D202", "I001", "PLR0913", "S101", "T201"]
 "docs-site/**/*.py" = ["D103", "T201"]
 "plugins/accounts/**/*.py" = ["ANN401", "D100", "D101", "D103", "D202", "N802", "PERF401", "PLR0913", "PLR1702", "S101", "S105", "S311", "S603"]
@@ -435,7 +436,7 @@ python_version = "3.13"
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
-files = ["eazy_sdk", "tests", "plugins", "scripts", "examples"]
+files = ["eazy_sdk", "tests", "plugins", "scripts", "examples", "skills"]
 exclude = ["tests/fixtures/openapi_consumer/consumer_sdk", "plugins/browser/probe"]
 # Lets tests do `import docs_freshness` (they add scripts/ to sys.path at runtime).
-mypy_path = ["scripts", "plugins/openapi", "plugins/xml"]
+mypy_path = ["scripts", "plugins/openapi", "plugins/xml", "skills/eazy-sdk-from-capture/scripts"]
