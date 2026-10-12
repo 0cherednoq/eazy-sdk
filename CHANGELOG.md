@@ -5,6 +5,17 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Added:
+
+- `QueryModel(target, using=None)` in `eazy_sdk.request` and `Http.get(..., query=...)`: the
+  query of a request declared as one private model. Each field of the model is one query
+  parameter, in the model's order; an operation field without a placement feeds the field of
+  the same name; the rest take their defaults and stay out of the public signature. The model
+  is built on every attempt, so a `default_factory` field is fresh on a retry. `using=` builds
+  the model from the operation value and, with two parameters, from the `requires=`
+  dependencies. It lives beside declared `Query[...]` fields, `Inject` and session values; one
+  name in two places is refused before the request.
+
 ## 0.2.0a15 - 2026-10-12
 
 Added:

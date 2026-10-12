@@ -4,7 +4,7 @@ description: Маркеры размещения, тела и представл
 sources:
   - eazy_sdk.request
   - eazy_sdk.core.errors.OperationBindingError
-api_fingerprint: "sha256:976dd7f1d935055112859d4512b538bb402f2618f62fd09f966ac0916c7efad3"
+api_fingerprint: "sha256:117a654c795764aed18032f5138ba4ac9a52505957b3ab0cb6e5f97874e967af"
 ---
 
 Маркер размещает поле операции. `Path[T]` и `Annotated[T, markers.Path()]` являются двумя
@@ -118,6 +118,11 @@ class RegisterUser(HttpOperation[RegisteredUser]):
 private wire schema и одним из перечисленных encodings; смешивать projection с root/flat body
 нельзя. Источником по умолчанию служит сам класс операции: в проекцию идут поля без маркера размещения,
 уже с применёнными значениями по умолчанию.
+
+`QueryModel(target, using=None)` описывает query одной приватной моделью: каждое поле `target`
+становится одним параметром, поле операции без маркера размещения попадает в одноимённое поле
+модели. Передаётся в `__http__` как `query=`. Подробности описаны в руководстве
+{doc}`о представлении запроса </guide/requests/representation>`.
 
 ## Ошибки binding и projection
 

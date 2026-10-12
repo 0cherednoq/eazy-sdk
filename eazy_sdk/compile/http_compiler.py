@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 import inspect
+import types
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, get_args, get_origin, runtime_checkable
+from enum import Enum
+from typing import (
+    Any,
+    Literal,
+    Protocol,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    runtime_checkable,
+)
 
 from eazy_sdk.codecs import BodyCodec
 from eazy_sdk.core.errors import (
@@ -47,6 +58,7 @@ from eazy_sdk.request.descriptors import (
     JsonBody,
     JsonField,
     MultipartBody,
+    QueryModel,
     ReplayableStreamBody,
 )
 from eazy_sdk.request.params import Cookie, Header, Query
@@ -161,6 +173,11 @@ class CompiledContract[T]:
     descriptors: Mapping[ValueSlot[object], object]
     wire_names: Mapping[ValueSlot[object], str]
     pass_diagnostics: tuple[CompilerPassDiagnostic, ...]
+    query_model: QueryModel[object, object] | None = None
+    """The query as one private model; its fields own the slots of ``query_model_slots``."""
+    query_model_arity: int = 0
+    """How many positional arguments ``QueryModel.using`` takes; zero when there is none."""
+    query_model_slots: Mapping[str, ValueSlot[object]] | None = None
 
     def bind_input(self, request: Mapping[str, object]) -> BoundArguments:
         unknown = request.keys() - self.input_slots.keys()
@@ -260,6 +277,8 @@ class _InputLayoutPass:
     body_field_slots: dict[str, ValueSlot[object]]
     body_projection: BodyProjection[object, object] | None
     diagnostic: CompilerPassDiagnostic
+    query_model: QueryModel[object, object] | None = None
+    query_model_slots: Mapping[str, ValueSlot[object]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,6 +399,11 @@ def compile_endpoint[T](
         private_body_writers=private_body_writers,
         signature_plan=signature_plan,
         body_signature_paths=body_signature_paths,
+        query_model=layout.query_model,
+        query_model_arity=_callable_arity(
+            layout.query_model.using if layout.query_model is not None else None
+        ),
+        query_model_slots=layout.query_model_slots,
         input_fields=input_fields,
         input_slots=input_slots,
         descriptors=descriptors,
@@ -411,6 +435,41 @@ def _compile_input_layout(
     input_slots: dict[str, ValueSlot[object]] = {}
     projection_slots: dict[str, ValueSlot[object]] = {}
     input_identities: set[tuple[RequestLocation, str]] = set()
+    query_model = cast("QueryModel[object, object] | None", getattr(contract, "query_model", None))
+    query_model_slots: dict[str, ValueSlot[object]] = {}
+    if query_model is not None:
+        # The model's parameters come first and in its order: it is the query as written.
+        for model_field in default_model_adapters().fields(query_model.target):
+            wire_name = model_field.wire_name
+            if (RequestLocation.QUERY, wire_name) in input_identities:
+                raise PlanError(
+                    f"query model of {contract.operation_id!r} names {wire_name!r} twice"
+                )
+            input_identities.add((RequestLocation.QUERY, wire_name))
+            declared = next(
+                (item for item in model_field.metadata if isinstance(item, Query)), None
+            )
+            codec = declared.codec if declared is not None else None
+            if codec is None and not _is_query_scalar(model_field.annotation):
+                raise PlanError(
+                    f"query model field {model_field.name!r} in {contract.operation_id!r} is "
+                    "not a scalar: one query parameter holds one value, so a structured field "
+                    "needs a codec, Annotated[T, Query(codec=...)]"
+                )
+            model_slot = cast(
+                ValueSlot[object],
+                ValueSlot(
+                    diagnostic_name=f"query-model.{wire_name}",
+                    validator=PythonTypeValidator(object),
+                    required=False,
+                ),
+            )
+            slot_groups[RequestLocation.QUERY][wire_name] = model_slot
+            slots.append(model_slot)
+            descriptors[model_slot] = Query(wire_name, codec=codec)
+            wire_names[model_slot] = wire_name
+            slot_locations[model_slot] = RequestLocation.QUERY
+            query_model_slots[model_field.name] = model_slot
     for field in input_fields:
         if field.is_projection_source:
             slot = cast(
@@ -506,6 +565,13 @@ def _compile_input_layout(
             if not isinstance(name, str) or not name:
                 raise PlanError("auth placement requires a wire name")
             group = slot_groups[location]
+            if location is RequestLocation.QUERY and name in {
+                wire_names[slot] for slot in query_model_slots.values()
+            }:
+                raise PlanError(
+                    f"the session places {name!r} in the query, and the query model of "
+                    f"{contract.operation_id!r} declares a field of that name"
+                )
             if name in group:
                 continue
             auth_slot = cast(
@@ -575,6 +641,8 @@ def _compile_input_layout(
             len(slots),
             tuple(location.value for location in RequestLocation),
         ),
+        query_model=query_model,
+        query_model_slots=query_model_slots,
     )
 
 
@@ -1321,6 +1389,33 @@ def _body_field_like(
     raise PlanError(
         f"the session places {name!r} in the request body, and the body of "
         f"{contract.operation_id!r} is multipart: only form and JSON fields are supported"
+    )
+
+
+_QUERY_SCALARS = (str, int, float, bool, Enum)
+
+
+def _is_query_scalar(annotation: object) -> bool:
+    """Tell whether a model field's type fits one query parameter without a codec."""
+    origin = get_origin(annotation)
+    if origin in {Union, types.UnionType}:
+        return all(item is type(None) or _is_query_scalar(item) for item in get_args(annotation))
+    if origin is Literal:
+        return True
+    return isinstance(annotation, type) and issubclass(annotation, _QUERY_SCALARS)
+
+
+def _callable_arity(function: object | None) -> int:
+    """Count the positional parameters of a projection function; one when it cannot be read."""
+    if function is None:
+        return 0
+    try:
+        parameters = inspect.signature(cast(Any, function)).parameters.values()
+    except (TypeError, ValueError):
+        return 1
+    return sum(
+        parameter.kind in {parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD}
+        for parameter in parameters
     )
 
 

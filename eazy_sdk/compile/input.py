@@ -33,6 +33,7 @@ from eazy_sdk.request.descriptors import (
     JsonField,
     MultipartBody,
     Part,
+    QueryModel,
     ReplayableStreamBody,
 )
 from eazy_sdk.request.params import Cookie, Header, Path, Query, QueryString
@@ -124,6 +125,7 @@ def inspect_operation_input(
     path: str,
     models: ModelAdapterRegistry,
     projection: BodyProjection[Any, Any] | None = None,
+    query: QueryModel[Any, Any] | None = None,
 ) -> MethodInputSchema:
     """Read an operation class into the field metadata the compiler consumes.
 
@@ -159,7 +161,7 @@ def inspect_operation_input(
             _input_field(
                 model_field,
                 operation_id=operation_id,
-                allow_unplaced=projection is not None,
+                allow_unplaced=projection is not None or query is not None,
             )
         )
 
@@ -184,6 +186,13 @@ def inspect_operation_input(
         projection,
         fields=fields,
         operation_type=operation_type,
+        models=models,
+        operation_id=operation_id,
+    )
+    _validate_query_model(
+        query,
+        fields=fields,
+        projection=projection,
         models=models,
         operation_id=operation_id,
     )
@@ -477,6 +486,47 @@ def _validate_path(fields: list[InputField], *, path: str, operation_id: str) ->
             f"path inputs for operation {operation_id!r} do not match template: "
             + ", ".join(details)
         )
+
+
+def _validate_query_model(
+    query: QueryModel[Any, Any] | None,
+    *,
+    fields: list[InputField],
+    projection: BodyProjection[Any, Any] | None,
+    models: ModelAdapterRegistry,
+    operation_id: str,
+) -> None:
+    """A field without a placement belongs to somebody: here, to the query model.
+
+    Without ``using`` the model is fed by name, so every field it cannot default has to be an
+    operation field, and, where no body projection takes the rest, every unplaced operation
+    field has to be one of the model's.
+    """
+
+    if query is None:
+        return
+    try:
+        model_fields = models.fields(query.target)
+    except UnsupportedModelTypeError as exc:
+        raise PlanError(
+            f"query model for {operation_id!r} is not a model any configured adapter supports"
+        ) from exc
+    if query.using is not None:
+        return
+    unplaced = {field.python_name for field in fields if field.is_projection_source}
+    names = {model_field.name for model_field in model_fields}
+    for model_field in model_fields:
+        if model_field.required and model_field.name not in unplaced:
+            raise PlanError(
+                f"query model field {model_field.name!r} in {operation_id!r} has no default and "
+                "no operation field of that name feeds it"
+            )
+    if projection is None:
+        for name in sorted(unplaced - names):
+            raise PlanError(
+                f"input field {name!r} in {operation_id!r} has no placement and is not a field "
+                "of the query model"
+            )
 
 
 def _validate_projection_source(

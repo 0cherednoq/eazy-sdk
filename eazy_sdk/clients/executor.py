@@ -173,6 +173,7 @@ from ._decisions import (
     ResponseDecisionInput,
     RetryTransition,
     TerminalResponse,
+    build_query_model,
     build_request_document,
     decide_response,
 )
@@ -1846,7 +1847,11 @@ class _RequestBuild:
     def _declared(self, stage: RequestStage) -> bool:
         compiled = self.run_context.compiled
         if stage is RequestStage.PROJECTION:
-            return compiled.body_projection is not None or bool(compiled.private_body_writers)
+            return (
+                compiled.body_projection is not None
+                or bool(compiled.private_body_writers)
+                or compiled.query_model is not None
+            )
         if stage is RequestStage.ENVELOPE:
             return compiled.contract.envelope is not None
         if stage is RequestStage.DOCUMENT_CRYPTO:
@@ -1861,15 +1866,17 @@ class _RequestBuild:
 
     def _project(self) -> None:
         run = self.run_context
-        self.document = build_request_document(
-            RequestDocumentStageInput(
-                run.compiled,
-                self.values,
-                run.core.serialization.models,
-                run.mandatory_results,
-                run.injected,
-            )
-        ).document
+        stage = RequestDocumentStageInput(
+            run.compiled,
+            self.values,
+            run.core.serialization.models,
+            run.mandatory_results,
+            run.injected,
+        )
+        self.document = build_request_document(stage).document
+        query = build_query_model(stage)
+        if query is not None:
+            self.values = apply_patch_atomic(self.values, query)
 
     def _wrap(self) -> None:
         contract = self.run_context.compiled.contract

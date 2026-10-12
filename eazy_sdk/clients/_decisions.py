@@ -14,6 +14,7 @@ from eazy_sdk.compile.http_compiler import CompiledContract
 from eazy_sdk.core import (
     OperationBindingError,
     OperationValues,
+    Set,
     ValuePatch,
     WriterConflictError,
 )
@@ -33,6 +34,7 @@ from eazy_sdk.response.cases import (
 )
 from eazy_sdk.response.normalized import cast_headers
 from eazy_sdk.response.refresh import meta_refresh_target
+from eazy_sdk.sentinels import Unset
 
 _NO_INJECTIONS: Mapping[RequestDependency[Any], object] = MappingProxyType({})
 """No dependency values: an immutable default, never a shared mutable one."""
@@ -71,6 +73,57 @@ def build_request_document[T](
     else:
         document = _NO_BODY_DOCUMENT_OVERRIDE
     return RequestDocumentStageOutput(document)
+
+
+def build_query_model[T](stage: RequestDocumentStageInput[T]) -> ValuePatch | None:
+    """Build the query model for the current attempt and return its fields as slot values.
+
+    The model is built anew on every attempt, so a ``default_factory`` field (a timestamp, a
+    request id) is fresh on a retry, a redirect and a replay after a session refresh. A field
+    that comes out ``None`` or ``UNSET`` is left out: its parameter is not sent.
+    """
+
+    compiled = stage.compiled
+    query_model = compiled.query_model
+    if query_model is None:
+        return None
+    operation_type = compiled.contract.operation_type
+    arguments = {
+        name: copy.deepcopy(stage.values.require(slot))
+        for name, slot in compiled.input_slots.items()
+        if stage.values.contains(slot)
+    }
+    try:
+        if query_model.using is None:
+            fields = stage.models.fields(query_model.target)
+            built = query_model.target(
+                **{
+                    (item.validation_name or item.name): arguments[item.name]
+                    for item in fields
+                    if item.name in arguments
+                }
+            )
+        else:
+            source = operation_type(**arguments) if operation_type is not None else arguments
+            using = cast(Any, query_model.using)
+            built = (
+                using(source, stage.injected) if compiled.query_model_arity >= 2 else using(source)
+            )
+    except Exception:
+        raise OperationBindingError(
+            code="projection_failed",
+            operation_id=compiled.contract.operation_id,
+            field=None,
+            phase="projection",
+            detail=f"query model {query_model.target.__name__!r} could not be built",
+        ) from None
+    operations = []
+    for name, slot in (compiled.query_model_slots or {}).items():
+        value = getattr(built, name, None)
+        if value is None or isinstance(value, Unset):
+            continue
+        operations.append(Set(slot, value))
+    return ValuePatch(tuple(operations))
 
 
 @dataclass(frozen=True, slots=True)

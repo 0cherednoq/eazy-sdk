@@ -101,6 +101,43 @@ class Body:
 
 
 @dataclass(frozen=True, slots=True)
+class QueryModel[TSource, TWire]:
+    """Describe the query of a request as one private model.
+
+    Each field of ``target`` is one query parameter, in the order the model declares them. The
+    caller sees only the operation's own fields; the parameters a service demands and a caller
+    does not own are fields of the model with a default::
+
+        class _ThreadQuery(BaseModel):
+            id: str
+            quotes_version: int = 1
+            force_custom_thread: bool = False
+            stamp: int = Field(default_factory=now_ms)
+
+        __http__ = Http.get("/threads/thread", query=QueryModel(_ThreadQuery))
+
+        id: str              # no placement: feeds the model's field of the same name
+
+    The model is built for every attempt, so a ``default_factory`` gives a fresh value on a
+    retry. ``using`` builds it by hand, from the operation value and, when declared with two
+    parameters, from the resolved ``requires=`` dependencies, exactly as ``BodyProjection``
+    does. A field whose value is ``None`` or ``UNSET`` is not sent.
+
+    A field holds a scalar. A structured value needs a codec, written on the model's field as
+    it would be on an operation's: ``Annotated[Sort, Query(codec=JsonCodec())]``.
+    """
+
+    target: type[TWire]
+    using: Callable[[TSource], TWire] | Callable[[TSource, Injected], TWire] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, type):
+            raise TypeError("query model target must be a model class")
+        if self.using is not None and not callable(self.using):
+            raise TypeError("query model using must be callable")
+
+
+@dataclass(frozen=True, slots=True)
 class BodyProjection[TSource, TWire]:
     """Project caller-visible values into one private semantic wire body.
 

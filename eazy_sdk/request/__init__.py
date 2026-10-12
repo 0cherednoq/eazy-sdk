@@ -15,7 +15,7 @@ from eazy_sdk.codecs import (
 )
 
 from . import markers
-from .descriptors import Body, BodyProjection, MultipartPart, RequestBody
+from .descriptors import Body, BodyProjection, MultipartPart, QueryModel, RequestBody
 from .params import QueryString
 from .short import (
     BytesBody,
@@ -85,6 +85,7 @@ __all__ = [
     "Path",
     "Query",
     "QueryCodec",
+    "QueryModel",
     "QueryString",
     "ReplayableStreamBody",
     "RequestBody",

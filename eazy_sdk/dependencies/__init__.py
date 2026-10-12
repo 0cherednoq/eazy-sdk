@@ -205,9 +205,7 @@ class DependencyContext:
         if router is None:
             address = self.base_url
         else:
-            found = {
-                bound for service, bound in self.services.items() if router in service.__mro__
-            }
+            found = {bound for service, bound in self.services.items() if router in service.__mro__}
             if len(found) != 1:
                 problem = (
                     "is not a router of this SDK root"

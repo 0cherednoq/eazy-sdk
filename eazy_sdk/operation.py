@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from eazy_sdk.crypto import PayloadCrypto
     from eazy_sdk.dependencies import DependencySpec, Inject
     from eazy_sdk.protection.advanced import SolverRequirement
-    from eazy_sdk.request.descriptors import BodyProjection
+    from eazy_sdk.request.descriptors import BodyProjection, QueryModel
     from eazy_sdk.request.signatures import RequestSignature
     from eazy_sdk.response._mapping import ErrorSpec, ErrorsSpec, SuccessSpec
 
@@ -84,6 +84,8 @@ class _HttpSpec:
 
     # How the request is shaped.
     projection: BodyProjection[Any, Any] | None = None
+    query: QueryModel[Any, Any] | None = None
+    """The query as one private model: its fields are the parameters on the wire."""
     wire: Wire = EMPTY_WIRE
 
     # What the service requires of the request.
@@ -145,6 +147,7 @@ class _HttpOptions(TypedDict, total=False):
 
     # How the request is shaped.
     projection: BodyProjection[Any, Any] | None
+    query: QueryModel[Any, Any] | None
     wire: Wire
 
     # What the service requires of the request; each also inherits from the router's MRO.

@@ -45,8 +45,10 @@ Read the parameter's line in the inventory.
 
 | The inventory says | Declare |
 |---|---|
-| `constant`, technical (a format flag, a version, a client name) | `Inject(..., source="value")` |
-| `timestamp` | `Inject(..., source=callable)`, recomputed on every attempt |
+| `constant`, technical (a format flag, a version, a client name), in the query | a field of the query model with a default (see "The query as a model") |
+| `constant`, technical, in a header or a form | `Inject(..., source="value")` |
+| `timestamp` in the query | a field of the query model with a `default_factory` |
+| `timestamp` elsewhere | `Inject(..., source=callable)`, recomputed on every attempt |
 | `constant`, but the caller may reasonably want another value (page size, sort) | a public field with that default |
 | `varies` between samples | a public field |
 | comes from `the caller` or `typed by the user` | a public field, or credentials of the sign-in |
@@ -66,6 +68,59 @@ A header the browser sets by itself (`User-Agent`, `Accept-Encoding`, `sec-*`) b
 transport: `impersonate` sends it. Declare only what the site's own code adds: `Origin`,
 `X-Requested-With`, headers with the site's prefix, and the `Referer` of a form the site
 checks. The `Referer` of a GET is where the person happened to be; do not declare it.
+
+## The query as a model
+
+An operation whose query carries more than its caller owns declares the query as one private
+model. Each field is one parameter, in the model's order, with a type:
+
+```python
+import time
+from dataclasses import dataclass
+
+from eazy_sdk import Http, HttpOperation
+from eazy_sdk.request import QueryModel
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+class _ThreadQuery(BaseModel):
+    """The query as the site's own client sends it."""
+
+    model_config = ConfigDict(serialize_by_alias=True)   # needed for the alias below
+
+    quotes_version: int = 1
+    id: str
+    offset: int = 0
+    force_custom_thread: bool = False        # goes out as "false"
+    use_color_scheme: int = 1                # the site wants 1, not true: declare an int
+    stamp: int = Field(default_factory=now_ms, alias="_")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetThread(HttpOperation[Thread]):
+    __http__ = Http.get("/api/v1/threads/thread", query=QueryModel(_ThreadQuery))
+
+    id: str             # no placement marker: feeds the model's field of the same name
+    offset: int = 0
+```
+
+- Take the order of the fields from the recorded request; the replay compares names and
+  values, and a server may care about the order.
+- A parameter with a pagination name (`offset`, `limit`, `page`, a cursor) is an operation
+  field even when every sample has the same value: it is the caller's to change.
+- The model is built on every attempt: a `default_factory` field is fresh on a retry.
+- A value that is itself JSON keeps its codec on the model's field:
+  `sort: Annotated[Sort, markers.Query(codec=JsonCodec())] = NEWEST_FIRST`.
+- One value under two names, or a field computed from others: `QueryModel(Model, using=build)`
+  with `build(call)` or `build(call, injected)`, as for a body projection.
+- Session values (`Placed.query`) and `Inject` stay where they are and go after the model's
+  fields. Headers are never part of the model.
+- `QueryModel` needs a library that has it (after 0.2.0a15). On an older one declare the
+  constants with `Inject`.
 
 ## Placements
 

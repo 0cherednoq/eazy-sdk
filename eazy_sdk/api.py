@@ -746,6 +746,7 @@ class _OperationDescriptor[**P, T, I = Any]:
             path=spec.path,
             models=models,
             projection=spec.projection,
+            query=spec.query,
         )
         _validate_url_address(input_schema, spec.address, operation_id)
         if spec.envelope_cases:
@@ -787,6 +788,7 @@ class _OperationDescriptor[**P, T, I = Any]:
             responses=responses,
             operation_type=self.operation_type,
             projection=spec.projection,
+            query_model=spec.query,
             requires=spec.requires,
             inject=spec.inject,
             protections=spec.protections,

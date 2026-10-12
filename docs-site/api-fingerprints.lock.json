@@ -201,11 +201,11 @@
     }
   },
   "guide/requests/addresses.mdx": {
-    "fingerprint": "sha256:c9c9c578217dfbafad19a71d119dbb333185485f1804d8f370de5b70a21a1c03",
+    "fingerprint": "sha256:53817fffc1cd00557e4de46d904c7383cd4fa79bcea5eb7630e334f52ccc2234",
     "symbols": {
       "eazy_sdk.cookies": "sha256:0be70d6488d8e088e17c9c035b7bf371119c03ad4725cbdfd6f0eb04426a1a55",
       "eazy_sdk.dependencies": "sha256:72b55ac5c24c6980073668dd09acd3cb4a850682774c7407738a265e72e40158",
-      "eazy_sdk.request": "sha256:0ea9ae50a3b92fe66b5fa7e47c2b2d132f0a424ad20f79d9c509a1183bc785f6"
+      "eazy_sdk.request": "sha256:382ae5980cf8621671c661c7825423858a3d4d5ff7d89589473620fe9e57696a"
     }
   },
   "guide/requests/bytes.mdx": {
@@ -544,10 +544,10 @@
     }
   },
   "reference/api/request.mdx": {
-    "fingerprint": "sha256:976dd7f1d935055112859d4512b538bb402f2618f62fd09f966ac0916c7efad3",
+    "fingerprint": "sha256:117a654c795764aed18032f5138ba4ac9a52505957b3ab0cb6e5f97874e967af",
     "symbols": {
       "eazy_sdk.core.errors.OperationBindingError": "sha256:521998615f5e60e0afd5737fc41a23502a4bcf2d2793d0ceb4ada21601eb720b",
-      "eazy_sdk.request": "sha256:0ea9ae50a3b92fe66b5fa7e47c2b2d132f0a424ad20f79d9c509a1183bc785f6"
+      "eazy_sdk.request": "sha256:382ae5980cf8621671c661c7825423858a3d4d5ff7d89589473620fe9e57696a"
     }
   },
   "reference/api/response.mdx": {
@@ -597,11 +597,11 @@
     }
   },
   "start/quickstart.mdx": {
-    "fingerprint": "sha256:1209a3ff26b3a7d898d814af20bb067e19b34b2667154c406a14105b9cf15e14",
+    "fingerprint": "sha256:7d30eb68d809f5ece9e4eb2bf9c596f82205a4da38e3f07c315350b884a5afa1",
     "symbols": {
       "eazy_sdk.Client": "sha256:d6d0253fb9f1941be3bfb8acd1827ccbf4c37f5ab25e278f4b54c08fa43921df",
       "eazy_sdk.api": "sha256:afa3909e96c4b610eaa25f1417524eeb0626c90bfce883e4bdff49ad0c8a14da",
-      "eazy_sdk.request": "sha256:0ea9ae50a3b92fe66b5fa7e47c2b2d132f0a424ad20f79d9c509a1183bc785f6",
+      "eazy_sdk.request": "sha256:382ae5980cf8621671c661c7825423858a3d4d5ff7d89589473620fe9e57696a",
       "eazy_sdk.response": "sha256:cde24e5b513c4a377c0bf5dec8492d6f38fc25801a8b7c2b8fc66d6a58a6ee54"
     }
   }
