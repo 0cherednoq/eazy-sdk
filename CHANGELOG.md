@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a14 - 2026-10-12
+
 Changed (typing only, nothing changes at run time):
 
 - `items()` and `first()` on a paginated operation are typed by the element: what `items=`
