@@ -951,7 +951,11 @@ def page_facts(event: dict[str, Any]) -> dict[str, Any]:
     for key in ("title", "heading"):
         if event.get(key):
             facts[key] = _shown(str(event[key]), 80)
-    notices = [_shown(str(item), 200) for item in event.get("notices") or []][:5]
+    notices = [
+        _shown(str(item), 200)
+        for item in event.get("notices") or []
+        if not _SPINNER.match(str(item))
+    ][:5]
     if notices:
         facts["notices"] = notices
     every = [str(item) for item in event.get("appeared") or []]

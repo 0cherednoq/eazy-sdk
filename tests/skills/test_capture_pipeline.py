@@ -589,6 +589,7 @@ def test_a_page_belongs_to_the_navigation_not_to_background_requests(burp_base64
 def test_a_spinner_is_not_a_message() -> None:
     facts = capture_inventory.page_facts({"appeared": ["Loading..."], "appeared_total": 1})
     assert facts == {}
+    assert capture_inventory.page_facts({"notices": ["Загружается..."]}) == {}
     facts = capture_inventory.page_facts(
         {"appeared": ["Загрузка…", "Неверный пароль, попробуйте ещё раз"], "appeared_total": 2}
     )
