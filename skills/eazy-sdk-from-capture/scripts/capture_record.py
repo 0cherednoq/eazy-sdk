@@ -46,6 +46,9 @@ _TABS_SECONDS = 0.5
 _COOKIES_SECONDS = 3.0
 _ACTION_WINDOW = 5.0
 _NO_BODY_TYPES = {"Image", "Media", "Font"}
+_CONTROL_TAGS = {"button", "input", "select", "textarea", "label", "summary"}
+_MAX_LABEL = 32
+_REDIRECT_LOW, _REDIRECT_HIGH = 300, 399
 _DROPPED_HEADERS = {"content-encoding", "transfer-encoding"}
 
 # Runs in an isolated world of every frame, before the page's own scripts.
@@ -377,6 +380,13 @@ class TabRecorder:
             await tab.on(name, self._guard(handler))
         await tab.enable_network_events()
         await self._command("Network.setBypassServiceWorker", bypass=True)
+        # A page that redirects at once (a meta-refresh stub) is gone before its body can be
+        # asked for. Documents are therefore held at the response and read there.
+        await tab.on("Fetch.requestPaused", self._guard(self._on_paused))
+        await self._command(
+            "Fetch.enable",
+            patterns=[{"urlPattern": "*", "resourceType": "Document", "requestStage": "Response"}],
+        )
         # Without the Page domain Chrome runs new-document scripts only for navigations the
         # debugger itself started: a link or a form would open a page with no listener.
         await tab.enable_page_events()
@@ -476,6 +486,27 @@ class TabRecorder:
         self._recent = [*self._recent[-200:], hop]
         self._associate()
 
+    def _on_paused(self, params: Mapping[str, Any]) -> None:
+        self._spawn(self._release(params))
+
+    async def _release(self, params: Mapping[str, Any]) -> None:
+        paused = str(params.get("requestId", ""))
+        try:
+            status = int(params.get("responseStatusCode") or 0)
+            hop = self._current(str(params.get("networkId", "")))
+            if hop is not None and status and not _REDIRECT_LOW <= status <= _REDIRECT_HIGH:
+                result = await self._command("Fetch.getResponseBody", requestId=paused)
+                raw = result.get("body")
+                if isinstance(raw, str):
+                    body = base64.b64decode(raw) if result.get("base64Encoded") else raw.encode()
+                    if len(body) <= self._options.max_body:
+                        hop.response_body = body
+                        self._journal.write_hop(hop)
+        except Exception as error:  # noqa: BLE001 - the page must load whatever happened here
+            self._journal.event("recorder_error", where="document body", error=repr(error))
+        finally:
+            await self._command("Fetch.continueRequest", requestId=paused)
+
     def _associate(self) -> None:
         """Name, for every recent request, the last action that came before it."""
         for hop in self._recent:
@@ -536,6 +567,8 @@ class TabRecorder:
         hop = self._current(str(params.get("requestId", "")))
         if hop is None:
             return
+        if hop.response_body is not None:
+            return  # a document: its body was read while the response was held
         if hop.meta.get("resourceType") in _NO_BODY_TYPES:
             hop.body_omitted = f"{hop.meta['resourceType']} bodies are not recorded"
             self._journal.write_hop(hop)
@@ -615,7 +648,12 @@ class TabRecorder:
             event["length"] = len(value)
             if value:
                 event["value_ref"] = self._journal.typed_value(value, target)
-        name = target.get("label") or target.get("name") or target.get("selector") or ""
+        # Only the text of a control names an action: the text of a list row or of a whole
+        # form is content of the person's account and must not travel with every request.
+        text = str(target.get("label") or "")
+        control = target.get("tag") in _CONTROL_TAGS or bool(target.get("role"))
+        short = bool(text) and len(text) <= _MAX_LABEL and (control or target.get("tag") == "a")
+        name = text if short else target.get("name") or target.get("selector") or ""
         if event.get("action") == "submit" and event.get("to"):
             name = urlsplit(str(event["to"])).path
         label = f"{event.get('action', 'action')} {name}".strip()

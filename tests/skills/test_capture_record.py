@@ -80,7 +80,13 @@ class _Site(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
-        if path == "/login":
+        if path == "/stub":
+            # A page that leaves at once: its body is gone before anyone can ask for it.
+            stub = (
+                "<html><head><meta http-equiv='refresh' content=\"0;URL='/login'\"/></head></html>"
+            )
+            self._send(200, "text/html; charset=utf-8", stub.encode())
+        elif path == "/login":
             self._send(200, "text/html; charset=utf-8", LOGIN_PAGE.encode())
         elif path == "/inbox/":
             self._send(200, "text/html; charset=utf-8", INBOX_PAGE.encode())
@@ -169,6 +175,21 @@ def test_recording_holds_traffic_actions_and_marks(recording: Path) -> None:
     assert ("click", "more") in described
     # The click that navigated away is not lost with its document.
     assert described.index(("click", "enter")) < described.index(("click", "more"))
+
+
+def test_a_page_that_redirects_at_once_keeps_its_body(site: str, tmp_path: Path) -> None:
+    async def visitor(tab: Any, mark: Callable[[str], Awaitable[None]]) -> None:
+        await tab.find(id="login", timeout=10)
+        await asyncio.sleep(0.3)
+
+    options = capture_record.Options(
+        url=f"{site}/stub", out=tmp_path / "captures", chrome=CHROME, headless=True
+    )
+    directory = asyncio.run(capture_record.record(options, visitor))
+    capture = capture_normalize.merge([capture_normalize.read_any(directory)])
+    stub = next(e for e in capture.exchanges if e.path == "/stub")
+    assert b"http-equiv='refresh'" in stub.response_body
+    assert next(e for e in capture.exchanges if e.path == "/login").response_body
 
 
 def test_typed_values_stay_out_of_the_timeline(recording: Path) -> None:
