@@ -282,3 +282,46 @@ def test_traffic_only_mode_injects_nothing(site: str, tmp_path: Path) -> None:
     assert "request" in kinds
     capture = capture_normalize.merge([capture_normalize.read_any(directory)])
     assert [e.path for e in capture.exchanges if e.path == "/auth"] == ["/auth"]
+
+
+def test_the_mark_panel_is_on_screen(site: str, tmp_path: Path) -> None:
+    seen: dict[str, Any] = {}
+
+    async def visitor(tab: Any, mark: Callable[[str], Awaitable[None]]) -> None:
+        await tab.find(id="login", timeout=10)
+        tree = await tab.execute_command({"method": "Page.getFrameTree", "params": {}})
+        world = await tab.execute_command(
+            {
+                "method": "Page.createIsolatedWorld",
+                "params": {
+                    "frameId": tree["result"]["frameTree"]["frame"]["id"],
+                    "worldName": capture_record.WORLD,
+                },
+            }
+        )
+        expression = (
+            "(() => { const box = document.getElementById("
+            f"{capture_record._HOST_ID!r}"
+            ").getBoundingClientRect(); return JSON.stringify("
+            "{top: box.top, right: innerWidth - box.right, width: box.width, height: box.height}); })()"
+        )
+        result = await tab.execute_command(
+            {
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": expression,
+                    "contextId": world["result"]["executionContextId"],
+                    "returnByValue": True,
+                },
+            }
+        )
+        seen.update(json.loads(result["result"]["result"]["value"]))
+
+    options = capture_record.Options(
+        url=f"{site}/login", out=tmp_path / "captures", chrome=CHROME, headless=True
+    )
+    asyncio.run(capture_record.record(options, visitor))
+    assert 0 <= seen["top"] <= 20
+    assert 0 <= seen["right"] <= 20
+    assert seen["width"] > 100
+    assert seen["height"] > 10

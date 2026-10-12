@@ -173,7 +173,8 @@ _PAGE_SCRIPT = r"""
     if (document.getElementById(HOST) || !document.documentElement) return;
     const host = document.createElement('div');
     host.id = HOST;
-    host.style.cssText = 'position:fixed;top:8px;right:8px;z-index:2147483647;all:initial;position:fixed';
+    // `all` first: written after them it would reset the position it is meant to keep.
+    host.style.cssText = 'all:initial;position:fixed;top:8px;right:8px;z-index:2147483647';
     const root = host.attachShadow({mode: 'closed'});
     root.innerHTML = '<div style="font:12px system-ui;background:#111c;color:#fff;padding:6px 8px;' +
       'border-radius:8px;display:flex;gap:6px;align-items:center">' +

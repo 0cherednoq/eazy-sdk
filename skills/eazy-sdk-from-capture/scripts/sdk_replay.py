@@ -273,7 +273,9 @@ def _cookie_names(value: str | None) -> set[str]:
     return {part.split("=", 1)[0].strip() for part in (value or "").split(";") if "=" in part}
 
 
-def _compare_headers(sent: Sent, recorded: Exchange) -> tuple[list[str], list[str]]:
+def _compare_headers(
+    sent: Sent, recorded: Exchange, known_cookies: frozenset[str]
+) -> tuple[list[str], list[str]]:
     findings: list[str] = []
     notes: list[str] = []
     sent_names = {name.lower() for name, _ in sent.headers}
@@ -293,13 +295,29 @@ def _compare_headers(sent: Sent, recorded: Exchange) -> tuple[list[str], list[st
     missing = _cookie_names(recorded.request_header("cookie")) - _cookie_names(
         sent.header("cookie")
     )
-    if missing:
-        findings.append(f"cookies: recorded {sorted(missing)}, not sent by the SDK")
+    # A cookie the scenario's own responses never set was in the browser before the scenario
+    # began: the SDK cannot have it, and that is not a difference in the request.
+    earlier = sorted(missing - known_cookies)
+    if earlier:
+        notes.append(f"cookies {earlier} were set before this scenario began")
+    if missing & known_cookies:
+        findings.append(f"cookies: recorded {sorted(missing & known_cookies)}, not sent by the SDK")
     return findings, notes
 
 
-def compare(sent: Sent, recorded: Exchange, shield: Shield) -> tuple[list[str], list[str]]:
-    """Return what makes a request differ from the recorded one, and what is merely noted."""
+def compare(
+    sent: Sent,
+    recorded: Exchange,
+    shield: Shield,
+    known_cookies: frozenset[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Return what makes a request differ from the recorded one, and what is merely noted.
+
+    ``known_cookies`` are the cookies the responses served so far have set; ``None`` means
+    every recorded cookie is expected.
+    """
+    if known_cookies is None:
+        known_cookies = frozenset(_cookie_names(recorded.request_header("cookie")))
     findings = _compare_pairs(
         "query",
         parse_qsl(urlsplit(sent.url).query, keep_blank_values=True),
@@ -308,7 +326,7 @@ def compare(sent: Sent, recorded: Exchange, shield: Shield) -> tuple[list[str], 
         ordered=False,
     )
     findings += _compare_bodies(sent, recorded, shield)
-    header_findings, notes = _compare_headers(sent, recorded)
+    header_findings, notes = _compare_headers(sent, recorded, known_cookies)
     return findings + header_findings, notes
 
 
@@ -323,6 +341,7 @@ class Play:
     shield: Shield
     requests: list[dict[str, Any]] = field(default_factory=list)
     unmatched: list[str] = field(default_factory=list)
+    cookies: set[str] = field(default_factory=set)
 
     def answer(self, request: Any, response_type: Callable[..., Any]) -> Any:
         """Find the recorded exchange for a request and build its response."""
@@ -336,7 +355,10 @@ class Play:
             ):
                 continue
             del self.queue[index]
-            findings, notes = compare(sent, exchange, self.shield)
+            findings, notes = compare(sent, exchange, self.shield, frozenset(self.cookies))
+            for value in exchange.response_headers:
+                if value[0].lower() == "set-cookie":
+                    self.cookies.add(value[1].split("=", 1)[0].strip())
             self.requests.append(
                 {
                     "exchange": exchange.seq,

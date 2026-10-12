@@ -233,3 +233,21 @@ def test_a_module_that_does_not_import_fails_g1(project: Path, work: Path) -> No
     assert result["status"] == "fail"
     assert result["details"][0].startswith("minisdk.broken: ModuleNotFoundError")
     assert work.exists()
+
+
+def test_a_cookie_from_before_the_scenario_is_a_note_not_a_difference() -> None:
+    from capture_model import Exchange
+
+    recorded = Exchange(
+        1,
+        "GET",
+        "https://a.example/x",
+        request_headers=[("Cookie", "old=1; fresh=2")],
+    )
+    sent = sdk_replay.Sent("GET", "https://a.example/x", (), b"")
+    shield = sdk_replay.Shield({})
+    findings, notes = sdk_replay.compare(sent, recorded, shield, frozenset({"fresh"}))
+    assert findings == ["cookies: recorded ['fresh'], not sent by the SDK"]
+    assert notes == ["cookies ['old'] were set before this scenario began"]
+    findings, _ = sdk_replay.compare(sent, recorded, shield)
+    assert findings == ["cookies: recorded ['fresh', 'old'], not sent by the SDK"]
