@@ -6019,3 +6019,25 @@ the package. Phase 60 stays active: its open items are in `60-sdk-authoring-skil
 | `uv build`, `scripts/package_audit.py` | PASS: one wheel and one sdist. |
 | Release workflow for `v0.2.0a15` (run 38280651388) | PASS: build and audit, GitHub release with 2 assets, published to PyPI. |
 | `scripts/extras_smoke.py`, `twine check` | Not run locally; the release workflow builds and audits the package. |
+
+## Release closure 0.2.0a16 (2026-10-12)
+
+One library change: `QueryModel(target, using=None)` in `eazy_sdk.request` and
+`Http.get(..., query=...)`, the query of a request declared as one private model.
+`feat/query-model` was merged into `master` fast-forward.
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q` on 0.2.0a16, without `test_generated_projection_import_types_and_executes_exact_wire_body` | PASS: 2196 passed, 11 skipped, 3 deselected in 500.44s. |
+| that test alone | PASS: 3 passed in 62.22s. It aborts a full run by timeout on a busy machine, so it was run apart. |
+| `uv run mypy` | PASS: no issues found in 552 source files. |
+| `uv run ruff check`, `uv run lint-imports` | PASS. |
+| `scripts/docs_freshness.py check`, `docs-site/scripts/validate_docs.py` | PASS: 85 pages fresh, 118 pages valid. |
+| strict Sphinx build (`-W --keep-going`) | PASS. |
+| `uv build`, `scripts/package_audit.py` | PASS after a fix: the audit refused the wheel for a variable named `model_fields` in `eazy_sdk/compile/input.py`, which it reads as model-library duck typing. Renamed, rebuilt. |
+| GitHub CI on `master` at `23b5e61` (run 38298459760) | PASS: checks py3.13 and py3.14, both pydoll jobs, packaging. |
+| Release workflow for `v0.2.0a16` (run 38299232828) | PASS: build and audit, GitHub release with 2 assets, published to PyPI. |
+
+Checked on the released package: `Desktop/armgs-sdk-v3` on `eazy-sdk-core 0.2.0a16` from
+PyPI, with `GetThread` declared through `QueryModel`: 27 scenarios as expected, G1–G7, G9,
+G10 pass; G8 fails on a credential the operator wrote into `examples/live_check.py`.
