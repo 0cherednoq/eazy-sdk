@@ -11,7 +11,7 @@ uv run --with pydoll-python python scripts/capture_record.py --url https://site.
 A visible Chrome opens on a clean profile, so the sign-in is recorded from its first request.
 Run the command in the background and tell the user, in their words:
 
-1. Type a scenario name in the small "REC" panel at the top right and press **Mark** before
+1. Type a scenario name in the small "REC" panel at the bottom right and press **Mark** before
    each thing the SDK has to do: `login`, `list inbox`, `open message`.
 2. Do that one thing. Wait until the page has settled.
 3. Repeat for every scenario. Do each thing the plain way, once. For a list, load a second
@@ -19,6 +19,8 @@ Run the command in the background and tell the user, in their words:
 4. If you can afford it, make one deliberate mistake under its own mark (a wrong password):
    a refusal that was recorded becomes an error class, one that was not stays unknown.
 5. Press **Finish** or close the browser.
+
+The panel lies over the page. A click on "REC" folds it when it covers something.
 
 What the user should know before starting:
 

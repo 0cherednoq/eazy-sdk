@@ -5956,3 +5956,43 @@ OpenAPI consumer fixture and `uv.lock`.
 | `scripts/package_audit.py` | PASS. |
 | `scripts/extras_smoke.py` | PASS: 17 extras install from the wheel and import. |
 | from `docs-site/`: `npm run check`, `npm run build` | Not run: the site is built by Sphinx since phase 56. |
+
+## Phase 60 — skill "SDK from recorded traffic" (active, 2026-10-12)
+
+Branch `feat/sdk-capture-skill`. Plan and journal: `60-sdk-authoring-skill.md` (§12 holds what
+was done and where the result differs from the plan). The skill lives in
+`skills/eazy-sdk-from-capture/`, its tests in `tests/skills/`. No library code changed;
+`pyproject.toml` only adds `skills` to the mypy and ruff scope.
+
+State by step of §11:
+
+| Step | State | Evidence |
+|---|---|---|
+| S0 browser recorder | done | `tests/skills/test_capture_record.py`, a real Chrome on a local site; two live recordings by the operator |
+| S1 normalise, redact | done | `tests/skills/test_capture_pipeline.py`; `var/har` and both live recordings |
+| S2 inventory | done | same tests; the inventory of `var/har` shows every item of §8.2 |
+| S3 replay and gates | done | `tests/skills/test_sdk_replay.py`; `armgs-sdk` replayed on `var/har` and on the live recording |
+| S4 skill page, references, scaffold | done | `tests/skills/test_skill_package.py`; `refs_freshness.py`: 8 pages, 0 stale imports |
+| S5 a run of the skill from scratch | done on `var/har` by an independent agent, G1–G10 pass (§12.4); not done on a browser recording | |
+| S6 a second site | pending | |
+
+Commands run on the final state of the branch:
+
+| Command | Result |
+|---|---|
+| `uv run pytest tests/skills -q` | PASS: 67 passed. |
+| `uv run pytest -q` | PASS: 2151 passed, 11 skipped in 596.93s, run before the last four commits, which touch only `skills/` and `tests/skills/`. An earlier run under parallel load stopped on a timeout in `plugins/openapi/tests/test_phase21_body_projection_codegen.py`; that file alone: 18 passed. |
+| `uv run mypy` | PASS: no issues found in 548 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS: 5 contracts kept. |
+| `scripts/docs_freshness.py`, docs build, package gates | Not run: the phase changes no library code and no docs page. |
+
+Remaining work and blockers:
+
+- acceptance criteria §8.3 items 6–8 on the operator's live recording: the SDK has to be
+  written from it by the skill and compared with `armgs-sdk`;
+- the recorder was not tried on a site with anti-bot protection;
+- a screenshot for a mark made in the panel; a test that a recording survives a killed process;
+- how the skill reaches users (a Claude Code plugin) is undecided;
+- found in the library by the live recording, owner's decision: following a redirect whose
+  address repeats a query name ends in `PlanError: duplicate query wire name`.

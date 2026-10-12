@@ -174,14 +174,20 @@ _PAGE_SCRIPT = r"""
     const host = document.createElement('div');
     host.id = HOST;
     // `all` first: written after them it would reset the position it is meant to keep.
-    host.style.cssText = 'all:initial;position:fixed;top:8px;right:8px;z-index:2147483647';
+    host.style.cssText = 'all:initial;position:fixed;bottom:8px;right:8px;z-index:2147483647';
     const root = host.attachShadow({mode: 'closed'});
     root.innerHTML = '<div style="font:12px system-ui;background:#111c;color:#fff;padding:6px 8px;' +
       'border-radius:8px;display:flex;gap:6px;align-items:center">' +
-      '<span style="color:#f55">● REC</span>' +
+      '<span data-a="fold" title="hide or show" style="color:#f55;cursor:pointer">● REC</span>' +
+      '<span data-a="tools" style="display:flex;gap:6px;align-items:center">' +
       '<input placeholder="scenario name" style="width:130px;font:12px system-ui;padding:2px 4px">' +
       '<button data-a="mark" style="font:12px system-ui">Mark</button>' +
-      '<button data-a="finish" style="font:12px system-ui">Finish</button></div>';
+      '<button data-a="finish" style="font:12px system-ui">Finish</button></span></div>';
+    // The panel sits over the page: a click on "REC" folds it away from what it covers.
+    const tools = root.querySelector('[data-a=tools]');
+    root.querySelector('[data-a=fold]').addEventListener('click', () => {
+      tools.style.display = tools.style.display === 'none' ? 'flex' : 'none';
+    });
     const input = root.querySelector('input');
     const mark = () => {
       const label = input.value.trim();

@@ -303,7 +303,7 @@ def test_the_mark_panel_is_on_screen(site: str, tmp_path: Path) -> None:
             "(() => { const box = document.getElementById("
             f"{capture_record._HOST_ID!r}"
             ").getBoundingClientRect(); return JSON.stringify("
-            "{top: box.top, right: innerWidth - box.right, width: box.width, height: box.height}); })()"
+            "{bottom: innerHeight - box.bottom, right: innerWidth - box.right, width: box.width, height: box.height}); })()"
         )
         result = await tab.execute_command(
             {
@@ -321,7 +321,7 @@ def test_the_mark_panel_is_on_screen(site: str, tmp_path: Path) -> None:
         url=f"{site}/login", out=tmp_path / "captures", chrome=CHROME, headless=True
     )
     asyncio.run(capture_record.record(options, visitor))
-    assert 0 <= seen["top"] <= 20
+    assert 0 <= seen["bottom"] <= 20
     assert 0 <= seen["right"] <= 20
     assert seen["width"] > 100
     assert seen["height"] > 10
