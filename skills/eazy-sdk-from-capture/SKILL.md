@@ -53,7 +53,9 @@ python -I scripts/capture_normalize.py <recording dir | file.har | burp export> 
 
 Exit: `capture.json` is written. Read every WARNING. A lossy source (Burp export without
 base64) is fine for the inventory but cannot prove response cases that match on text: tell the
-user now and ask for a re-export or a new recording before promising a green replay.
+user now. You may go on with such a source when every response case can match on what
+survived (ASCII text, statuses, headers, JSON structure); say in the plan and in the report
+which text fields the replay therefore does not prove.
 
 ### 2. Redact
 
@@ -113,7 +115,8 @@ From the project root, in its environment:
 python <skill>/scripts/sdk_check.py .sdk-work --package <name> --scenarios tests/replay/scenarios.toml
 ```
 
-Add `--ignore <dir>` for a directory that legitimately holds raw recordings. Fix the SDK and
+It prints the replay and the gates and writes `.sdk-work/check-report.json`. Add
+`--ignore <dir>` for a directory that legitimately holds raw recordings. Fix the SDK and
 rerun until every gate passes. Read `references/replay.md` for what each finding means. Never
 make a gate pass by excluding an exchange you cannot explain or by loosening a scenario.
 

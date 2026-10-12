@@ -29,7 +29,7 @@ mode = "async"                       # "sync" for a SyncRoot SDK
 [[scenario]]
 name = "wrong password"
 exchanges = "1-2"                    # "1-2,5" or [1, 2, 5]
-call = "signed_in"                   # a dotted path from the SDK: "mail.list", "mail.list.items"
+call = "mail.list"                   # a dotted path from the SDK: "mail.list.items", "signed_in"
 [scenario.options]
 username = "__SECRET_email_1__"
 password = "__SECRET_password_1__"
@@ -58,6 +58,10 @@ reason = "background polling of the unread counter"
 
 - Placeholders from the inventory (`__SECRET_password_1__`) are replaced with the real values
   at run time. Never write a real value here: gate G8 looks for them.
+- `call` is resolved by attribute access from the SDK and called with `[scenario.args]`.
+  A protected operation signs in first, so a wrong-password scenario may call any protected
+  operation and expect the refusal. To replay the sign-in alone, call a root helper such as
+  `signed_in` (`layout.md`).
 - One scenario per mark of the recording, or per call the SDK offers. A scenario lists every
   exchange its call makes, including the sign-in chain when the call triggers it.
 - `raises` / `returns` name a class anywhere in the MRO. `fields` compares a value at a

@@ -54,6 +54,11 @@ Read the parameter's line in the inventory.
 | `secret:*` that comes from the session | a `Placed` field of the session model |
 | `unknown`, changes between samples | stop: it is computed by a page script. Name it in the plan |
 
+The `source` of an `Inject` is a constant, a zero-argument callable (sync or async), or a
+`service_url(...)`. Query and form values are strings on the wire: a constant the inventory
+shows as `false` or `1` is `source="false"`, `source="1"`. A constant that merely looks like a
+query string (`opener=account&twoSteps=1`) stays one string constant.
+
 With one sample every value looks constant. Say in the plan which constants you are treating
 as technical on the strength of a single sample; the user decides the doubtful ones.
 
@@ -148,7 +153,23 @@ class SubmitCredentials(HttpOperation[SignedIn]):
 ```
 
 Fields of a projected operation carry no placement: the projection owns the body. The order of
-the form model's fields is the wire order.
+the form model's fields is the wire order. Constants of the form are defaults of the form
+model.
+
+When a form field is an address on another host (a return URL), the projection asks for it as
+a dependency; `injected` is where the declared `requires` arrive:
+
+```python
+from eazy_sdk.dependencies import dependency, service_url
+
+RETURN_TO = dependency(str, name="return-address", provide=service_url(MailHost, "/inbox"))
+
+# in the form model:
+#     page: str
+#     ... cls(..., page=str(injected[RETURN_TO.dependency]))
+# in the operation:
+#     __http__ = Http.post("/cgi-bin/auth", requires=(RETURN_TO,), projection=...)
+```
 
 ## A query that is part of the address
 

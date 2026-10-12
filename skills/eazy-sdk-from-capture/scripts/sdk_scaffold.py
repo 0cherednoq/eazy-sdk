@@ -84,12 +84,12 @@ mode = "async"
 # [[scenario]]
 # name = "sign in"
 # exchanges = "1-4"
-# call = "signed_in"
+# call = "mail.list"
 # [scenario.options]
 # username = "__SECRET_email_1__"
 # password = "__SECRET_password_1__"
 # [scenario.expect]
-# returns = "SiteSession"
+# returns = "ThreadsPage"
 
 # [[exclude]]
 # exchanges = "5"

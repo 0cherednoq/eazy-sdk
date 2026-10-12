@@ -53,53 +53,101 @@ from eazy_sdk.dependencies import service_url
 from eazy_sdk.request import markers
 
 ORIGIN = Inject(placement=markers.Header("Origin"), source=service_url(AccountHost))
+REFERER = Inject(placement=markers.Header("Referer"), source=service_url(AccountHost, "/"))
+RETURN_TO = Inject(placement=markers.Query("page"), source=service_url(MailHost, "/inbox"))
 ```
+
+`service_url(Host)` is the bound address of the host; `service_url(Host, "/path")` is an
+address on it.
 
 Then a different `config` changes both where the SDK goes and everything that names the
 address.
 
+## Config
+
+A frozen dataclass: one base URL per host, the transport settings, nothing else. Take every
+value from the recording; write no address anywhere else in the package.
+
+```python
+from dataclasses import dataclass
+
+from curl_cffi import BrowserTypeLiteral
+
+
+@dataclass(frozen=True, slots=True)
+class SiteConfig:
+    account_base_url: str = "https://account.site.example"
+    mail_base_url: str = "https://mail.site.example"
+    impersonate: BrowserTypeLiteral = "chrome"   # a plain ``str`` does not pass mypy
+    timeout: float = 30.0
+    proxy: str | None = None
+
+
+DEFAULT_CONFIG = SiteConfig()
+```
+
 ## Root
 
-The root composes routers and owns nothing else. Operations are never declared on the root.
+The root composes routers and is opened by one factory. Operations are never declared on the
+root; a plain helper method is allowed.
 
 ```python
 from typing import Self
 
 from eazy_sdk import AsyncRoot, ClientConfig, Identity, Resilience, api_group, bind
-from eazy_sdk.auth import Cookies
+from eazy_sdk.auth import Cookies, ensure_session
+from eazy_sdk.auth.session import MemorySessionStore
 from eazy_sdk.handlers.curl_cffi import AsyncCurlCffiZaprosHandler
+from zapros import AsyncBaseHandler
 
 
 class SiteSdk(AsyncRoot):
     cookies = Cookies()  # the site keeps its session in cookies: the library carries them
 
     mail = api_group(MailApi)
+    # Sign-in steps, one router per host. The login service calls them, the user does not.
     login_pages = api_group(LoginPagesApi)
+    mail_pages = api_group(MailPagesApi)
 
     @classmethod
-    def open(cls, *, config: SiteConfig = DEFAULT_CONFIG, handler=None) -> Self:
+    def open(
+        cls,
+        *,
+        credentials: SiteLogin,
+        config: SiteConfig = DEFAULT_CONFIG,
+        handler: AsyncBaseHandler | None = None,
+    ) -> Self:
+        auth = SESSION.configure(
+            credentials=credentials,
+            service=SiteLoginService(),
+            store=MemorySessionStore[SiteSession](),
+        )
         return cls.from_handler(
-            handler=handler or AsyncCurlCffiZaprosHandler(impersonate=config.impersonate),
+            handler=handler
+            or AsyncCurlCffiZaprosHandler(impersonate=config.impersonate, proxy=config.proxy),
             base_url=config.mail_base_url,
             bindings=(bind(AccountHost, base_url=config.account_base_url),),
             config=ClientConfig(
-                resilience=Resilience(max_redirects=6, client_redirects=True, timeout=30.0)
+                resilience=Resilience(max_redirects=6, client_redirects=True, timeout=config.timeout)
             ),
-            identity=Identity(),
+            identity=Identity(auth=(auth,)),
         )
+
+    async def signed_in(self) -> SiteSession:
+        """Sign in if not signed in yet, without sending an API request."""
+        return await ensure_session(self, scheme=SESSION)
 ```
 
+- `handler=` is how the replay substitutes the transport: keep it in the signature.
+- `base_url` is the address of the routers that are not bound; every other host gets a
+  `bind(Host, base_url=...)`.
 - `Cookies()` on the root: declare it whenever the inventory lists cookies. The SDK never
   enumerates or forwards cookies by hand.
 - `max_redirects` and `client_redirects=True`: set them when the inventory shows a redirect
   chain. `client_redirects` follows `<meta http-equiv="refresh">` stubs. An operation that
   declares a case on a redirect status reads that redirect itself; it is not followed.
-- The factory takes `handler=` so the replay can substitute the transport.
-
-## Config
-
-A frozen dataclass with one base URL per host, `impersonate`, the timeout, and an optional
-`proxy`. Take every value from the recording; write no address anywhere else.
+- `SESSION`, the credentials type and the login service are in `auth-session.md`. An SDK
+  without sign-in drops `credentials` and `auth` and passes `identity=Identity()`.
 
 ## Public surface
 

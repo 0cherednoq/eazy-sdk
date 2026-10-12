@@ -140,6 +140,9 @@ class JsonApi(MailHost):
 - A case with a criterion outranks a success without one, so a refusal body is never parsed
   into a model full of defaults.
 
+When the recording shows the envelope but no refusal, declare `unwrap` alone and no `errors`:
+a refusal that was never observed has no shape to declare.
+
 Declare an envelope only when the inventory shows it. With `one operation` confidence, say so
 in the plan.
 
@@ -169,6 +172,9 @@ class MailPage(BaseModel):
   regex and the context around the value. When the inventory reports several occurrences,
   anchor the pattern to the text that precedes the right one.
 - `A | B` tries sources left to right.
+- `FromCookie("act")` reads a cookie **this response sets**, not the cookie jar. The inventory
+  line "comes from cookie `act` set by #1" means: the model of the operation behind exchange
+  #1 gets a field `Annotated[str, FromCookie("act")]`, and the next step passes it on.
 - A required field is a criterion: a page without it is not this page. That is how a redirect
   stub and the real page served from one address are told apart. Do not make a field required
   on text the recording lost (a `LOSSY TEXT` variant): match on a value that survived.
