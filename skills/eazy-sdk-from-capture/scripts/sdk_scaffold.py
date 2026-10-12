@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from importlib import metadata
 from pathlib import Path
 
-_FALLBACK_VERSION = "0.2.0a15"
+_FALLBACK_VERSION = "0.2.0a16"
 _IGNORED = (".sdk-work/", "captures/", "__pycache__/", ".venv/", ".env")
 
 _MODULES: dict[str, str] = {

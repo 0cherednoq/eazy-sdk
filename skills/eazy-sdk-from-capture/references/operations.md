@@ -119,8 +119,8 @@ class GetThread(HttpOperation[Thread]):
   with `build(call)` or `build(call, injected)`, as for a body projection.
 - Session values (`Placed.query`) and `Inject` stay where they are and go after the model's
   fields. Headers are never part of the model.
-- `QueryModel` needs a library that has it (after 0.2.0a15). On an older one declare the
-  constants with `Inject`.
+- `QueryModel` needs `eazy-sdk-core` 0.2.0a16 or newer. On an older one declare the constants
+  with `Inject`.
 
 ## Placements
 

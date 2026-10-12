@@ -506,7 +506,7 @@ def _validate_query_model(
     if query is None:
         return
     try:
-        model_fields = models.fields(query.target)
+        target_fields = models.fields(query.target)
     except UnsupportedModelTypeError as exc:
         raise PlanError(
             f"query model for {operation_id!r} is not a model any configured adapter supports"
@@ -514,8 +514,8 @@ def _validate_query_model(
     if query.using is not None:
         return
     unplaced = {field.python_name for field in fields if field.is_projection_source}
-    names = {model_field.name for model_field in model_fields}
-    for model_field in model_fields:
+    names = {model_field.name for model_field in target_fields}
+    for model_field in target_fields:
         if model_field.required and model_field.name not in unplaced:
             raise PlanError(
                 f"query model field {model_field.name!r} in {operation_id!r} has no default and "

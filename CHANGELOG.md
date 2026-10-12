@@ -5,6 +5,8 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a16 - 2026-10-12
+
 Added:
 
 - `QueryModel(target, using=None)` in `eazy_sdk.request` and `Http.get(..., query=...)`: the
