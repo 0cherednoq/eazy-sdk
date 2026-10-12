@@ -114,10 +114,10 @@
     }
   },
   "guide/auth/placed.mdx": {
-    "fingerprint": "sha256:f2491c7e649811c0a3405651776e811e40c99fc508d6d4fce812f144c564f39e",
+    "fingerprint": "sha256:dd79449c2df640d41104d3dc64ba72ec9b7bf1cd73acfa16c7def44b6522f82a",
     "symbols": {
       "eazy_sdk.auth.Bearer": "sha256:6254d1e9553802ba25175c5b1e3ea104181a11e19b1f85046d78b547f14244cc",
-      "eazy_sdk.auth.Placed": "sha256:765ae29bd78a55620e87c4a4b5f95210e15c880380870bd0808c7cd4283d2b93",
+      "eazy_sdk.auth.Placed": "sha256:60b33908e54b53ff3eda50b75a179d7ff7a3b45ab6eb0d74ea458a6523bc36c6",
       "eazy_sdk.auth.session_scheme": "sha256:8ff44c0bb3cca08deddc666775d19e013aae829d31368df0f45d9d2f763f36c2"
     }
   },

@@ -39,6 +39,23 @@ SESSION: SessionScheme[SiteSession] = session_scheme(SiteSession, name="site-ses
 that declares `security = SESSION`. A session whose placed value is empty is not a session
 and is acquired again.
 
+A site may carry the session with a request's own parameters: in the query of a read and in
+the form of a write. The inventory shows it as the same secret in the query of GET operations
+and in the body of POST ones. Say it once on the field, places read left to right:
+
+```python
+class SiteSession(BaseModel):
+    email: Annotated[str, Placed.body("email", secret=False) | Placed.query("email", secret=False)]
+    token: Annotated[str, Placed.body("token") | Placed.query("token")]
+```
+
+An operation with flat body fields (`Form`, `JsonField`) gets the value as one more of them,
+after its own; any other operation gets it in the query. When the recorded form has the
+session fields elsewhere, give the whole order:
+`Http.post(..., wire=Wire(order=FieldOrder(body=("ids", "email", "flag", "token"))))` with
+`Wire` and `FieldOrder` from `eazy_sdk.request`. `Placed.body` needs a library that has it; on
+an older one the write operations are a library gap.
+
 When the site authorises by cookies alone, there may be nothing to place: keep a session
 model with what the caller wants to know (the account address) and let the cookies travel.
 

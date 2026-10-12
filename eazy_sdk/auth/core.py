@@ -27,6 +27,7 @@ class AuthLocation(Enum):
     HEADER = "header"
     QUERY = "query"
     COOKIE = "cookie"
+    BODY = "body"
 
 
 class SessionSelector[TSession, TValue](Protocol):
@@ -77,6 +78,9 @@ class AuthPlacement[TSession, TValue]:
     select: SessionSelector[TSession, TValue]
     prefix: str = ""
     secret: bool = True
+    alternatives: tuple[AuthPlacement[TSession, Any], ...] = ()
+    """Where the value goes in an operation that has no such place, in order."""
+
     def value(self, session: TSession) -> str:
         selected = self.select.select(session)
         reveal = getattr(selected, "get_secret_value", None)
@@ -307,20 +311,28 @@ def _binding_operations(
 ) -> list[Set[Any]]:
     output: list[Set[Any]] = []
     for placement in scheme.placements:
-        slots: Any
-        if placement.location is AuthLocation.HEADER:
-            slots = compiled.header_slots
-        elif placement.location is AuthLocation.QUERY:
-            slots = compiled.query_slots
+        # The compiler reserved one place of the chain for this operation: the first that
+        # has a slot here is that place.
+        for candidate in (placement, *placement.alternatives):
+            slot: ValueSlot[Any] | None = _slots(compiled, candidate.location).get(candidate.name)
+            if slot is not None:
+                output.append(Set(slot, candidate.value(value)))
+                break
         else:
-            slots = compiled.cookie_slots
-        slot: ValueSlot[Any] | None = slots.get(placement.name)
-        if slot is None:
             raise PlanError(
                 f"auth target is not declared: {placement.location.value}.{placement.name}"
             )
-        output.append(Set(slot, placement.value(value)))
     return output
+
+
+def _slots(compiled: CompiledContract[object], location: AuthLocation) -> Any:
+    if location is AuthLocation.HEADER:
+        return compiled.header_slots
+    if location is AuthLocation.QUERY:
+        return compiled.query_slots
+    if location is AuthLocation.BODY:
+        return compiled.body_field_slots
+    return compiled.cookie_slots
 
 
 def dataclass_replace_alternative[T](

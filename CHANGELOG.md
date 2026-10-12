@@ -5,6 +5,25 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Added:
+
+- `Placed.body(name)` and the chain `Placed.body("token") | Placed.query("token")` on a session
+  field: a site that carries the session with the request's own parameters gets it in the form
+  or JSON body of a write and in the query of a read. For each operation the first place it
+  has is taken, left to right; the body is a place where the operation declares flat body
+  fields (`Form`, `JsonField`). A session field with only `Placed.body(...)` is refused on the
+  first call of an operation without such fields.
+
+Fixed:
+
+- Following a redirect whose address repeats a query name (`?from=login&from=octavius`) ended
+  in `PlanError: duplicate query wire name`. Names inside an address, whether a redirect target
+  or the declared path, may now repeat and go out as written. Parameters an operation declares
+  still have to be unique, among themselves and against the address.
+- The request leaves with exactly the prepared query. The Zapros client merges a URL's query
+  through a mapping and kept one value per repeated name; the emitters now put the prepared
+  query back before the handler sees the request.
+
 ## 0.2.0a14 - 2026-10-12
 
 Changed (typing only, nothing changes at run time):

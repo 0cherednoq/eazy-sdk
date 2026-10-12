@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import types
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol, Union, cast, get_args, get_origin, overload
 
@@ -58,20 +58,26 @@ class Bearer:
     prefix: str = "Bearer "
 
 
-type _PlacedLocation = Literal["query", "header"]
+type _PlacedLocation = Literal["query", "header", "body"]
 
 
 @dataclass(frozen=True, slots=True)
 class Placed:
     """Mark a session field placed into every protected request; one session may carry several.
 
-    Written through its four spellings, on the field that holds the value::
+    Written through its spellings, on the field that holds the value::
 
         class MailSession(BaseModel):
             token: Annotated[str, Placed.query("token")]
             email: Annotated[str, Placed.query("email", secret=False)]
 
     ``Bearer()`` is the same statement as ``Placed.header("Authorization", prefix="Bearer ")``.
+
+    A site may carry the session with the request's own parameters: in the query of a
+    read, in the form of a write. ``Placed.body("token") | Placed.query("token")`` says
+    so: the first place the operation has is taken, left to right. The body is a place an
+    operation has when it declares flat body fields (``Form``, ``JsonField``); the value
+    becomes one more of them, in the operation's own encoding.
     A session whose placed value is empty is not a session: it is acquired again rather than
     sent.
 
@@ -83,6 +89,8 @@ class Placed:
     name: str = ""
     prefix: str = ""
     secret: bool = True
+    otherwise: tuple[Placed, ...] = ()
+    """Where the value goes when the operation has no such place, in order."""
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -99,6 +107,27 @@ class Placed:
         """One header, with an optional scheme prefix such as ``"Bearer "``."""
 
         return Placed("header", name, prefix, secret)
+
+    @staticmethod
+    def body(name: str, *, secret: bool = True) -> Placed:
+        """One flat field of the request body, encoded as the operation encodes its own."""
+
+        return Placed("body", name, secret=secret)
+
+    def __or__(self, other: Placed) -> Placed:
+        """This place, or ``other`` for an operation that does not have it."""
+
+        if not isinstance(other, Placed):
+            return NotImplemented
+        return replace(
+            self, otherwise=(*self.otherwise, replace(other, otherwise=()), *other.otherwise)
+        )
+
+    @property
+    def chain(self) -> tuple[Placed, ...]:
+        """This place and every place after it, each on its own."""
+
+        return (replace(self, otherwise=()), *self.otherwise)
 
     @property
     def destination(self) -> tuple[str, str]:
@@ -482,6 +511,16 @@ class _SessionModel:
                     AttributeSessionSelector(name),
                     placed.prefix,
                     placed.secret,
+                    tuple(
+                        AuthPlacement(
+                            AuthLocation(other.location),
+                            other.name,
+                            AttributeSessionSelector(name),
+                            other.prefix,
+                            other.secret,
+                        )
+                        for other in placed.otherwise
+                    ),
                 )
                 for name, placed in self.placements
             ),
@@ -499,7 +538,7 @@ def _is_empty(value: object) -> bool:
 
 def _refuse_colliding_placements(model: type[object], placements: list[tuple[str, Placed]]) -> None:
     taken: dict[tuple[str, str], str] = {}
-    for name, placed in placements:
+    for name, placed in ((name, item) for name, first in placements for item in first.chain):
         other = taken.setdefault(placed.destination, name)
         if other == name:
             continue

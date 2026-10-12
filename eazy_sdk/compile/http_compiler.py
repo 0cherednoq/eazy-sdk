@@ -42,6 +42,7 @@ from eazy_sdk.models import ModelAdapterError, ModelAdapterRegistry, default_mod
 from eazy_sdk.request.descriptors import (
     BodyProjection,
     BytesBody,
+    Form,
     FormBody,
     JsonBody,
     JsonField,
@@ -491,8 +492,10 @@ def _compile_input_layout(
         wire_names[injected_slot] = wire_name
         slot_locations[injected_slot] = location
     security = getattr(contract, "security", None)
+    session_body_names: list[str] = []
     for scheme in _security_schemes(security):
-        for placement in getattr(scheme, "placements", ()):
+        for declared in getattr(scheme, "placements", ()):
+            placement = _placement_for(declared, contract, input_fields)
             location_name = getattr(getattr(placement, "location", None), "value", None)
             try:
                 location = RequestLocation(location_name)
@@ -516,9 +519,15 @@ def _compile_input_layout(
             )
             group[name] = auth_slot
             slots.append(auth_slot)
-            descriptors[auth_slot] = placement
+            descriptors[auth_slot] = (
+                _body_field_like(contract, input_fields, name)
+                if location is RequestLocation.BODY
+                else placement
+            )
             wire_names[auth_slot] = name
             slot_locations[auth_slot] = location
+            if location is RequestLocation.BODY:
+                session_body_names.append(name)
     body_slot: ValueSlot[object] | None = next(
         (
             input_slots[field.python_name]
@@ -541,6 +550,10 @@ def _compile_input_layout(
             for injection in contract.inject
             if injection.location == "body"
         }
+    )
+    # A session value placed in the body is one more flat field, after the operation's own.
+    body_field_slots.update(
+        {name: slot_groups[RequestLocation.BODY][name] for name in session_body_names}
     )
     body_projection = cast(BodyProjection[object, object] | None, contract.projection)
     return _InputLayoutPass(
@@ -1259,6 +1272,56 @@ def _type_identity(annotation: object) -> str:
 
 def _location_name(location: RequestLocation | None) -> str:
     return location.value if location is not None else "projection"
+
+
+def _flat_body_sample(contract: EndpointLike, input_fields: Sequence[InputField]) -> object | None:
+    """Return the marker of one flat body field the operation declares, if it has any."""
+    if getattr(contract, "projection", None) is not None:
+        return None
+    for field in input_fields:
+        if field.is_body_field:
+            return field.placement
+    for injection in getattr(contract, "inject", ()):
+        if isinstance(injection, Inject) and injection.location == "body":
+            return injection.placement
+    return None
+
+
+def _placement_for(
+    declared: object, contract: EndpointLike, input_fields: Sequence[InputField]
+) -> object:
+    """Choose, from a session field's places, the first one this operation has.
+
+    The query and the headers are places every request has. The body is one only where the
+    operation declares flat body fields: there the session value travels beside them.
+    """
+    candidates = (declared, *getattr(declared, "alternatives", ()))
+    has_flat_body = _flat_body_sample(contract, input_fields) is not None
+    for candidate in candidates:
+        location = getattr(getattr(candidate, "location", None), "value", None)
+        if location != RequestLocation.BODY.value or has_flat_body:
+            return candidate
+    name = getattr(declared, "name", "")
+    raise PlanError(
+        f"the session places {name!r} in the request body, and {contract.operation_id!r} "
+        "declares no flat body fields (Form, JsonField) to put it beside; give the session "
+        "field another place after `|`, or declare the operation's body as flat fields"
+    )
+
+
+def _body_field_like(
+    contract: EndpointLike, input_fields: Sequence[InputField], name: str
+) -> object:
+    """Describe a session value as one more field of the kind the operation's body is made of."""
+    sample = _flat_body_sample(contract, input_fields)
+    if isinstance(sample, Form):
+        return Form(name)
+    if isinstance(sample, JsonField):
+        return JsonField(name)
+    raise PlanError(
+        f"the session places {name!r} in the request body, and the body of "
+        f"{contract.operation_id!r} is multipart: only form and JSON fields are supported"
+    )
 
 
 def _security_schemes(security: object | None) -> tuple[object, ...]:
