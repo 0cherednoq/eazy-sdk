@@ -323,8 +323,31 @@ def read_recording(directory: Path) -> Capture:
         for line in timeline.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 capture.timeline.append(json.loads(line))
+    # Actions reach the recorder a poll later than requests do: order by the common clock.
+    capture.timeline.sort(key=lambda event: (float(event.get("t", 0)), int(event.get("seq", 0))))
+    for event in capture.timeline:
+        if event.get("kind") == "storage":
+            _attach_storage(directory, event)
     capture.exchanges.sort(key=lambda item: item.seq)
     return capture
+
+
+def _attach_storage(directory: Path, event: dict[str, Any]) -> None:
+    """Carry the values of web storage into the timeline: a token may come from there."""
+    slug = re.sub(r"[^A-Za-z0-9.-]+", "_", str(event.get("origin", ""))).strip("_")[:80] or "site"
+    path = directory / "storage" / f"{slug}.json"
+    if path.exists():
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        event["local"] = stored.get("local", {})
+        event["session"] = stored.get("session", {})
+
+
+def typed_values(directory: Path) -> list[dict[str, Any]]:
+    """Read what the person typed during a recording."""
+    path = directory / "secrets.local.json"
+    if not path.exists():
+        return []
+    return list(json.loads(path.read_text(encoding="utf-8")).get("typed", []))
 
 
 # --- entry --------------------------------------------------------------------------------
@@ -414,6 +437,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     capture.files = [str(path) for path in args.inputs]
     target = args.out / "capture.json"
     dump(capture, target)
+    typed = [item for path in args.inputs if path.is_dir() for item in typed_values(path)]
+    if typed:
+        (args.out / "typed.json").write_text(
+            json.dumps({"typed": typed}, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
     stamp = datetime.now(UTC).isoformat(timespec="seconds")
     print(f"{summary(capture)}\nwritten: {target} at {stamp}")
     return 0

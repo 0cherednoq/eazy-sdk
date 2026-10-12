@@ -564,6 +564,21 @@ class Provenance:
             for exchange in capture.exchanges
             if exchange.response_body and is_textual(exchange.response_headers)
         }
+        self._stored: dict[str, dict[str, Any]] = {}
+        for event in capture.timeline:
+            if event.get("kind") != "storage":
+                continue
+            for area in ("local", "session"):
+                for key, value in (event.get(area) or {}).items():
+                    self._stored.setdefault(
+                        str(value),
+                        {
+                            "from": "web storage",
+                            "area": area,
+                            "key": str(key),
+                            "origin": event.get("origin", ""),
+                        },
+                    )
         self._cache: dict[tuple[str, int], dict[str, Any]] = {}
 
     def of(self, value: str, before: int) -> dict[str, Any]:
@@ -592,6 +607,9 @@ class Provenance:
                 return found
         if identity:
             return {"from": "the caller"}
+        if value in self._stored:
+            # No response carried it, the page keeps it in storage: a script made it.
+            return self._stored[value]
         return {"from": "unknown", "note": "not found in any earlier response"}
 
     @staticmethod

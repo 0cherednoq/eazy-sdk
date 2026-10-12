@@ -235,6 +235,11 @@ def collect(capture: Capture, typed: Sequence[dict[str, Any]] = ()) -> Vault:
             vault.identities.add(value.strip())
     for exchange in capture.exchanges:
         _collect_exchange(vault, exchange)
+    for event in capture.timeline:
+        if event.get("kind") == "storage":
+            for area in ("local", "session"):
+                items = [(str(k), str(v)) for k, v in (event.get(area) or {}).items()]
+                _served_pairs(vault, items, f"web storage of {event.get('origin', '')}")
     _derive_from_emails(vault, {exchange.host.split(":")[0] for exchange in capture.exchanges})
     return vault
 
@@ -338,8 +343,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     capture = load(args.workdir / "capture.json")
     typed: list[dict[str, Any]] = []
-    if args.typed is not None:
-        typed = list(json.loads(args.typed.read_text(encoding="utf-8")).get("typed", []))
+    for source in (args.typed, args.workdir / "typed.json"):
+        if source is not None and source.exists():
+            typed += list(json.loads(source.read_text(encoding="utf-8")).get("typed", []))
     vault = collect(capture, typed)
     redacted = redact(capture, vault)
     remaining = leaks(redacted, vault)

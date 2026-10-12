@@ -23,6 +23,8 @@ def _origin(origin: dict[str, Any]) -> str:
         times = origin.get("occurrences", 1)
         many = f", {times} occurrences" if times > 1 else ""
         return f"body of #{origin['exchange']}{hint}{many}: `{origin.get('context', '')}`"
+    if source == "web storage":
+        return f"{origin['area']}Storage key `{origin['key']}` of {origin['origin']}"
     if source == "the client":
         return f"the client, first sent in #{origin['first_sent_in']}"
     if source == "unknown":
