@@ -205,10 +205,10 @@ class _SyncClient(Protocol):
     ) -> PreparedCall: ...
 
 
-class _BoundOperation[**P, T]:
+class _BoundOperation[**P, T, I = Any]:
     """What a router instance hands out for an operation: the class, bound to one client."""
 
-    def __init__(self, descriptor: _OperationDescriptor[P, T], api: _ApiBase) -> None:
+    def __init__(self, descriptor: _OperationDescriptor[P, T, I], api: _ApiBase) -> None:
         self._descriptor = descriptor
         self._api = api
         self.__name__ = descriptor.__name__
@@ -240,7 +240,7 @@ class _BoundOperation[**P, T]:
 
     # -- pagination --------------------------------------------------------------------
 
-    def _strategy(self, max_pages: int | None) -> Pagination[T]:
+    def _strategy(self, max_pages: int | None) -> Pagination[T, I]:
         """The declared ``__pages__``, or D-52-04; ``max_pages`` is checked here too (D-52-06)."""
 
         strategy = self._descriptor.pages
@@ -251,7 +251,7 @@ class _BoundOperation[**P, T]:
 
     def _next_page(
         self,
-        strategy: Pagination[T],
+        strategy: Pagination[T, I],
         request: HttpOperation[T],
         result: T,
         *,
@@ -348,7 +348,7 @@ class _BoundOperation[**P, T]:
         return self._descriptor._values_of(request, self._descriptor.resolve_for(self._api))
 
 
-class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
+class _BoundAsyncOperation[**P, T, I = Any](_BoundOperation[P, T, I]):
     _api: AsyncApi
 
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
@@ -420,9 +420,9 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         max_pages: int | None = None,
         max_items: int | None = None,
         options: CallOptions | None = None,
-        key: Callable[[Any], Hashable] | None = None,
+        key: Callable[[I], Hashable] | None = None,
         **kwargs: Any,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[I]:
         """The elements of successive pages, flattened; ``key=`` skips repeats across pages.
 
         A page that contributes nothing new ends the iteration, which also bounds a server that
@@ -459,7 +459,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
 
     async def first(
         self, *args: Any, options: CallOptions | None = None, **kwargs: Any
-    ) -> Any | None:
+    ) -> I | None:
         """The first element, or ``None`` when the first page has none; always one request."""
 
         async for item in self.items(*args, max_items=1, options=options, **kwargs):
@@ -511,7 +511,7 @@ class _BoundAsyncOperation[**P, T](_BoundOperation[P, T]):
         return cast(ResponseEnvelope[T, Any], result)
 
 
-class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
+class _BoundSyncOperation[**P, T, I = Any](_BoundOperation[P, T, I]):
     _api: SyncApi
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T:
@@ -580,9 +580,9 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         max_pages: int | None = None,
         max_items: int | None = None,
         options: CallOptions | None = None,
-        key: Callable[[Any], Hashable] | None = None,
+        key: Callable[[I], Hashable] | None = None,
         **kwargs: Any,
-    ) -> Iterator[Any]:
+    ) -> Iterator[I]:
         """The elements of successive pages, flattened; ``key=`` skips repeats across pages."""
 
         strategy = self._strategy(max_pages)
@@ -612,7 +612,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
                 return
             request, url = step
 
-    def first(self, *args: Any, options: CallOptions | None = None, **kwargs: Any) -> Any | None:
+    def first(self, *args: Any, options: CallOptions | None = None, **kwargs: Any) -> I | None:
         """The first element, or ``None`` when the first page has none; always one request."""
 
         for item in self.items(*args, max_items=1, options=options, **kwargs):
@@ -664,7 +664,7 @@ class _BoundSyncOperation[**P, T](_BoundOperation[P, T]):
         return cast(ResponseEnvelope[T, Any], result)
 
 
-class _OperationDescriptor[**P, T]:
+class _OperationDescriptor[**P, T, I = Any]:
     """One operation class on a router: immutable declaration, bound per router instance.
 
     ``__set_name__`` records the owner, the attribute name and, for ``op()``, whether the
@@ -682,7 +682,7 @@ class _OperationDescriptor[**P, T]:
         accepts_options: bool = False,
         signature: inspect.Signature | None = None,
         synthesized: bool = False,
-        pages: Pagination[T] | None = None,
+        pages: Pagination[T, I] | None = None,
     ) -> None:
         self.operation_type = operation_type
         self.spec = spec
@@ -934,17 +934,17 @@ class _OperationDescriptor[**P, T]:
     # -- descriptor protocol ---------------------------------------------------------
 
     @overload
-    def __get__(self, instance: None, owner: type[object]) -> _OperationDescriptor[P, T]: ...
+    def __get__(self, instance: None, owner: type[object]) -> _OperationDescriptor[P, T, I]: ...
 
     @overload
     def __get__(
         self, instance: AsyncApi, owner: type[object] | None = None
-    ) -> _BoundAsyncOperation[P, T]: ...
+    ) -> _BoundAsyncOperation[P, T, I]: ...
 
     @overload
     def __get__(
         self, instance: SyncApi, owner: type[object] | None = None
-    ) -> _BoundSyncOperation[P, T]: ...
+    ) -> _BoundSyncOperation[P, T, I]: ...
 
     def __get__(self, instance: object | None, owner: type[object] | None = None) -> object:
         if instance is None:
@@ -1018,8 +1018,23 @@ class _ComposesItself(Protocol):
     def __compose__(cls, client: object) -> Self: ...
 
 
+class _Paginated[T, I](Protocol):
+    """An operation value whose class declares ``__pages__``: a page type and an element type.
+
+    ``op()`` reads the element type from here, so ``items()`` and ``first()`` on the router
+    are typed by what the strategy's ``items=`` returns.
+    """
+
+    @property
+    def __pages__(self) -> Pagination[T, I]: ...
+
+
 @overload
 def op[TDescriptor](operation: type[_PublishesItself[TDescriptor]], /) -> TDescriptor: ...
+
+
+@overload
+def op[**P, T, I](operation: Callable[P, _Paginated[T, I]], /) -> _OperationDescriptor[P, T, I]: ...
 
 
 @overload

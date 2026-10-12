@@ -52,6 +52,10 @@ page 2: Решение
 `first()` возвращает первый элемент или `None`, если первая страница пуста, и всегда делает
 ровно один запрос: `latest = await api.documents.first(case_id=cid)`.
 
+Тип элемента берётся из `items=` стратегии: если `items=lambda r: r.items` возвращает
+`list[Document]`, то `items()` отдаёт `Document`, `first()` возвращает `Document | None`, а
+`key=` принимает `Document`. Отдельная аннотация в вызывающем коде не нужна.
+
 Каждая страница проходит обычные retry, middleware, авторизацию, защиту и подпись. Синхронный
 роутер возвращает iterator, асинхронный async iterator.
 

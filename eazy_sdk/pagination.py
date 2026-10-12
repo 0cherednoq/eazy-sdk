@@ -27,6 +27,8 @@ retries, middleware, protections and ``options=`` apply to each one.
 
 The result type is the first argument of :meth:`Pages.numbered` so that the ``items=`` and
 ``total_pages=`` callables are typed: an IDE completes ``r.`` and mypy checks the attribute.
+What ``items=`` returns gives the strategy its element type, and ``items()`` and ``first()`` on
+the router hand out exactly that type.
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ __all__ = [
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NumberedPages[T]:
+class NumberedPages[T, I = Any]:
     """Pages addressed by a number in one request field.
 
     ``page`` and ``size`` are Python field names of the operation class, since the next request
@@ -60,7 +62,7 @@ class NumberedPages[T]:
 
     result: type[T]
     page: str
-    items: Callable[[T], Sequence[object]]
+    items: Callable[[T], Sequence[I]]
     size: str | None = None
     total_pages: Callable[[T], int] | None = None
 
@@ -84,7 +86,7 @@ class NumberedPages[T]:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class OffsetPages[T]:
+class OffsetPages[T, I = Any]:
     """Pages addressed by the number of elements already seen, in one request field.
 
     ``offset`` and ``limit`` are Python field names of the operation class. The next offset is
@@ -94,7 +96,7 @@ class OffsetPages[T]:
 
     result: type[T]
     offset: str
-    items: Callable[[T], Sequence[object]]
+    items: Callable[[T], Sequence[I]]
     limit: str | None = None
     total: Callable[[T], int] | None = None
 
@@ -116,7 +118,7 @@ class OffsetPages[T]:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class CursorPages[T]:
+class CursorPages[T, I = Any]:
     """Pages addressed by an opaque token the previous page handed out.
 
     ``cursor`` is the Python field name that carries the token; the first page sends whatever
@@ -126,7 +128,7 @@ class CursorPages[T]:
 
     result: type[T]
     cursor: str
-    items: Callable[[T], Sequence[object]]
+    items: Callable[[T], Sequence[I]]
     next_cursor: Callable[[T], object | None]
 
     def __post_init__(self) -> None:
@@ -145,7 +147,7 @@ class CursorPages[T]:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NextUrlPages[T]:
+class NextUrlPages[T, I = Any]:
     """Pages addressed by a link the previous page handed out.
 
     The link is sent as it is: the operation's path and query fields are not re-applied to it,
@@ -155,7 +157,7 @@ class NextUrlPages[T]:
     """
 
     result: type[T]
-    items: Callable[[T], Sequence[object]]
+    items: Callable[[T], Sequence[I]]
     next_url: Callable[[T], str | None]
 
     def __post_init__(self) -> None:
@@ -171,7 +173,9 @@ class NextUrlPages[T]:
         return ()
 
 
-type Pagination[T] = NumberedPages[T] | OffsetPages[T] | CursorPages[T] | NextUrlPages[T]
+type Pagination[T, I = Any] = (
+    NumberedPages[T, I] | OffsetPages[T, I] | CursorPages[T, I] | NextUrlPages[T, I]
+)
 """Every strategy an operation may declare as ``__pages__``."""
 
 
@@ -181,46 +185,46 @@ class Pages:
     __slots__ = ()
 
     @staticmethod
-    def numbered[T](
+    def numbered[T, I](
         result: type[T],
         *,
         page: str,
-        items: Callable[[T], Sequence[object]],
+        items: Callable[[T], Sequence[I]],
         size: str | None = None,
         total_pages: Callable[[T], int] | None = None,
-    ) -> NumberedPages[T]:
+    ) -> NumberedPages[T, I]:
         return NumberedPages(
             result=result, page=page, items=items, size=size, total_pages=total_pages
         )
 
     @staticmethod
-    def offset[T](
+    def offset[T, I](
         result: type[T],
         *,
         offset: str,
-        items: Callable[[T], Sequence[object]],
+        items: Callable[[T], Sequence[I]],
         limit: str | None = None,
         total: Callable[[T], int] | None = None,
-    ) -> OffsetPages[T]:
+    ) -> OffsetPages[T, I]:
         return OffsetPages(result=result, offset=offset, items=items, limit=limit, total=total)
 
     @staticmethod
-    def cursor[T](
+    def cursor[T, I](
         result: type[T],
         *,
         cursor: str,
-        items: Callable[[T], Sequence[object]],
+        items: Callable[[T], Sequence[I]],
         next_cursor: Callable[[T], object | None],
-    ) -> CursorPages[T]:
+    ) -> CursorPages[T, I]:
         return CursorPages(result=result, cursor=cursor, items=items, next_cursor=next_cursor)
 
     @staticmethod
-    def next_url[T](
+    def next_url[T, I](
         result: type[T],
         *,
-        items: Callable[[T], Sequence[object]],
+        items: Callable[[T], Sequence[I]],
         next_url: Callable[[T], str | None],
-    ) -> NextUrlPages[T]:
+    ) -> NextUrlPages[T, I]:
         return NextUrlPages(result=result, items=items, next_url=next_url)
 
 

@@ -7,9 +7,9 @@ ordinary ``send()`` of the bound operation; declaration errors surface when ``op
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, assert_type, cast
 
 import httpx
 import pytest
@@ -314,6 +314,31 @@ async def test_async_first() -> None:
     empty, seen = _async([()])
     assert await empty.plain.first() is None
     assert _page_numbers(seen) == [1]
+
+
+def test_items_and_first_carry_the_element_type() -> None:
+    """What ``items=`` of the strategy returns is what ``items()`` and ``first()`` hand out."""
+
+    api, _ = _sync([["a", "b"]])
+    documents = api.documents.items(case_id="c", key=lambda document: document.id)
+    assert_type(documents, Iterator[Document])
+    assert [document.id for document in documents] == ["a", "b"]
+    first = api.documents.first(case_id="c")
+    assert_type(first, Document | None)
+    assert_type(api.documents(case_id="c"), DocumentsPage)
+    # An operation without ``__pages__`` has no element type to give.
+    assert_type(api.one(), DocumentsPage)
+    assert_type(api.one.items(), Iterator[Any])
+
+
+async def test_async_items_and_first_carry_the_element_type() -> None:
+    api, _ = _async([["a", "b"]])
+    documents = api.documents.items(case_id="c", key=lambda document: document.id)
+    assert_type(documents, AsyncIterator[Document])
+    assert [document.id async for document in documents] == ["a", "b"]
+    first = await api.plain.first()
+    assert_type(first, Document | None)
+    assert first is not None and first.id == "a"
 
 
 def test_first_page_is_the_request_value() -> None:

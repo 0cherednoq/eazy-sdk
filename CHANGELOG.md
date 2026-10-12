@@ -5,6 +5,18 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+Changed (typing only, nothing changes at run time):
+
+- `items()` and `first()` on a paginated operation are typed by the element: what `items=`
+  of the `Pages` strategy returns is what `items()` iterates (`Iterator[Document]`,
+  `AsyncIterator[Document]`) and what `first()` returns (`Document | None`), and `key=` takes
+  that element. Before, all three were `Any`. Checked under mypy and pyright.
+- `NumberedPages`, `OffsetPages`, `CursorPages`, `NextUrlPages` and `Pagination` take a second
+  type parameter, the element; it defaults to `Any`, so `Pagination[Page]` reads as before.
+- `HttpOperation` no longer annotates `__pages__`: `op()` tells a paginated operation by the
+  attribute being present. Reading `__pages__` off a bare `type[HttpOperation[...]]` is now a
+  type error; reading it off the operation class that declares it is typed precisely.
+
 ## 0.2.0a13 - 2026-10-11
 
 Added (nothing existing changes):
