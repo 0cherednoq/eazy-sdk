@@ -115,6 +115,9 @@ def project_files(root: Path, skip: Sequence[Path]) -> Iterator[Path]:
             if entry.is_dir():
                 if entry.name not in _SKIPPED_DIRECTORIES and entry.resolve() not in skipped:
                     stack.append(entry)
+            elif entry.name == ".env" or entry.name.startswith(".env."):
+                # Where a person keeps credentials for a live run: theirs, and never committed.
+                continue
             elif entry.is_file() and entry.stat().st_size <= _MAX_SCANNED_BYTES:
                 yield entry
 

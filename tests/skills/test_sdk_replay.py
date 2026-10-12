@@ -311,3 +311,17 @@ def test_an_expectation_can_index_a_list_and_expect_none() -> None:
     assert sdk_replay._judge(
         {"returns": "dict", "fields": {"quotes.-1.author": "A"}}, result, None
     ) == ["quotes.-1.author: expected 'A', got 'B'"]
+
+
+def test_an_env_file_is_where_credentials_belong_and_a_source_file_is_not(
+    project: Path, work: Path
+) -> None:
+    scenarios = write_project(project)
+    (project / ".env").write_text(f"PASSWORD={PASSWORD}\n", encoding="utf-8")
+    report = sdk_check.run(work, "minisdk", scenarios, project, tools=False)
+    assert report["gates"]["G8 no secrets in the project"]["status"] == "pass"
+    (project / "live_check.py").write_text(f'PASSWORD = "{PASSWORD}"\n', encoding="utf-8")
+    report = sdk_check.run(work, "minisdk", scenarios, project, tools=False)
+    assert report["gates"]["G8 no secrets in the project"]["details"] == [
+        "live_check.py:1: __SECRET_password_2__"
+    ]

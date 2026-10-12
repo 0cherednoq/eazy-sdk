@@ -129,7 +129,9 @@ Write `REPORT.md` in the project from `.sdk-work/check-report.json`:
 - what the replay proved, scenario by scenario;
 - what you assumed and what was not observed;
 - how to check against the live site (`examples/live_check.py`), which needs the user's
-  credentials and is not part of the gates.
+  credentials and is not part of the gates. The example reads them from the environment or
+  from `.env`, which the scaffold ignores for git; a credential written into a source file
+  fails gate G8.
 
 ## Scripts
 
