@@ -5996,3 +5996,26 @@ Remaining work and blockers:
 - how the skill reaches users (a Claude Code plugin) is undecided;
 - found in the library by the live recording, owner's decision: following a redirect whose
   address repeats a query name ends in `PlanError: duplicate query wire name`.
+
+## Release closure 0.2.0a15 (2026-10-12)
+
+`feat/placed-body` (which carried `feat/sdk-capture-skill`) was merged into `master`
+fast-forward. The release carries three library changes: `Placed.body` and the chain of
+places on a session field; an address that repeats a query name is sent as written; `Literal`
+in the type of an input value. The skill `eazy-sdk-from-capture` is in the repository, not in
+the package. Phase 60 stays active: its open items are in `60-sdk-authoring-skill.md` §12.8.
+
+| Command | Result |
+|---|---|
+| `uv run pytest -q`, before the version bump | PASS: 2184 passed, 11 skipped in 642.67s. |
+| `uv run pytest -q`, on 0.2.0a15 | FAIL locally: 2182 passed, 11 skipped, 1 failed, 1 error, both timeouts on localhost (`httpx.ConnectTimeout` in `tests/integration/auth/test_adapter_matrix.py`, a CDP handshake timeout in `tests/skills/test_capture_record.py`) on a machine running 26 Python and 78 Chrome processes. The two files alone: 44 passed. The tag was held until CI was green. |
+| GitHub CI on `master` at `3a38ab6` (run 38279873842) | PASS: checks py3.13 and py3.14, both pydoll jobs, packaging. |
+| `uv run mypy` | PASS: no issues found in 551 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS: 5 contracts kept. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 85 pages fresh. |
+| `docs-site/scripts/validate_docs.py` | PASS: 118 pages. |
+| strict Sphinx build (`-W --keep-going`) | PASS: no warnings. |
+| `uv build`, `scripts/package_audit.py` | PASS: one wheel and one sdist. |
+| Release workflow for `v0.2.0a15` (run 38280651388) | PASS: build and audit, GitHub release with 2 assets, published to PyPI. |
+| `scripts/extras_smoke.py`, `twine check` | Not run locally; the release workflow builds and audits the package. |
