@@ -79,11 +79,15 @@ _FORM = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.IGNORECASE | re.DOTALL)
 _INPUT = re.compile(r"<(?:input|select|textarea)\b([^>]*)>", re.IGNORECASE)
 _ATTRIBUTE = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+# A home-made generator may drop leading zeros of a group: still a random request id.
+_LOOSE_UUID = re.compile(r"^[0-9a-f]{1,8}(-[0-9a-f]{1,4}){3}-[0-9a-f]{1,12}$", re.IGNORECASE)
 _HEX = re.compile(r"^[0-9a-f]{16,}$", re.IGNORECASE)
 _TOKENISH = re.compile(r"^(?=.*\d)(?=.*[A-Za-z])[\w.~=-]{20,}$")
 _QUERY_STRING = re.compile(r"^[\w.%-]+=[^&=]*(&[\w.%-]+=[^&=]*)+$")
 _ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _MIN_TRACED = 6
+_MAX_LABEL = 32
+_CONTROL_TAGS = {"button", "input", "select", "textarea", "label", "summary"}
 _IDENTITY_KINDS = {"email", "emaillocal", "emaildomain", "login", "password", "typed"}
 _MERGE_THRESHOLD = 3
 _MAX_VALUES = 5
@@ -170,6 +174,8 @@ def classify_value(value: str) -> str:
         return f"secret:{secret.group(1)}"
     if value.isdigit() and len(value) in {10, 13} and value[0] in "12":
         return "timestamp"
+    if _LOOSE_UUID.match(value):
+        return "uuid"
     if value[:1] in "{[":
         try:
             json.loads(value)
@@ -882,7 +888,7 @@ def out_of_scope(capture: Capture, operations: Sequence[dict[str, Any]]) -> list
     signals: list[str] = []
     sockets = [e.seq for e in capture.exchanges if e.status == 101]
     if sockets or any(event.get("kind") == "websocket" for event in capture.timeline):
-        signals.append(f"WebSocket traffic (exchanges {sockets}): not covered by this skill")
+        signals.append("WebSocket traffic was recorded: not covered by this skill")
     signals.extend(
         f"#{exchange.seq}: the response carries anti-bot or captcha markers"
         for exchange in capture.exchanges
@@ -896,6 +902,8 @@ def out_of_scope(capture: Capture, operations: Sequence[dict[str, Any]]) -> list
                     signals.append(
                         f"{operation['id']}: {place} {item['name']!r} looks like a signature"
                     )
+                elif item["looks_like"] == ["uuid"]:
+                    continue  # a request id the client makes up: an Inject with a generator
                 elif origin.get("from") == "unknown" and item["behaviour"] != "constant":
                     signals.append(
                         f"{operation['id']}: {place} {item['name']!r} changes and comes from no "
@@ -904,6 +912,19 @@ def out_of_scope(capture: Capture, operations: Sequence[dict[str, Any]]) -> list
         if any(e not in {"none", "form", "json", "multipart"} for e in operation["body_encoding"]):
             signals.append(f"{operation['id']}: request body is {operation['body_encoding']}")
     return list(dict.fromkeys(signals))
+
+
+def _target_name(target: dict[str, Any]) -> str:
+    """Name what was acted on without quoting the page's content.
+
+    The text of a control is its name. The text of anything else (a row of a mail list, a
+    whole form) is content of the user's account and stays out of the inventory.
+    """
+    label = str(target.get("label") or "")
+    control = target.get("tag") in _CONTROL_TAGS or bool(target.get("role"))
+    if label and len(label) <= _MAX_LABEL and (control or target.get("tag") == "a"):
+        return label
+    return str(target.get("name") or target.get("selector") or target.get("tag") or "")
 
 
 def scenarios(capture: Capture, kept: set[int]) -> list[dict[str, Any]]:
@@ -920,8 +941,9 @@ def scenarios(capture: Capture, kept: set[int]) -> list[dict[str, Any]]:
             marked = True
         elif kind == "action":
             target = event.get("target") or {}
-            label = target.get("label") or target.get("name") or target.get("selector") or ""
-            current["actions"].append(f"{event.get('action', 'action')} {label}".strip())
+            current["actions"].append(
+                f"{event.get('action', 'action')} {_target_name(target)}".strip()
+            )
         elif kind == "navigation":
             current["actions"].append(f"navigate {_location_shape(str(event.get('url', '')))}")
         elif kind == "request" and event.get("exchange") in kept:

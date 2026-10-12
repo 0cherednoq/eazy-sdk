@@ -698,6 +698,10 @@ class Recorder:
         loop = asyncio.get_running_loop()
         while not self.stop.is_set():
             line = await loop.run_in_executor(None, sys.stdin.readline)
+            if not line:
+                # End of input, not an empty line: there is no terminal to read (a background
+                # run; on Windows the null device even claims to be a terminal).
+                return
             label = line.strip()
             if not label:
                 self.stop.set()

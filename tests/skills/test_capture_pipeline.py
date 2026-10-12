@@ -416,7 +416,7 @@ def test_marks_cut_the_timeline_into_scenarios(burp_base64: Path) -> None:
     capture.timeline = [
         {"kind": "mark", "label": "login"},
         {"kind": "action", "action": "input", "target": {"name": "password"}},
-        {"kind": "action", "action": "click", "target": {"label": "Sign in"}},
+        {"kind": "action", "action": "click", "target": {"tag": "button", "label": "Sign in"}},
         {"kind": "request", "exchange": 3},
         {"kind": "mark", "label": "inbox"},
         {"kind": "request", "exchange": 5},

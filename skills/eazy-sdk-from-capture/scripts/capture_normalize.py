@@ -409,6 +409,8 @@ def merge(captures: Sequence[Capture]) -> Capture:
         exchange.seq
         for exchange in merged.exchanges
         if any("not saved" in note or "not kept" in note for note in exchange.notes)
+        # An image the recorder skipped on purpose is not a loss worth a warning.
+        and not any("bodies are not recorded" in note for note in exchange.notes)
     ]
     if unsaved:
         merged.warnings.append(f"exchanges {unsaved} have no saved response body")
