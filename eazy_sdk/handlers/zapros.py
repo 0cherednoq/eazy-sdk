@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 from zapros import (
     AsyncBaseHandler,
@@ -55,6 +56,41 @@ class BorrowedAsyncHandler(AsyncBaseHandler):
         return None
 
 
+class _ExactTarget(BaseHandler):
+    """Hands the request on with the address that was prepared.
+
+    A Zapros client merges the URL's query through a mapping, so a name that repeats keeps
+    only its first value. The prepared target is the one the signature covers and, on a
+    redirect, the one the server named: it goes out as it is.
+    """
+
+    def __init__(self, handler: BaseHandler, url: str) -> None:
+        self.handler = handler
+        self.url = url
+
+    def handle(self, request: Any) -> Response:
+        _restore_target(request, self.url)
+        return self.handler.handle(request)
+
+
+class _AsyncExactTarget(AsyncBaseHandler):
+    """Async twin of :class:`_ExactTarget`."""
+
+    def __init__(self, handler: AsyncBaseHandler, url: str) -> None:
+        self.handler = handler
+        self.url = url
+
+    async def ahandle(self, request: Any) -> Response:
+        _restore_target(request, self.url)
+        return await self.handler.ahandle(request)
+
+
+def _restore_target(request: Any, url: str) -> None:
+    query = urlsplit(url).query
+    if request.url.search.removeprefix("?") != query:
+        request.url.search = query
+
+
 class ZaprosSyncEmitter:
     def __init__(self, client: ZaprosClient) -> None:
         self.client = client
@@ -67,6 +103,7 @@ class ZaprosSyncEmitter:
             response = request_call(
                 request.method.decode("ascii"),
                 request.url,
+                handler=lambda handler: _ExactTarget(handler, request.url),
                 headers=_headers(request),
                 context=_context(options),
                 **_body_kwargs(request),
@@ -88,6 +125,7 @@ class ZaprosAsyncEmitter:
             response = await request_call(
                 request.method.decode("ascii"),
                 request.url,
+                handler=lambda handler: _AsyncExactTarget(handler, request.url),
                 headers=_headers(request),
                 context=_context(options),
                 **_body_kwargs(request),

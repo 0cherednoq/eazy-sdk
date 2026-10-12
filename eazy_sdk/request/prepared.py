@@ -295,7 +295,7 @@ class RequestPreparer:
         )
         existing_pairs, existing_query = _existing_query(split.query)
         query_pairs = (*existing_pairs, *generated_pairs)
-        _ensure_unique_query_pairs(query_pairs)
+        _ensure_unique_query_pairs(generated_pairs, taken=existing_pairs)
         query = b"&".join(part for part in (existing_query, generated_query) if part)
         path_bytes = path.encode("ascii")
         target = path_bytes + (b"?" + query if query else b"")
@@ -549,13 +549,20 @@ def _existing_query(value: str) -> tuple[tuple[PreparedQueryPair, ...], bytes]:
                 encoded_value=encoded_value,
             )
         )
-    result = tuple(output)
-    _ensure_unique_query_pairs(result)
-    return result, encoded
+    return tuple(output), encoded
 
 
-def _ensure_unique_query_pairs(pairs: Sequence[PreparedQueryPair]) -> None:
-    seen: set[bytes] = set()
+def _ensure_unique_query_pairs(
+    pairs: Sequence[PreparedQueryPair], *, taken: Sequence[PreparedQueryPair] = ()
+) -> None:
+    """Refuse a query name the SDK itself would write twice.
+
+    ``taken`` are the pairs already in the address. An address is somebody else's text: a
+    path the author wrote, or a redirect target the server named, and a server may repeat
+    a name. Such an address is sent as it is. What the declaration generates still has to
+    be unique, among itself and against the address.
+    """
+    seen: set[bytes] = {pair.name for pair in taken}
     for pair in pairs:
         if pair.name in seen:
             raise PlanError(
