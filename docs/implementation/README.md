@@ -92,6 +92,8 @@ hops without being named, and removes every other way to send one.
 tags, `Payload[T]` in a generic model, session refresh on a declared error, fallback field sources,
 the service address as an `Inject` source, an absolute URL as a call argument, public access to the
 current session and cookies, and a page map for a browser `Failure`. Planned, not started.
+[Phase 62](62-service-set-cookies.md) lets the sign-in service put into the user's jar a cookie
+that a page script would set (`AuthContext.set_cookie`); I1 of phase 58 is unchanged.
 
 ## Цель
 

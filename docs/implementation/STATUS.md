@@ -6041,3 +6041,23 @@ One library change: `QueryModel(target, using=None)` in `eazy_sdk.request` and
 Checked on the released package: `Desktop/armgs-sdk-v3` on `eazy-sdk-core 0.2.0a16` from
 PyPI, with `GetThread` declared through `QueryModel`: 27 scenarios as expected, G1–G7, G9,
 G10 pass; G8 fails on a credential the operator wrote into `examples/live_check.py`.
+
+## Phase 62 — a cookie the sign-in service sets (complete, 2026-10-26)
+
+Plan: `62-service-set-cookies.md`. Branch `feat/phase62-service-cookies` in a separate worktree,
+cut from `8f1b856`; the main working copy (phase 61, uncommitted) was not
+touched. Owner's decision: the service writes the cookie into the jar instead of bringing back
+`Placed.cookie`; I1 of phase 58 stays.
+
+| Command | Result |
+|---|---|
+| `uv run pytest tests/unit/test_phase62_service_cookies.py -q` | PASS: 6 passed. |
+| `uv run pytest -q` | PASS: 2205 passed, 11 skipped in 584.77s. |
+| `uv run mypy` | PASS: no issues in 553 source files. |
+| `uv run ruff check` | PASS. |
+| `uv run lint-imports` | PASS: 5 contracts kept. |
+| `uv run python scripts/docs_freshness.py check` | PASS: 85 pages fresh. |
+| `npm run check` / `npm run build` in `docs-site/` | NOT RUN. |
+
+Acceptance on `rambler-sdk` (local build of the branch): skill gates G1–G10 pass; live send over
+HTTP `uid=9`, browser fallback on the same cookies `uid=10`. Release not done: waits for the owner.

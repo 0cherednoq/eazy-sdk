@@ -30,7 +30,7 @@ from eazy_sdk.auth.session import (
     SessionValidator,
     StoredSession,
 )
-from eazy_sdk.cookies import CookieJar, Cookies
+from eazy_sdk.cookies import CookieJar, Cookies, CookieState, StoredCookie
 from eazy_sdk.core.errors import GraphError, PlanError
 from eazy_sdk.core.kernel import ValueValidator
 from eazy_sdk.models import default_model_adapters
@@ -148,6 +148,15 @@ class AuthContext[TSdk = Any](Protocol):
 
     def capture[T](self, envelope: ResponseEnvelope[T, Any]) -> T: ...
 
+    def set_cookie(self, cookie: StoredCookie) -> None:
+        """Put a cookie into the user's jar, as a script of the site's page would.
+
+        For a value the sign-in obtains and the site expects back in a cookie no server sets.
+        From here on it is one of the user's cookies like any other: chosen by address, saved
+        beside the session, checked by ``Cookies(required=...)``.
+        """
+        ...
+
 
 class AuthService[TCredentials, TSession](Protocol):
     async def acquire(
@@ -168,10 +177,19 @@ class AuthFlowContext[TSdk]:
     deadline: datetime | None
     resolution_graph: ResolutionGraph
     _responses: list[object] = field(default_factory=list, repr=False, compare=False)
+    _jar: CookieJar | None = field(default=None, repr=False, compare=False)
 
     def capture[T](self, envelope: ResponseEnvelope[T, Any]) -> T:
         self._responses.append(envelope.response)
         return envelope.value
+
+    def set_cookie(self, cookie: StoredCookie) -> None:
+        if self._jar is None:
+            raise SessionConfigurationError(
+                f"session {self.session_key.value!r}: set_cookie({cookie.name!r}) has no jar to "
+                "put the cookie in; declare Cookies(...) on the service"
+            )
+        self._jar.load(CookieState((cookie,)))
 
     @property
     def responses(self) -> tuple[object, ...]:
@@ -301,6 +319,7 @@ class SessionProvider[TCredentials, TSession, TSdk]:
             self.config.key,
             None,
             graph,
+            _jar=self.lifecycle.jar,
         )
 
     async def _lifecycle_call(

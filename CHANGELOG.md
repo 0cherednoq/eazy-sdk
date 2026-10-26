@@ -5,6 +5,17 @@ All notable changes to Eazy SDK are documented here. The project follows
 
 ## Unreleased
 
+## 0.2.0a17 - 2026-10-26
+
+Added:
+
+- `AuthContext.set_cookie(cookie)`: the sign-in service puts into the user's jar a cookie that a
+  script of the site's page would set, such as a session token the login returns in its body and
+  the site expects back in a cookie. From there it is one of the user's cookies like any other:
+  chosen by address, saved beside the session, read by `cookies_of`, checked by
+  `Cookies(required=...)`. A service without `Cookies(...)` is refused with
+  `SessionConfigurationError`.
+
 ## 0.2.0a16 - 2026-10-12
 
 Added:

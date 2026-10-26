@@ -56,6 +56,13 @@ session fields elsewhere, give the whole order:
 `Wire` and `FieldOrder` from `eazy_sdk.request`. `Placed.body` needs a library that has it; on
 an older one the write operations are a library gap.
 
+A cookie that no response sets but every later request carries is written by a script of the
+page. When its value comes from the sign-in (a token in the login's JSON body), the service puts
+it into the jar where the script would have: `context.set_cookie(StoredCookie(name, value, host,
+secure=True))` from `eazy_sdk.cookies`, inside `acquire`. From there it travels like a cookie the
+server set; name it in `Cookies(required=(...))` so a session without it is acquired again.
+`set_cookie` needs `eazy-sdk-core` 0.2.0a17 or newer; on an older one it is a library gap.
+
 When the site authorises by cookies alone, there may be nothing to place: keep a session
 model with what the caller wants to know (the account address) and let the cookies travel.
 

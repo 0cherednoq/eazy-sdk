@@ -185,6 +185,12 @@ class SessionLifecycle[TCredentials, TSession, TContext]:
 
         self._cookies = (jar, declared)
 
+    @property
+    def jar(self) -> CookieJar | None:
+        """The user's jar this session is tied to; ``None`` on a site without cookies."""
+
+        return None if self._cookies is None else self._cookies[0]
+
     def _seed(self, stored: StoredSession[TSession]) -> None:
         """Pour a saved snapshot into the jar, once.
 

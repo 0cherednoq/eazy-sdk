@@ -90,8 +90,9 @@
     }
   },
   "guide/auth/cookies-session.mdx": {
-    "fingerprint": "sha256:9bd88bfe3cfdd65bc956a74024813db3ebd3476598837539957de805570d8878",
+    "fingerprint": "sha256:2be791aa4fbe15aac0b4eb9452a7c7ecbd9f241c5690eec0ebb5ef7ca85b173c",
     "symbols": {
+      "eazy_sdk.auth.AuthContext": "sha256:36d92b0adc13bd83c1c26a5f417428d05dfa500eed163d4b2121bbdec2911442",
       "eazy_sdk.auth.Cookies": "sha256:874f2d82158dc9a2df20d6f73ec33206ef0ab470def273c81add420f4f84aa6e",
       "eazy_sdk.cookies.CookieJar": "sha256:db26ba3ab2dec8c929de1c854449a8c443be7fa1b3f35499a05daf99602ab20b",
       "eazy_sdk.cookies.CookieState": "sha256:5a98149d44962214bd72213d2d586ff47838b80aaa5fbbe05939558140f4921e",

@@ -2,12 +2,13 @@
 title: Сайт ведёт сессию на куках
 description: Объявите это одной строкой на корне SDK, и куки сайта будут ходить между запросами сами, как в браузере.
 sources:
+  - eazy_sdk.auth.AuthContext
   - eazy_sdk.auth.Cookies
   - eazy_sdk.cookies.CookieJar
   - eazy_sdk.cookies.CookieState
   - eazy_sdk.cookies.StoredCookie
   - eazy_sdk.identity.Identity
-api_fingerprint: "sha256:9bd88bfe3cfdd65bc956a74024813db3ebd3476598837539957de805570d8878"
+api_fingerprint: "sha256:2be791aa4fbe15aac0b4eb9452a7c7ecbd9f241c5690eec0ebb5ef7ca85b173c"
 ---
 
 Вход на обычный сайт занимает несколько шагов. Страница входа ставит одни куки, форма входа
@@ -111,6 +112,39 @@ wrong password: fail 1
 удалил сервер или истёк срок. Так сайт узнаёт устройство при повторном входе и реже просит
 второй фактор. Чтобы начать с чистого листа, удалите запись пользователя вызовом
 `store.invalidate(key)` или заведите новый `Identity`.
+
+## Куку ставит скрипт страницы
+
+Бывает, что сессионную куку ставит не сервер, а скрипт страницы. Вход отвечает токеном в теле
+ответа, скрипт записывает его в куку, и дальше сайт узнаёт пользователя только по ней. Это
+тоже кука сайта, поэтому она едет через тот же набор кук пользователя. Кладёт её сервис входа,
+то есть тот код, который в браузере выполнял бы скрипт:
+
+```python
+from eazy_sdk.cookies import StoredCookie
+
+
+class LoginService:
+    async def acquire(self, credentials: Login, context: AuthContext[Any]) -> Session:
+        signed = await context.sdk.auth.sign_in(email=credentials.email, password=...)
+        context.set_cookie(
+            StoredCookie("rsid", signed.token, "mail.example", secure=True,
+                         expires_at=signed.expires_at)
+        )
+        return Session(email=credentials.email)
+
+
+class MailSdk(AsyncRoot):
+    cookies = Cookies(required=("rsid",))
+```
+
+С этого момента кука ничем не отличается от поставленной сервером: уходит по своему адресу,
+сохраняется рядом с сессией, читается `cookies_of`. Кука с тем же именем, доменом и путём
+заменяет прежнюю. С `required=("rsid",)` срок куки становится сроком сессии: когда кука
+истекла, сессия добывается входом заново.
+
+`set_cookie` есть только у контекста сервиса входа. Операции куку не ставят, а на сервисе без
+`Cookies(...)` вызов заканчивается ошибкой конфигурации: класть куку некуда.
 
 ## Куки, которые выбирает вызывающий
 
